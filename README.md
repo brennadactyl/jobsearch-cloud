@@ -107,7 +107,23 @@ note after each step if you'd rather do it the traditional way instead.
    as project skills, which is all they were ever doing. This is not published
    as an installable Claude Code plugin, so there is no `/plugin install` for
    it - a clone is the supported way in.
-3. **Deploy the tracker** (once - not per machine). Two separate one-click
+3. **Turn on R2** (once per Cloudflare account, before the deploys below).
+   The API stores documents - resumes and each track's baseline doc - in an R2
+   bucket, and R2 is off by default on a new account. The deploy button
+   provisions the bucket for you, but only once R2 itself is enabled;
+   otherwise that deploy fails with `Please enable R2 through the Cloudflare
+   Dashboard. [code: 10042]`.
+
+   Go to **[dash.cloudflare.com](https://dash.cloudflare.com/) → R2 Object
+   Storage → Overview** and complete the checkout flow. It is a subscription
+   with a free allowance, not a paid plan - 10 GB stored, 1M writes and 10M
+   reads a month, no egress fees - so it asks for billing details, and a
+   personal job search uses about a megabyte of that. Skipping this is a
+   supported choice: everything else works and the document endpoints answer
+   503, but then each machine running searches needs its own copy of the
+   baseline docs and resumes. See [server/README.md](server/README.md).
+
+4. **Deploy the tracker** (once - not per machine). Two separate one-click
    deploys, server first:
 
    [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/brennadactyl/JobSearchTracker/tree/main/server)
@@ -126,7 +142,7 @@ note after each step if you'd rather do it the traditional way instead.
      -H "Content-Type: application/json" \
      -d '{"name":"Your Name","password":"a-long-password-you-pick"}'
    ```
-   Keep the `id` it returns - that's your user id, and step 4 puts your
+   Keep the `id` it returns - that's your user id, and step 5 puts your
    search data under it.
 
    Then the client:
@@ -150,25 +166,25 @@ note after each step if you'd rather do it the traditional way instead.
 
    **The page will be empty at this point, and that's correct** - no track
    tabs, just Overview and Applications. A fresh database ships with no
-   tracks, no title and no location rules of its own; step 4 is what fills
+   tracks, no title and no location rules of its own; step 5 is what fills
    them in. (Nothing here is pre-seeded with anyone else's job search.)
 
    (Prefer the CLI, or need to apply a schema change later?
    [server/README.md](server/README.md) and [client/README.md](client/README.md)
    document the manual `wrangler`-based path too - same end result.)
-4. **Set up your private data folder** - either:
+5. **Set up your private data folder** - either:
    - **With Claude's help (recommended):** put your resume(s) somewhere
      Claude can read them, then ask it to run the
      [job-search-setup](.claude/skills/job-search-setup/) skill. It'll ask
      what tracks/companies/locations you want and generate everything in
-     step 5 below for you, then run that step itself.
+     step 6 below for you, then run that step itself.
    - **By hand:** see [private.example/README.md](private.example/README.md)
      for the exact files to author yourself.
 
    Either way, point at the resulting folder with
    `setx JOB_SEARCH_DATA_DIR "C:\path\to\private"`, or just place it at
    `private\` next to this repo (already gitignored).
-5. **Register the scheduled tasks** (the setup skill does this for you; run
+6. **Register the scheduled tasks** (the setup skill does this for you; run
    it yourself if you set up by hand or are adding a track):
    ```powershell
    .\scripts\setup-scheduler.ps1
@@ -176,7 +192,7 @@ note after each step if you'd rather do it the traditional way instead.
    It discovers each person by their `private\<user-id>\tracker.json` and
    asks their account what tracks it has - nothing to tell it about how many
    you have, or how many people share the machine.
-6. **Test one run before trusting the schedule** - the previous step prints
+7. **Test one run before trusting the schedule** - the previous step prints
    the exact command for whichever tracks it just registered, e.g.:
    ```bat
    schtasks /Run /TN JobSearch-ab266b6c-Engineering
@@ -186,7 +202,7 @@ note after each step if you'd rather do it the traditional way instead.
    it found. Until a track's first run reports in it reads "No run recorded
    yet", which is also what you'll see on a brand-new install.
 
-7. **Set up backups** - see [Backups](#backups) below. One elevated command,
+8. **Set up backups** - see [Backups](#backups) below. One elevated command,
    and it's the step you won't think to do until you need it: nothing above
    this line leaves a copy of your data anywhere but Cloudflare.
 
@@ -229,7 +245,7 @@ One deployment holds any number of job searches, each with its own tracks,
 leads, page title and location rules, and its own sign-in. To add someone:
 
 1. Create their account with the `ADMIN_TOKEN` (same `POST /api/users` call
-   as step 3 of Setup above). It returns their user id.
+   as step 4 of Setup above). It returns their user id.
 2. Run the [job-search-setup](.claude/skills/job-search-setup/) skill for
    them - it makes `private\<their id>\`, mints the token their scheduled
    runs use, reads their resume, asks about their tracks and locations,

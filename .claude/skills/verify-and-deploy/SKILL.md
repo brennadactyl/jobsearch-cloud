@@ -81,6 +81,12 @@ connection error and not a 404:
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8788/api/data
 ```
 
+`wrangler dev --local` simulates the `DOCS` R2 bucket, so the document checks
+need no cloud bucket and no account with R2 enabled. Its startup banner should
+list both bindings - `env.DB` and `env.DOCS` - and a missing `env.DOCS` there
+means the config is wrong rather than the account: the document checks would
+then fail as `503 documents are not configured` while everything else passed.
+
 ### 3. Run the checks
 
 ```bash
@@ -121,6 +127,20 @@ data writes it refuses.
 **If this deploy carries a migration, take a backup first** -
 `scripts/backup-tracker.ps1`. A migration is the one thing here that runs once
 against real data and cannot be undone.
+
+**The target account must have R2 enabled**, because `wrangler.toml` binds a
+`DOCS` bucket. If it does not, `wrangler deploy` fails with
+
+```
+Please enable R2 through the Cloudflare Dashboard. [code: 10042]
+```
+
+That is a refused deploy, not a broken one - the running worker is untouched -
+but it is a wall, and `wrangler deploy --dry-run` will not warn you because it
+validates offline. Check with `npx wrangler r2 bucket list` before deploying to
+an account for the first time; an empty list is a pass, the 10042 is not. The
+fix is a dashboard step, not a code one: see `server/README.md`'s
+"First: turn on R2".
 
 ## Verifying a `client/` change
 
