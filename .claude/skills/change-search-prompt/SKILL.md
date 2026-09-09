@@ -1,0 +1,133 @@
+---
+name: change-search-prompt
+description: Change what a nightly job search does - across the three places its instructions live (server/src/prompt.js, each person's D1 track config, and every private/<user>/docs/tracked_<key>_postings.md on disk) - and reconcile the existing track docs so no track silently keeps following the old convention. Use when editing prompt.js, a track's baseline doc, the daily search or application-fill instructions, or any convention a scheduled run follows.
+---
+
+# Changing what a nightly run does
+
+A run's instructions come from three surfaces, and picking the wrong one is
+how a change reaches one track and not its siblings. Decide which before
+editing anything.
+
+| Surface | Holds | Reaches |
+|---|---|---|
+| `server/src/prompt.js` | this API's own calling convention - the numbered steps that fetch, sync, delist and report | every track, every person, on the next server deploy |
+| D1 track config (`/api/config`) | one track's stored prose - role line, resume line, fit filter, company list, location guidance | that one track, immediately, no deploy |
+| `private/<user-id>/docs/tracked_<key>_postings.md` | knowledge with no DB equivalent - fit reasoning, per-company fetch-reliability notes, scope rules | that one track, on whichever machine holds the folder |
+
+Posting data is in none of them. Leads, screened rows, coverage and run
+history live in D1 and are fetched per run - a doc that keeps its own copy is
+a doc that goes stale.
+
+## The failure this skill exists for
+
+**A cross-cutting convention changed in one track's doc silently drifts out of
+sync in the others.** Nothing at runtime cross-checks the docs against each
+other; each is self-contained. This has actually happened: one track's doc got
+updated when the tracker migrated off an old hosting mechanism, its siblings
+did not, and a later scheduled run confidently tried to publish through the
+retired mechanism. It had no way to know the convention had moved on.
+
+`job-search-setup`'s `templates/tracked-postings.template.md` is the shared
+source of truth for a **new** track only. Nothing reconciles existing tracks
+against it. That is the job below, and it is on whoever makes the change.
+
+## Changing the calling convention (`prompt.js`)
+
+This is the right surface for anything that is the same for everybody: which
+route a step calls, what it posts, what counts as verified, what a run must
+report. Those steps moved here precisely because they were byte-identical
+across every hand-maintained copy, and a copy that silently lacked step 9c -
+the run record - was a real documented failure: it is the only thing that
+distinguishes "searched, found nothing" from "stopped running weeks ago".
+
+- Keep structured what the *app* reads (`key`, `label`, `sort_order`,
+  `schedule_time`, `target_companies`). Keep verbatim what only the model
+  reads. The live prompts had drifted from the template that generated them
+  and the drift was load-bearing - a resume line naming a text fallback the
+  machine genuinely depends on, a sentence widening a company list beyond its
+  apparent industry. Store a keyword and regenerate the sentence and all of
+  that is silently gone.
+- The multi-tab pieces are each the empty string when they do not apply. A new
+  optional step follows that shape rather than becoming another config flag.
+- `buildAutofillPrompt()` takes no arguments - the nightly application fill is
+  the same text for everybody. Keep it that way.
+
+**Read the result, do not imagine it.** The composed prompt is a route:
+
+```bash
+curl -s "$TRACKER_URL/api/prompt/<track key>" -H "Authorization: Bearer <that person's token>"
+```
+
+Do that for a track that has the feature and one that does not, and read both
+in full. String interpolation across a 400-line prompt is easy to get subtly
+wrong in ways that only show up at 3am in a log.
+
+Deploying the server is what ships it - see `verify-and-deploy`. Nothing has
+to be re-registered.
+
+## Changing one track's stored prose
+
+That is `/api/config` - a GET, merge, POST of the whole config. Read the
+`job-search-setup` skill's step 6 for the exact procedure; it is the
+GET-merge-POST that matters, because posting a partial config replaces what
+was there.
+
+If the change is really about *how searches work* rather than *what this
+person is looking for*, it belongs in `prompt.js` instead. A convention parked
+in one person's config is the drift problem in a different place.
+
+## Changing a track doc, and reconciling the rest
+
+The doc is edited by the run itself as it goes - that is why it is a file and
+not config. It holds fit reasoning, the target-company list with why each is
+there, the expanded net and what came of each attempt, and the per-company
+fetch-reliability notes.
+
+When the change is cross-cutting - how leads sync, the fetch-efficiency rule,
+the fit-filter philosophy, the coverage rotation, anything the template's
+numbered list covers:
+
+1. Make the change in
+   `.claude/skills/job-search-setup/templates/tracked-postings.template.md`
+   first, so new tracks are born correct.
+2. **Then find every existing doc and bring each into line:**
+
+   ```bash
+   ls "$JOB_SEARCH_DATA_DIR"/*/docs/tracked_*_postings.md
+   ```
+
+   (or `private/*/docs/` next to the repo if that variable is not set). Every
+   person, every track - not just the one you were iterating on.
+3. For each, read the corresponding section and update it. Do not paste the
+   template over the file: the parts that are that track's own knowledge -
+   reliability notes, expanded net, target companies - are the reason the file
+   exists, and they are not recoverable.
+4. Say in your report which docs you changed and which you left alone, so the
+   ones you could not see (another machine, another person) are visible as a
+   gap rather than assumed done.
+
+These files hold personal data and live outside the repo. They are never
+committed.
+
+## If a run needs a capability it does not have
+
+Headless runs use a scoped tool allowlist in `scripts/run-search.ps1`
+(`Read Write Edit Glob Grep WebSearch WebFetch Bash`), not full permission
+bypass. If a prompt change needs something outside it, add it there
+deliberately and say why in the comment. Never reach for
+`--dangerously-skip-permissions`.
+
+## Testing a prompt change
+
+Run it end to end before trusting the schedule:
+
+```powershell
+.\scripts\run-search.ps1 -Task <track key> -User <user id>
+```
+
+**Run it against a test account, not the primary one.** A live run writes
+leads, screened rows, coverage sweeps and a run record, and a delist report
+cannot be undone. Read `private/<user-id>/logs/<track>.log` afterwards, then
+reload the tracker page and check the tab's run stamp - what the run *says* it
+did and what landed in D1 are two different claims.
