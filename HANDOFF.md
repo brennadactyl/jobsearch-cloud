@@ -55,14 +55,28 @@ bound sessions started in this folder.
 
 ### Still open
 
-- **The old repo can still deploy to these same resources.** `C:/VibeCoding`
-  (`JobSearchTracker`) has an unchanged `wrangler.toml` pointing at the same worker and
-  the same D1. Two repos able to publish to one deployment, with histories that have
-  already diverged once, is the next thing to close — by retiring it as a deploy
-  source. Left untouched here deliberately; it is a separate repo and its own call.
+The repos were reorganised on 2026-09-09: the personal tracker, which used to sit
+directly at `C:/VibeCoding`, now lives at `C:/VibeCoding/job-search-tracker/`, and
+`jobsearch-cloud` is its sibling rather than a folder nested inside its working tree.
+Paths in older notes predate that.
+
+- **The old repo can still deploy to these same resources.** `job-search-tracker/`
+  has an unchanged `wrangler.toml` naming the same worker and the same D1. Two repos
+  able to publish to one deployment, with histories that have already diverged once,
+  is the next thing to close. Left alone deliberately — it is a public template whose
+  README documents deploying it, so removing its wrangler config would break it for
+  anyone forking. Blanking its `database_id` is the cheaper move if it comes up again;
+  that would also get the live database id out of a public repo.
 - **The runner has not moved.** Windows Task Scheduler still invokes
-  `C:/VibeCoding/scripts/` against `C:/VibeCoding/private/`. The deployment moved; the
-  thing that feeds it nightly did not.
+  `job-search-tracker/scripts/` against `job-search-tracker/private/`. The deployment
+  moved; the thing that feeds it nightly did not.
+- **Path-anchored guards are the thing the move kept breaking.** Two were found dead
+  in this repo afterwards, both silent: the hook's rule protecting `private/` stopped
+  matching once the silo gained a path segment, and the hook's own test harness had
+  the pre-move absolute path hardcoded, so it spawned nothing and reported every case
+  as allowed. Both are fixed, and the suite now exits non-zero rather than only
+  printing. Worth suspecting the same failure mode anywhere else a literal path was
+  written down.
 
 ---
 

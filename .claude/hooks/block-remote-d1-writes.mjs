@@ -74,8 +74,16 @@ const DESTRUCTIVE = [
  *
  * Verbs are matched at an invocation boundary, same as the wrangler rules, so
  * a command that merely mentions a path isn't refused.
+ *
+ * The optional segment before `private` is what survives a reorganisation. The
+ * silo used to sit at C:/VibeCoding/private; when the personal repo was moved
+ * down into C:/VibeCoding/job-search-tracker/ the silo went with it, and a rule
+ * anchored on the old absolute path stopped matching without failing - it
+ * reported nothing and quietly allowed `rm -rf` on the whole folder. A
+ * path-anchored rule is only as durable as the layout it was written against,
+ * so this one tolerates the repo root moving down a level.
  */
-const PROTECTED = /(?:private[\\/]+backups|[a-z]:[\\/]+vibecoding[\\/]+private(?![\w-])|\.claude[\\/]+hooks)/i;
+const PROTECTED = /(?:private[\\/]+backups|[a-z]:[\\/]+vibecoding[\\/]+(?:[\w.-]+[\\/]+)?private(?![\w-])|\.claude[\\/]+hooks)/i;
 // No `|` in the boundary set, unlike the wrangler rules: a pipe appears inside
 // regex literals and quoted strings far more often than it precedes a delete,
 // and `|rm ` in someone's regex was enough to refuse an innocent command. A

@@ -10,6 +10,8 @@
   ["rm C:/VibeCoding/private/backups/d1-2026-08-31.sql", "bash: remove one backup file"],
   ["cd /c/VibeCoding && rm -rf .claude/hooks", "bash: remove the guard itself"],
   ["Move-Item C:\\VibeCoding\\private\\backups D:\\elsewhere", "PowerShell: move the backups away"],
+  ["rm -rf C:/VibeCoding/job-search-tracker/private", "bash: remove the silo at its post-move path"],
+  ["Remove-Item -Recurse -Force C:\\VibeCoding\\job-search-tracker\\private", "PowerShell: remove the silo at its post-move path"],
 
   ["wrangler d1 execute db --remote --command \"SELECT COUNT(*) FROM leads\"", "SELECT --remote (must stay allowed)"],
   ["wrangler d1 execute db --local --command \"UPDATE leads SET fit = 1\"", "any --local write (must stay allowed)"],
