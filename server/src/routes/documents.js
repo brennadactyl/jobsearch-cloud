@@ -30,6 +30,37 @@ import { json, CORS_HEADERS } from "../http.js";
 import { badDocumentPath, isDocumentPath } from "../validate.js";
 
 /**
+ * The refusal for a deployment that has this code but no `DOCS` bucket.
+ *
+ * Reachable exactly one way: a worker deployed from a wrangler.toml without the
+ * [[r2_buckets]] block, or against an account where R2 was never enabled. Every
+ * other route keeps working in that state - `Docs` is constructed per request
+ * but touches the binding only when a method is called - so the failure is
+ * narrow, and it is worth failing narrowly on purpose.
+ *
+ * Without this the first call reads `.list` off undefined and the worker's
+ * uncaught TypeError becomes a 500 carrying a raw stack trace: no JSON error
+ * shape, and no CORS headers, which reaches a browser as an opaque network
+ * failure with no status to read (the case ../http.js exists to prevent). 503
+ * rather than 500 because nothing is wrong with the request - the deployment is
+ * incomplete, and the fix is a config change rather than a retry.
+ *
+ * @param {import("../r2.js").Docs|null} docs
+ * @returns {Response|null} the refusal, or null when the bucket is there
+ */
+function missingBucket(docs) {
+  if (docs && docs.bucket) return null;
+  return json(
+    {
+      error:
+        "documents are not configured on this deployment - the DOCS R2 bucket " +
+        "is not bound (see server/wrangler.toml)",
+    },
+    503
+  );
+}
+
+/**
  * GET /api/documents - requires a Bearer token -> `{ documents: [...] }`.
  *
  * The index: path, kind, content type, size, etag and upload time for each,
@@ -39,6 +70,9 @@ import { badDocumentPath, isDocumentPath } from "../validate.js";
  * them would make "what do I have?" the most expensive call in the API.
  */
 export async function handleListDocuments({ docs }) {
+  const unconfigured = missingBucket(docs);
+  if (unconfigured) return unconfigured;
+
   return json({
     documents: (await docs.list()).map((d) => ({
       path: d.path,
@@ -59,6 +93,9 @@ export async function handleListDocuments({ docs }) {
  * the whole concurrency story for the baseline doc.
  */
 export async function handleGetDocument({ docs, params }) {
+  const unconfigured = missingBucket(docs);
+  if (unconfigured) return unconfigured;
+
   const path = params[0];
   if (!isDocumentPath(path)) return badDocumentPath(path);
 
@@ -97,6 +134,9 @@ export async function handleGetDocument({ docs, params }) {
  * revising one they read.
  */
 export async function handlePutDocument({ request, docs, params }) {
+  const unconfigured = missingBucket(docs);
+  if (unconfigured) return unconfigured;
+
   const path = params[0];
   if (!isDocumentPath(path)) return badDocumentPath(path);
 
@@ -126,6 +166,9 @@ export async function handlePutDocument({ request, docs, params }) {
  * wrong.
  */
 export async function handleDeleteDocument({ docs, params }) {
+  const unconfigured = missingBucket(docs);
+  if (unconfigured) return unconfigured;
+
   const path = params[0];
   if (!isDocumentPath(path)) return badDocumentPath(path);
 
