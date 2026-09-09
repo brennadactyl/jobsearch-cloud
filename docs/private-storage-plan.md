@@ -37,11 +37,22 @@ Three things make this worth doing now beyond the hosted-service goal:
 1. **The silo is unbacked-up and machine-bound.** `backup-tracker.ps1` runs `wrangler d1
    export` nightly and archives it under SYSTEM-owned ACLs. Nothing does that for the
    resumes or the track docs. Lose the machine, lose them.
-2. **Two of three accounts have a silently broken resume.** `job-search-setup/SKILL.md:123-132`
-   warns that a resume stored only as `.pdf`/`.docx` is one the headless run reads *nothing*
-   from, every night, forever — it screens every posting against an empty profile and reports
-   success. Account `49732752-…` has a PDF with no `.txt` anywhere; `ab266b6c-…` keeps its
-   `.txt` in `reference/`, not `resumes/`. Nothing can detect this today.
+2. **Two of the twelve tracks name a resume the nightly run cannot read.**
+   `job-search-setup/SKILL.md:123-132` warns that a resume stored only as `.pdf`/`.docx` is
+   one the headless run reads *nothing* from, every night, forever. Checked against the
+   2026-09-09 D1 export: `49732752-…/engineering-management` names a `.pdf` and has no text
+   copy anywhere, and `ab266b6c-…/CPM` names a `.docx` falling back to another `.docx`. The
+   other two searching tracks are fine — one names a `.txt` explicitly, the other names a
+   `.txt` fallback that exists.
+
+   Severity is lower than the skill's worst case, because both affected docs carry an inline
+   `## Candidate Profile` section and step 1 reads the doc before step 2 reads the resume. So
+   the real failure is subtler: **the profile is a frozen copy taken at setup, and nothing
+   detects when the resume moves on.** Every run reports success either way.
+
+   Worth fixing while nearby, though it is config rather than storage: `CPM`'s `resume_line`
+   says "if that file isn't present, fall back to …". The file *is* present — it is merely
+   unreadable — so the escape hatch is keyed on the wrong condition and can never fire.
 3. **The silo is 236 MB, of which ~1 MB is real.** `run-search.ps1:189` sets cwd to the
    durable user folder and the allowlist includes `Write`, so every run's scratch lands
    there permanently — 830 files, ~190 MB of `_ashby_openai.json` and `.tmp_run/`.
@@ -68,7 +79,7 @@ Not migrated, discarded: `.tmp/`, `tmp/`, `raw/`, loose run scratch, `scheduled-
 **One file = one R2 object + one D1 index row**, and **`path` is the join key.**
 
 Each row carries the relative path the file used to occupy inside the person's folder —
-`docs/tracked_cpm_postings.md`, `resumes/Brenna_Duffitt_Resume.txt`. The R2 key is
+`docs/tracked_cpm_postings.md`, `resumes/<name>_Resume.txt`. The R2 key is
 `<user-id>/<path>`, derived rather than stored, so it cannot drift from the row. The runner
 materializes each document back to its path in a scratch working directory before launching
 `claude`, and posts the track doc back afterwards.
@@ -287,10 +298,19 @@ sibling are simply two files.
 
 - Read `docs\*.md` rather than globbing `tracked_*` — the real rule is "whatever each track's
   `doc_file` points at", and `ab266b6c-…`'s `tracked_job_postings.md` already fits no pattern.
-- **After importing, report every `resumes/` binary with no `.txt` or `.md` sibling, by
-  name.** This is the check that surfaces the two accounts screening against an empty
-  profile. Producing the missing text is a human step with the `docx`/`pdf` skills, not
-  something to guess at here.
+- **After importing, run the readable-resume audit**: for every track with no `fed_by`, does
+  its `resume_line` name at least one `documents.path` whose `content_type` is `text/*`?
+  Report the ones that don't, by track.
+
+  Not "a binary with no `.txt` sibling in the same folder", which was the first draft of this
+  check and is wrong at both ends — it would falsely flag `ab266b6c-…/SWE`, whose text
+  fallback lives in `reference/` and is named explicitly, and directory adjacency was never
+  what made a resume readable. What matters is whether the prose the run is handed points at
+  something it can open. That is a join between `tracks` and the index, and it is the
+  clearest thing the D1 index buys that a bucket listing could not.
+
+  Producing missing text stays a human step with the `docx`/`pdf` skills, not something to
+  guess at here.
 - `-WhatIf` prints the plan without posting.
 
 ---
