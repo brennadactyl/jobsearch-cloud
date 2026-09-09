@@ -8,23 +8,40 @@ Delete this file once its contents have been absorbed into real issues or docs.
 
 ---
 
-## ⚠️ Read this before running anything here
+## ⚠️ Before running anything here
 
-This repo is a full copy of `JobSearchTracker`, so it still carries **production
-deploy config pointing at the live tracker**:
+**Both hazards this section used to describe are fixed.** Kept as a record of what
+was wrong, because the shape of it explains the one step still outstanding.
 
-- `server/wrangler.toml` → `name = "job-search-tracker"`,
-  `database_id = "104f139f-bc84-4e72-8034-8541ef563ae4"` (the live D1)
-- `client/wrangler.toml` → `name = "job-search-tracker-client"`
+**Deploy config no longer points at the live tracker.** This repo is a full copy of
+`JobSearchTracker`, so it arrived carrying that deployment's config: both worker names
+and, worse, the live D1 `database_id`. `npm run deploy` would have overwritten the
+live Worker and applied migrations to the real users' database. Now:
 
-A `npm run deploy` from this repo would **overwrite the live Worker and apply
-migrations to the real D1 database.** Renaming both Workers and provisioning separate
-D1 is task zero, before any other work.
+- `server/wrangler.toml` → `name = "jobsearch-cloud"`, `database_id = ""`
+- `client/wrangler.toml` → `name = "jobsearch-cloud-client"`
 
-Also: the `block-remote-d1-writes` PreToolUse hook is configured in
-`.claude/settings.local.json` with an **absolute path** to
-`C:/VibeCoding/.claude/hooks/block-remote-d1-writes.mjs` — it currently points back at
-the *old* repo's copy. Repoint it or copy the hook in.
+The blank `database_id` is the load-bearing part, and it is blank on purpose. The
+rename alone would not have been enough — `npm run deploy` begins with
+`wrangler d1 migrations apply DB --remote`, which resolves its target from
+`database_id` and ignores the worker name entirely. Empty means a deploy fails
+immediately instead of finding production.
+
+**Still outstanding:** provisioning this deployment's own database. `wrangler d1 create
+jobsearch-cloud-db`, then paste the id it prints into `server/wrangler.toml`. Until
+then this repo cannot deploy, which is the correct state for it to be in.
+
+**The D1 write guard is now wired in, and travels.** The `block-remote-d1-writes`
+PreToolUse hook is configured in the committed `.claude/settings.json`, pointing at
+`$CLAUDE_PROJECT_DIR/.claude/hooks/block-remote-d1-writes.mjs` — the copy that came
+across with the mirror. Being committed and project-relative, it applies in every
+clone and every worktree, with no per-machine setup.
+
+It was not merely misconfigured before; it was absent. The only config was at
+`C:/VibeCoding/.claude/settings.local.json` — the *parent* of both repo folders — so
+it bound sessions started at `C:/VibeCoding` and no session started in this repo. The
+guard against writing straight to production D1 was not running in the repo that was
+still pointed at production D1.
 
 ---
 
