@@ -46,7 +46,6 @@ GitHub shows source for `.html` files rather than rendering them).
 ## Contents
 
 ```
-.claude-plugin/plugin.json    lets this repo be installed as a Claude Code plugin (see Setup)
 .claude/skills/
   job-search-setup/           AI-assisted onboarding - see Setup below
 docs/
@@ -100,14 +99,14 @@ note after each step if you'd rather do it the traditional way instead.
    Then authenticate for headless use: `claude setup-token`, then
    `setx CLAUDE_CODE_OAUTH_TOKEN "<token it gives you>"` (open a new
    terminal afterward so the variable takes effect).
-2. **Get this tooling onto your machine** - inside a Claude Code session:
+2. **Get this tooling onto your machine** - clone it:
+   ```bash
+   git clone https://github.com/brennadactyl/jobsearch-cloud.git
    ```
-   /plugin marketplace add brennadactyl/JobSearchTracker
-   /plugin install job-search-tracker@JobSearchTracker
-   ```
-   Claude Code fetches everything itself - no `git clone` needed. (If you'd
-   rather have an editable local copy - e.g. to change the code - `git clone`
-   still works exactly as before; everything below is the same either way.)
+   Open the clone in Claude Code and the skills under `.claude/skills/` load
+   as project skills, which is all they were ever doing. This is not published
+   as an installable Claude Code plugin, so there is no `/plugin install` for
+   it - a clone is the supported way in.
 3. **Deploy the tracker** (once - not per machine). Two separate one-click
    deploys, server first:
 

@@ -484,27 +484,17 @@ the curls above by hand) once they've deployed the API and the webpage.
 
 ### 7. Register the scheduled tasks
 
-**If this repo was installed as a Claude Code plugin** (`$env:CLAUDE_PLUGIN_ROOT`
-is set), copy its `scripts/` folder to `<data dir>\scripts\` first (overwrite
-- keep it current with the plugin's version), and run
-`setup-scheduler.ps1` from *that* copy, not from `$env:CLAUDE_PLUGIN_ROOT`
-directly:
+Run `scripts/setup-scheduler.ps1` from the repo root (or with `-DataDir`
+pointing at a non-default data dir). A clone is a stable location, which is
+what a scheduled task needs - it stores an absolute path and runs it unattended
+for months.
 
-```powershell
-Copy-Item "$env:CLAUDE_PLUGIN_ROOT\scripts" "<data dir>\scripts" -Recurse -Force
-& "<data dir>\scripts\setup-scheduler.ps1" -DataDir "<data dir>"
-```
-
-This matters because `${CLAUDE_PLUGIN_ROOT}` points at a cache directory that
-gets replaced (old versions cleaned up after ~14 days) whenever the plugin
-updates. A scheduled task registered against that path directly would break
-silently on the next plugin update; one registered against the stable copy
-in the data dir doesn't.
-
-**If this repo was `git clone`d instead** (`$env:CLAUDE_PLUGIN_ROOT` is
-unset), run `scripts/setup-scheduler.ps1` from the repo root (or with
-`-DataDir` pointing at a non-default data dir) - no copy needed, the clone
-itself is already a stable location.
+This used to fork on whether the repo arrived by clone or by `/plugin install`,
+because `$env:CLAUDE_PLUGIN_ROOT` points at a cache directory that gets
+replaced when a plugin updates, so a task registered against it broke silently
+a fortnight later. This is no longer published as a plugin, so a clone is the
+only way in and that hazard is gone with it. If you find a task still pointing
+into a plugin cache from the old arrangement, re-register it from the clone.
 
 **Unless you are in a git worktree, which is not.** Check before running it:
 

@@ -172,7 +172,10 @@ with tracker API calls becoming ordinary tool definitions.
 
 - **Who pays for tokens** — BYO Anthropic key (kills sign-up friction, simplest) vs.
   you eat it and charge. Upstream of the sign-up flow and the pricing page.
-- Does the hosted version still ship a Claude Code plugin? `.claude-plugin/plugin.json`
-  still declares `job-search-tracker` v5.0.0 pointing at the skills dir — left alone
-  deliberately; it's a design question, not cleanup.
+- ~~Does the hosted version still ship a Claude Code plugin?~~ **Decided: no.**
+  `.claude-plugin/plugin.json` is removed and the README points at `git clone`. The
+  skills still load as project skills from `.claude/skills/`, which is all they were
+  doing; what is gone is the ability to `/plugin install` this repo. Note both
+  unmerged feature branches still modify that manifest, so each will conflict with
+  its deletion when it lands.
 - Does `job-search-setup` (conversational onboarding) survive, or does sign-up replace it?
