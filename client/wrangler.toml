@@ -1,4 +1,4 @@
-name = "jobsearch-cloud-client"
+name = "job-search-tracker-client"
 compatibility_date = "2025-01-01"
 
 # Static single-file app, no build step, no server-side code - deployed as

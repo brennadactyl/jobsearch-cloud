@@ -8,40 +8,61 @@ Delete this file once its contents have been absorbed into real issues or docs.
 
 ---
 
-## ⚠️ Before running anything here
+## ⚠️ This repo owns the live deployment
 
-**Both hazards this section used to describe are fixed.** Kept as a record of what
-was wrong, because the shape of it explains the one step still outstanding.
+Not a copy of it, not a staging twin — **the running tracker**. That was a deliberate
+choice over standing up a second deployment beside it, and it changes how everything
+below should be read.
 
-**Deploy config no longer points at the live tracker.** This repo is a full copy of
-`JobSearchTracker`, so it arrived carrying that deployment's config: both worker names
-and, worse, the live D1 `database_id`. `npm run deploy` would have overwritten the
-live Worker and applied migrations to the real users' database. Now:
+- `server/wrangler.toml` → `job-search-tracker`, D1 `104f139f-…` (the live database)
+- `client/wrangler.toml` → `job-search-tracker-client`
 
-- `server/wrangler.toml` → `name = "jobsearch-cloud"`, `database_id = ""`
-- `client/wrangler.toml` → `name = "jobsearch-cloud-client"`
+The names are load-bearing. `wrangler deploy` does not rename a worker: a changed
+`name` publishes a *new* worker on a *new* URL and leaves the old one serving.
+Renaming would have stranded every bookmark, `client/public/local-config.js`, and the
+scheduled runner on the old origin while this repo talked to an empty copy. Taking
+over a deployment means keeping its identifiers, not changing them.
 
-The blank `database_id` is the load-bearing part, and it is blank on purpose. The
-rename alone would not have been enough — `npm run deploy` begins with
-`wrangler d1 migrations apply DB --remote`, which resolves its target from
-`database_id` and ignores the worker name entirely. Empty means a deploy fails
-immediately instead of finding production.
+**Before the first deploy from here, main had to catch up.** The mirror was cut at
+`d6ee5f2`; `JobSearchTracker` merged PR #19 afterwards, so the *running* client had a
+"Signed in as …" password-change flow this repo had never had on main — it was sitting
+unmerged on `claude/signed-in-as-opens-password`. Deploying without that merge would
+have been a silent rollback of a live feature. `server/src`, `server/migrations` and
+`client/public` are now byte-identical to the deployed code. **Any future divergence
+between the two repos must be reconciled the same way, in this direction, before a
+deploy.**
 
-**Still outstanding:** provisioning this deployment's own database. `wrangler d1 create
-jobsearch-cloud-db`, then paste the id it prints into `server/wrangler.toml`. Until
-then this repo cannot deploy, which is the correct state for it to be in.
+`client/public/local-config.js` (gitignored, holds the live API origin) has been placed
+in the main checkout. It is still absent from every worktree, by design —
+`client/predeploy-check.mjs` refuses a client deploy without it, because `[assets]`
+replaces the live file list wholesale, so a missing file is a *deleted* file.
 
-**The D1 write guard is now wired in, and travels.** The `block-remote-d1-writes`
-PreToolUse hook is configured in the committed `.claude/settings.json`, pointing at
-`$CLAUDE_PROJECT_DIR/.claude/hooks/block-remote-d1-writes.mjs` — the copy that came
-across with the mirror. Being committed and project-relative, it applies in every
-clone and every worktree, with no per-machine setup.
+### What this costs, and it is not small
 
-It was not merely misconfigured before; it was absent. The only config was at
-`C:/VibeCoding/.claude/settings.local.json` — the *parent* of both repo folders — so
-it bound sessions started at `C:/VibeCoding` and no session started in this repo. The
-guard against writing straight to production D1 was not running in the repo that was
-still pointed at production D1.
+`npm run deploy` from here begins with `wrangler d1 migrations apply DB --remote`
+against real users' data. The `block-remote-d1-writes` hook does **not** cover that —
+it permits `migrations apply` on purpose, reasoning that schema changes have their own
+reviewed path. So an unfinished migration in this tree is one command from production,
+and the productization work below is *made of* schema changes. Run
+`verify-migration.mjs` and take a `wrangler d1 export` first, every time.
+
+The hook is otherwise now wired in properly, and travels: committed
+`.claude/settings.json` pointing at
+`$CLAUDE_PROJECT_DIR/.claude/hooks/block-remote-d1-writes.mjs`, so it applies in every
+clone and worktree. It previously did not run here at all — its only configuration
+lived in the *old repo's* `.claude/settings.local.json` at `C:/VibeCoding`, which never
+bound sessions started in this folder.
+
+### Still open
+
+- **The old repo can still deploy to these same resources.** `C:/VibeCoding`
+  (`JobSearchTracker`) has an unchanged `wrangler.toml` pointing at the same worker and
+  the same D1. Two repos able to publish to one deployment, with histories that have
+  already diverged once, is the next thing to close — by retiring it as a deploy
+  source. Left untouched here deliberately; it is a separate repo and its own call.
+- **The runner has not moved.** Windows Task Scheduler still invokes
+  `C:/VibeCoding/scripts/` against `C:/VibeCoding/private/`. The deployment moved; the
+  thing that feeds it nightly did not.
 
 ---
 
