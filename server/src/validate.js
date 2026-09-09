@@ -68,6 +68,55 @@ export function unknownTrackResponse(tracks, rows) {
   );
 }
 
+// The three folders a document can live in, which are also the three values of
+// its `kind`. A list rather than "any folder" because the runner materializes
+// these paths onto a disk (see scripts/run-search.ps1): an open-ended folder
+// name is a directory this run creates on someone's machine, and the set that
+// is actually meaningful has been three since private.example/README.md was
+// written.
+export const DOCUMENT_FOLDERS = ["docs", "resumes", "reference"];
+
+// Whether a caller-supplied document path is one this API will store.
+//
+// One rule doing two jobs, which is why it is a single regexp rather than a
+// classification step and a security step that could disagree. It fixes the
+// vocabulary - one known folder, one plain filename, no nesting - so `kind` is
+// derivable from the path itself with nothing stored alongside it. And in
+// fixing it, it refuses "..", absolute paths, backslashes, empty segments and
+// a leading dot, with no separate traversal check to keep correct.
+//
+// That second job is the load-bearing one. These paths are not only object
+// keys: the nightly runner writes each of them to a file under its working
+// directory. A path this accepted with a ".." in it would be a write-anywhere
+// primitive on the machine running the search, reachable by anyone holding a
+// session token.
+//
+// Deliberately narrow on filenames. Real ones here are `tracked_swe_postings.md`
+// and `Someone_Resume.docx`; a name needing anything outside word characters,
+// spaces, dots and hyphens is likelier a mistake or an attempt than a document
+// somebody meant to store.
+const DOCUMENT_PATH = new RegExp(`^(${DOCUMENT_FOLDERS.join("|")})/[\\w][\\w .-]*$`);
+
+/** @param {unknown} path @returns {boolean} */
+export function isDocumentPath(path) {
+  return typeof path === "string" && DOCUMENT_PATH.test(path);
+}
+
+// The refusal every document route gives for a path it will not store. Names
+// the rule rather than the offending part: the callers are a PowerShell script
+// and an LLM run, and "what am I allowed to send" is the useful answer to both.
+export function badDocumentPath(path) {
+  return json(
+    {
+      error:
+        `invalid document path "${path}" - must be ` +
+        `<${DOCUMENT_FOLDERS.join("|")}>/<filename>, one folder deep, ` +
+        "with a filename of word characters, spaces, dots or hyphens",
+    },
+    400
+  );
+}
+
 // The exclusion predicate for this user, built from their settings. Every
 // write path that can introduce a company needs it (leads, screened, and the
 // coverage rotation both ways), and each one was fetching settings and

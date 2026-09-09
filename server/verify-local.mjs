@@ -23,16 +23,28 @@ const A = process.argv[2] || "http://127.0.0.1:8787";
 const ADMIN = process.argv[3] || "local-admin-token-for-testing";
 let pass = 0, fail = 0;
 
-const req = async (method, path, { token, body, admin } = {}) => {
+// `raw`, `type`, `ifMatch` and `bytes` are for /api/documents, the one resource
+// whose body is not JSON in either direction (see src/routes/documents.js).
+// Everything else ignores them and behaves exactly as it always did.
+const req = async (method, path, { token, body, admin, raw, type, ifMatch, bytes } = {}) => {
   const headers = {};
   if (body) headers["content-type"] = "application/json";
+  if (type) headers["content-type"] = type;
+  if (ifMatch) headers["if-match"] = ifMatch;
   if (token) headers.authorization = "Bearer " + token;
   if (admin) headers.authorization = "Bearer " + ADMIN;
-  const res = await fetch(A + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(A + path, {
+    method,
+    headers,
+    body: raw !== undefined ? raw : body ? JSON.stringify(body) : undefined,
+  });
+  if (bytes) {
+    return { status: res.status, body: new Uint8Array(await res.arrayBuffer()), headers: res.headers };
+  }
   const text = await res.text();
   let json = null;
   try { json = JSON.parse(text); } catch {}
-  return { status: res.status, json, text };
+  return { status: res.status, json, text, headers: res.headers };
 };
 
 function check(name, ok, detail) {
@@ -1250,6 +1262,117 @@ check("a delisted fed-tab row is reachable when asking by the feeder's name",
 check("and the posting can go back on the board",
   ((await req("POST", "/api/leads", { token: F_TOK, body: { leads: [
     { search: "ENG-SENIOR", url: fedUrl, company: "Example", title: "Principal Engineer" } ] } })).json.added || 0) === 1);
+
+console.log("\n== documents ==");
+// The resumes and per-track baseline docs, which live in R2 rather than D1 (see
+// src/r2.js). `wrangler dev --local` gives these a local bucket, so this needs
+// no cloud R2 and no account with R2 enabled.
+// A_TOK was spent by the logout check in the sessions section above, so this
+// mints a fresh one. Worth doing explicitly rather than moving this section
+// higher: an expired token here fails as `{"error":"unauthorized"}` on the
+// writes while the "is it gone?" reads pass anyway, which looks like a partial
+// feature rather than a dead credential.
+const D_TOK = (await req("POST", "/api/login", {
+  body: { name: "Ada", password: "ada-new-password-1" } })).json.token;
+check("a fresh session for the document checks", !!D_TOK);
+
+// Unique per run, like the shared-posting urls above. The cross-user check
+// below asserts Bo has *no* document at this path, and re-running against the
+// same local bucket would otherwise find the copy Bo wrote last time - a pass
+// turning into a failure on the second run, for no change in the code.
+const DOC = `docs/tracked_ENG_${Date.now()}_postings.md`;
+const put1 = await req("PUT", `/api/documents/${DOC}`, {
+  token: D_TOK, raw: "# Baseline\nAda's notes.", type: "text/markdown" });
+check("a document can be written", put1.status === 200 && !!put1.json.etag, JSON.stringify(put1.json));
+
+const index = await req("GET", "/api/documents", { token: D_TOK });
+const row = (index.json.documents || []).find((d) => d.path === DOC);
+check("it appears in the index with kind derived from its folder",
+  !!row && row.kind === "docs" && row.content_type === "text/markdown", JSON.stringify(row));
+check("the index reports the same etag and size the write did",
+  row && row.etag === put1.json.etag && row.bytes === put1.json.bytes, JSON.stringify(row));
+check("the index carries no bodies",
+  row && !("body" in row) && !("content" in row), JSON.stringify(row));
+check("reading it back returns what was written",
+  (await req("GET", `/api/documents/${DOC}`, { token: D_TOK })).text === "# Baseline\nAda's notes.");
+
+// The cross-user check that matters most here: a resume is the most private
+// thing this deployment holds, and `Docs` prefixes every key with the caller's
+// id, so Bo naming Ada's exact path reaches an object that isn't there.
+check("another user gets 404 for the same document path",
+  (await req("GET", `/api/documents/${DOC}`, { token: B_TOK })).status === 404);
+await req("PUT", `/api/documents/${DOC}`, { token: B_TOK, raw: "BO", type: "text/markdown" });
+check("and their write of that path is a separate object",
+  (await req("GET", `/api/documents/${DOC}`, { token: D_TOK })).text === "# Baseline\nAda's notes.");
+check("which they can read as their own",
+  (await req("GET", `/api/documents/${DOC}`, { token: B_TOK })).text === "BO");
+
+// Byte-identical round trip. Every byte value 0-255, because the failure this
+// guards against - a body decoded as UTF-8 somewhere in the middle - corrupts
+// exactly the high bytes a .docx or .pdf is full of and leaves ASCII intact.
+const blob = new Uint8Array(256).map((_, i) => i);
+await req("PUT", "/api/documents/resumes/Someone_Resume.pdf", {
+  token: D_TOK, raw: blob, type: "application/pdf" });
+const back = await req("GET", "/api/documents/resumes/Someone_Resume.pdf", { token: D_TOK, bytes: true });
+check("a binary round-trips byte-identical",
+  back.body.length === 256 && back.body.every((b, i) => b === i),
+  `got ${back.body.length} bytes`);
+check("and comes back with the content type it was stored with",
+  back.headers.get("content-type") === "application/pdf");
+
+// The conditional write the nightly run depends on. A run reads the doc at the
+// start of a turn lasting many minutes and hands back an edited copy at the
+// end; without this, anything written in between is erased by a copy made
+// before it existed.
+const stale = put1.json.etag;
+const put2 = await req("PUT", `/api/documents/${DOC}`, {
+  token: D_TOK, raw: "# Baseline v2", type: "text/markdown", ifMatch: stale });
+check("a conditional write with the current etag succeeds", put2.status === 200);
+const clobber = await req("PUT", `/api/documents/${DOC}`, {
+  token: D_TOK, raw: "# CLOBBER", type: "text/markdown", ifMatch: stale });
+check("the same etag a second time is 412", clobber.status === 412, JSON.stringify(clobber.json));
+check("and the 412 wrote nothing",
+  (await req("GET", `/api/documents/${DOC}`, { token: D_TOK })).text === "# Baseline v2");
+// curl users echo back the quoted header spelling; the property form is bare.
+// A mismatch between the two would look exactly like a real conflict.
+check("a quoted etag is accepted as If-Match",
+  (await req("PUT", `/api/documents/${DOC}`, { token: D_TOK, raw: "# v3",
+    type: "text/markdown", ifMatch: `"${put2.json.etag}"` })).status === 200);
+
+// The runner writes these paths to a real directory, so a path that escapes the
+// three known folders is a write-anywhere primitive on that machine. Note the
+// two refusal codes: `..` is normalised out of the URL before routing and 404s
+// on no matching route, while an encoded or malformed path reaches the
+// validator and 400s. Both refuse; asserting only one would miss a regression
+// in the other.
+for (const bad of ["docs/sub/nested.md", "wat/x.md", "docs/.hidden", "docs/", "docs/..%2Fx.md"]) {
+  check(`"${bad}" is refused by the path validator`,
+    (await req("PUT", `/api/documents/${bad}`, { token: D_TOK, raw: "x" })).status === 400);
+}
+for (const bad of ["../secrets.md", "docs/../../etc/passwd"]) {
+  check(`"${bad}" never reaches a handler`,
+    (await req("PUT", `/api/documents/${bad}`, { token: D_TOK, raw: "x" })).status === 404);
+}
+
+check("deleting a document works",
+  (await req("DELETE", `/api/documents/${DOC}`, { token: D_TOK })).status === 200);
+check("it is gone from the index",
+  !((await req("GET", "/api/documents", { token: D_TOK })).json.documents || []).some((d) => d.path === DOC));
+// R2's delete is happy to remove a key that was never there. Reporting success
+// would tell a caller its cleanup worked when it was aiming at the wrong path.
+check("deleting it again is 404",
+  (await req("DELETE", `/api/documents/${DOC}`, { token: D_TOK })).status === 404);
+check("the other user's copy survived that delete",
+  (await req("GET", `/api/documents/${DOC}`, { token: B_TOK })).text === "BO");
+
+// PUT and DELETE are this API's first non-GET/POST verbs, so the preflight has
+// to advertise them or a browser refuses the call before it is ever routed.
+const preflight = await req("OPTIONS", "/api/documents");
+const allowed = preflight.headers.get("access-control-allow-methods") || "";
+check("the preflight advertises PUT and DELETE",
+  allowed.includes("PUT") && allowed.includes("DELETE"), allowed);
+check("and allows the If-Match header",
+  (preflight.headers.get("access-control-allow-headers") || "").includes("If-Match"));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
