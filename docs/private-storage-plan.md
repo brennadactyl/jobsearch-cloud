@@ -32,28 +32,12 @@ folder that is copied between machines by hand.
 > `private/<user-id>/docs/tracked_<key>_postings.md` live on disk. The track doc is
 > *edited by the run as it goes*, so it needs a real read-write home (R2 or D1), not a copy.
 
-Three things make this worth doing now beyond the hosted-service goal:
+Two things make this worth doing now beyond the hosted-service goal:
 
 1. **The silo is unbacked-up and machine-bound.** `backup-tracker.ps1` runs `wrangler d1
    export` nightly and archives it under SYSTEM-owned ACLs. Nothing does that for the
    resumes or the track docs. Lose the machine, lose them.
-2. **Two of the twelve tracks name a resume the nightly run cannot read.**
-   `job-search-setup/SKILL.md:123-132` warns that a resume stored only as `.pdf`/`.docx` is
-   one the headless run reads *nothing* from, every night, forever. Checked against the
-   2026-09-09 D1 export: `49732752-…/engineering-management` names a `.pdf` and has no text
-   copy anywhere, and `ab266b6c-…/CPM` names a `.docx` falling back to another `.docx`. The
-   other two searching tracks are fine — one names a `.txt` explicitly, the other names a
-   `.txt` fallback that exists.
-
-   Severity is lower than the skill's worst case, because both affected docs carry an inline
-   `## Candidate Profile` section and step 1 reads the doc before step 2 reads the resume. So
-   the real failure is subtler: **the profile is a frozen copy taken at setup, and nothing
-   detects when the resume moves on.** Every run reports success either way.
-
-   Worth fixing while nearby, though it is config rather than storage: `CPM`'s `resume_line`
-   says "if that file isn't present, fall back to …". The file *is* present — it is merely
-   unreadable — so the escape hatch is keyed on the wrong condition and can never fire.
-3. **The silo is 236 MB, of which ~1 MB is real.** `run-search.ps1:189` sets cwd to the
+2. **The silo is 236 MB, of which ~1 MB is real.** `run-search.ps1:189` sets cwd to the
    durable user folder and the allowlist includes `Write`, so every run's scratch lands
    there permanently — 830 files, ~190 MB of `_ashby_openai.json` and `.tmp_run/`.
 
@@ -91,10 +75,11 @@ Two consequences worth stating plainly:
   legacy filenames (`tracked_job_postings.md`) that `docs/multi-user-plan.md:314-316` calls
   load-bearing drift. The DB becomes the source of truth without one track's config being
   rewritten.
-- **A resume and its text extract are two documents, not one row with two representations.**
-  `resumes/X.pdf` and `resumes/X.txt` each get a row. That is what they already are on disk,
-  `resume_line` goes on naming the `.txt`, and "a binary with no text sibling" stays a cheap
-  query against the index — which is the check that catches the two silently-broken accounts.
+- **A resume and any text extract beside it are two documents, not one row with two
+  representations.** `resumes/X.pdf` and `resumes/X.txt` each get a row. That is what they
+  already are on disk, so whatever a track's `resume_line` names goes on resolving unchanged
+  — including the tracks that name a `.docx`, and the one whose text fallback lives in
+  `reference/` rather than `resumes/`.
 
 It also fixes the scratch problem for free: cwd becomes a disposable per-run directory
 rather than the durable silo.
@@ -106,10 +91,11 @@ base64 upload path, a dual-storage branch in every handler, and D1's 2 MB row ca
 that grows every night. (The cap is roughly three years out at the observed ~1.5-2 KB/day,
 so it is a ceiling rather than an emergency; the simplification is the real reason.)
 
-**Why not skip D1 entirely and list the bucket.** `kind`, and which track's `doc_file` points
-at which document, are relational facts rather than object properties. Keeping them in SQL
-beside `tracks` is what makes the audit query above a query, rather than a bucket listing
-with filename parsing. `bytes` and `etag` are a cache of R2's truth, rewritten on every put.
+**Why not skip D1 entirely and list the bucket.** `kind`, and which track's `doc_file` or
+`resume_line` points at which document, are relational facts rather than object properties.
+Keeping them in SQL beside `tracks` means questions about the two can be joined rather than
+answered by listing a bucket and parsing filenames. `bytes` and `etag` are a cache of R2's
+truth, rewritten on every put.
 
 ---
 
@@ -298,19 +284,11 @@ sibling are simply two files.
 
 - Read `docs\*.md` rather than globbing `tracked_*` — the real rule is "whatever each track's
   `doc_file` points at", and `ab266b6c-…`'s `tracked_job_postings.md` already fits no pattern.
-- **After importing, run the readable-resume audit**: for every track with no `fed_by`, does
-  its `resume_line` name at least one `documents.path` whose `content_type` is `text/*`?
-  Report the ones that don't, by track.
-
-  Not "a binary with no `.txt` sibling in the same folder", which was the first draft of this
-  check and is wrong at both ends — it would falsely flag `ab266b6c-…/SWE`, whose text
-  fallback lives in `reference/` and is named explicitly, and directory adjacency was never
-  what made a resume readable. What matters is whether the prose the run is handed points at
-  something it can open. That is a join between `tracks` and the index, and it is the
-  clearest thing the D1 index buys that a bucket listing could not.
-
-  Producing missing text stays a human step with the `docx`/`pdf` skills, not something to
-  guess at here.
+- **After importing, print each track's `resume_line` next to whether the paths it names are
+  now in the index.** Informational, not a gate: it is a cheap thing to show once everything
+  is listed in one place, and it makes a `resume_line` pointing at a path that no longer
+  exists visible rather than silent. It is deliberately *not* a readability judgement — see
+  the note below.
 - `-WhatIf` prints the plan without posting.
 
 ---
@@ -396,8 +374,17 @@ cd server && node verify-local.mjs http://127.0.0.1:8799
 - **Prompt-native access.** `prompt.js` is untouched; the run still reads and edits files.
   Teaching the prompt to call `/api/documents` directly is the change that lands when the
   runner moves server-side, and the endpoints built here are the ones it will use.
-- **Text extraction.** The import script reports resumes with no readable text; producing
-  that text stays a human step with the `docx`/`pdf` skills.
+- **Resume readability.** Whether a track's `resume_line` points at something the nightly run
+  can actually open is identically true or false before and after this migration, so it is
+  not this plan's problem. An earlier draft made it justification #2 and then built an audit
+  around it; both were scope creep from having the folder inventoried. For the record, so it
+  is not rediscovered as a crisis: `job-search-setup/SKILL.md:123-132`'s "always write a
+  `.txt`" is a defensive convention against a specific tooling gap, not a property of the
+  system — `Read` handles PDFs directly, `.docx` is the format that actually needs help, and
+  every affected doc carries an inline `## Candidate Profile` section that step 1 reads
+  first. Separately, `CPM`'s `resume_line` falls back "if that file isn't present" when the
+  file is present and merely unreadable, so that branch cannot fire. A config fix, whenever
+  someone wants it.
 - **Pruning the track docs.** ~35% of `tracked_job_postings.md` is frozen history
   (`Removed / went dead`, frozen 2026-08-27). Worth doing, unrelated to storage.
 - **Cleaning the 190 MB of existing scratch.** Phase 3 stops it accumulating; deleting
