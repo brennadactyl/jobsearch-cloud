@@ -51,6 +51,11 @@
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
+/* The Overview scrolls inside itself and the other tabs scroll the window,
+   so the window scrollbar would appear and disappear as you switch between
+   them - taking ~15px of page width with it each time. Reserving the gutter
+   on both keeps the column the same width whichever tab you are on. */
+html{scrollbar-gutter:stable}
 body{margin:0;background:var(--ground);color:var(--ink);
   font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.5;
   -webkit-text-size-adjust:100%}
@@ -340,11 +345,21 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
    `calc(100vh - 260px)` .md-list uses, so a wrapped header or a second row
    of tiles can't push the bottom off screen. */
 #app.pinned{height:100vh;height:100dvh;display:flex;flex-direction:column}
-#app.pinned .wrap{flex:1;min-height:0;display:flex;flex-direction:column;padding-bottom:0}
+/* width:100% is load-bearing. .wrap centres itself with `margin:0 auto`,
+   and an auto cross-axis margin on a flex item makes it shrink to its
+   content instead of stretching - which narrowed the whole column by
+   ~160px on the Overview and widened it again on every other tab, so
+   switching tabs visibly resized the page. */
+#app.pinned .wrap{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;padding-bottom:0}
 #app.pinned #panel{flex:1;min-height:0;display:flex;flex-direction:column}
 #app.pinned .panel-scroll{flex:1;min-height:0;overflow-y:auto;
   padding:6px 0 24px;scrollbar-gutter:stable}
 #app.pinned .panel-scroll .sec:first-child{margin-top:0}
+/* The scroll region gives up its scrollbar's width; the pinned tile row
+   above it doesn't, so without this the tiles sit ~15px wider than every
+   card below them. --sbw is measured in render() rather than assumed -
+   it is 0 where the platform draws overlay scrollbars. */
+#app.pinned .tiles{padding-right:var(--sbw,0px)}
 /* Pinning costs vertical room, and a short or narrow viewport has none to
    spare - below either, the page goes back to being one scrolling document
    with the tab bar sticky, which is what it is on every other tab. */
@@ -1933,6 +1948,20 @@ function appDetailHtml(a){
   return h;
 }
 
+// How much width the Overview's scroll region loses to its scrollbar. The
+// tile row is pinned outside that region, so without reserving the same
+// strip it sits wider than every card below it. Measured rather than
+// assumed - 0 where the platform draws overlay scrollbars, and 0 on the
+// narrow/short layout where nothing scrolls in there. Re-measured on
+// resize, because crossing that layout's breakpoint changes the answer
+// without anything re-rendering.
+function syncScrollGutter(){
+  var ov=document.querySelector(".panel-scroll");
+  document.documentElement.style.setProperty("--sbw",
+    ov?(ov.offsetWidth-ov.clientWidth)+"px":"0px");
+}
+window.addEventListener("resize",syncScrollGutter);
+
 function render(){
   var tabs=buildTabs();
   // ui.tab is restored from localStorage, so it can name a track that has
@@ -1960,6 +1989,7 @@ function render(){
   else if(current.kind==="allleads")p.innerHTML=leadsTab(ALL_LEADS);
   else p.innerHTML=leadsTab(current.id);
   var newOv=p.querySelector(".panel-scroll");
+  syncScrollGutter();
   if(newOv&&ovTop!==null)newOv.scrollTop=ovTop;
   var newList=p.querySelector(".md-list");
   if(newList){
