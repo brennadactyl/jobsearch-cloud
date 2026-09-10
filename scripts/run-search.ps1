@@ -6,9 +6,31 @@
   Generic runner - contains no personal data itself. It fetches the prompt for
   one track from the tracker API (`GET /api/prompt/<task>`), runs it
   non-interactively via `claude -p`, and logs output to
-  <DataDir>\<User>\logs\<Task>.log. Working directory is set to the user's
-  folder so the relative paths inside the prompt (docs/..., resumes/...)
-  resolve correctly.
+  <DataDir>\<User>\logs\<Task>.log.
+
+  ---- Documents come from the tracker, not from this machine.
+
+  The prompt names relative paths (docs/..., resumes/...) and those are now
+  fetched from `GET /api/documents` into a throwaway directory,
+  <DataDir>\<User>\.run\<Task>, which becomes the working directory for the
+  run. Wiped and refilled every time, so what the search reads is what the
+  tracker holds rather than whatever a previous run left lying around - and so
+  the several hundred megabytes of scratch a run generates stops accumulating
+  in the durable folder, which is what happened when that folder *was* the
+  working directory.
+
+  Afterwards, any file under docs\ whose contents changed is written back
+  (`PUT /api/documents/<path>`), because the baseline doc is the one thing a
+  run edits as it goes. What to send is decided by comparing SHA-256 against a
+  manifest taken on the way down - not by working out which file the track's
+  config points at, which would mean reimplementing the server's own fallback
+  here where the two could drift. Files under resumes\ and reference\ are
+  inputs and are never written back.
+
+  Each write-back carries `If-Match` with the etag the file arrived with, so a
+  run can only overwrite the version it read. A 412 means something else wrote
+  the document during the run; the run's copy is saved next to the log and the
+  run fails rather than clobbering it.
 
   The prompt is composed server-side from that track's config in D1, not read
   from a file here. That's what lets one machine run several people's searches
@@ -41,10 +63,14 @@
   and the credentials come from the environment.
 
 .PARAMETER DataDir
-  Path to the private data folder (the "silo"). With -User, it holds one
-  folder per person; without, it holds one person's docs/, resumes/, logs/
-  directly. Defaults to the JOB_SEARCH_DATA_DIR environment variable, then to
-  a "private" folder next to this repo.
+  Path to the private data folder (the "silo"). With -User, it holds each
+  person's tracker.json and logs/. Defaults to the JOB_SEARCH_DATA_DIR
+  environment variable, then to a "private" folder next to this repo.
+
+.PARAMETER UseLocalFiles
+  Skip the document fetch and run against whatever is already on disk, the way
+  this script worked before documents moved into the tracker. For debugging a
+  run against hand-edited files; a scheduled run should never use it.
 
 .EXAMPLE
   .\run-search.ps1 -Task SWE -User ab266b6c-00cc-45d1-92ac-cdad412c1558
@@ -56,7 +82,9 @@ param(
 
     [string]$User,
 
-    [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" })
+    [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
+
+    [switch]$UseLocalFiles
 )
 
 $ErrorActionPreference = "Stop"
@@ -152,6 +180,93 @@ if (-not $promptBody) {
     exit 1
 }
 
+# ---- Materialize this person's documents into a throwaway directory. -------
+#
+# $manifest is what makes the write-back decidable: path -> the etag the file
+# arrived with and the SHA-256 of its bytes. Afterwards, anything under docs\
+# whose hash moved gets sent back, conditional on that etag. Hashes rather than
+# "which file is this track's doc_file" on purpose - deriving that would mean
+# reimplementing prompt.js's `track.doc_file || docs/tracked_<key>_postings.md`
+# fallback in PowerShell, where it is free to drift from the server's version,
+# and a run that fills several tabs (fed_by) can legitimately edit a sibling's
+# doc, which a single-file rule would silently drop.
+$runDir = $null
+$manifest = @{}
+$headers = @{ Authorization = "Bearer $trackerToken" }
+
+if ($UseLocalFiles) {
+    Log "documents:        SKIPPED (-UseLocalFiles) - running against $workDir as-is"
+} else {
+    $index = $null
+    try {
+        $index = Invoke-RestMethod -Uri "$trackerUrl/api/documents" -Headers $headers -ErrorAction Stop
+    } catch {
+        $status = $_.Exception.Response.StatusCode.value__
+        if ($status -eq 503) {
+            # A deployment with no DOCS bucket. Documented as a supported
+            # choice (see server/README.md), and the honest answer is the old
+            # behaviour: run against whatever is on disk.
+            Log "documents:        not configured on this deployment - running against $workDir as-is"
+        } else {
+            Log "ERROR: couldn't list documents ($status): $($_.Exception.Message)"
+            Write-Error "Couldn't list documents for '$Task' ($status). The search needs its baseline doc and resume."
+            exit 1
+        }
+    }
+
+    if ($index) {
+        # Zero documents is refused rather than run. The prompt's first step is
+        # "read docs/<the baseline doc>" and its second is "read the resume";
+        # with neither present the search screens every posting against nothing
+        # and reports success, which is indistinguishable from a real quiet
+        # night. Almost always means the import has not been run yet.
+        if (-not $index.documents -or $index.documents.Count -eq 0) {
+            Log "ERROR: the tracker holds no documents for this account."
+            Write-Error "No documents for this account - run scripts\import-documents.ps1 first. Refusing to search against an empty profile."
+            exit 1
+        }
+
+        $runDir = Join-Path (Join-Path $workDir ".run") $Task
+        if (Test-Path $runDir) { Remove-Item -Recurse -Force $runDir }
+        New-Item -ItemType Directory -Force -Path $runDir | Out-Null
+
+        $oldProgress = $ProgressPreference
+        $ProgressPreference = "SilentlyContinue"
+        $bytes = 0
+        foreach ($doc in $index.documents) {
+            $dest = Join-Path $runDir ($doc.path -replace '/', '\')
+            New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
+            try {
+                # -UseBasicParsing: without it PS 5.1 hands a *successful*
+                # response to the IE engine to parse, which tries to prompt and
+                # throws under a scheduled task's -NonInteractive.
+                Invoke-WebRequest -Uri "$trackerUrl/api/documents/$($doc.path)" `
+                    -Headers $headers -OutFile $dest -UseBasicParsing -ErrorAction Stop
+            } catch {
+                Log "ERROR: couldn't fetch $($doc.path): $($_.Exception.Message)"
+                Write-Error "Couldn't fetch document '$($doc.path)'. Refusing to search against a partial profile."
+                exit 1
+            }
+            $got = (Get-Item $dest).Length
+            if ($doc.bytes -and $got -ne $doc.bytes) {
+                Log "ERROR: $($doc.path) came back $got bytes, expected $($doc.bytes)"
+                Write-Error "Document '$($doc.path)' downloaded short. Refusing to search against a truncated profile."
+                exit 1
+            }
+            $manifest[$doc.path] = @{
+                etag = $doc.etag
+                sha  = (Get-FileHash -Path $dest -Algorithm SHA256).Hash
+            }
+            $bytes += $got
+        }
+        $ProgressPreference = $oldProgress
+        Log ("documents:        {0} file(s), {1:N0} bytes -> {2}" -f $index.documents.Count, $bytes, $runDir)
+    }
+}
+
+# Only the working directory moves. $workDir still holds tracker.json and logs\.
+$cwd = if ($runDir) { $runDir } else { $workDir }
+
 # This runs as a single headless, non-interactive `claude -p` turn - nobody is
 # there to read a "kicked off as a background agent, I'll report back" reply.
 # If the model backgrounds any part of the work (a Bash run_in_background
@@ -185,8 +300,8 @@ Log "allowed tools:    $allowedTools"
 Log "CLAUDE_CODE_OAUTH_TOKEN set: $([bool]$env:CLAUDE_CODE_OAUTH_TOKEN)"
 
 $job = Start-Job -ScriptBlock {
-    param($claudePath, $prompt, $allowedTools, $workDir, $trackerUrl, $trackerToken)
-    Set-Location $workDir
+    param($claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken)
+    Set-Location $cwd
     # The prompt's own curl calls read these from the environment. Set inside
     # the script block because Start-Job runs in its own process - and set from
     # the resolved per-user values, so two people's searches on one machine
@@ -200,7 +315,7 @@ $job = Start-Job -ScriptBlock {
     # encoding recovers it, because the damage happened upstream of the write.
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     & $claudePath -p $prompt --allowedTools $allowedTools 2>&1
-} -ArgumentList $claudePath, $prompt, $allowedTools, $workDir, $trackerUrl, $trackerToken
+} -ArgumentList $claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken
 
 $start = Get-Date
 Log "job started (id $($job.Id)), waiting..."
@@ -220,6 +335,67 @@ if ($output) { $output | Out-String | Out-File -Append -Encoding utf8 -FilePath 
 Log "----- end output -----"
 
 $exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
+
+# ---- Write back what the run edited. --------------------------------------
+#
+# Only docs\. resumes\ and reference\ are inputs, and a rule that discards
+# changes there is a better guarantee than an instruction in a prompt asking
+# the model not to make them.
+#
+# A failure here is fatal even when the search itself succeeded, and that is
+# the point: the run's findings are in that document. Reporting success while
+# they sit in a directory the next run wipes would be the same class of bug as
+# a run that exits 0 having synced nothing.
+if ($runDir -and $manifest.Count -gt 0) {
+    $sent = 0
+    foreach ($rel in @($manifest.Keys)) {
+        $local = Join-Path $runDir ($rel -replace '/', '\')
+        $folder = $rel.Split("/")[0]
+
+        if (-not (Test-Path $local)) {
+            # Never mirrored as a delete. Removing someone's baseline doc
+            # because a run deleted its local copy is not a decision this
+            # script gets to make on its own.
+            Log "WARNING: $rel is gone from the run directory - left untouched in the tracker."
+            continue
+        }
+
+        $now = (Get-FileHash -Path $local -Algorithm SHA256).Hash
+        if ($now -eq $manifest[$rel].sha) { continue }
+
+        if ($folder -ne "docs") {
+            Log "WARNING: $rel changed during the run and was discarded - only docs/ is written back."
+            continue
+        }
+
+        try {
+            $body = [System.IO.File]::ReadAllBytes($local)
+            $null = Invoke-WebRequest -Uri "$trackerUrl/api/documents/$rel" -Method Put `
+                -Headers (@{ Authorization = "Bearer $trackerToken"; "If-Match" = $manifest[$rel].etag }) `
+                -Body $body -ContentType "text/markdown" -UseBasicParsing -ErrorAction Stop
+            $sent++
+            Log ("wrote back {0} ({1:N0} bytes)" -f $rel, $body.Length)
+        } catch {
+            $status = $_.Exception.Response.StatusCode.value__
+            if ($status -eq 412) {
+                # Something wrote this document between the fetch and now. The
+                # run's copy is the newer *edit* but the older *base*, so
+                # sending it would erase whatever landed in between. Keep it
+                # where a person can merge it by hand.
+                $rescue = Join-Path $logDir "$Task-doc-conflict-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
+                Copy-Item $local $rescue -Force
+                Log "ERROR: $rel changed underneath this run (412). This run's version: $rescue"
+                Write-Error "'$rel' was modified during the run. This run's copy is at $rescue - merge it by hand; nothing was overwritten."
+            } else {
+                Log "ERROR: couldn't write back $rel ($status): $($_.Exception.Message)"
+                Write-Error "Couldn't write back '$rel' ($status). The run's edits are in $local - do not let the next run wipe it."
+            }
+            $exitCode = 1
+        }
+    }
+    Log "write-back:       $sent document(s) updated"
+}
+
 $elapsed = [int]((Get-Date) - $start).TotalSeconds
 Log "finished $Task - job state: $jobState, elapsed: ${elapsed}s, exit code: $exitCode"
 Log "===== done ====="
