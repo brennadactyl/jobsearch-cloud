@@ -51,12 +51,27 @@
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
+/* The Overview scrolls inside itself and the other tabs scroll the window,
+   so the window scrollbar would appear and disappear as you switch between
+   them - taking ~15px of page width with it each time. Reserving the gutter
+   on both keeps the column the same width whichever tab you are on. */
+html{scrollbar-gutter:stable}
 body{margin:0;background:var(--ground);color:var(--ink);
   font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.5;
   -webkit-text-size-adjust:100%}
 .wrap{max-width:1360px;margin:0 auto;padding:0 20px 72px}
 h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;letter-spacing:-.02em}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+/* The title block and the tab bar stick as one unit, so which board you are
+   looking at and which tab you are on stay on screen while its rows scroll.
+   Needs its own background: sticky content sits over the page, and without
+   one the rows would show through it. The Overview pins these already (see
+   #app.pinned), where this is a no-op. */
+.topbar{position:sticky;top:0;z-index:20;background:var(--ground)}
+/* A short viewport cannot spare ~110px on a title you have already read -
+   there, only the tab bar stays (.tabs is sticky in its own right). */
+@media (max-height:620px){.topbar{position:static}}
 
 .hdr{display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;justify-content:space-between;padding:30px 0 18px}
 .hdr h1{font-size:clamp(24px,3.6vw,33px);font-weight:700}
@@ -94,6 +109,10 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 .tab .tabwarn{width:6px;height:6px;border-radius:50%;flex:none;margin-left:-2px}
 .tab .tabwarn.stale{background:var(--warn)}
 .tab .tabwarn.error{background:var(--crit)}
+/* A posting the nightly fill couldn't read. Amber like a stale search, and
+   for the same reason: something here is waiting on you, and nothing else
+   is going to do it. */
+.tab .tabwarn.fill{background:var(--warn)}
 .tab:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 
@@ -121,6 +140,11 @@ textarea{resize:vertical;min-height:34px}
 .chip{appearance:none;font:inherit;font-size:13px;cursor:pointer;border-radius:99px;
   border:1px solid var(--line);background:var(--surface);color:var(--ink2);padding:4px 11px}
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+/* The filter a tab was opened with, from an Overview number. Always on when
+   shown, and always removable - a filter you can't see is a page misreporting
+   what it holds. */
+.chip.drill{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.chip.drill .x{margin-left:7px;font-weight:600}
 
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .scroller{overflow-x:auto}
@@ -207,6 +231,40 @@ tr.more-row td{padding:4px 12px 14px}
 td.rc{max-width:260px}
 td.rc a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.cc{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+/* The posting's host in the applications grid. Capped and clipped: a job
+   board hostname is short, but nothing stops one being long, and this column
+   sits between two the eye needs. */
+td.lk{max-width:150px}
+td.lk a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.lk .lk-none{color:var(--ink3)}
+
+/* The applications grid's fill-state groups (see appsGridHtml). A divider
+   with a label rather than a card or a heading, so the table still reads as
+   one table - and the whole divider is the fold control, because an 11px
+   caret is a poor click target and there is nothing else on that row. */
+tr.group td{background:var(--surface2);border-bottom:1px solid var(--line);padding:0}
+.grp{appearance:none;border:0;background:none;cursor:pointer;font:inherit;color:var(--ink3);
+  display:flex;align-items:center;width:100%;text-align:left;padding:7px 12px;
+  font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.grp:hover{background:var(--line)}
+.grp:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.grp .caret{flex:none;margin-right:9px;font-size:10px;line-height:1;
+  transition:transform .12s ease}
+.grp[aria-expanded="false"] .caret{transform:rotate(-90deg)}
+.grp .cnt{font-family:"IBM Plex Mono",monospace;text-transform:none;letter-spacing:0;
+  font-weight:400;margin-left:8px}
+/* Folded away, the count is the only thing left saying what is in there. */
+.grp[aria-expanded="false"] .cnt{color:var(--ink2)}
+tr.group.stuck .grp,tr.group.stuck .grp .cnt{color:var(--warn)}
+
+/* A row still waiting on tonight's run, and one no run will ever read. */
+tr.waiting input::placeholder,tr.stuck input::placeholder{font-style:italic}
+.eta{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ink2)}
+.eta .pulse{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+tr.stuck td:first-child{border-left-color:var(--warn)}
+.stuck-note{display:inline-flex;align-items:center;gap:6px;color:var(--warn);font-weight:500;
+  max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stuck-note .mark{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
 td:first-child{border-left:3px solid transparent}
 tr.pri0 td:first-child{border-left-color:var(--pri-0)}
 tr.pri1 td:first-child{border-left-color:var(--pri-1)}
@@ -243,6 +301,10 @@ td textarea{font-size:13px;min-height:32px;min-width:130px}
 .md-row-top .co{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .md-row-top .pill{flex:0 0 auto}
 .md-row-ttl{font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.4}
+/* Which search found this row - shown only in the pooled All-leads list,
+   where the tab no longer says it. */
+.md-row-track{display:inline-block;margin-left:7px;padding:0 6px;border-radius:4px;
+  background:var(--surface2);color:var(--ink3);font-size:11px;white-space:nowrap}
 .md-row-loc{font-size:11.5px;color:var(--ink3);margin-top:7px;display:flex;align-items:baseline}
 .md-row-loc .geo{flex:0 0 auto;margin-left:6px;padding:1px 7px}
 .md-row-place{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -322,8 +384,61 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .pill.bad{background:none;color:var(--crit);border-color:var(--crit)}
 
 .tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));margin-bottom:20px}
-.tile{padding:16px 17px;border-radius:12px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
-.tile .k{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+
+/* The Overview scrolls inside itself: header, tabs and the tile row hold
+   still while the searches and the funnel scroll past, the same way a track
+   tab's master/detail card scrolls under a toolbar that doesn't. render()
+   adds .pinned for the Overview only - every other tab scrolls as one
+   document. A column that measures itself, rather than the fixed
+   `calc(100vh - 260px)` .md-list uses, so a wrapped header or a second row
+   of tiles can't push the bottom off screen. */
+#app.pinned{height:100vh;height:100dvh;display:flex;flex-direction:column}
+/* width:100% is load-bearing. .wrap centres itself with `margin:0 auto`,
+   and an auto cross-axis margin on a flex item makes it shrink to its
+   content instead of stretching - which narrowed the whole column by
+   ~160px on the Overview and widened it again on every other tab, so
+   switching tabs visibly resized the page. */
+#app.pinned .wrap{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;padding-bottom:0}
+#app.pinned #panel{flex:1;min-height:0;display:flex;flex-direction:column}
+#app.pinned .panel-scroll{flex:1;min-height:0;overflow-y:auto;
+  padding:6px 0 24px;scrollbar-gutter:stable}
+#app.pinned .panel-scroll .sec:first-child{margin-top:0}
+/* Says the region has more above it. Only once something has actually
+   scrolled under it - a hairline over content sitting flush at the top
+   would read as a stray rule. Inset, so it stays on the region's edge
+   instead of scrolling away with the content. */
+#app.pinned .panel-scroll.scrolled{box-shadow:inset 0 1px 0 var(--line)}
+/* The scroll region gives up its scrollbar's width; the pinned tile row
+   above it doesn't, so without this the tiles sit ~15px wider than every
+   card below them. --sbw is measured in render() rather than assumed -
+   it is 0 where the platform draws overlay scrollbars. */
+#app.pinned .tiles{padding-right:var(--sbw,0px)}
+/* Pinning costs vertical room, and a short or narrow viewport has none to
+   spare - below either, the page goes back to being one scrolling document
+   with the tab bar sticky, which is what it is on every other tab. */
+@media (max-height:620px),(max-width:700px){
+  #app.pinned{height:auto;display:block}
+  #app.pinned .wrap{display:block;padding-bottom:72px}
+  #app.pinned #panel{display:block}
+  #app.pinned .panel-scroll{overflow:visible;padding:0}
+  #app.pinned .panel-scroll .sec:first-child{margin-top:26px}
+}
+/* Each tile opens the rows behind its number (see dashboard()'s TILES), so
+   it is a real button - keyboard reachable, and with the chevron showing at
+   rest rather than on hover: an affordance nobody sees until they are
+   already pointing at it doesn't help them decide to point at it. */
+.tile{padding:16px 17px;border-radius:12px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);
+  display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+  transition:border-color .12s ease}
+.tile:hover{border-color:var(--ink3)}
+.tile:hover .go{color:var(--accent)}
+/* Nothing behind the number to open. Driven off the count, so the day it
+   isn't zero the tile comes back on its own. */
+.tile[disabled]{cursor:default;opacity:.72}
+.tile[disabled]:hover{border-color:var(--line)}
+.tile .k{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);font-weight:600;
+  display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tile .go{font-size:15px;line-height:1;color:var(--ink3);flex:none}
 .tile .v{font-family:"Bricolage Grotesque",sans-serif;font-size:31px;font-weight:700;line-height:1.15;margin-top:7px;letter-spacing:-.03em}
 .tile .f{font-size:12.5px;color:var(--ink2);margin-top:3px}
 .tile.hi .v{color:var(--accent)}
@@ -332,6 +447,16 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .bar h3{font-size:14px;font-weight:600;display:flex;justify-content:space-between;
   align-items:baseline;gap:6px 14px;flex-wrap:wrap;margin-bottom:7px}
 .bar h3 span{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink3);font-weight:400}
+/* A bar's name, when there is a tab holding the rows it counts. A button
+   rather than a link because it switches tabs in place - there is no URL
+   behind a tab here to point an href at. */
+.jumplink{appearance:none;border:0;background:none;padding:0;font:inherit;color:inherit;
+  cursor:pointer;border-radius:4px}
+.jumplink:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.jumplink:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* A funnel stage nothing has reached. `.bar h3 span` would otherwise set it
+   in the mono count face, and dimming it says why it isn't a button. */
+.bar h3 .jumpdead{font-family:inherit;font-size:inherit;font-weight:inherit;color:var(--ink3)}
 .meter{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden;display:flex}
 .meter i{display:block;height:100%}
 .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font-size:12.5px;color:var(--ink2)}
@@ -428,6 +553,9 @@ try{
 
 <div id="app" class="hidden">
   <div class="wrap">
+    <!-- Title block and tab bar travel together, so both stay put while a
+         tab's rows scroll under them. -->
+    <div class="topbar">
     <div class="hdr">
       <div>
         <h1 id="appTitle">Job Search Tracker</h1>
@@ -441,6 +569,7 @@ try{
       </div>
     </div>
     <nav class="tabs" id="tabs" role="tablist"></nav>
+    </div>
     <main id="panel"></main>
   </div>
 </div>
@@ -581,7 +710,8 @@ var API_BASE=(typeof LOCAL_API_BASE!=="undefined"?LOCAL_API_BASE:"");
 // a configured deployment overwrites all of these.
 function defaultSettings(){
   return {display_title:"Job Search Tracker",overview_label:"Overview",
-    applications_label:"Applications",stale_run_hours:36,priority_locations:[]};
+    applications_label:"Applications",all_leads_label:"All leads",
+    stale_run_hours:36,priority_locations:[]};
 }
 var state={updated:null,leads:[],applications:[],tracks:[],settings:defaultSettings()};
 
@@ -609,7 +739,20 @@ function buildTabs(){
   var tabs=[
     {id:"dashboard",kind:"overview",label:s.overview_label||"Overview",n:null},
     {id:"applications",kind:"applications",label:s.applications_label||"Applications",
-     n:state.applications.length},
+     n:state.applications.length,
+     // A posting the nightly fill couldn't read is the one thing on this tab
+     // that waits on you rather than on a company: nothing will fill that row
+     // in but you, and no later run will try again. Marked the way a track
+     // whose search stopped reporting is - see the `warn` field below.
+     warn:state.applications.some(function(a){return a.autofill==="failed";})
+       ? {cls:"fill",title:"A posting couldn’t be read — a row here needs filling in by hand"}
+       : null},
+    // Every track's leads in one list. It exists because the Overview's
+    // tiles count across tracks - "116 untriaged" spans five tabs - and a
+    // number you can't open is a number you stop trusting. Its badge counts
+    // New the way a track tab's does, so it reads as the sum of them.
+    {id:ALL_LEADS,kind:"allleads",label:s.all_leads_label||"All leads",
+     n:state.leads.filter(function(l){return l.status==="New";}).length},
   ];
   Object.keys(TRACKS).forEach(function(k){
     tabs.push({id:k,kind:"track",label:TRACKS[k].label,
@@ -617,9 +760,22 @@ function buildTabs(){
       // counts New leads - not the whole track (Reviewing/Not a fit are
       // things you've already looked at, and Applied leads have moved to
       // the Applications tab entirely, see setLeadStatus()).
-      n:state.leads.filter(function(l){return l.search===k&&l.status==="New";}).length});
+      n:state.leads.filter(function(l){return l.search===k&&l.status==="New";}).length,
+      // Only stale/error earn a mark - see runState() on why "never ran"
+      // stays quiet.
+      warn:trackWarn(k)});
   });
   return tabs;
+}
+
+// The mark a track tab carries when its scheduled search has stopped
+// reporting cleanly, in the shape buildTabs puts on every tab: a class and
+// the sentence that explains it. Returns null when there is nothing to say.
+function trackWarn(k){
+  var st=runState(TRACKS[k]&&TRACKS[k].run);
+  if(st==="error")return {cls:"error",title:"The last scheduled run reported an error"};
+  if(st==="stale")return {cls:"stale",title:"This search hasn’t run recently"};
+  return null;
 }
 
 // Applies state.tracks/state.settings (from /api/data) to TRACKS and the
@@ -638,7 +794,13 @@ function applyConfig(){
       ", refreshed daily. Edit anything — it saves for every device."
     : "No tracked searches configured yet — run the job-search-setup skill to add one.";
 }
-var ui={tab:"dashboard",q:"",filter:"All",selected:{},expanded:{},view:"detail",leadSort:"priority",appSort:"applied-desc"};
+var ui={tab:"dashboard",q:"",filter:"All",selected:{},expanded:{},view:"detail",leadSort:"priority",appSort:"applied-desc",drill:null,collapsed:{}};
+
+// The id of the cross-track leads tab. A tab id, not a track key: the same
+// shape as "dashboard" and "applications", which are also ids no track can
+// usefully be called.
+var ALL_LEADS="allleads";
+
 
 // Fields shown in leads' and applications' facts cards. Facts about the
 // opportunity itself (stable once entered - comp doesn't change because
@@ -685,6 +847,64 @@ var STAGE_DATE_FIELDS=[
   ["Rejected","dateRejected"],
   ["Withdrawn","dateWithdrawn"]
 ];
+
+// Drill-downs. Every Overview number that isn't just "a tab's worth of rows"
+// names one of these, and the tab it opens filters by the same predicate the
+// tile counted with - one definition, so the number you clicked and the rows
+// you land on can't drift apart. `scope` says which tab shows it; `label` is
+// what the dismissible chip reads; `test` is the rule.
+var DRILLS={
+  // Matches the Overview's priority-location tile: the first configured
+  // ranking, still worth looking at. Applied leads aren't in the leads tab
+  // at all (see setLeadStatus), so only "Not a fit" needs excluding here.
+  "top-geo-open":{scope:"leads",
+    label:function(){
+      var r=(state.settings.priority_locations||[])[0];
+      return (r?r.label:"Top locations")+" · still open";
+    },
+    test:function(l){var g=geo(l.location);return !!g&&g.i===0&&l.status!=="Not a fit";}},
+  "in-conversation":{scope:"apps",label:"In screen or loop stage",
+    test:function(a){return ACTIVE.indexOf(a.status)>=0;}},
+  "gone-quiet":{scope:"apps",label:"Applied 14+ days ago, no reply",
+    test:function(a){var d=daysSince(a.dateApplied);
+      return a.status==="Applied"&&d!==null&&d>14;}},
+  // The funnel's first row. "To Apply" rows sit in this tab without having
+  // been applied to, which is exactly what the Overview splits them out of.
+  "applied":{scope:"apps",label:"Applied",
+    test:function(a){return a.status!=="To Apply";}}
+};
+// One per pipeline stage, built from the same list the funnel is built from,
+// so a stage added there arrives here too. These test the stage *date*, not
+// the current status: the date is stamped once and never cleared, so an
+// application rejected after a tech screen still counts as having reached
+// one - which is what the funnel row it opens from counted.
+STAGE_DATE_FIELDS.forEach(function(s){
+  DRILLS["reached-"+s[1]]={scope:"apps",label:"Reached "+s[0],
+    test:function(a){return a.status!=="To Apply"&&!!a[s[1]];}};
+});
+
+function drillLabel(id){
+  var d=DRILLS[id]; if(!d)return "";
+  return typeof d.label==="function"?d.label():d.label;
+}
+// True when a row survives the active drill-down. No drill, or one belonging
+// to the other kind of tab, filters nothing.
+function drillKeeps(scope,row){
+  var d=DRILLS[ui.drill];
+  if(!d||d.scope!==scope)return true;
+  return d.test(row);
+}
+// The chip that says a drill-down is on and takes it off again. Rendered
+// only in the tab that owns it - the Overview sends you here with a filter
+// applied, and an applied filter you can't see is a page lying about what
+// it's showing.
+function drillChipHtml(scope){
+  var d=DRILLS[ui.drill];
+  if(!d||d.scope!==scope)return "";
+  return '<button class="chip drill" data-drill-clear="1" aria-pressed="true" '+
+    'title="Clear this filter">'+esc(drillLabel(ui.drill))+
+    '<span class="x" aria-hidden="true">×</span></button>';
+}
 // [column,label] form, "Applied" first - the order the Stage history table
 // (see stageHistoryHtml) renders in, and the source list for it.
 var STAGE_HISTORY_FIELDS=[["dateApplied","Applied"]].concat(
@@ -952,6 +1172,22 @@ function runSummary(run){
 
 // The one-line "when did this search last run" stamp shown above a track's
 // list and in the Overview panel.
+// The ranking legend for the location tiers, shared by every tab that
+// colours a row by one. Numbered so the ranking reads as a ranking - with
+// more than two tiers, colour alone stops saying which outranks which.
+function geoKeyHtml(){
+  return (state.settings.priority_locations||[]).map(function(r,i){
+    var dot=i<5?"var(--pri-"+i+")":"var(--ink3)";
+    return '<span><i style="background:'+dot+'"></i>'+(i+1)+'. '+esc(r.label)+'</span>';
+  }).join("");
+}
+
+// What the pooled leads tab says where a track tab shows its run stamp.
+function trackCountLine(){
+  var n=Object.keys(TRACKS).length;
+  return n+" tracked search"+(n===1?"":"es")+" feed this list";
+}
+
 function runStampHtml(key){
   var tr=TRACKS[key]; if(!tr)return "";
   var run=tr.run, st=runState(run);
@@ -1126,7 +1362,7 @@ function forgetSession(message){
   // whatever tab and sort the last one left behind - and it gets re-saved
   // under their session, which is how a cleared preference comes back.
   ui.tab="dashboard";ui.q="";ui.filter="All";ui.selected={};ui.expanded={};
-  ui.view="detail";ui.leadSort="priority";ui.appSort="applied-desc";
+  ui.view="detail";ui.leadSort="priority";ui.appSort="applied-desc";ui.drill=null;
   document.getElementById("gate").classList.remove("hidden");
   document.getElementById("app").classList.add("hidden");
   document.getElementById("gateError").textContent=message||"";
@@ -1198,17 +1434,12 @@ function boot(){
 
 function tabsHtml(){
   return buildTabs().map(function(x){
-    // Only a track tab can carry a run warning, and only stale/error earn
-    // one - see runState() on why "never ran" stays quiet.
-    var warn="";
-    if(x.kind==="track"){
-      var st=runState(TRACKS[x.id]&&TRACKS[x.id].run);
-      if(st==="stale"||st==="error"){
-        warn='<i class="tabwarn '+st+'" title="'+
-          (st==="error"?"The last scheduled run reported an error":
-                        "This search hasn’t run recently")+'"></i>';
-      }
-    }
+    // Whether a tab has something wrong behind it is decided in buildTabs,
+    // with the rest of what a tab is - this only draws it, so a new kind of
+    // tab with a new reason to be marked needs nothing here.
+    var warn=x.warn
+      ? '<i class="tabwarn '+esc(x.warn.cls)+'" title="'+esc(x.warn.title)+'"></i>'
+      : "";
     return '<button class="tab" role="tab" data-tab="'+esc(x.id)+'" aria-selected="'+(ui.tab===x.id)+'">'+
       esc(x.label)+warn+(x.n!==null?'<span class="n">'+x.n+'</span>':'')+'</button>';
   }).join("");
@@ -1249,15 +1480,46 @@ function dashboard(){
   var topLabel=topRule?topRule.label:"Top locations";
   var trackCount=state.tracks.length;
 
-  var h='<div class="tiles">'+
-    '<div class="tile hi"><div class="k">Untriaged</div><div class="v mono">'+fresh+'</div><div class="f">leads marked New</div></div>'+
-    '<div class="tile"><div class="k">'+esc(topLabel)+'</div><div class="v mono" style="color:var(--pri-0)">'+near+'</div><div class="f">still open</div></div>'+
-    '<div class="tile"><div class="k">Tracked leads</div><div class="v mono">'+L.length+'</div><div class="f">across '+trackCount+' tracked search'+(trackCount===1?'':'es')+'</div></div>'+
-    '<div class="tile"><div class="k">Applied</div><div class="v mono">'+appliedCount+'</div><div class="f">'+
-      (toApply?'plus '+toApply+' still to apply':'in your Applications tab')+'</div></div>'+
-    '<div class="tile"><div class="k">In conversation</div><div class="v mono">'+active+'</div><div class="f">screen or loop stage</div></div>'+
-    '<div class="tile"><div class="k">Gone quiet</div><div class="v mono">'+stale+'</div><div class="f">applied 14+ days ago</div></div>'+
-  '</div>';
+  // Every tile opens the rows behind its own number: the tab it lands on
+  // plus the filter that reproduces the count, so what you clicked and what
+  // you land in are the same set. `drill` names an entry in DRILLS, which
+  // owns the rule; `filter` is a plain status chip where one already says
+  // it. A tile counting zero has nothing to open and says so by being
+  // disabled - derived from the count, so it comes back on its own.
+  var TILES=[
+    {k:"Untriaged",v:fresh,f:"leads marked New",hi:true,tab:ALL_LEADS,filter:"New"},
+    {k:topLabel,v:near,f:"still open",color:"var(--pri-0)",tab:ALL_LEADS,drill:"top-geo-open"},
+    // Counts what the tab it opens can show - leads marked Applied have
+    // moved to Applications and aren't in that list, so counting them here
+    // would send you to a shorter list than the number promised.
+    {k:"Tracked leads",v:L.filter(function(l){return l.status!=="Applied";}).length,
+     f:"across "+trackCount+" tracked search"+(trackCount===1?"":"es"),tab:ALL_LEADS},
+    {k:"Applied",v:appliedCount,
+     f:toApply?"plus "+toApply+" still to apply":"in your Applications tab",
+     tab:"applications",drill:"applied"},
+    {k:"In conversation",v:active,f:"screen or loop stage",
+     tab:"applications",drill:"in-conversation"},
+    {k:"Gone quiet",v:stale,f:"applied 14+ days ago",
+     tab:"applications",drill:"gone-quiet"}
+  ];
+  var h='<div class="tiles">'+TILES.map(function(t){
+    var dead=!t.v;
+    return '<button type="button" class="tile'+(t.hi?" hi":"")+'"'+
+      (dead?' disabled title="Nothing to open yet"'
+           :' data-tab="'+esc(t.tab)+'"'+
+            (t.filter?' data-tab-filter="'+esc(t.filter)+'"':'')+
+            (t.drill?' data-drill="'+esc(t.drill)+'"':''))+'>'+
+      '<div class="k">'+esc(t.k)+(dead?'':'<span class="go" aria-hidden="true">&rsaquo;</span>')+'</div>'+
+      '<div class="v mono"'+(t.color?' style="color:'+t.color+'"':'')+'>'+t.v+'</div>'+
+      '<div class="f">'+esc(t.f)+'</div></button>';
+  }).join("")+'</div>';
+
+  // Everything below the tiles scrolls inside itself, so the tabs and the
+  // numbers stay put while you read the searches - the same shape a track
+  // tab has, where the master/detail card scrolls and the toolbar doesn't.
+  // #app.pinned (set in render()) is what turns this div into that region;
+  // on a short or narrow viewport the CSS drops it back to one document.
+  h+='<div class="panel-scroll">';
 
   // Whether every scheduled search is still firing is the one thing the
   // lead counts above genuinely cannot show - a search that stopped running
@@ -1289,7 +1551,12 @@ function dashboard(){
     var tot=rows.length||1;
     var cols={"New":"var(--accent)","Reviewing":"var(--warn)","Applied":"var(--good)",
               "Not a fit":"var(--line)"};
-    h+='<div class="bar"><h3>'+esc(TRACKS[k].label)+' <span>'+esc(TRACKS[k].full)+' &middot; '+rows.length+'</span></h3>'+
+    // The name opens that track's tab. Only the name, not the whole header
+    // row: the row also carries the description and the run stamp, and a
+    // click target that wide would swallow selecting either.
+    h+='<div class="bar"><h3><button type="button" class="jumplink" data-tab="'+esc(k)+'" '+
+      'title="Open this tab">'+esc(TRACKS[k].label)+'</button>'+
+      ' <span>'+esc(TRACKS[k].full)+' &middot; '+rows.length+'</span></h3>'+
       '<div class="meter">'+byStatus.map(function(b){
         return b.n?'<i style="width:'+(b.n/tot*100)+'%;background:'+cols[b.s]+'"></i>':"";}).join("")+'</div>'+
       '<div class="legend">'+byStatus.filter(function(b){return b.n;}).map(function(b){
@@ -1317,14 +1584,23 @@ function dashboard(){
         : 'Move a lead to Applied, or add one directly from the Applications tab, and its progress shows up here.')+
       '</div>';
   }else{
-    var FUNNEL=[["Applied",appliedCount]].concat(STAGE_DATE_FIELDS.slice(0,4).map(function(s){
-      return [s[0],appsApplied.filter(function(a){return a[s[1]];}).length];
+    // Each row carries the drill-down that reproduces it, so its header can
+    // open the same set in Applications - "applied" for the first row, and
+    // the per-stage entries DRILLS builds from this very list for the rest.
+    var FUNNEL=[["Applied",appliedCount,"applied"]].concat(STAGE_DATE_FIELDS.slice(0,4).map(function(s){
+      return [s[0],appsApplied.filter(function(a){return a[s[1]];}).length,"reached-"+s[1]];
     }));
     h+='<div class="card" style="padding:19px"><div class="bars">'+
       FUNNEL.map(function(r,i){
         var pct=Math.round(r[1]/appliedCount*100);
         var color=i===0?"var(--ink3)":(i===FUNNEL.length-1?"var(--good)":"var(--accent)");
-        return '<div class="bar"><h3>'+esc(r[0])+' <span>'+r[1]+' &middot; '+pct+'%</span></h3>'+
+        // A stage nothing has reached has no rows to open, so it stays
+        // plain text rather than a link that lands on an empty list.
+        var head=r[1]
+          ? '<button type="button" class="jumplink" data-tab="applications" data-drill="'+esc(r[2])+'" '+
+            'title="Open these in Applications">'+esc(r[0])+'</button>'
+          : '<span class="jumpdead" title="Nothing has reached this stage yet">'+esc(r[0])+'</span>';
+        return '<div class="bar"><h3>'+head+' <span>'+r[1]+' &middot; '+pct+'%</span></h3>'+
           '<div class="meter"><i style="width:'+pct+'%;background:'+color+'"></i></div></div>';
       }).join("")+'</div>';
 
@@ -1366,6 +1642,7 @@ function dashboard(){
     ? 'Scheduled searches across your '+trackCount+' tracked search'+(trackCount===1?'':'es')+' add rows here every day.'
     : 'Once a tracked search is set up, its scheduled run adds rows here every day.')+
     ' Every posting is opened and confirmed live before it lands; nothing arrives from a search snippet alone.</div>';
+  h+='</div>'; // .panel-scroll
   return h;
 }
 
@@ -1380,38 +1657,52 @@ function leadsTab(key){
   // `tracked` keeps the unfiltered set only so the empty state below can tell
   // a search that has never found anything from one whose finds have all been
   // applied to.
-  var tracked=state.leads.filter(function(l){return l.search===key;});
+  //
+  // The same function draws the cross-track tab (key===ALL_LEADS): one list
+  // over every track instead of one, which is the only difference that
+  // reaches the rows. Everything a single track has and a pooled list can't
+  // - its description, its run stamp, the empty state that explains why a
+  // search found nothing - is skipped rather than faked.
+  var isAll=(key===ALL_LEADS);
+  var scopeLabel=isAll
+    ? ((state.settings&&state.settings.all_leads_label)||"All leads")
+    : TRACKS[key].label;
+  var tracked=state.leads.filter(function(l){return isAll||l.search===key;});
   var all=tracked.filter(function(l){return l.status!=="Applied";});
   var q=ui.q.toLowerCase();
   var rows=all.filter(function(l){
     if(ui.filter!=="All"&&l.status!==ui.filter)return false;
+    if(!drillKeeps("leads",l))return false;
     if(!q)return true;
     return (l.company+" "+l.title+" "+l.location).toLowerCase().indexOf(q)>=0;
   }).sort(leadComparator(ui.leadSort));
-  // Numbered so the ranking is readable as a ranking - with more than two
-  // tiers, colour alone stops saying which one outranks which.
-  var geoKeyHtml=(state.settings.priority_locations||[]).map(function(r,i){
-    var dot=i<5?"var(--pri-"+i+")":"var(--ink3)";
-    return '<span><i style="background:'+dot+'"></i>'+(i+1)+'. '+esc(r.label)+'</span>';
-  }).join("");
   var h='<div class="toolbar">'+
-    '<div class="search"><input type="search" id="q" placeholder="Filter '+esc(TRACKS[key].label)+'&hellip;" value="'+esc(ui.q)+'"></div>'+
+    '<div class="search"><input type="search" id="q" placeholder="Filter '+esc(scopeLabel)+'&hellip;" value="'+esc(ui.q)+'"></div>'+
     '<div class="chips">'+["All"].concat(LEAD_STATUS.filter(function(s){return s!=="Applied";})).map(function(f){
       return '<button class="chip" data-filter="'+esc(f)+'" aria-pressed="'+(ui.filter===f)+'">'+esc(f)+'</button>';
-    }).join("")+'</div>'+
+    }).join("")+drillChipHtml("leads")+'</div>'+
     viewSwitchHtml()+'</div>'+
     // The controls people touch constantly (search, status, view mode)
     // stay full-weight above. Sort and this row's other contents are all
     // settings/context you glance at, not fiddle with per-visit, so they
     // share one quieter line instead of competing for the same attention.
     '<div class="key"><div class="sortwrap"><label class="sort-label" for="leadSort">Sort</label>'+sortSelectHtml("leads","leadSort")+'</div>'+
-      geoKeyHtml+
+      geoKeyHtml()+
       // Only true under the default sort - a flat sort by found/location/
       // company means proximity no longer decides the order, so the legend
       // shouldn't claim it does.
       (ui.leadSort==="priority"?'<span>Closest roles sorted first</span>':'')+
-      '<span class="key-run">'+runStampHtml(key)+'</span></div>';
+      // A pooled list has no single run behind it, so it says how many
+      // searches feed it instead of which one last reported.
+      '<span class="key-run">'+(isAll
+        ? esc(trackCountLine())
+        : runStampHtml(key))+'</span></div>';
 
+  if(!all.length&&isAll){
+    return h+'<div class="card empty"><strong>Nothing open right now</strong>'+
+      'No tracked search has a posting waiting to be looked at &mdash; everything found so far has been '+
+      'applied to or ruled out. New postings land here as the daily runs find them.</div>';
+  }
   if(!all.length){
     // An empty track has more than one story behind it, and they read very
     // differently. Whether anything is still tracked separates a search that
@@ -1435,9 +1726,16 @@ function leadsTab(key){
       warn0+'</div>';
   }
   if(!rows.length) return h+'<div class="card empty"><strong>Nothing matches</strong>Try a different filter.</div>';
+  // In the pooled list, which search found a posting is the one thing a row
+  // no longer says by virtue of which tab you are on.
+  function trackTagHtml(l){
+    if(!isAll)return "";
+    var tr=TRACKS[l.search];
+    return '<span class="md-row-track">'+esc(tr?tr.label:l.search)+'</span>';
+  }
 
   if(ui.view==="grid"){
-    h+=leadsGridHtml(rows,key);
+    h+=leadsGridHtml(rows,key,isAll);
     h+='<div class="note">Quick-scan columns only &mdash; referral, notes, team, setup, and the rest are in Detail view (click a row to open them). Edits save when you click away. '+rows.length+' of '+all.length+' shown.</div>';
     return h;
   }
@@ -1451,14 +1749,14 @@ function leadsTab(key){
     return '<div class="'+cls+'" data-select="'+l.id+'" data-scope="'+key+'">'+
       '<div class="md-row-top"><span class="co">'+esc(l.company)+'</span>'+
         '<span class="pill '+pillFor(l.status)+'">'+esc(l.status)+'</span></div>'+
-      '<div class="md-row-ttl">'+esc(l.title)+'</div>'+
+      '<div class="md-row-ttl">'+esc(l.title)+trackTagHtml(l)+'</div>'+
       '<div class="md-row-loc"><span class="md-row-place">'+esc(l.location)+'</span>'+
         (g?'<span class="geo '+g.p+'">'+esc(g.label)+'</span>':'')+
         '<span class="md-row-found" title="Date this listing was added">Found <span class="mono">'+esc(l.found)+'</span></span></div>'+
     '</div>';
   }).join("");
 
-  h+='<div class="md"><div class="md-list">'+listHtml+'</div><div class="md-detail">'+leadDetailHtml(sel,key)+'</div></div>';
+  h+='<div class="md"><div class="md-list">'+listHtml+'</div><div class="md-detail">'+leadDetailHtml(sel,isAll?sel.search:key)+'</div></div>';
   h+='<div class="note">Status, notes, and details save when you click away from the field. '+rows.length+' of '+all.length+' shown.</div>';
   return h;
 }
@@ -1472,11 +1770,14 @@ var LEAD_GRID_FIELDS=[
   ["comp","Comp range"]
 ];
 
-function leadsGridHtml(rows,trackKey){
-  var COLS=6+LEAD_GRID_FIELDS.length; // company/role/location/status + extras + found + details indicator
+function leadsGridHtml(rows,trackKey,isAll){
+  // One more column in the pooled list: which search found the row, the
+  // thing the tab itself says everywhere else.
+  var COLS=6+LEAD_GRID_FIELDS.length+(isAll?1:0); // company/role/location/status + extras + found + details indicator
   var h='<div class="card grid-wrap"><table><thead><tr>'+
     '<th>Company</th><th>Role</th><th>Location</th><th>Status</th>'+
     LEAD_GRID_FIELDS.map(function(f){return '<th>'+esc(f[1])+'</th>';}).join("")+
+    (isAll?'<th>Search</th>':'')+
     '<th>Found</th><th></th>'+
   '</tr></thead><tbody>'+rows.map(function(l){
     var g=geo(l.location);
@@ -1489,12 +1790,19 @@ function leadsGridHtml(rows,trackKey){
     var row='<tr data-expand="'+l.id+'" data-scope="'+trackKey+'"'+(cls?' class="'+cls+'"':'')+'>'+
       '<td class="co cc" title="'+esc(l.company)+'">'+esc(l.company)+'</td>'+
       '<td class="rc"><a href="'+esc(l.url)+'" target="_blank" rel="noopener" title="'+esc(l.title)+'">'+esc(l.title)+'</a></td>'+
-      '<td class="loc" title="'+esc(l.location)+'"><div class="loc-txt">'+esc(l.location)+'</div>'+(g?'<span class="geo '+g.p+'">'+esc(g.label)+'</span>':'')+'</td>'+
+      // The tier is the stripe down the row's left edge (tr.pri0-4 above),
+      // not a badge here. A grid is scanned down a column, and the same
+      // ranking said twice on one row - once in colour, once in words
+      // repeating the location beside it - is one more thing to read past.
+      // Detail view keeps the badge, where a row is read rather than scanned.
+      '<td class="loc" title="'+esc(l.location)+'"><div class="loc-txt">'+esc(l.location)+'</div></td>'+
       '<td>'+selectHtml(LEAD_STATUS,l.status,'data-id="'+l.id+'" data-field="status"')+'</td>'+
       LEAD_GRID_FIELDS.map(function(f){
         var key=f[0],val=l[key]||"";
         return '<td><input type="text" data-id="'+l.id+'" data-field="'+key+'" value="'+esc(val)+'"></td>';
       }).join("")+
+      (isAll?'<td class="cc" title="'+esc(TRACKS[l.search]?TRACKS[l.search].label:l.search)+'">'+
+        esc(TRACKS[l.search]?TRACKS[l.search].label:l.search)+'</td>':'')+
       '<td class="dt mono">'+esc(l.found)+'</td>'+
       '<td class="exp-ind">'+(open?'Hide':'Details')+'</td>'+
     '</tr>';
@@ -1539,7 +1847,11 @@ function leadDetailHtml(l,key){
 }
 
 function appsTab(){
-  var A=state.applications.slice().sort(appComparator(ui.appSort));
+  var ALL_APPS=state.applications.slice().sort(appComparator(ui.appSort));
+  // `ALL_APPS` stays around so the two empty states below can tell "you
+  // haven't logged anything" from "the filter you arrived with matches
+  // nothing" - which are different problems with different answers.
+  var A=ALL_APPS.filter(function(a){return drillKeeps("apps",a);});
   // The URL box is the whole of adding an application now: paste the posting
   // you applied to, and a nightly run reads the company, role and location off
   // it. Leaving it empty still adds the blank row this button always added -
@@ -1560,17 +1872,41 @@ function appsTab(){
   // here on purpose, which is what makes this tab the record of what was
   // actually applied to.
   var h='<div class="toolbar">'+
-    '<div class="search"><input type="url" id="appurl" placeholder="Paste the job posting URL" aria-label="Job posting URL"></div>'+
-    '<button class="btn primary" id="addapp">Add application</button>'+
-    '<span style="font-size:13px;color:var(--ink3)">Nothing is added here except by you &mdash; a pasted URL is filled in overnight.</span>'+
+    '<div class="search"><input type="url" id="appurl"'+
+      ' placeholder="Paste a link straight to the job posting"'+
+      ' aria-label="Link to a job posting" aria-describedby="addhint"'+
+      // "Straight to" is the constraint: the run opens exactly this URL, so a
+      // search page or a careers index produces a row nothing can fill.
+      ' title="The posting&rsquo;s own page, not a search or a careers index &mdash; that page is what tonight&rsquo;s run opens and reads. Greenhouse, Lever, Workday and company careers pages all work."></div>'+
+    // The button has two jobs and the field decides which. It is never
+    // disabled: adding a row with no posting behind it is a real thing this
+    // button does. It says which one it is about to do instead, and takes
+    // the primary weight only for the path the field has been filled in for
+    // - see syncAddControl(), which keeps this in step as you type.
+    '<button class="btn" id="addapp">Add empty row</button>'+
+    // Says what pressing the button will do, which is the question anyone
+    // standing here actually has. It used to say where these rows come from
+    // ("nothing is added here except by you") - true, and answering a
+    // question nobody asks at this moment; the note at the foot of the tab
+    // still makes that point.
+    '<span class="hint" id="addhint">Adds a row for you to fill in yourself.</span>'+
     viewSwitchHtml()+'</div>'+
     // Same tiering as leadsTab: Add/search-equivalent controls stay
     // full-weight above, Sort (the one setting this tab has) drops to its
     // own quiet line rather than crowding the primary row.
-    '<div class="key"><div class="sortwrap"><label class="sort-label" for="appSort">Sort</label>'+sortSelectHtml("applications","appSort")+'</div></div>';
-  if(!A.length){
+    '<div class="key"><div class="sortwrap"><label class="sort-label" for="appSort">Sort</label>'+sortSelectHtml("applications","appSort")+'</div>'+
+      // Rows here carry the same tier stripe the leads grids do, and a
+      // colour down the edge of a row says nothing without the ranking it
+      // belongs to.
+      geoKeyHtml()+
+      (drillChipHtml("apps")?'<div class="chips">'+drillChipHtml("apps")+'</div>':'')+'</div>';
+  if(!ALL_APPS.length){
     return h+'<div class="card empty"><strong>No applications logged</strong>'+
       'When you apply to something, add it here to track the conversation. Days-since and the follow-up list update themselves.</div>';
+  }
+  if(!A.length){
+    return h+'<div class="card empty"><strong>Nothing matches</strong>'+
+      'No application matches this filter. Clear it above to see all '+ALL_APPS.length+'.</div>';
   }
 
   if(ui.view==="grid"){
@@ -1613,34 +1949,123 @@ function appsTab(){
   return h;
 }
 
+// Which of the overnight fill's three states a row is in.
+//
+// The 'waiting' arm mirrors getAutofillQueue() in ../../server/src/db.js -
+// link, unread flag, and a gap the posting could fill - the same deliberate
+// duplication as LEAD_STATUS/DEFAULT_SETTINGS above, and with the same
+// obligation to stay in step: a row this called waiting that no run would
+// ever fetch would sit there promising a fill that is never coming. The
+// blank-field condition is the easy one to drop and the one that matters -
+// a row with a link whose company, role and location are already filled is
+// not in the queue, because there is nothing left for a posting to supply.
+function fillState(a){
+  if((a.autofill||"")==="failed")return "stuck";
+  if((a.autofill||"")===""&&safeUrl(a.link)&&
+     (!a.company||!a.title||!a.location))return "waiting";
+  return "";
+}
+
 function appsGridHtml(A){
-  var COLS=8; // company/role/location/status/applied/days/details/remove
+  var COLS=9; // company/role/location/link/status/applied/days/details/remove
   var h='<div class="card grid-wrap"><table><thead><tr>'+
     // Location sits between Role and Status, the slot it has in the leads
     // grid - and it has to be here at all now that Location A-Z is one of
     // this tab's sorts (see APP_SORTS), or Grid view reorders on a column it
     // doesn't show.
-    '<th>Company</th><th>Role</th><th>Location</th><th>Status</th><th>Applied</th><th>Days</th>'+
+    //
+    // Link closes the identity block rather than living only in Detail view.
+    // A row added by pasting a URL has nothing else in it until the overnight
+    // fill reads the posting - company, role and location are all blank - so
+    // without this column that row is an unidentifiable blank line in the one
+    // view meant for scanning.
+    '<th>Company</th><th>Role</th><th>Location</th><th>Link</th><th>Status</th><th>Applied</th><th>Days</th>'+
     '<th></th><th></th>'+
-  '</tr></thead><tbody>'+A.map(function(a){
+  '</tr></thead><tbody>';
+
+  // Order is what needs you first: a posting no run will ever read, then
+  // everything in normal shape, then the rows that need nothing from you
+  // until tonight. The middle group takes the tab's own name from config -
+  // it is not all "applied" (a hand-added row waiting to be applied to sits
+  // there too), it is the ones with nothing wrong.
+  var groups=[
+    {key:"stuck",label:"Couldn’t be read",note:"type it in, no run will fix this"},
+    {key:"",label:(state.settings&&state.settings.applications_label)||"Applications",note:""},
+    {key:"waiting",label:"Waiting on tonight’s fill",note:"added by link, nothing to do"}
+  ].map(function(g){
+    g.rows=A.filter(function(a){return fillState(a)===g.key;});
+    return g;
+  }).filter(function(g){return g.rows.length;});
+
+  // On a day when every posting read cleanly there is one group, and a lone
+  // divider across the whole table says nothing anyone needs - so headers
+  // appear only when there is more than one state to separate, and the tab
+  // goes back to being the plain list it has always been.
+  var grouped=groups.length>1;
+
+  groups.forEach(function(grp){
+    var shut=grouped&&!!ui.collapsed[grp.key];
+    if(grouped){
+      h+='<tr class="group'+(grp.key?" "+grp.key:"")+'"><td colspan="'+COLS+'">'+
+        '<button class="grp" type="button" data-collapse="'+esc(grp.key)+'" '+
+          'aria-expanded="'+(!shut)+'">'+
+          '<span class="caret" aria-hidden="true">&#9662;</span>'+esc(grp.label)+
+          '<span class="cnt">'+grp.rows.length+(grp.note?' &middot; '+esc(grp.note):'')+'</span>'+
+        '</button></td></tr>';
+    }
+    if(shut)return;
+    h+=grp.rows.map(function(a){
     var d=daysSince(a.dateApplied);
-    var g=geo(a.location);
+    var link=safeUrl(a.link);
     var open=!!ui.expanded[a.id];
     // Row is the expand/select click target (see leadsGridHtml above for
     // why); most of an application row is form fields though, so the
     // document click handler excludes clicks on those and only the row's
     // non-input area (Days, the indicator cell, empty padding) toggles it.
-    var cls=String(ui.selected.applications)===String(a.id)?' class="gr-sel"':'';
+    // Same left-edge stripe the leads grid uses for the location tier, so
+    // the two grids read alike and the legend below the toolbar means the
+    // same thing on both.
+    var g=geo(a.location);
+    // A stuck row's edge says stuck rather than saying how close the job is:
+    // it has no location yet to be close to, and the one thing worth knowing
+    // about it is that it is waiting on you.
+    var clsList=(g&&grp.key!=="stuck"?[g.p]:[]).concat(
+      grp.key==="stuck"?["stuck"]:[],
+      String(ui.selected.applications)===String(a.id)?["gr-sel"]:[]);
+    var cls=clsList.length?' class="'+clsList.join(" ")+'"':'';
+    // The empty cells stay editable in every state - you can always type it
+    // in yourself - but they say which of the two reasons they are empty for
+    // instead of naming the column back at you.
+    var ph=grp.key==="waiting"?"Reads overnight":(grp.key==="stuck"?"Type it in":"");
     var row='<tr data-expand="'+a.id+'" data-scope="applications"'+cls+'>'+
-      '<td><input type="text" data-id="'+a.id+'" data-field="company" data-app="1" value="'+esc(a.company)+'" placeholder="Company"></td>'+
-      '<td><input type="text" data-id="'+a.id+'" data-field="title" data-app="1" value="'+esc(a.title)+'" placeholder="Role"></td>'+
+      '<td><input type="text" data-id="'+a.id+'" data-field="company" data-app="1" value="'+esc(a.company)+'" placeholder="'+esc(ph||"Company")+'"></td>'+
+      '<td><input type="text" data-id="'+a.id+'" data-field="title" data-app="1" value="'+esc(a.title)+'" placeholder="'+esc(ph||"Role")+'"></td>'+
       // An input, not the leads grid's plain text: an application's location
       // is the installer's own field, correctable like every other cell here.
-      '<td class="loc"><input type="text" data-id="'+a.id+'" data-field="location" data-app="1" value="'+esc(a.location)+'" placeholder="Location">'+
-        (g?'<span class="geo '+g.p+'">'+esc(g.label)+'</span>':'')+'</td>'+
+      // No geo tier badge here. Grid view is a scan of rows you have already
+      // decided to apply to, where how close a job is has stopped being a
+      // question - it earns its place on a leads row, which is a decision,
+      // and it was only doubling the location text on this one.
+      '<td class="loc"><input type="text" data-id="'+a.id+'" data-field="location" data-app="1" value="'+esc(a.location)+'" placeholder="'+esc(ph||"Location")+'"></td>'+
+      // The host, not the URL: enough to say where the posting lives and to
+      // click through, in a column narrow enough to sit between two others.
+      // Typing or correcting the URL itself stays in Detail view, where the
+      // field has room for it.
+      '<td class="lk">'+(link
+        ? '<a href="'+esc(link)+'" target="_blank" rel="noopener" title="'+esc(link)+'">'+esc(hostOf(link))+' &#8599;</a>'
+        : '<span class="lk-none">&mdash;</span>')+'</td>'+
       '<td>'+selectHtml(APP_STATUS,a.status,'data-id="'+a.id+'" data-field="status" data-app="1"')+'</td>'+
       '<td><input type="date" data-id="'+a.id+'" data-field="dateApplied" data-app="1" value="'+esc(a.dateApplied)+'"></td>'+
-      '<td class="dt mono">'+(d===null?"&mdash;":d)+'</td>'+
+      // Days counts from an applied date, which a row in either fill state
+      // hasn't got - so the column says what the row is waiting on instead
+      // of a dash. The stuck row carries the run's own note, which is the
+      // whole reason it is stuck and the thing that tells you whether
+      // typing it in is the answer.
+      '<td class="dt'+(grp.key?"":" mono")+'">'+(
+        grp.key==="waiting"?'<span class="eta"><i class="pulse"></i>Tonight</span>'
+        :grp.key==="stuck"?'<span class="stuck-note" title="'+esc(a.autofill_note||"")+'">'+
+            '<i class="mark"></i>'+esc(a.autofill_note||"Couldn’t read it")+'</span>'
+        :(d===null?"&mdash;":d))+'</td>'+
       '<td class="exp-ind">'+(open?'Hide':'Details')+'</td>'+
       '<td><button class="btn ghost" data-del="'+a.id+'" title="Remove">&times;</button></td>'+
     '</tr>';
@@ -1649,7 +2074,9 @@ function appsGridHtml(A){
         autofillNoteHtml(a)+factsCardsHtml(a,true,true)+'</td></tr>';
     }
     return row;
-  }).join("")+'</tbody></table></div>';
+    }).join("");
+  });
+  h+='</tbody></table></div>';
   return h;
 }
 
@@ -1712,6 +2139,42 @@ function appDetailHtml(a){
   return h;
 }
 
+// How much width the Overview's scroll region loses to its scrollbar. The
+// tile row is pinned outside that region, so without reserving the same
+// strip it sits wider than every card below it. Measured rather than
+// assumed - 0 where the platform draws overlay scrollbars, and 0 on the
+// narrow/short layout where nothing scrolls in there. Re-measured on
+// resize, because crossing that layout's breakpoint changes the answer
+// without anything re-rendering.
+function syncScrollGutter(){
+  var ov=document.querySelector(".panel-scroll");
+  document.documentElement.style.setProperty("--sbw",
+    ov?(ov.offsetWidth-ov.clientWidth)+"px":"0px");
+}
+window.addEventListener("resize",syncScrollGutter);
+
+// The hairline on the Overview's scroll region (see #app.pinned
+// .panel-scroll.scrolled) - on only while there is content above the fold.
+function markScrolled(ov){
+  ov.classList.toggle("scrolled",ov.scrollTop>0);
+}
+
+// Keeps the add control in step with the URL field as you type: which of its
+// two jobs it is about to do, and the sentence beside it. Called from
+// render() (the control is redrawn with the panel) and on every keystroke.
+function syncAddControl(){
+  var url=document.getElementById("appurl"),
+      btn=document.getElementById("addapp"),
+      hint=document.getElementById("addhint");
+  if(!url||!btn||!hint)return;
+  var has=url.value.trim()!=="";
+  btn.textContent=has?"Add from link":"Add empty row";
+  btn.className=has?"btn primary":"btn";
+  hint.textContent=has
+    ? "Tonight’s run opens the posting and fills in the company, role and location."
+    : "Adds a row for you to fill in yourself.";
+}
+
 function render(){
   var tabs=buildTabs();
   // ui.tab is restored from localStorage, so it can name a track that has
@@ -1726,9 +2189,29 @@ function render(){
   // otherwise reset its scroll position to the top on every click -
   // including just selecting a different row. Preserve it across the swap.
   var oldList=p.querySelector(".md-list"), scrollTop=oldList?oldList.scrollTop:null;
+  // Same problem, same fix, for the Overview's own scroll region (see
+  // #app.pinned): repainting it after a click would otherwise jump back to
+  // the top of the page.
+  var oldOv=p.querySelector(".panel-scroll"), ovTop=oldOv?oldOv.scrollTop:null;
+  // Only the Overview pins its header and tiles and scrolls the rest - the
+  // other tabs scroll as documents, with their own list panes capped inside
+  // the master/detail card.
+  document.getElementById("app").classList.toggle("pinned",current.kind==="overview");
   if(current.kind==="overview")p.innerHTML=dashboard();
   else if(current.kind==="applications")p.innerHTML=appsTab();
+  else if(current.kind==="allleads")p.innerHTML=leadsTab(ALL_LEADS);
   else p.innerHTML=leadsTab(current.id);
+  var newOv=p.querySelector(".panel-scroll");
+  syncAddControl();
+  syncScrollGutter();
+  if(newOv){
+    // render() replaces the panel wholesale, so this is a fresh element
+    // every time and the old listener goes with the old node.
+    newOv.addEventListener("scroll",function(){markScrolled(newOv);});
+    if(ovTop!==null)newOv.scrollTop=ovTop;
+    // Restoring a scroll position has to restore the edge with it.
+    markScrolled(newOv);
+  }
   var newList=p.querySelector(".md-list");
   if(newList){
     if(scrollTop!==null){
@@ -1761,8 +2244,29 @@ document.addEventListener("click",function(e){
   // the date modal has.
   if(e.target.id==="pwModal"){closePwModal();return;}
 
+  // Clearing a drill-down without leaving the tab it filters.
+  var dc=e.target.closest("[data-drill-clear]");
+  if(dc){ui.drill=null; render(); return;}
+
+  // Folding one of the applications grid's fill-state groups away. The whole
+  // divider is the control - an 11px caret is a poor click target and there
+  // is nothing else on that row to click.
+  var col=e.target.closest("[data-collapse]");
+  if(col){
+    var ck=col.getAttribute("data-collapse");
+    ui.collapsed[ck]=!ui.collapsed[ck];
+    render();
+    return;
+  }
+
   var t=e.target.closest("[data-tab]");
-  if(t){ui.tab=t.getAttribute("data-tab");ui.q="";ui.filter="All";
+  if(t){ui.tab=t.getAttribute("data-tab");ui.q="";
+    // A tab opened from an Overview number arrives filtered to the rows that
+    // number counted - either a plain status filter or a named drill-down.
+    // Anything else (a tab click, a track name) lands unfiltered.
+    var tf=t.getAttribute("data-tab-filter"), td=t.getAttribute("data-drill");
+    ui.filter=tf||"All";
+    ui.drill=(td&&DRILLS[td])?td:null;
     try{localStorage.setItem("bjs.tab",ui.tab);}catch(err){} render(); return;}
 
   var f=e.target.closest("[data-filter]");
@@ -1855,6 +2359,10 @@ document.addEventListener("input",function(e){
     var pos=e.target.selectionStart; render();
     var n=document.getElementById("q"); if(n){n.focus();n.setSelectionRange(pos,pos);}
   }
+  // No render() here, deliberately: this changes a label and a class on two
+  // elements, and repainting the panel under a field being typed into is how
+  // you lose a cursor position.
+  if(e.target.id==="appurl")syncAddControl();
 });
 
 // Adding an application: a pasted URL, or nothing at all.

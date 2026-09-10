@@ -60,20 +60,17 @@
 
   ---- A run that fails says so in the tracker, not only to Task Scheduler.
 
-  Every path that decides this run failed records it (`POST /api/runs` with
-  `status: "error"` and the reason) before exiting. Until that existed the run
-  record was written only by the model, from a step at the end of the composed
-  prompt, so a run that died before reaching that step left nothing behind at
-  all - and a missing record reads on the page as a stale run stamp, which is
-  indistinguishable from a night that genuinely found nothing. That is the one
-  thing the record exists to tell apart.
+  A failure is recorded (`POST /api/runs` with `status: "error"` and the
+  reason) at the moment the run gives up, not at the end - the tail of this
+  script is not reachable from a fatal check before the CLI launches, nor from
+  the write-back loop, which ends the script inside its own catch. Whichever
+  path gets there first records once; the tail is the backstop.
 
-  The model's own success record is left alone. What this adds on top of it is
-  a check that there is one: after the CLI returns, the run record for this
-  track has to be newer than this run's start, or the run failed for a reason
-  no list of known failure strings had on it. Asserting what a success looks
-  like catches the next failure; listing what the last three looked like does
-  not.
+  The run's own success record is left alone. What this adds on top of it is a
+  check that there is one: the record for this track must have changed since
+  this run started, compared against a baseline read before the job began
+  rather than against a clock, so no skew between this machine and the edge
+  has to be guessed at.
 
   Calls to the tracker retry a transient failure - a Cloudflare 1101, a 429, a
   connection that never got an answer - with backoff, and stop at once on
@@ -223,86 +220,66 @@ function Invoke-WithRetry($what, $action) {
     }
 }
 
-# ---- Recording a run that failed. ------------------------------------------
+# ---- Recording a failed run, from wherever the run gives up. ---------------
 #
-# Until this existed the run record was written only by the model, from the
-# `./tracker run` step at the end of the composed prompt - so a run that died
-# before reaching that step wrote nothing at all. `grep -c "api/runs"
-# run-search.ps1` returned 0.
+# The tail of this script records a failure once everything else is done, which
+# is the right place for the failures it can see. It is not reachable from two
+# whole classes of them, and both end the run:
 #
-# That is exactly the 2026-09-10 failure: the CLI never started, the run lasted
-# twenty seconds, nothing was searched or synced, and the task reported exit 0.
-# No run record, so the tracker page showed a stale run stamp - indistinguishable
-# from a night that genuinely found nothing. The record exists to tell those two
-# apart, and it was absent in the one case where that mattered most.
+#   - Every fatal check before the CLI is launched (no CLI, no prompt, no
+#     documents, a short download, no helper) exits on the spot. The 2026-09-10
+#     failure was of exactly this kind on the next run along.
+#   - The write-back loop. $ErrorActionPreference is "Stop", which makes
+#     Write-Error a *terminating* error: the script ends inside the catch, and
+#     the summary line, the tail block and the exit at the bottom of the file
+#     never run at all. The `$exitCode = 1` after it has never once executed.
 #
-# None of this is inferred. The runner already decides, in code, that the CLI
-# never started; it simply had nowhere to put that knowledge except an exit code
-# only Task Scheduler ever sees.
+# So recording lives in a function that the moment of failure calls, and the
+# tail becomes a backstop rather than the only path. Guarded to fire once,
+# keeping the first reason given: that is the one describing what went wrong,
+# where a later one is usually its consequence.
 #
-# Best-effort on purpose: if the tracker cannot be reached the run has still
-# failed, and the original reason is still the one worth reporting, so a failure
-# to record is logged and swallowed rather than replacing it.
+# A direct call rather than `./tracker run`, for main's reason and it is a good
+# one: the helper lives in the run directory this script builds, and one of the
+# failures being reported is "the run never got that far". A reporter that
+# depends on the machinery it reports on is silent in the cases you need it for.
+$scriptStart = Get-Date
 $script:runRecorded = $false
-$script:failed = $false
-$script:failureNote = ""
 
-function Record-FailedRun($note) {
-    # At most one record per run, and always the first reason given: that is the
-    # one describing what actually went wrong, where a later one is usually its
-    # consequence.
+function Record-FailedRun($reason) {
     if ($script:runRecorded) { return }
     $script:runRecorded = $true
+    $secs = [int]((Get-Date) - $scriptStart).TotalSeconds
+    $note = "runner-reported failure after ${secs}s: $reason"
     try {
-        $body = @{
-            search = $Task
-            status = "error"
-            # Today's *local* date, by the same rule and for the same reason as
-            # tracker.ps1's: letting the server fall back to its own UTC date
-            # stamps an evening run with tomorrow.
-            on     = (Get-Date).ToString("yyyy-MM-dd")
-            # Prefixed, so the morning after can tell a record the runner wrote
-            # about a run that never started from one a search wrote about
-            # itself.
-            note   = "runner: $note"
-        } | ConvertTo-Json -Depth 5 -Compress
         $null = Invoke-WithRetry "POST /api/runs" {
-            Invoke-RestMethod -Uri "$trackerUrl/api/runs" -Method Post `
+            Invoke-RestMethod -Uri "$trackerUrl/api/runs" -Method Post -TimeoutSec 30 `
                 -Headers @{ Authorization = "Bearer $trackerToken" } `
-                -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) `
-                -ContentType "application/json; charset=utf-8" -ErrorAction Stop
+                -ContentType "application/json" `
+                -Body (@{
+                    search = $Task
+                    status = "error"
+                    # Today's *local* date. Without it the server falls back to
+                    # its own UTC one, which is tomorrow for any run late enough
+                    # in the day - the single thing tracker.ps1 exists to stop
+                    # a caller getting wrong.
+                    on     = (Get-Date).ToString("yyyy-MM-dd")
+                    note   = $note
+                } | ConvertTo-Json -Compress)
         }
-        Log "run record:       wrote '$Task' as 'error' - $note"
+        Log "recorded a failed run against $Task - the page will show it as an error rather than a stale stamp"
     } catch {
-        Log "WARNING: couldn't record the failed run ($(Get-HttpStatus $_)): $($_.Exception.Message)"
-        Log "         The run still failed for the reason above - this line is only about recording it."
+        Log "WARNING: could not record the failed run ($($_.Exception.Message)). The failure above still stands; only the tracker's copy of it is missing."
     }
 }
 
-# Marks the run failed, and records it there and then rather than at the end.
-#
-# The timing is not incidental. $ErrorActionPreference is "Stop", which makes
-# Write-Error a *terminating* error: a failure in the write-back loop below
-# ends the script on the spot, and anything left to the tail of the file - a
-# summary line, a deferred POST - never happens. Recording at the moment of
-# failure is the only placement that survives every exit this script has.
-#
-# It also means marking a run failed and giving a reason are one operation, so
-# a future failure path cannot do the first without the second, and the reason
-# it gives is the one that reaches the tracker.
-function Set-Failed($note) {
-    Log "ERROR: $note"
-    if (-not $script:failureNote) { $script:failureNote = $note }
-    $script:failed = $true
-    Record-FailedRun $note
-}
-
-# Every fatal path goes through here, so recording a failure is not something a
-# new one can forget: it is what exiting looks like. The three checks above this
-# point - no data dir, no user folder, no credentials - cannot use it, because
-# there is by definition no tracker to record to yet.
-function Stop-Run($note, $userMessage) {
-    Set-Failed $note
+# Every fatal path before the CLI runs goes through here, so recording is not
+# something a new one can forget: it is what exiting looks like. The three
+# checks above this point - no data dir, no user folder, no credentials -
+# cannot use it, because there is by definition no tracker to record to yet.
+function Stop-Run($reason, $userMessage) {
+    Log "ERROR: $reason"
+    Record-FailedRun $reason
     Write-Error $userMessage
     exit 1
 }
@@ -493,6 +470,34 @@ Log "claude CLI:       $claudePath"
 Log "allowed tools:    $allowedTools"
 Log "CLAUDE_CODE_OAUTH_TOKEN set: $([bool]$env:CLAUDE_CODE_OAUTH_TOKEN)"
 
+# ---- The run record as it stands before this run touches anything. ---------
+#
+# Read before the job starts, not after, so nothing the run does can land in
+# the baseline it is about to be judged against.
+#
+# The check after the run compares against this value rather than against a
+# clock. "The record changed" is exact and needs no arithmetic; "the record is
+# newer than $start" mixes this machine's clock with Cloudflare's and has to
+# guess how far apart they are - too tight and a legitimate run fails on a
+# second of drift, too loose and a record written minutes before this run
+# started passes for this run's own. There is no correct slack, which is the
+# tell that it is the wrong comparison.
+#
+# $null means the baseline could not be established. The check says so and
+# declines to judge, rather than inventing a verdict from a missing input.
+$recordBefore = $null
+try {
+    $cfgBefore = Invoke-WithRetry "GET /api/config" {
+        Invoke-RestMethod -Uri "$trackerUrl/api/config" -TimeoutSec 30 `
+            -Headers @{ Authorization = "Bearer $trackerToken" } -ErrorAction Stop
+    }
+    $trackBefore = $cfgBefore.tracks | Where-Object { $_.key -eq $Task } | Select-Object -First 1
+    $recordBefore = if ($trackBefore -and $trackBefore.last_run) { [string]$trackBefore.last_run.at } else { "" }
+    Log "run record before: $(if ($recordBefore) { $recordBefore } else { '(never recorded)' })"
+} catch {
+    Log "WARNING: couldn't read this track's run record before starting ($($_.Exception.Message)) - the post-run check will have nothing to compare against."
+}
+
 $job = Start-Job -ScriptBlock {
     param($claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken, $task)
     Set-Location $cwd
@@ -529,10 +534,6 @@ $job = Start-Job -ScriptBlock {
 } -ArgumentList $claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken, $Task
 
 $start = Get-Date
-# Kept in UTC because it gets compared against a timestamp the *worker* wrote.
-# See the run-record assertion below - that is the whole reason this is
-# captured rather than derived from the elapsed time at the end.
-$startedAtUtc = $start.ToUniversalTime()
 Log "job started (id $($job.Id)), waiting..."
 
 while ($job.State -eq "Running") {
@@ -549,12 +550,8 @@ Log "----- claude output -----"
 if ($output) { $output | Out-String | Out-File -Append -Encoding utf8 -FilePath $logFile }
 Log "----- end output -----"
 
-if ($jobState -ne "Completed") {
-    Set-Failed "the CLI job ended in state '$jobState' - nothing was searched or synced"
-}
+$exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
 
-# ---- What failure is known to look like. -----------------------------------
-#
 # The CLI exiting cleanly is not the same as the CLI having done anything. An
 # unauthenticated run prints "Not logged in - Please run /login" and exits 0:
 # job state Completed, twenty seconds, nothing searched, nothing synced, and
@@ -565,22 +562,25 @@ if ($jobState -ne "Completed") {
 # It matters as much here as there. A search that finds nothing writes nothing,
 # so "ran and found nothing" and "never ran" look identical on the page - the
 # run record is what tells them apart, and an unauthenticated run does not
-# write one either.
+# write one either. The task's Last Run Result is then the only honest signal
+# available, and it has to be honest.
 #
 # Checked against the output rather than by pre-flighting the credential: the
 # token is read by the CLI in a child process, and what matters is whether that
 # process could use it, not whether this one can see it.
-#
-# This is a denylist, and it is kept for what a denylist is good at: it names
-# the cause. "The CLI is not authenticated" is a better thing to find in a log
-# than "no run record", and it costs no round trip. What it cannot do is catch
-# the next failure, which is what the assertion after it is for.
 $outputText = if ($output) { ($output | Out-String).Trim() } else { "" }
+# Carried to the run record below, so the tracker says *why* rather than only
+# that something went wrong.
+$failureReason = if ($jobState -ne "Completed") { "the run did not complete (job state: $jobState)" } else { "" }
 if (-not $outputText) {
-    Set-Failed "the CLI produced no output at all - nothing was searched or synced"
-} elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error") {
-    Set-Failed "the CLI is not authenticated - nothing was searched or synced"
+    Log "ERROR: the CLI produced no output at all - nothing was searched or synced"
+    $failureReason = "the CLI produced no output - nothing was searched or synced"
+    $exitCode = 1
+} elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error|Failed to authenticate|Invalid bearer token|401") {
+    Log "ERROR: the CLI is not authenticated - nothing was searched or synced."
     Log "       Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
+    $failureReason = "the CLI is not authenticated - nothing was searched or synced"
+    $exitCode = 1
 } elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
     # The CLI never started. This is the same class of failure as the one above -
     # the job completes, the elapsed time looks like a fast run, and nothing was
@@ -589,85 +589,68 @@ if (-not $outputText) {
     # prompt was passed as an argument and exceeded the Windows command-line
     # limit; that specific cause is fixed above, and this stays because "the
     # launcher failed" must not keep reading as success.
-    Set-Failed "the CLI failed to start - nothing was searched or synced"
+    Log "ERROR: the CLI failed to start - nothing was searched or synced."
     Log "       See the output above; a launcher failure is not a search result."
+    $failureReason = "the CLI failed to start - nothing was searched or synced"
+    $exitCode = 1
 }
 
-# ---- What success is required to look like. --------------------------------
+# ---- Did the run actually record itself? ----------------------------------
 #
-# The guard above lists what failure looked like the last three times. It was
-# written against the CLI's own output and did not survive the first failure
-# that arrived from the npm shim *above* the CLI - same silence, same false
-# success, a source nobody had thought to list. A denylist misses the next one
-# by construction, so this asks the opposite question, and asks it of the
-# tracker rather than of the output: did this run do the one thing every run
-# does?
+# Everything above is a denylist: it enumerates what failure has looked like so
+# far, which by construction misses the next one. It has already missed two.
+# The launcher failure on 2026-09-10 came from the shim rather than the CLI and
+# matched none of the authentication strings. Then this very check was tested by
+# feeding the CLI a bad token, and the CLI said "Failed to authenticate. API
+# Error: 401 Invalid bearer token" - which none of the four patterns matched
+# either. Twenty seconds, nothing searched, exit code 0.
 #
-# The run record, and only the run record. A good night usually also leaves
-# leads, screened rows and verifications - but "usually" is not something that
-# can be asserted, and a genuinely quiet night that added no leads must not
-# read as a failure. The record is the one artefact every run writes
-# unconditionally, including the runs that found nothing, which is the entire
-# reason it exists (server/src/routes/runs.js).
+# So this asks the opposite question, and it is the only one with a single right
+# answer: a run that worked wrote its own run record (step 9c, `./tracker run`).
+# If no record landed since this run started, the run did not finish its own
+# bookkeeping - whatever the reason, and whatever the output happened to say.
+# That covers the two misses above and the next one, without knowing its name.
 #
-# Checked by *instant*, not by date. A record stamped today is not evidence
-# that this run wrote it: an earlier run of the same track earlier the same day
-# satisfies that, and re-running after a failure is exactly when someone is
-# watching. So the record has to be newer than this run's start, with a few
-# minutes of slack because that timestamp is the edge's clock and the start is
-# this machine's.
-#
-# Skipped when the run has already failed: there is a specific reason in hand,
-# and it is a better one than anything this could add.
-if (-not $script:failed) {
-    $config = $null
-    try {
-        $config = Invoke-WithRetry "GET /api/config" {
-            Invoke-RestMethod -Uri "$trackerUrl/api/config" -Headers $headers -ErrorAction Stop
-        }
-    } catch {
-        # Not evidence of anything. This is the check being unable to look,
-        # which is a different thing from having looked and found nothing, and
-        # only one of the two means the run failed. Treating them alike would
-        # make a network blip at 01:30 indistinguishable from a search that
-        # never ran, which is the confusion this whole section exists to end.
-        Log "WARNING: couldn't ask the tracker whether the run recorded itself ($(Get-HttpStatus $_)): $($_.Exception.Message)"
-        Log "         The run is left as it stands - unable to check is not the same as failed."
-    }
-
-    if ($config) {
-        $track = @($config.tracks | Where-Object { $_ -and $_.key -eq $Task })[0]
-        $recordedAt = $null
-        if ($track -and $track.last_run -and $track.last_run.at) {
-            try {
-                $recordedAt = [datetime]::Parse(
-                    $track.last_run.at,
-                    [System.Globalization.CultureInfo]::InvariantCulture,
-                    [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
-            } catch {
-                Log "WARNING: couldn't read the run record's timestamp '$($track.last_run.at)'"
+# Inconclusive is not failure: if the tracker cannot be reached to check, say so
+# and leave $exitCode alone rather than inventing a failure out of a network
+# blip. This check can only ever turn a false success into a reported failure.
+# Only the run record is asserted, never leads or screened rows. A good night
+# usually leaves those too, but "usually" is not a rule that can be checked,
+# and a genuinely quiet night that added nothing must not read as a failure.
+# The record is the one thing every run writes unconditionally, including the
+# runs that found nothing - which is the entire reason it exists.
+if ($exitCode -eq 0) {
+    if ($null -eq $recordBefore) {
+        Log "WARNING: no baseline was read before the run - skipping the check that it wrote a record."
+    } else {
+        try {
+            $cfg = Invoke-WithRetry "GET /api/config" {
+                Invoke-RestMethod -Uri "$trackerUrl/api/config" -TimeoutSec 30 `
+                    -Headers @{ Authorization = "Bearer $trackerToken" } -ErrorAction Stop
             }
-        }
-
-        if (-not $track) {
-            # Not called a failed run: the POST would be refused for the same
-            # reason (runs.js rejects an unknown track key), and the track being
-            # absent is a config problem rather than a search that didn't happen.
-            Log "WARNING: the tracker has no track '$Task' - can't check for a run record."
-        } elseif ($null -eq $recordedAt -or $recordedAt -lt $startedAtUtc.AddMinutes(-5)) {
-            $seen = if ($null -eq $recordedAt) { "there has never been one" } else { "the newest is from $($track.last_run.at)" }
-            Set-Failed "'$Task' recorded no run for tonight - $seen. The CLI exited cleanly and matched no known failure, so nothing was synced for a reason not on any list."
-        } elseif ($track.last_run.status -eq "error") {
-            # The run reached its own recording step and reported a failure. It
-            # is already in the tracker, honestly, so there is nothing to write -
-            # but the task must not go on reporting exit 0 over the top of it.
-            $script:runRecorded = $true
-            Set-Failed "'$Task' recorded itself as 'error': $($track.last_run.note)"
-        } else {
-            Log "run record:       '$Task' recorded 'ok' at $($track.last_run.at)"
+            $track = $cfg.tracks | Where-Object { $_.key -eq $Task } | Select-Object -First 1
+            $recordedAt = if ($track -and $track.last_run) { [string]$track.last_run.at } else { "" }
+            if (-not $recordedAt -or $recordedAt -eq $recordBefore) {
+                Log "ERROR: the run wrote no run record - it did not finish, whatever the output says."
+                Log "       Run record for $Task is unchanged since this run started$(if ($recordBefore) { " ($recordBefore)" } else { ' (there has never been one)' })."
+                $failureReason = "the run wrote no run record - it did not finish its own bookkeeping"
+                $exitCode = 1
+            } elseif ($track.last_run.status -eq "error") {
+                # The run got as far as its own recording step and reported a
+                # failure. That record is already in the tracker and it is the
+                # honest one, so it is left alone - but the task must not go on
+                # reporting exit 0 over the top of it.
+                $script:runRecorded = $true
+                Log "ERROR: the run recorded itself as an error: $($track.last_run.note)"
+                $failureReason = "the run recorded itself as an error: $($track.last_run.note)"
+                $exitCode = 1
+            }
+        } catch {
+            Log "WARNING: couldn't check whether a run record was written ($($_.Exception.Message)) - leaving the run's own result alone."
         }
     }
 }
+
 # ---- Write back what the run edited. --------------------------------------
 #
 # Only docs\. resumes\ and reference\ are inputs, and a rule that discards
@@ -702,20 +685,19 @@ if ($runDir -and $manifest.Count -gt 0) {
 
         try {
             $body = [System.IO.File]::ReadAllBytes($local)
-            # Retried on a transient failure like every other call, and the 412
-            # below is why that is worth spelling out. A PUT that lands but
-            # whose response is lost leaves the retry looking at a document
-            # whose etag has moved, so the retry gets a 412 and this reports a
-            # conflict that nobody caused.
+            # Retried like every other call, and the 412 below is why that is
+            # worth spelling out. A PUT that lands but whose response is lost
+            # leaves the retry looking at a document whose etag has moved, so
+            # it comes back 412 and this reports a conflict nobody caused.
             #
-            # Still the right trade, in both directions. The window for that is
-            # the width of one lost response, where a plain 5xx is whatever
-            # Cloudflare is having; and the false conflict is loud and costs
-            # nothing - the tracker already holds the bytes this run wrote, and
-            # the rescue copy beside the log is identical to them. The opposite
-            # arrangement, treating a post-retry 412 as success, would call the
-            # run a success in the one case where somebody really did write
-            # over it. Erring loud is the whole disposition of this script.
+            # Still the right trade in both directions. That window is the width
+            # of one lost response, where a plain 5xx is whatever Cloudflare is
+            # having; and the false conflict is loud and costs nothing, since
+            # the tracker already holds the bytes this run wrote and the rescue
+            # copy beside the log is identical to them. The opposite
+            # arrangement - treating a post-retry 412 as success - would call
+            # the run a success in the one case where somebody really did write
+            # over it.
             $null = Invoke-WithRetry "PUT /api/documents/$rel" {
                 Invoke-WebRequest -Uri "$trackerUrl/api/documents/$rel" -Method Put `
                     -Headers (@{ Authorization = "Bearer $trackerToken"; "If-Match" = $manifest[$rel].etag }) `
@@ -732,15 +714,23 @@ if ($runDir -and $manifest.Count -gt 0) {
                 # where a person can merge it by hand.
                 $rescue = Join-Path $logDir "$Task-doc-conflict-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
                 Copy-Item $local $rescue -Force
-                # Set-Failed records the run before Write-Error is reached, and
-                # that ordering is load-bearing here: $ErrorActionPreference is
-                # "Stop", so the Write-Error below ends the script on the spot.
-                # Nothing after this loop runs - not the summary line, not the
-                # "finished" line, not the exit at the bottom of the file.
-                Set-Failed "$rel changed underneath this run (412). This run's version: $rescue"
+                Log "ERROR: $rel changed underneath this run (412). This run's version: $rescue"
+                $failureReason = "$rel changed underneath this run (412) - this run's version is at $rescue"
+            } else {
+                Log "ERROR: couldn't write back $rel ($status): $($_.Exception.Message)"
+                $failureReason = "couldn't write back $rel ($status) - the run's edits are in $local"
+            }
+            $exitCode = 1
+            # Recorded here rather than at the tail, and the ordering is the
+            # whole point: $ErrorActionPreference is "Stop", so the Write-Error
+            # below is a terminating error that ends the script inside this
+            # catch. Nothing after this loop runs - not the summary line, not
+            # the tail's record, not the exit at the bottom of the file. This
+            # was the one failure that reported nothing to the tracker at all.
+            Record-FailedRun $failureReason
+            if ($status -eq 412) {
                 Write-Error "'$rel' was modified during the run. This run's copy is at $rescue - merge it by hand; nothing was overwritten."
             } else {
-                Set-Failed "couldn't write back $rel ($status): $($_.Exception.Message)"
                 Write-Error "Couldn't write back '$rel' ($status). The run's edits are in $local - do not let the next run wipe it."
             }
         }
@@ -748,12 +738,35 @@ if ($runDir -and $manifest.Count -gt 0) {
     Log "write-back:       $sent document(s) updated"
 }
 
-# One place decides the exit code, from one flag, and every path that sets that
-# flag has already recorded the run - see Set-Failed. There is no longer a way
-# to decide this run failed and still leave the tracker with nothing to show
-# for it.
-$exitCode = if ($script:failed) { 1 } else { 0 }
 $elapsed = [int]((Get-Date) - $start).TotalSeconds
+
+# ---- Record a failed run, because nothing else will. ----------------------
+#
+# The success record is written by the run itself (step 9c, `./tracker run`).
+# That covers every case except the one that matters most: a run that died
+# before it got there writes nothing at all, and "never ran" then looks exactly
+# like "ran and found nothing" - a search that finds nothing writes nothing
+# either. The run record is the only thing that distinguishes them, and until
+# now it was missing from precisely the failure it was invented to expose.
+#
+# On 2026-09-10 the CLI never started, the run lasted twenty seconds, and the
+# page showed a stale run stamp with no indication anything was wrong.
+#
+# Never fatal. A tracker that cannot be reached is worth a log line, not a
+# second failure on top of the one being reported - and it must not change
+# $exitCode, which is the signal Task Scheduler already has.
+#
+# This is the backstop rather than the only path. The failures it can see are
+# the ones between the CLI returning and here; the ones it cannot see - every
+# fatal check before the CLI is launched, and the write-back loop, which ends
+# the script inside its own catch - record themselves at the moment they give
+# up. Record-FailedRun fires once, so whichever gets there first wins and the
+# reason kept is the first one given.
+if ($exitCode -ne 0) {
+    if (-not $failureReason) { $failureReason = "the run failed (exit code $exitCode)" }
+    Record-FailedRun $failureReason
+}
+
 Log "finished $Task - job state: $jobState, elapsed: ${elapsed}s, exit code: $exitCode"
 Log "===== done ====="
 
