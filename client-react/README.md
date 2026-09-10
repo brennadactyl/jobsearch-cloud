@@ -8,8 +8,11 @@ own URL where nobody depends on it.
 Why it exists, what it has to clear before it could replace anything, and what
 happens if it never does: [`../docs/react-adoption-plan.md`](../docs/react-adoption-plan.md).
 
-**Status: Phase 1.** Signs in, loads `/api/data` through a typed boundary, and
-reports what came back. No tabs, no tables, no writes — those are Phases 3 and 4.
+**Status: Phase 4.** Signs in, draws the Overview, both leads tabs and
+Applications in Detail and Grid, and writes: every field saves on blur, statuses
+go through their own endpoints, and rows can be added and removed. Writes are
+optimistic - the row changes first and the server's answer decides whether it
+stays changed.
 
 ## Stack
 
@@ -61,10 +64,25 @@ repo's first. What the tests cover at this phase:
 - **`src/theme.test.ts`** — that every colour token is defined in all three
   theme blocks, and that no rule inlines a hex value. A check the single-file
   page cannot make of itself, covering the failure its editing skill warns about.
-- **`src/App.test.tsx`** — the gate and the summary, queried by role and
+- **`src/domain/drills.test.ts`** — the drill invariant: for every tile and
+  funnel row, the number shown is the length of the rows it opens. Includes a
+  mutation test that edits one rule and asserts the number moves *with* it,
+  which is the property that matters — parity passed trivially the day it was
+  written, and the question is whether it keeps passing after an edit.
+- **`src/domain/domain.test.ts`** — the ported rules: `safeUrl` against a list
+  of hostile inputs, location tiers, comparators, run state, fill state, and
+  that every tab label comes from config.
+- **`src/App.test.tsx`** — the gate, shell and routing, queried by role and
   accessible name. Querying that way is what turns "every interactive element is
   a real control" into an assertion: a `div` with a click handler has no role to
-  find, so these fail if one appears.
+  find, so these fail if one appears. Also walks a drill end to end — read the
+  figure off a rendered tile, click it, count the rows that arrive.
+- **`src/writes.test.tsx`** — the optimistic layer, which is where this client
+  has a failure mode the old page did not. A field saves on blur and not before;
+  a failed save puts the old value back and says so; a lead marked Applied takes
+  the application the server creates; a stage change asks for a date and writes
+  nothing if you cancel; a delete the server refused is undone on a *successful*
+  response.
 
 ## The API URL is a build input, not a runtime file
 

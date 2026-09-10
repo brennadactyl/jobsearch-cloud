@@ -7,24 +7,36 @@
  * only when there is more than one state to separate, so on a day when
  * everything read cleanly the tab is the plain list it has always been.
  *
- * Read-only in this phase.
+ * Every control here writes. Moving into a stage that has not happened yet asks
+ * when it did - see StageDateModal.
  */
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Application, TrackerData } from "../api/schema";
-import { APP_ROLE_FIELDS, APP_STATUS, STAGE_HISTORY_FIELDS } from "../domain/constants";
+import { APP_ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "../domain/constants";
 import { appRows, drillKeeps } from "../domain/drills";
 import { daysSince, hostOf, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { appComparator, fillState, type FillState } from "../domain/rows";
 import { pathForTab } from "../domain/tabs";
 import { setPrefs, usePrefs } from "../ui/prefs";
+import { useAddApplication, useDeleteApplication } from "../api/mutations";
 import { DrillChip, FactsCards, GeoBadge, GeoKey, Pill, SortSelect, ViewSwitch } from "./bits";
+import { AppStatusSelect, EditableField, StageDateModal, type PendingStage } from "./writes";
 
 export default function ApplicationsTab({ data }: { data: TrackerData }) {
   const { settings } = data;
   const prefs = usePrefs();
   const [params] = useSearchParams();
   const drill = params.get("drill");
+
+  const [link, setLink] = useState("");
+  const [pending, setPending] = useState<PendingStage | null>(null);
+  const addApp = useAddApplication();
+  const add = () => {
+    addApp.mutate({ link: link.trim() });
+    setLink("");
+  };
 
   const all = appRows(data.applications).sort(appComparator(prefs.appSort));
   const rows = all.filter((a) => drillKeeps(drill, "apps", a, settings));
@@ -46,14 +58,27 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
             placeholder="Paste a link straight to the job posting"
             aria-label="Link to a job posting"
             aria-describedby="addhint"
-            disabled
+            // "Straight to" is the constraint: the run opens exactly this URL,
+            // so a search page or a careers index produces a row nothing can fill.
+            title="The posting's own page, not a search or a careers index."
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            onKeyDown={(e) => {
+              // Paste, Enter, done - the point of the box is that adding an
+              // application takes one gesture.
+              if (e.key === "Enter") add();
+            }}
           />
         </div>
-        <button className="btn" id="addapp" type="button" disabled>
-          Add empty row
+        {/* Two jobs, and the field decides which. Never disabled: adding a row
+            with no posting behind it is a real thing this button does. */}
+        <button className={link.trim() ? "btn primary" : "btn"} id="addapp" type="button" onClick={add}>
+          {link.trim() ? "Add from link" : "Add empty row"}
         </button>
         <span className="hint" id="addhint">
-          Adding arrives in Phase 4 — this view is read-only.
+          {link.trim()
+            ? "Tonight's run opens the posting and fills in the company, role and location."
+            : "Adds a row for you to fill in yourself."}
         </span>
         <ViewSwitch />
       </div>
@@ -80,6 +105,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
           When you apply to something, add it here to track the conversation. Days-since and the follow-up list update
           themselves.
         </div>
+        <StageDateModal pending={pending} onClose={() => setPending(null)} />
       </>
     );
   }
@@ -92,6 +118,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
           <strong>Nothing matches</strong>
           No application matches this filter. Clear it above to see all {all.length}.
         </div>
+        <StageDateModal pending={pending} onClose={() => setPending(null)} />
       </>
     );
   }
@@ -100,10 +127,11 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
     return (
       <>
         {toolbar}
-        <AppsGrid rows={rows} data={data} />
+        <AppsGrid rows={rows} data={data} setPending={setPending} />
         <div className="note">
           Quick-scan columns only — referral, notes and the rest are in Detail view. {rows.length} of {all.length} shown.
         </div>
+        <StageDateModal pending={pending} onClose={() => setPending(null)} />
       </>
     );
   }
@@ -154,13 +182,33 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
           })}
         </div>
         <div className="md-detail">
-          <AppDetail app={sel} data={data} />
+          <AppDetail app={sel} data={data} onNeedsDate={setPending} />
         </div>
       </div>
       <div className="note">
-        {rows.length} of {all.length} shown. Editing arrives in Phase 4 — this view is read-only for now.
+        {rows.length} of {all.length} shown.
       </div>
+      <StageDateModal pending={pending} onClose={() => setPending(null)} />
     </>
+  );
+}
+
+/** Removing an application just confirms - unlike a lead, nothing has to stop a search rediscovering it. */
+function RemoveApp({ app }: { app: Application }) {
+  const del = useDeleteApplication();
+  const name = `${app.company} ${app.title}`.trim() || "this row";
+  return (
+    <button
+      className="btn ghost"
+      type="button"
+      title="Remove"
+      aria-label={`Remove ${name}`}
+      onClick={() => {
+        if (window.confirm(`Remove ${name} from Applications?`)) del.mutate({ id: app.id });
+      }}
+    >
+      ×
+    </button>
   );
 }
 
@@ -176,7 +224,15 @@ function groupsFor(rows: Application[], applicationsLabel: string) {
     .filter((g) => g.rows.length);
 }
 
-function AppsGrid({ rows, data }: { rows: Application[]; data: TrackerData }) {
+function AppsGrid({
+  rows,
+  data,
+  setPending,
+}: {
+  rows: Application[];
+  data: TrackerData;
+  setPending: (p: PendingStage) => void;
+}) {
   const prefs = usePrefs();
   const { settings } = data;
   const COLS = 9;
@@ -249,13 +305,13 @@ function AppsGrid({ rows, data }: { rows: Application[]; data: TrackerData }) {
                       <>
                         <tr key={a.id} className={cls || undefined}>
                           <td>
-                            <input type="text" value={a.company} placeholder={ph || "Company"} aria-label="Company" readOnly />
+                            <EditableField row={a} kind="application" field="company" placeholder={ph || "Company"} ariaLabel="Company" />
                           </td>
                           <td>
-                            <input type="text" value={a.title} placeholder={ph || "Role"} aria-label="Role" readOnly />
+                            <EditableField row={a} kind="application" field="title" placeholder={ph || "Role"} ariaLabel="Role" />
                           </td>
                           <td className="loc">
-                            <input type="text" value={a.location} placeholder={ph || "Location"} aria-label="Location" readOnly />
+                            <EditableField row={a} kind="application" field="location" placeholder={ph || "Location"} ariaLabel="Location" />
                           </td>
                           <td className="lk">
                             {link ? (
@@ -267,14 +323,10 @@ function AppsGrid({ rows, data }: { rows: Application[]; data: TrackerData }) {
                             )}
                           </td>
                           <td>
-                            <select value={a.status} disabled aria-label="Status">
-                              {APP_STATUS.map((s) => (
-                                <option key={s}>{s}</option>
-                              ))}
-                            </select>
+                            <AppStatusSelect app={a} onNeedsDate={setPending} />
                           </td>
                           <td>
-                            <input type="date" value={a.dateApplied} aria-label="Date applied" readOnly />
+                            <EditableField row={a} kind="application" field="dateApplied" type="date" ariaLabel="Date applied" />
                           </td>
                           {/* Days counts from an applied date, which a row in
                               either fill state hasn't got - so the column says
@@ -310,13 +362,15 @@ function AppsGrid({ rows, data }: { rows: Application[]; data: TrackerData }) {
                               {open ? "Hide" : "Details"}
                             </button>
                           </td>
-                          <td />
+                          <td>
+                            <RemoveApp app={a} />
+                          </td>
                         </tr>
                         {open && (
                           <tr className="more-row" key={`${a.id}-more`}>
                             <td colSpan={COLS}>
                               <div className="facts-card" style={{ marginTop: 0 }}>
-                                <FactsCards item={a} fields={APP_ROLE_FIELDS} />
+                                <FactsCards item={a} kind="application" fields={APP_ROLE_FIELDS} />
                               </div>
                             </td>
                           </tr>
@@ -333,7 +387,15 @@ function AppsGrid({ rows, data }: { rows: Application[]; data: TrackerData }) {
   );
 }
 
-function AppDetail({ app, data }: { app: Application; data: TrackerData }) {
+function AppDetail({
+  app,
+  data,
+  onNeedsDate,
+}: {
+  app: Application;
+  data: TrackerData;
+  onNeedsDate: (p: PendingStage) => void;
+}) {
   const { settings } = data;
   const g = geo(app.location, settings.priority_locations);
   const link = safeUrl(app.link);
@@ -376,12 +438,9 @@ function AppDetail({ app, data }: { app: Application; data: TrackerData }) {
       {state === "waiting" && <div className="dh-fit">Tonight’s run will read this posting and fill in what it states.</div>}
 
       <div className="dh-status">
-        <select value={app.status} disabled aria-label="Status">
-          {APP_STATUS.map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
+        <AppStatusSelect app={app} onNeedsDate={onNeedsDate} />
         {app.dateApplied && <span className="dh-dates">Applied {app.dateApplied}</span>}
+        <RemoveApp app={app} />
       </div>
 
       {history.length > 1 && (
@@ -401,7 +460,7 @@ function AppDetail({ app, data }: { app: Application; data: TrackerData }) {
       )}
 
       <div className="facts-card">
-        <FactsCards item={app} fields={APP_ROLE_FIELDS} />
+        <FactsCards item={app} kind="application" fields={APP_ROLE_FIELDS} />
       </div>
     </>
   );

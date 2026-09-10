@@ -92,3 +92,14 @@ export function pillFor(status: string): string {
   };
   return map[status] || "live";
 }
+
+/**
+ * status -> the history column it stamps. Mirrors STAGE_DATE_MAP in
+ * server/src/routes/applications.js - the same intentional duplication as
+ * APP_STATUS itself. Used to decide whether picking a status needs to ask for a
+ * date first.
+ */
+export const APP_STAGE_DATE_MAP: Record<string, string> = {
+  Applied: "dateApplied",
+  ...Object.fromEntries(STAGE_DATE_FIELDS.map(([label, field]) => [label, field])),
+};

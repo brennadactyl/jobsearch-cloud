@@ -10,6 +10,7 @@ import { relWhen, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { runState, runSummary } from "../domain/runs";
 import { setPrefs, usePrefs } from "../ui/prefs";
+import { EditableField, EditableNotes } from "./writes";
 
 /** Status as a coloured pill. */
 export function Pill({ status }: { status: string }) {
@@ -151,20 +152,17 @@ export function PostingLink({ url, children }: { url: string; children: React.Re
 }
 
 /**
- * The facts cards under a row's header.
- *
- * Read-only in this phase: the inputs are rendered so the layout is the layout,
- * and marked readOnly rather than disabled so they stay selectable and
- * focusable. Phase 4 turns them into writes.
+ * The facts cards under a row's header. Every field commits on blur.
  */
 export function FactsCards({
   item,
+  kind,
   fields,
 }: {
   item: Lead | Application;
+  kind: "lead" | "application";
   fields: readonly (readonly [field: string, label: string])[];
 }) {
-  const row = item as unknown as Record<string, string>;
   return (
     <div className="facts">
       <div className="fcard">
@@ -173,14 +171,14 @@ export function FactsCards({
           {fields.map(([field, label]) => (
             <label key={field} className="f">
               <span>{label}</span>
-              <input type="text" value={row[field] ?? ""} placeholder={label} readOnly />
+              <EditableField row={item} kind={kind} field={field} placeholder={label} ariaLabel={label} />
             </label>
           ))}
         </div>
       </div>
       <div className="fcard">
         <h4>Notes</h4>
-        <textarea value={row.notes ?? ""} placeholder="Notes" readOnly />
+        <EditableNotes row={item} kind={kind} />
       </div>
     </div>
   );

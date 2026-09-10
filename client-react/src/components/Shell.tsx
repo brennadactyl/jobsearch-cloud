@@ -12,6 +12,7 @@ import type { TrackerData } from "../api/schema";
 import { ALL_LEADS } from "../domain/constants";
 import { buildTabs, buildTracks } from "../domain/tabs";
 import { usePinnedLayout, useTheme } from "../ui/hooks";
+import { useSaved } from "../ui/saved";
 import ApplicationsTab from "./ApplicationsTab";
 import LeadsTab from "./LeadsTab";
 import Overview from "./Overview";
@@ -39,6 +40,7 @@ export default function Shell({
   const tracks = buildTracks(data.tracks);
   const tabs = buildTabs(data.leads, data.applications, tracks, settings);
   const location = useLocation();
+  const save = useSaved();
   const [theme, toggleTheme] = useTheme();
   const pinned = usePinnedLayout(isOverview);
 
@@ -62,6 +64,15 @@ export default function Shell({
               <div className="sub">{sub}</div>
             </div>
             <div className="hdr-right">
+              {/* Every write path sets this. With optimistic updates the row has
+                  already changed on screen, so this is the only thing telling
+                  "saved" apart from "about to be rolled back". */}
+              <div className="stamp">
+                <span className={`dot ${save.tone}`} />
+                <span role="status" aria-live="polite">
+                  {save.text}
+                </span>
+              </div>
               <span className="who">Signed in as {data.user.name}</span>
               <button className="btn ghost" type="button" onClick={onSignOut} title="Sign out of this browser">
                 Log out

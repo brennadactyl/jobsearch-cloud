@@ -14,7 +14,15 @@
  * deployed client always talks to one server.
  */
 import { z } from "zod";
-import { dataSchema, loginSchema, type TrackerData } from "./schema";
+import {
+  applicationSchema,
+  dataSchema,
+  leadSchema,
+  loginSchema,
+  type Application,
+  type Lead,
+  type TrackerData,
+} from "./schema";
 
 export const API_BASE: string = import.meta.env.VITE_API_BASE;
 
@@ -166,4 +174,97 @@ export async function logout(): Promise<void> {
   } catch {
     /* already forgotten locally */
   }
+}
+
+// ---------------------------------------------------------------------------
+// Writes.
+//
+// Status is the exception to the generic field write, on both kinds of row: the
+// server validates the value and owns side effects a plain field patch cannot
+// do - creating a lead's application atomically, stamping a stage date. If a
+// new field ever needs a side effect it needs a route, not a special case here.
+//
+// Every one of these returns the server's authoritative row rather than the
+// caller guessing what changed, which is what lets an optimistic update be
+// replaced rather than merely confirmed.
+
+const updateLeadSchema = z.object({ ok: z.boolean().optional(), lead: leadSchema });
+const updateAppSchema = z.object({ ok: z.boolean().optional(), application: applicationSchema });
+/** Setting a lead to "Applied" creates its application in the same transaction. */
+const leadStatusSchema = z.object({ lead: leadSchema, application: applicationSchema.nullish() });
+
+/** One whitelisted field on a lead. Not status - see setLeadStatus. */
+export function updateLeadField(id: number, field: string, value: string): Promise<Lead> {
+  return request("/api/update", updateLeadSchema, {
+    method: "POST",
+    body: { type: "lead", id, [field]: value },
+  }).then((r) => r.lead);
+}
+
+export function updateApplicationField(id: number, field: string, value: string): Promise<Application> {
+  return request("/api/update", updateAppSchema, {
+    method: "POST",
+    body: { type: "application", id, [field]: value },
+  }).then((r) => r.application);
+}
+
+export function setLeadStatus(id: number, status: string) {
+  return request(`/api/leads/${id}/status`, leadStatusSchema, { method: "POST", body: { status } });
+}
+
+/**
+ * Files a lead under a different tab. The one field with failures worth reading
+ * rather than a generic "couldn't save": an unknown track key, and a
+ * destination that already holds this posting (409 from the UNIQUE constraint).
+ */
+export function moveLead(id: number, search: string): Promise<Lead> {
+  return request("/api/update", updateLeadSchema, {
+    method: "POST",
+    body: { type: "lead", id, search },
+  }).then((r) => r.lead);
+}
+
+/** `date` stamps the stage column the status moves into; omitted means today. */
+export function setApplicationStatus(id: number, status: string, date?: string): Promise<Application> {
+  return request(`/api/applications/${id}/status`, updateAppSchema, {
+    method: "POST",
+    body: date ? { status, date } : { status },
+  }).then((r) => r.application);
+}
+
+/**
+ * A row created with a link and nothing else is the entire handoff to the
+ * overnight fill: it becomes a candidate because of what is in it (a link, and
+ * no company/role/location), not because anything here said so. Nothing is
+ * flagged or tracked from this side, so there is no state this page can get
+ * wrong or leave stale.
+ */
+export function addApplication(link: string): Promise<Application> {
+  return request("/api/update", updateAppSchema, {
+    method: "POST",
+    body: { type: "application", link, dateApplied: "" },
+  }).then((r) => r.application);
+}
+
+/**
+ * Removing a posting takes a reason, which is stored on the screened row the
+ * removal leaves behind. That row is both the only lasting record of why it
+ * went and the thing that stops tomorrow's run rediscovering the URL and adding
+ * it straight back.
+ *
+ * `kept` comes back non-empty when an application still points at the lead, in
+ * which case nothing was deleted.
+ */
+export function deleteLead(id: number, reason: string) {
+  return request("/api/delete-leads", z.object({ kept: z.array(z.unknown()).default([]) }), {
+    method: "POST",
+    body: { ids: [id], reason },
+  });
+}
+
+export function deleteApplication(id: number) {
+  return request("/api/delete-application", z.object({ ok: z.boolean().optional() }), {
+    method: "POST",
+    body: { id },
+  });
 }

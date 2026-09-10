@@ -6,8 +6,8 @@
  * - its description, its run stamp, the empty state that explains why a search
  * found nothing - is skipped rather than faked.
  *
- * Read-only in this phase. Status pickers and fields are rendered so the layout
- * is real, and marked readOnly/disabled rather than removed.
+ * Every control here writes: status through its own endpoint, every other
+ * field on blur. See ./writes.tsx.
  */
 import { useSearchParams } from "react-router-dom";
 import type { Lead, TrackerData } from "../api/schema";
@@ -19,7 +19,9 @@ import { leadComparator } from "../domain/rows";
 import { runState } from "../domain/runs";
 import { buildTracks, pathForTab, trackCountLine } from "../domain/tabs";
 import { setPrefs, usePrefs } from "../ui/prefs";
+import { useDeleteLead, useMoveLead } from "../api/mutations";
 import { DrillChip, FactsCards, GeoBadge, GeoKey, Pill, RunStamp, SortSelect, ViewSwitch } from "./bits";
+import { EditableField, LeadStatusSelect } from "./writes";
 
 export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackKey: string }) {
   const { settings } = data;
@@ -219,7 +221,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
           })}
         </div>
         <div className="md-detail">
-          <LeadDetail lead={sel} trackLabel={tracks[isAll ? sel.search : trackKey]?.label ?? trackKey} data={data} />
+          <LeadDetail lead={sel} data={data} />
         </div>
       </div>
       <div className="note">
@@ -280,7 +282,6 @@ function LeadsGrid({
             const cls = [g ? g.p : "", String(prefs.selected[trackKey]) === String(l.id) ? "gr-sel" : ""]
               .filter(Boolean)
               .join(" ");
-            const row = l as unknown as Record<string, string>;
             const toggle = () =>
               setPrefs({
                 expanded: { ...prefs.expanded, [l.id]: !open },
@@ -309,15 +310,11 @@ function LeadsGrid({
                     <div className="loc-txt">{l.location}</div>
                   </td>
                   <td>
-                    <select value={l.status} disabled aria-label="Status">
-                      {LEAD_STATUS.map((s) => (
-                        <option key={s}>{s}</option>
-                      ))}
-                    </select>
+                    <LeadStatusSelect lead={l} />
                   </td>
                   {LEAD_GRID_FIELDS.map(([field, label]) => (
                     <td key={field}>
-                      <input type="text" value={row[field] ?? ""} aria-label={label} readOnly />
+                      <EditableField row={l} kind="lead" field={field} ariaLabel={label} />
                     </td>
                   ))}
                   {isAll && (
@@ -336,7 +333,7 @@ function LeadsGrid({
                   <tr className="more-row" key={`${l.id}-more`}>
                     <td colSpan={cols}>
                       <div className="facts-card" style={{ marginTop: 0 }}>
-                        <FactsCards item={l} fields={ROLE_FIELDS} />
+                        <FactsCards item={l} kind="lead" fields={ROLE_FIELDS} />
                       </div>
                     </td>
                   </tr>
@@ -350,13 +347,13 @@ function LeadsGrid({
   );
 }
 
-function LeadDetail({ lead, trackLabel, data }: { lead: Lead; trackLabel: string; data: TrackerData }) {
+function LeadDetail({ lead, data }: { lead: Lead; data: TrackerData }) {
   const { settings } = data;
   const g = geo(lead.location, settings.priority_locations);
   const url = safeUrl(lead.url);
   return (
     <>
-      <div className="dh-track">{trackLabel}</div>
+      <MoveLead lead={lead} data={data} />
       <div className="dh-head">
         <h1 title={lead.company}>{lead.company}</h1>
         <div className="dh-sub">{lead.title}</div>
@@ -380,18 +377,89 @@ function LeadDetail({ lead, trackLabel, data }: { lead: Lead; trackLabel: string
       </div>
       {lead.fit && <div className="dh-fit">{lead.fit}</div>}
       <div className="dh-status">
-        <select value={lead.status} disabled aria-label="Status">
-          {LEAD_STATUS.map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
+        <LeadStatusSelect lead={lead} />
         <span className="dh-dates">
           Found {lead.found} &middot; Confirmed live {lead.verified}
         </span>
+        <RemoveLead lead={lead} />
       </div>
       <div className="facts-card">
-        <FactsCards item={lead} fields={ROLE_FIELDS} />
+        <FactsCards item={lead} kind="lead" fields={ROLE_FIELDS} />
       </div>
     </>
+  );
+}
+
+/**
+ * The track line of a lead's header.
+ *
+ * A board with one track has nowhere to move a lead to, so it stays the plain
+ * label it always was; with more, it is a picker over every configured tab.
+ * Options carry the track *key* rather than the label, so two tabs sharing a
+ * label still move correctly and a rename does not break the control.
+ */
+function MoveLead({ lead, data }: { lead: Lead; data: TrackerData }) {
+  const move = useMoveLead();
+  const tracks = buildTracks(data.tracks);
+  const keys = Object.keys(tracks);
+  if (keys.length < 2) return <div className="dh-track">{tracks[lead.search]?.label ?? lead.search}</div>;
+  return (
+    <select
+      className="dh-track-in"
+      value={lead.search}
+      title="Move this posting to another tab"
+      aria-label="Tab"
+      onChange={(e) => move.mutate({ id: lead.id, search: e.target.value })}
+    >
+      {keys.map((k) => (
+        <option key={k} value={k}>
+          {tracks[k].label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * Removing a posting asks for a reason rather than just confirming.
+ *
+ * The reason is stored on the screened row the removal leaves behind, which is
+ * both the only lasting record of why it went and the thing that stops
+ * tomorrow's run rediscovering the URL and adding it straight back.
+ */
+function RemoveLead({ lead }: { lead: Lead }) {
+  const del = useDeleteLead();
+  const name = `${lead.company} ${lead.title}`.trim() || "this posting";
+  return (
+    <button
+      className="icon-btn danger"
+      type="button"
+      title="Remove this posting"
+      aria-label={`Remove ${name}`}
+      onClick={() => {
+        const why = window.prompt(
+          `Remove ${name}?\n\nWhy? This is kept so the search doesn't find it again.`,
+          "outside target locations",
+        );
+        if (why?.trim()) del.mutate({ id: lead.id, reason: why.trim() });
+      }}
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M3 4.5h10" />
+        <path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" />
+        <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" />
+        <path d="M6.7 7v4M9.3 7v4" />
+      </svg>
+    </button>
   );
 }
