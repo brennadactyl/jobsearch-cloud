@@ -142,6 +142,14 @@ an account for the first time; an empty list is a pass, the 10042 is not. The
 fix is a dashboard step, not a code one: see `server/README.md`'s
 "First: turn on R2".
 
+**In PowerShell, use `npx.cmd` and `npm.cmd`.** Windows' default execution
+policy blocks the `.ps1` shims Node installs, so `npx wrangler ...` and
+`npm run deploy` both die with "running scripts is disabled on this system"
+before running anything. The Bash tool is unaffected (no `.ps1` involved), and
+so is this session's own PowerShell, which runs with `-ExecutionPolicy Bypass` -
+which is exactly why it is easy to write instructions here that fail for the
+person who follows them.
+
 ## Verifying a `client/` change
 
 No build step, no test harness - it is one HTML file. Verification is

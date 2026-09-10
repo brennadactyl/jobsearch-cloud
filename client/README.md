@@ -144,6 +144,12 @@ first, which refuses the deploy when `local-config.js` is missing rather than
 letting it succeed into an unusable site. A bare `wrangler deploy` still works
 and is still fine from a checkout on `main` - it just has nothing watching it.
 
+The blocks here are `cmd.exe`. In PowerShell these die with "running scripts is
+disabled on this system" before running anything - that is Windows' default
+execution policy blocking Node's `.ps1` shims, and
+[`../server/README.md`](../server/README.md)'s setup section has the two ways
+round it.
+
 A client-only change (styling, a new field, a UI fix) never needs a server
 redeploy. A change that depends on a new API field/route does need the
 server deployed first - check [`../server/README.md`](../server/README.md)'s

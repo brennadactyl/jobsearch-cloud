@@ -92,6 +92,21 @@ currently supported).
 No Node.js, no git, and no `wrangler` CLI required for any of this - see the
 note after each step if you'd rather do it the traditional way instead.
 
+> **If PowerShell refuses with "running scripts is disabled on this system"**,
+> that is Windows' default execution policy, not anything about this repo. It
+> blocks the PowerShell shims Node installs, so `npm`, `npx` and a globally
+> installed `wrangler` all fail the same way while the `.cmd` next to each one
+> works. Either call those: `npx.cmd wrangler ...`, `npm.cmd run deploy`. Or
+> allow local scripts once, which is what most people want:
+>
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+> ```
+>
+> `RemoteSigned` still requires downloaded scripts to be signed; it only trusts
+> the ones on your own disk. The commands below are written plainly and work as
+> shown in `cmd.exe` and Git Bash either way.
+
 1. **Install Claude Code**:
    ```powershell
    irm https://claude.ai/install.ps1 | iex

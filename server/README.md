@@ -68,6 +68,14 @@ tracks, leads, applications, page titles and location rules.
 You need to do the account creation and login yourself - not something that
 can be done on your behalf.
 
+> **PowerShell and "running scripts is disabled on this system".** Windows'
+> default execution policy blocks the PowerShell shims Node installs, so `npm`,
+> `npx` and a globally installed `wrangler` all fail that way - including
+> `npm run deploy`. The `.cmd` beside each one is unaffected
+> (`npx.cmd wrangler ...`, `npm.cmd run deploy`), or allow local scripts once
+> with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Commands here are
+> written plainly and work as shown in `cmd.exe` and Git Bash.
+
 ### First: turn on R2
 
 **Do this before either path below.** This worker binds an R2 bucket for
@@ -88,7 +96,7 @@ million reads a month, and no egress charges - so Cloudflare wants billing
 details on file, but this deployment's documents run to about a megabyte and
 stay inside the free tier by three or four orders of magnitude.
 
-Confirm it took:
+Confirm it took (in PowerShell, `npx.cmd` - see the note above):
 
 ```bash
 npx wrangler r2 bucket list
