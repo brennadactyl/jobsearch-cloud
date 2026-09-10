@@ -128,33 +128,112 @@ if (-not $Search) {
 
 # ------------------------------------------------------------------- http ---
 
+# ---- What is worth retrying, and why replaying a call is safe here at all.
+#
+# Cloudflare answers a Worker *exception* with a 5xx whose body is
+# `error code: 1101`. It is not a 429, not a 404, and it says nothing about the
+# request: three consecutive GETs got one on 2026-09-10 during rapid sequential
+# calls, and every one of them succeeded on the very next attempt. Unretried,
+# that fails a sync step with nothing wrong with it, in the middle of an
+# unattended run, with nobody awake to see that the failure was spurious.
+#
+# Which statuses are transient is decided here, once, by number - not by
+# reading an error message and forming an opinion about it per call:
+#
+#   retry   no status at all (the connection never got an answer: reset, DNS,
+#           timeout), 429, and any other 5xx - which is where 1101 lands.
+#   stop    503, and every 4xx except 429. A 4xx is the server saying the
+#           request itself is wrong, and it will be exactly as wrong in twelve
+#           seconds; retrying only turns a clear error into a slow one. 503 is
+#           excluded from the 5xx rule on this API's own terms - it is what a
+#           handler returns when the deployment is missing a binding, where
+#           "the fix is a config change rather than a retry" (see
+#           ../server/src/routes/documents.js).
+#
+# Replaying a POST has to be safe, and it is for every endpoint reached from
+# here. That is a precondition rather than a happy accident, because a retry
+# cannot tell "the request never landed" from "it landed and the response was
+# lost":
+#
+#   /api/leads, /api/screened    dedup by url and report the duplicates back
+#   /api/verified, /api/delist   are keyed by url and idempotent
+#   /api/coverage                upserts by company, and *sets* the sweep
+#                                cursor from the positions reported rather
+#                                than incrementing it (db.js setSweepCursor)
+#   /api/runs                    upserts on (user, track)
+#
+# So the worst a replay costs is a duplicate counted in this command's own
+# output line, never a duplicate row. An endpoint that is not idempotent does
+# not belong on this path without an idempotency key of its own.
+#
+# Worst case is 19s of sleeping on one call, and a run makes eight of them.
+# That is the right trade for a job that has all night and nobody watching.
+$RetryAttempts = 4
+$RetryBackoff = @(2, 5, 12)
+
+function Test-Transient($status) {
+    if ($status -eq 503) { return $false }
+    return ($status -eq 0 -or $status -eq 429 -or $status -ge 500)
+}
+
+# One line's worth of an error body. A 1101 arrives as a whole HTML error page,
+# and the retry lines are progress reporting rather than the diagnosis - the
+# last attempt's Fail prints the body in full.
+function Squish($text) {
+    if (-not $text) { return "" }
+    $one = ($text -replace "\s+", " ").Trim()
+    if ($one.Length -gt 160) { return $one.Substring(0, 160) + "..." }
+    return $one
+}
+
 function Invoke-Tracker($method, $path, $bodyObj) {
     $uri = "$Base$path"
     $headers = @{ Authorization = "Bearer $Token" }
-    try {
-        if ($null -ne $bodyObj) {
-            $jsonText = $bodyObj | ConvertTo-Json -Depth 10 -Compress
-            # Sent as UTF-8 bytes rather than as a string: PS 5.1 encodes a
-            # string body as ISO-8859-1, which mangles an accented company name
-            # or an em-dash in a `note` on the way out.
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonText)
-            return Invoke-RestMethod -Uri $uri -Method $method -Headers $headers `
-                -Body $bytes -ContentType "application/json; charset=utf-8" -ErrorAction Stop
+    # Encoded once, outside the retry loop. It cannot change between attempts,
+    # and re-encoding per attempt is one more way the request that replaces a
+    # failed one could differ from it.
+    $bytes = $null
+    if ($null -ne $bodyObj) {
+        $jsonText = $bodyObj | ConvertTo-Json -Depth 10 -Compress
+        # Sent as UTF-8 bytes rather than as a string: PS 5.1 encodes a string
+        # body as ISO-8859-1, which mangles an accented company name or an
+        # em-dash in a `note` on the way out.
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonText)
+    }
+
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            if ($null -ne $bytes) {
+                return Invoke-RestMethod -Uri $uri -Method $method -Headers $headers `
+                    -Body $bytes -ContentType "application/json; charset=utf-8" -ErrorAction Stop
+            }
+            return Invoke-RestMethod -Uri $uri -Method $method -Headers $headers -ErrorAction Stop
+        } catch {
+            $resp = $_.Exception.Response
+            $status = 0
+            if ($resp) { try { $status = [int]$resp.StatusCode } catch { } }
+            $detail = ""
+            if ($resp) {
+                try {
+                    $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
+                    $detail = $reader.ReadToEnd()
+                } catch { }
+            }
+            if (-not $detail) { $detail = $_.Exception.Message }
+
+            if (-not (Test-Transient $status) -or $attempt -ge $RetryAttempts) {
+                # How many attempts it took is part of the error. A step that
+                # failed four times over twenty seconds and one that failed
+                # once are different problems, and this log line is all anyone
+                # has the next morning.
+                $tries = ""
+                if ($attempt -gt 1) { $tries = " after $attempt attempts" }
+                Fail "$method $path failed ($status)$tries`: $detail"
+            }
+            $wait = $RetryBackoff[[Math]::Min($attempt - 1, $RetryBackoff.Count - 1)]
+            Say "$method $path failed ($status) - transient, retrying in ${wait}s (attempt $attempt of $RetryAttempts): $(Squish $detail)"
+            Start-Sleep -Seconds $wait
         }
-        return Invoke-RestMethod -Uri $uri -Method $method -Headers $headers -ErrorAction Stop
-    } catch {
-        $resp = $_.Exception.Response
-        $status = 0
-        if ($resp) { try { $status = [int]$resp.StatusCode } catch { } }
-        $detail = ""
-        if ($resp) {
-            try {
-                $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
-                $detail = $reader.ReadToEnd()
-            } catch { }
-        }
-        if (-not $detail) { $detail = $_.Exception.Message }
-        Fail "$method $path failed ($status): $detail"
     }
 }
 
