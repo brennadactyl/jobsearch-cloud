@@ -302,8 +302,18 @@ if (-not $NoDocuments) {
                 $destDir = Split-Path $dest -Parent
                 if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
                 try {
+                    # -UseBasicParsing is not optional in a scheduled task.
+                    # Without it, PS 5.1's Invoke-WebRequest hands a successful
+                    # response to the Internet Explorer engine to parse, and on
+                    # a machine where that engine has never been configured it
+                    # tries to prompt - which under -NonInteractive throws
+                    # "Read and Prompt functionality is not available" with no
+                    # HTTP status attached. The request succeeded; only the
+                    # client-side parse failed, which makes it read like a
+                    # network fault. -OutFile alone happens to avoid the parse,
+                    # so this is belt and braces on the call that matters most.
                     Invoke-WebRequest -Uri "$($cfg.url)/api/documents/$($doc.path)" `
-                        -Headers $headers -OutFile $dest -ErrorAction Stop
+                        -Headers $headers -OutFile $dest -UseBasicParsing -ErrorAction Stop
                     $got = (Get-Item $dest).Length
                     # The index reports the size R2 holds. A short file here means
                     # a truncated download, which on disk looks like a real backup.
