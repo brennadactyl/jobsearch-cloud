@@ -63,6 +63,16 @@ body{margin:0;background:var(--ground);color:var(--ink);
 h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;letter-spacing:-.02em}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 
+/* The title block and the tab bar stick as one unit, so which board you are
+   looking at and which tab you are on stay on screen while its rows scroll.
+   Needs its own background: sticky content sits over the page, and without
+   one the rows would show through it. The Overview pins these already (see
+   #app.pinned), where this is a no-op. */
+.topbar{position:sticky;top:0;z-index:20;background:var(--ground)}
+/* A short viewport cannot spare ~110px on a title you have already read -
+   there, only the tab bar stays (.tabs is sticky in its own right). */
+@media (max-height:620px){.topbar{position:static}}
+
 .hdr{display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;justify-content:space-between;padding:30px 0 18px}
 .hdr h1{font-size:clamp(24px,3.6vw,33px);font-weight:700}
 .hdr .sub{color:var(--ink2);font-size:14px;margin-top:5px}
@@ -505,6 +515,9 @@ try{
 
 <div id="app" class="hidden">
   <div class="wrap">
+    <!-- Title block and tab bar travel together, so both stay put while a
+         tab's rows scroll under them. -->
+    <div class="topbar">
     <div class="hdr">
       <div>
         <h1 id="appTitle">Job Search Tracker</h1>
@@ -518,6 +531,7 @@ try{
       </div>
     </div>
     <nav class="tabs" id="tabs" role="tablist"></nav>
+    </div>
     <main id="panel"></main>
   </div>
 </div>
