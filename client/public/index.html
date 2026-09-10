@@ -109,6 +109,10 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 .tab .tabwarn{width:6px;height:6px;border-radius:50%;flex:none;margin-left:-2px}
 .tab .tabwarn.stale{background:var(--warn)}
 .tab .tabwarn.error{background:var(--crit)}
+/* A posting the nightly fill couldn't read. Amber like a stale search, and
+   for the same reason: something here is waiting on you, and nothing else
+   is going to do it. */
+.tab .tabwarn.fill{background:var(--warn)}
 .tab:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 
@@ -707,7 +711,14 @@ function buildTabs(){
   var tabs=[
     {id:"dashboard",kind:"overview",label:s.overview_label||"Overview",n:null},
     {id:"applications",kind:"applications",label:s.applications_label||"Applications",
-     n:state.applications.length},
+     n:state.applications.length,
+     // A posting the nightly fill couldn't read is the one thing on this tab
+     // that waits on you rather than on a company: nothing will fill that row
+     // in but you, and no later run will try again. Marked the way a track
+     // whose search stopped reporting is - see the `warn` field below.
+     warn:state.applications.some(function(a){return a.autofill==="failed";})
+       ? {cls:"fill",title:"A posting couldn’t be read — a row here needs filling in by hand"}
+       : null},
     // Every track's leads in one list. It exists because the Overview's
     // tiles count across tracks - "116 untriaged" spans five tabs - and a
     // number you can't open is a number you stop trusting. Its badge counts
@@ -721,9 +732,22 @@ function buildTabs(){
       // counts New leads - not the whole track (Reviewing/Not a fit are
       // things you've already looked at, and Applied leads have moved to
       // the Applications tab entirely, see setLeadStatus()).
-      n:state.leads.filter(function(l){return l.search===k&&l.status==="New";}).length});
+      n:state.leads.filter(function(l){return l.search===k&&l.status==="New";}).length,
+      // Only stale/error earn a mark - see runState() on why "never ran"
+      // stays quiet.
+      warn:trackWarn(k)});
   });
   return tabs;
+}
+
+// The mark a track tab carries when its scheduled search has stopped
+// reporting cleanly, in the shape buildTabs puts on every tab: a class and
+// the sentence that explains it. Returns null when there is nothing to say.
+function trackWarn(k){
+  var st=runState(TRACKS[k]&&TRACKS[k].run);
+  if(st==="error")return {cls:"error",title:"The last scheduled run reported an error"};
+  if(st==="stale")return {cls:"stale",title:"This search hasn’t run recently"};
+  return null;
 }
 
 // Applies state.tracks/state.settings (from /api/data) to TRACKS and the
@@ -1382,17 +1406,12 @@ function boot(){
 
 function tabsHtml(){
   return buildTabs().map(function(x){
-    // Only a track tab can carry a run warning, and only stale/error earn
-    // one - see runState() on why "never ran" stays quiet.
-    var warn="";
-    if(x.kind==="track"){
-      var st=runState(TRACKS[x.id]&&TRACKS[x.id].run);
-      if(st==="stale"||st==="error"){
-        warn='<i class="tabwarn '+st+'" title="'+
-          (st==="error"?"The last scheduled run reported an error":
-                        "This search hasn’t run recently")+'"></i>';
-      }
-    }
+    // Whether a tab has something wrong behind it is decided in buildTabs,
+    // with the rest of what a tab is - this only draws it, so a new kind of
+    // tab with a new reason to be marked needs nothing here.
+    var warn=x.warn
+      ? '<i class="tabwarn '+esc(x.warn.cls)+'" title="'+esc(x.warn.title)+'"></i>'
+      : "";
     return '<button class="tab" role="tab" data-tab="'+esc(x.id)+'" aria-selected="'+(ui.tab===x.id)+'">'+
       esc(x.label)+warn+(x.n!==null?'<span class="n">'+x.n+'</span>':'')+'</button>';
   }).join("");
