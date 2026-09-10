@@ -405,12 +405,17 @@ $exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
 # token is read by the CLI in a child process, and what matters is whether that
 # process could use it, not whether this one can see it.
 $outputText = if ($output) { ($output | Out-String).Trim() } else { "" }
+# Carried to the run record below, so the tracker says *why* rather than only
+# that something went wrong.
+$failureReason = if ($jobState -ne "Completed") { "the run did not complete (job state: $jobState)" } else { "" }
 if (-not $outputText) {
     Log "ERROR: the CLI produced no output at all - nothing was searched or synced"
+    $failureReason = "the CLI produced no output - nothing was searched or synced"
     $exitCode = 1
-} elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error") {
+} elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error|Failed to authenticate|Invalid bearer token|401") {
     Log "ERROR: the CLI is not authenticated - nothing was searched or synced."
     Log "       Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
+    $failureReason = "the CLI is not authenticated - nothing was searched or synced"
     $exitCode = 1
 } elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
     # The CLI never started. This is the same class of failure as the one above -
@@ -422,7 +427,48 @@ if (-not $outputText) {
     # launcher failed" must not keep reading as success.
     Log "ERROR: the CLI failed to start - nothing was searched or synced."
     Log "       See the output above; a launcher failure is not a search result."
+    $failureReason = "the CLI failed to start - nothing was searched or synced"
     $exitCode = 1
+}
+
+# ---- Did the run actually record itself? ----------------------------------
+#
+# Everything above is a denylist: it enumerates what failure has looked like so
+# far, which by construction misses the next one. It has already missed two.
+# The launcher failure on 2026-09-10 came from the shim rather than the CLI and
+# matched none of the authentication strings. Then this very check was tested by
+# feeding the CLI a bad token, and the CLI said "Failed to authenticate. API
+# Error: 401 Invalid bearer token" - which none of the four patterns matched
+# either. Twenty seconds, nothing searched, exit code 0.
+#
+# So this asks the opposite question, and it is the only one with a single right
+# answer: a run that worked wrote its own run record (step 9c, `./tracker run`).
+# If no record landed since this run started, the run did not finish its own
+# bookkeeping - whatever the reason, and whatever the output happened to say.
+# That covers the two misses above and the next one, without knowing its name.
+#
+# Inconclusive is not failure: if the tracker cannot be reached to check, say so
+# and leave $exitCode alone rather than inventing a failure out of a network
+# blip. This check can only ever turn a false success into a reported failure.
+if ($exitCode -eq 0) {
+    try {
+        $cfg = Invoke-RestMethod -Uri "$trackerUrl/api/config" -TimeoutSec 30 `
+            -Headers @{ Authorization = "Bearer $trackerToken" }
+        $track = $cfg.tracks | Where-Object { $_.key -eq $Task } | Select-Object -First 1
+        $recordedAt = if ($track -and $track.last_run) { $track.last_run.at } else { $null }
+        $isFresh = $false
+        if ($recordedAt -and -not [string]::IsNullOrWhiteSpace($recordedAt)) {
+            $isFresh = ([datetime]::Parse($recordedAt).ToUniversalTime() -ge $start.ToUniversalTime())
+        }
+        if (-not $isFresh) {
+            Log "ERROR: the run wrote no run record - it did not finish, whatever the output says."
+            Log "       Last record for $Task$(if ($recordedAt) { ": $recordedAt" } else { ": none" }); this run started $($start.ToUniversalTime().ToString('o'))."
+            $failureReason = "the run wrote no run record - it did not finish its own bookkeeping"
+            $exitCode = 1
+        }
+    } catch {
+        Log "WARNING: couldn't check whether a run record was written ($($_.Exception.Message)) - leaving the run's own result alone."
+    }
 }
 
 # ---- Write back what the run edited. --------------------------------------
@@ -486,6 +532,41 @@ if ($runDir -and $manifest.Count -gt 0) {
 }
 
 $elapsed = [int]((Get-Date) - $start).TotalSeconds
+
+# ---- Record a failed run, because nothing else will. ----------------------
+#
+# The success record is written by the run itself (step 9c, `./tracker run`).
+# That covers every case except the one that matters most: a run that died
+# before it got there writes nothing at all, and "never ran" then looks exactly
+# like "ran and found nothing" - a search that finds nothing writes nothing
+# either. The run record is the only thing that distinguishes them, and until
+# now it was missing from precisely the failure it was invented to expose.
+#
+# On 2026-09-10 the CLI never started, the run lasted twenty seconds, and the
+# page showed a stale run stamp with no indication anything was wrong.
+#
+# Deliberately a direct call rather than `./tracker run`: the helper lives in
+# the run directory this script builds, and one of the failures being reported
+# is "the run never got that far". A reporter that depends on the machinery it
+# reports on is silent in the cases you need it for.
+#
+# Never fatal. A tracker that cannot be reached is worth a log line, not a
+# second failure on top of the one being reported - and it must not change
+# $exitCode, which is the signal Task Scheduler already has.
+if ($exitCode -ne 0) {
+    if (-not $failureReason) { $failureReason = "the run failed (exit code $exitCode)" }
+    $note = "runner-reported failure after ${elapsed}s: $failureReason"
+    try {
+        $null = Invoke-RestMethod -Uri "$trackerUrl/api/runs" -Method Post -TimeoutSec 30 `
+            -Headers @{ Authorization = "Bearer $trackerToken" } `
+            -ContentType "application/json" `
+            -Body (@{ search = $Task; status = "error"; note = $note } | ConvertTo-Json -Compress)
+        Log "recorded a failed run against $Task - the page will show it as an error rather than a stale stamp"
+    } catch {
+        Log "WARNING: could not record the failed run ($($_.Exception.Message)). The failure above still stands; only the tracker's copy of it is missing."
+    }
+}
+
 Log "finished $Task - job state: $jobState, elapsed: ${elapsed}s, exit code: $exitCode"
 Log "===== done ====="
 
