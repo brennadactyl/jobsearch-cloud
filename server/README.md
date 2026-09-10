@@ -47,6 +47,12 @@ tracks, leads, applications, page titles and location rules.
   looking a bearer token up to a user. The only file that touches either.
 - `src/db.js` - all D1 access for a person's own data. Every instance is
   bound to one user id at construction, so no query can forget to filter.
+- `src/r2.js` - all R2 access for their documents: resumes, and the per-track
+  baseline doc the nightly search reads and edits. Scoped the same way `db.js`
+  is - every key is prefixed with the owner's id at construction, so no method
+  can address another person's object. An object's key is
+  `<user-id>/<relative path>`, and there is no table beside it: `kind` is the
+  first path segment and R2's own `list()` returns the rest.
 - `src/prompt.js` - composes the two prompts the scheduled runs execute:
   `buildSearchPrompt`, one track's daily search, from that track's config; and
   `buildAutofillPrompt`, the nightly fill for applications logged as a bare
@@ -62,6 +68,48 @@ tracks, leads, applications, page titles and location rules.
 You need to do the account creation and login yourself - not something that
 can be done on your behalf.
 
+> **PowerShell and "running scripts is disabled on this system".** Windows'
+> default execution policy blocks the PowerShell shims Node installs, so `npm`,
+> `npx` and a globally installed `wrangler` all fail that way - including
+> `npm run deploy`. The `.cmd` beside each one is unaffected
+> (`npx.cmd wrangler ...`, `npm.cmd run deploy`), or allow local scripts once
+> with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Commands here are
+> written plainly and work as shown in `cmd.exe` and Git Bash.
+
+### First: turn on R2
+
+**Do this before either path below.** This worker binds an R2 bucket for
+documents - resumes and each track's baseline doc (see [`src/r2.js`](src/r2.js)).
+R2 is off by default on a new Cloudflare account, and nothing can create a
+bucket until it is switched on: the deploy button's auto-provisioning and
+`wrangler` alike fail with
+
+```
+Please enable R2 through the Cloudflare Dashboard. [code: 10042]
+```
+
+To enable it: **[dash.cloudflare.com](https://dash.cloudflare.com/) → R2 Object
+Storage** (under **Storage & databases**) **→ Overview**, then complete the
+checkout flow to add an R2 subscription. It is a subscription with a free
+allowance rather than a paid plan - 10 GB of storage, 1 million writes and 10
+million reads a month, and no egress charges - so Cloudflare wants billing
+details on file, but this deployment's documents run to about a megabyte and
+stay inside the free tier by three or four orders of magnitude.
+
+Confirm it took (in PowerShell, `npx.cmd` - see the note above):
+
+```bash
+npx wrangler r2 bucket list
+```
+
+An empty list is the answer you want. The 10042 above means it did not take.
+
+If you would rather not enable R2 at all, the tracker still runs without it:
+every other endpoint works, and the four `/api/documents` routes answer 503
+saying documents are not configured. What you lose is the document store - the
+searches then need their baseline docs and resumes on the machine that runs
+them, which is where they lived before.
+
 ### Quick deploy (recommended)
 
 No Node.js or `wrangler` CLI required locally - the build/deploy happens in
@@ -72,10 +120,14 @@ Cloudflare's own environment.
 1. Click the button, sign in to Cloudflare (creates a free account if you
    don't have one), and accept the defaults on the setup page it shows you.
 2. It forks this `server/` directory into a new repo in your own GitHub, and
-   reads `wrangler.toml` to auto-provision a D1 database for you (filling in
-   the `database_id` for you - nothing to paste in by hand). `package.json`'s
-   `deploy` script (`wrangler d1 migrations apply DB --remote && wrangler
-   deploy`) runs the schema migrations and deploys in one step.
+   reads `wrangler.toml` to auto-provision both a D1 database and the R2
+   documents bucket for you (filling in the `database_id` for you - nothing to
+   paste in by hand). `package.json`'s `deploy` script (`wrangler d1 migrations
+   apply DB --remote && wrangler deploy`) runs the schema migrations and
+   deploys in one step.
+
+   The bucket is only auto-provisioned if you enabled R2 first - see above.
+   Skip that and this step is where it fails.
 3. It lands you on your new Worker's dashboard. Go to **Settings → Variables
    and Secrets** and add a secret named `ADMIN_TOKEN` - any long random value
    you pick (a password generator, or `-join ((48..57)+(97..122)|Get-Random
@@ -110,7 +162,15 @@ Cloudflare's own environment.
    It prints a `database_id`. Paste it into `wrangler.toml`, replacing
    `REPLACE_WITH_YOUR_D1_DATABASE_ID`.
 
-4. **Apply the schema:**
+4. **Create the documents bucket:**
+   ```bat
+   wrangler r2 bucket create job-search-tracker-docs
+   ```
+   Unlike D1 there is no id to paste - `wrangler.toml` binds it by name, so
+   this only has to match. If it errors with `[code: 10042]`, R2 is not enabled
+   on the account yet; see "First: turn on R2" above.
+
+5. **Apply the schema:**
    ```bat
    wrangler d1 migrations apply job-search-tracker-db --remote
    ```
@@ -119,7 +179,7 @@ Cloudflare's own environment.
    skill does it), so the page is deliberately empty until then rather than
    pre-filled with someone else's job search.
 
-5. **Set the admin token.** This creates accounts and resets passwords; it is
+6. **Set the admin token.** This creates accounts and resets passwords; it is
    not a login and nothing else accepts it. Pick a long random value:
    ```powershell
    -join ((48..57)+(97..122)|Get-Random -Count 40|%{[char]$_})
@@ -129,17 +189,17 @@ Cloudflare's own environment.
    wrangler secret put ADMIN_TOKEN
    ```
 
-6. **Deploy:**
+7. **Deploy:**
    ```bat
    wrangler deploy
    ```
    Prints your live URL, something like
    `https://job-search-tracker.<your-subdomain>.workers.dev`.
 
-7. **Create your account** and mint the token your scheduled searches will
+8. **Create your account** and mint the token your scheduled searches will
    use - see [Accounts](#accounts) below.
 
-8. **Deploy the client** - see [`../client/README.md`](../client/README.md).
+9. **Deploy the client** - see [`../client/README.md`](../client/README.md).
 
 ## Accounts
 

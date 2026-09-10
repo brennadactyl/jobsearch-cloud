@@ -20,8 +20,16 @@
 
 export const CORS_HEADERS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "Authorization, Content-Type",
+  // PUT and DELETE are here for /api/documents, the only resource addressed by
+  // its own URI rather than posted to a verb-named path (see
+  // ./routes/documents.js). Advertising them grants nothing - the bearer token
+  // is the boundary either way, as above - it stops a browser preflight
+  // refusing a call the route table would have answered. The nightly runner
+  // uses curl and never preflights, so this is for the page, whenever it grows
+  // a document view.
+  "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+  // If-Match rides along with a conditional document write.
+  "access-control-allow-headers": "Authorization, Content-Type, If-Match",
   "access-control-max-age": "86400",
 };
 
