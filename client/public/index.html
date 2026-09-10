@@ -121,6 +121,11 @@ textarea{resize:vertical;min-height:34px}
 .chip{appearance:none;font:inherit;font-size:13px;cursor:pointer;border-radius:99px;
   border:1px solid var(--line);background:var(--surface);color:var(--ink2);padding:4px 11px}
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+/* The filter a tab was opened with, from an Overview number. Always on when
+   shown, and always removable - a filter you can't see is a page misreporting
+   what it holds. */
+.chip.drill{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.chip.drill .x{margin-left:7px;font-weight:600}
 
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .scroller{overflow-x:auto}
@@ -243,6 +248,10 @@ td textarea{font-size:13px;min-height:32px;min-width:130px}
 .md-row-top .co{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .md-row-top .pill{flex:0 0 auto}
 .md-row-ttl{font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.4}
+/* Which search found this row - shown only in the pooled All-leads list,
+   where the tab no longer says it. */
+.md-row-track{display:inline-block;margin-left:7px;padding:0 6px;border-radius:4px;
+  background:var(--surface2);color:var(--ink3);font-size:11px;white-space:nowrap}
 .md-row-loc{font-size:11.5px;color:var(--ink3);margin-top:7px;display:flex;align-items:baseline}
 .md-row-loc .geo{flex:0 0 auto;margin-left:6px;padding:1px 7px}
 .md-row-place{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -322,8 +331,46 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .pill.bad{background:none;color:var(--crit);border-color:var(--crit)}
 
 .tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));margin-bottom:20px}
-.tile{padding:16px 17px;border-radius:12px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
-.tile .k{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+
+/* The Overview scrolls inside itself: header, tabs and the tile row hold
+   still while the searches and the funnel scroll past, the same way a track
+   tab's master/detail card scrolls under a toolbar that doesn't. render()
+   adds .pinned for the Overview only - every other tab scrolls as one
+   document. A column that measures itself, rather than the fixed
+   `calc(100vh - 260px)` .md-list uses, so a wrapped header or a second row
+   of tiles can't push the bottom off screen. */
+#app.pinned{height:100vh;height:100dvh;display:flex;flex-direction:column}
+#app.pinned .wrap{flex:1;min-height:0;display:flex;flex-direction:column;padding-bottom:0}
+#app.pinned #panel{flex:1;min-height:0;display:flex;flex-direction:column}
+#app.pinned .panel-scroll{flex:1;min-height:0;overflow-y:auto;
+  padding:6px 0 24px;scrollbar-gutter:stable}
+#app.pinned .panel-scroll .sec:first-child{margin-top:0}
+/* Pinning costs vertical room, and a short or narrow viewport has none to
+   spare - below either, the page goes back to being one scrolling document
+   with the tab bar sticky, which is what it is on every other tab. */
+@media (max-height:620px),(max-width:700px){
+  #app.pinned{height:auto;display:block}
+  #app.pinned .wrap{display:block;padding-bottom:72px}
+  #app.pinned #panel{display:block}
+  #app.pinned .panel-scroll{overflow:visible;padding:0}
+  #app.pinned .panel-scroll .sec:first-child{margin-top:26px}
+}
+/* Each tile opens the rows behind its number (see dashboard()'s TILES), so
+   it is a real button - keyboard reachable, and with the chevron showing at
+   rest rather than on hover: an affordance nobody sees until they are
+   already pointing at it doesn't help them decide to point at it. */
+.tile{padding:16px 17px;border-radius:12px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);
+  display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+  transition:border-color .12s ease}
+.tile:hover{border-color:var(--ink3)}
+.tile:hover .go{color:var(--accent)}
+/* Nothing behind the number to open. Driven off the count, so the day it
+   isn't zero the tile comes back on its own. */
+.tile[disabled]{cursor:default;opacity:.72}
+.tile[disabled]:hover{border-color:var(--line)}
+.tile .k{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);font-weight:600;
+  display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tile .go{font-size:15px;line-height:1;color:var(--ink3);flex:none}
 .tile .v{font-family:"Bricolage Grotesque",sans-serif;font-size:31px;font-weight:700;line-height:1.15;margin-top:7px;letter-spacing:-.03em}
 .tile .f{font-size:12.5px;color:var(--ink2);margin-top:3px}
 .tile.hi .v{color:var(--accent)}
@@ -332,6 +379,16 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .bar h3{font-size:14px;font-weight:600;display:flex;justify-content:space-between;
   align-items:baseline;gap:6px 14px;flex-wrap:wrap;margin-bottom:7px}
 .bar h3 span{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink3);font-weight:400}
+/* A bar's name, when there is a tab holding the rows it counts. A button
+   rather than a link because it switches tabs in place - there is no URL
+   behind a tab here to point an href at. */
+.jumplink{appearance:none;border:0;background:none;padding:0;font:inherit;color:inherit;
+  cursor:pointer;border-radius:4px}
+.jumplink:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.jumplink:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* A funnel stage nothing has reached. `.bar h3 span` would otherwise set it
+   in the mono count face, and dimming it says why it isn't a button. */
+.bar h3 .jumpdead{font-family:inherit;font-size:inherit;font-weight:inherit;color:var(--ink3)}
 .meter{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden;display:flex}
 .meter i{display:block;height:100%}
 .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font-size:12.5px;color:var(--ink2)}
@@ -581,7 +638,8 @@ var API_BASE=(typeof LOCAL_API_BASE!=="undefined"?LOCAL_API_BASE:"");
 // a configured deployment overwrites all of these.
 function defaultSettings(){
   return {display_title:"Job Search Tracker",overview_label:"Overview",
-    applications_label:"Applications",stale_run_hours:36,priority_locations:[]};
+    applications_label:"Applications",all_leads_label:"All leads",
+    stale_run_hours:36,priority_locations:[]};
 }
 var state={updated:null,leads:[],applications:[],tracks:[],settings:defaultSettings()};
 
@@ -610,6 +668,12 @@ function buildTabs(){
     {id:"dashboard",kind:"overview",label:s.overview_label||"Overview",n:null},
     {id:"applications",kind:"applications",label:s.applications_label||"Applications",
      n:state.applications.length},
+    // Every track's leads in one list. It exists because the Overview's
+    // tiles count across tracks - "116 untriaged" spans five tabs - and a
+    // number you can't open is a number you stop trusting. Its badge counts
+    // New the way a track tab's does, so it reads as the sum of them.
+    {id:ALL_LEADS,kind:"allleads",label:s.all_leads_label||"All leads",
+     n:state.leads.filter(function(l){return l.status==="New";}).length},
   ];
   Object.keys(TRACKS).forEach(function(k){
     tabs.push({id:k,kind:"track",label:TRACKS[k].label,
@@ -638,7 +702,13 @@ function applyConfig(){
       ", refreshed daily. Edit anything — it saves for every device."
     : "No tracked searches configured yet — run the job-search-setup skill to add one.";
 }
-var ui={tab:"dashboard",q:"",filter:"All",selected:{},expanded:{},view:"detail",leadSort:"priority",appSort:"applied-desc"};
+var ui={tab:"dashboard",q:"",filter:"All",selected:{},expanded:{},view:"detail",leadSort:"priority",appSort:"applied-desc",drill:null};
+
+// The id of the cross-track leads tab. A tab id, not a track key: the same
+// shape as "dashboard" and "applications", which are also ids no track can
+// usefully be called.
+var ALL_LEADS="allleads";
+
 
 // Fields shown in leads' and applications' facts cards. Facts about the
 // opportunity itself (stable once entered - comp doesn't change because
@@ -685,6 +755,64 @@ var STAGE_DATE_FIELDS=[
   ["Rejected","dateRejected"],
   ["Withdrawn","dateWithdrawn"]
 ];
+
+// Drill-downs. Every Overview number that isn't just "a tab's worth of rows"
+// names one of these, and the tab it opens filters by the same predicate the
+// tile counted with - one definition, so the number you clicked and the rows
+// you land on can't drift apart. `scope` says which tab shows it; `label` is
+// what the dismissible chip reads; `test` is the rule.
+var DRILLS={
+  // Matches the Overview's priority-location tile: the first configured
+  // ranking, still worth looking at. Applied leads aren't in the leads tab
+  // at all (see setLeadStatus), so only "Not a fit" needs excluding here.
+  "top-geo-open":{scope:"leads",
+    label:function(){
+      var r=(state.settings.priority_locations||[])[0];
+      return (r?r.label:"Top locations")+" · still open";
+    },
+    test:function(l){var g=geo(l.location);return !!g&&g.i===0&&l.status!=="Not a fit";}},
+  "in-conversation":{scope:"apps",label:"In screen or loop stage",
+    test:function(a){return ACTIVE.indexOf(a.status)>=0;}},
+  "gone-quiet":{scope:"apps",label:"Applied 14+ days ago, no reply",
+    test:function(a){var d=daysSince(a.dateApplied);
+      return a.status==="Applied"&&d!==null&&d>14;}},
+  // The funnel's first row. "To Apply" rows sit in this tab without having
+  // been applied to, which is exactly what the Overview splits them out of.
+  "applied":{scope:"apps",label:"Applied",
+    test:function(a){return a.status!=="To Apply";}}
+};
+// One per pipeline stage, built from the same list the funnel is built from,
+// so a stage added there arrives here too. These test the stage *date*, not
+// the current status: the date is stamped once and never cleared, so an
+// application rejected after a tech screen still counts as having reached
+// one - which is what the funnel row it opens from counted.
+STAGE_DATE_FIELDS.forEach(function(s){
+  DRILLS["reached-"+s[1]]={scope:"apps",label:"Reached "+s[0],
+    test:function(a){return a.status!=="To Apply"&&!!a[s[1]];}};
+});
+
+function drillLabel(id){
+  var d=DRILLS[id]; if(!d)return "";
+  return typeof d.label==="function"?d.label():d.label;
+}
+// True when a row survives the active drill-down. No drill, or one belonging
+// to the other kind of tab, filters nothing.
+function drillKeeps(scope,row){
+  var d=DRILLS[ui.drill];
+  if(!d||d.scope!==scope)return true;
+  return d.test(row);
+}
+// The chip that says a drill-down is on and takes it off again. Rendered
+// only in the tab that owns it - the Overview sends you here with a filter
+// applied, and an applied filter you can't see is a page lying about what
+// it's showing.
+function drillChipHtml(scope){
+  var d=DRILLS[ui.drill];
+  if(!d||d.scope!==scope)return "";
+  return '<button class="chip drill" data-drill-clear="1" aria-pressed="true" '+
+    'title="Clear this filter">'+esc(drillLabel(ui.drill))+
+    '<span class="x" aria-hidden="true">×</span></button>';
+}
 // [column,label] form, "Applied" first - the order the Stage history table
 // (see stageHistoryHtml) renders in, and the source list for it.
 var STAGE_HISTORY_FIELDS=[["dateApplied","Applied"]].concat(
@@ -952,6 +1080,12 @@ function runSummary(run){
 
 // The one-line "when did this search last run" stamp shown above a track's
 // list and in the Overview panel.
+// What the pooled leads tab says where a track tab shows its run stamp.
+function trackCountLine(){
+  var n=Object.keys(TRACKS).length;
+  return n+" tracked search"+(n===1?"":"es")+" feed this list";
+}
+
 function runStampHtml(key){
   var tr=TRACKS[key]; if(!tr)return "";
   var run=tr.run, st=runState(run);
@@ -1126,7 +1260,7 @@ function forgetSession(message){
   // whatever tab and sort the last one left behind - and it gets re-saved
   // under their session, which is how a cleared preference comes back.
   ui.tab="dashboard";ui.q="";ui.filter="All";ui.selected={};ui.expanded={};
-  ui.view="detail";ui.leadSort="priority";ui.appSort="applied-desc";
+  ui.view="detail";ui.leadSort="priority";ui.appSort="applied-desc";ui.drill=null;
   document.getElementById("gate").classList.remove("hidden");
   document.getElementById("app").classList.add("hidden");
   document.getElementById("gateError").textContent=message||"";
@@ -1249,15 +1383,46 @@ function dashboard(){
   var topLabel=topRule?topRule.label:"Top locations";
   var trackCount=state.tracks.length;
 
-  var h='<div class="tiles">'+
-    '<div class="tile hi"><div class="k">Untriaged</div><div class="v mono">'+fresh+'</div><div class="f">leads marked New</div></div>'+
-    '<div class="tile"><div class="k">'+esc(topLabel)+'</div><div class="v mono" style="color:var(--pri-0)">'+near+'</div><div class="f">still open</div></div>'+
-    '<div class="tile"><div class="k">Tracked leads</div><div class="v mono">'+L.length+'</div><div class="f">across '+trackCount+' tracked search'+(trackCount===1?'':'es')+'</div></div>'+
-    '<div class="tile"><div class="k">Applied</div><div class="v mono">'+appliedCount+'</div><div class="f">'+
-      (toApply?'plus '+toApply+' still to apply':'in your Applications tab')+'</div></div>'+
-    '<div class="tile"><div class="k">In conversation</div><div class="v mono">'+active+'</div><div class="f">screen or loop stage</div></div>'+
-    '<div class="tile"><div class="k">Gone quiet</div><div class="v mono">'+stale+'</div><div class="f">applied 14+ days ago</div></div>'+
-  '</div>';
+  // Every tile opens the rows behind its own number: the tab it lands on
+  // plus the filter that reproduces the count, so what you clicked and what
+  // you land in are the same set. `drill` names an entry in DRILLS, which
+  // owns the rule; `filter` is a plain status chip where one already says
+  // it. A tile counting zero has nothing to open and says so by being
+  // disabled - derived from the count, so it comes back on its own.
+  var TILES=[
+    {k:"Untriaged",v:fresh,f:"leads marked New",hi:true,tab:ALL_LEADS,filter:"New"},
+    {k:topLabel,v:near,f:"still open",color:"var(--pri-0)",tab:ALL_LEADS,drill:"top-geo-open"},
+    // Counts what the tab it opens can show - leads marked Applied have
+    // moved to Applications and aren't in that list, so counting them here
+    // would send you to a shorter list than the number promised.
+    {k:"Tracked leads",v:L.filter(function(l){return l.status!=="Applied";}).length,
+     f:"across "+trackCount+" tracked search"+(trackCount===1?"":"es"),tab:ALL_LEADS},
+    {k:"Applied",v:appliedCount,
+     f:toApply?"plus "+toApply+" still to apply":"in your Applications tab",
+     tab:"applications",drill:"applied"},
+    {k:"In conversation",v:active,f:"screen or loop stage",
+     tab:"applications",drill:"in-conversation"},
+    {k:"Gone quiet",v:stale,f:"applied 14+ days ago",
+     tab:"applications",drill:"gone-quiet"}
+  ];
+  var h='<div class="tiles">'+TILES.map(function(t){
+    var dead=!t.v;
+    return '<button type="button" class="tile'+(t.hi?" hi":"")+'"'+
+      (dead?' disabled title="Nothing to open yet"'
+           :' data-tab="'+esc(t.tab)+'"'+
+            (t.filter?' data-tab-filter="'+esc(t.filter)+'"':'')+
+            (t.drill?' data-drill="'+esc(t.drill)+'"':''))+'>'+
+      '<div class="k">'+esc(t.k)+(dead?'':'<span class="go" aria-hidden="true">&rsaquo;</span>')+'</div>'+
+      '<div class="v mono"'+(t.color?' style="color:'+t.color+'"':'')+'>'+t.v+'</div>'+
+      '<div class="f">'+esc(t.f)+'</div></button>';
+  }).join("")+'</div>';
+
+  // Everything below the tiles scrolls inside itself, so the tabs and the
+  // numbers stay put while you read the searches - the same shape a track
+  // tab has, where the master/detail card scrolls and the toolbar doesn't.
+  // #app.pinned (set in render()) is what turns this div into that region;
+  // on a short or narrow viewport the CSS drops it back to one document.
+  h+='<div class="panel-scroll">';
 
   // Whether every scheduled search is still firing is the one thing the
   // lead counts above genuinely cannot show - a search that stopped running
@@ -1289,7 +1454,12 @@ function dashboard(){
     var tot=rows.length||1;
     var cols={"New":"var(--accent)","Reviewing":"var(--warn)","Applied":"var(--good)",
               "Not a fit":"var(--line)"};
-    h+='<div class="bar"><h3>'+esc(TRACKS[k].label)+' <span>'+esc(TRACKS[k].full)+' &middot; '+rows.length+'</span></h3>'+
+    // The name opens that track's tab. Only the name, not the whole header
+    // row: the row also carries the description and the run stamp, and a
+    // click target that wide would swallow selecting either.
+    h+='<div class="bar"><h3><button type="button" class="jumplink" data-tab="'+esc(k)+'" '+
+      'title="Open this tab">'+esc(TRACKS[k].label)+'</button>'+
+      ' <span>'+esc(TRACKS[k].full)+' &middot; '+rows.length+'</span></h3>'+
       '<div class="meter">'+byStatus.map(function(b){
         return b.n?'<i style="width:'+(b.n/tot*100)+'%;background:'+cols[b.s]+'"></i>':"";}).join("")+'</div>'+
       '<div class="legend">'+byStatus.filter(function(b){return b.n;}).map(function(b){
@@ -1317,14 +1487,23 @@ function dashboard(){
         : 'Move a lead to Applied, or add one directly from the Applications tab, and its progress shows up here.')+
       '</div>';
   }else{
-    var FUNNEL=[["Applied",appliedCount]].concat(STAGE_DATE_FIELDS.slice(0,4).map(function(s){
-      return [s[0],appsApplied.filter(function(a){return a[s[1]];}).length];
+    // Each row carries the drill-down that reproduces it, so its header can
+    // open the same set in Applications - "applied" for the first row, and
+    // the per-stage entries DRILLS builds from this very list for the rest.
+    var FUNNEL=[["Applied",appliedCount,"applied"]].concat(STAGE_DATE_FIELDS.slice(0,4).map(function(s){
+      return [s[0],appsApplied.filter(function(a){return a[s[1]];}).length,"reached-"+s[1]];
     }));
     h+='<div class="card" style="padding:19px"><div class="bars">'+
       FUNNEL.map(function(r,i){
         var pct=Math.round(r[1]/appliedCount*100);
         var color=i===0?"var(--ink3)":(i===FUNNEL.length-1?"var(--good)":"var(--accent)");
-        return '<div class="bar"><h3>'+esc(r[0])+' <span>'+r[1]+' &middot; '+pct+'%</span></h3>'+
+        // A stage nothing has reached has no rows to open, so it stays
+        // plain text rather than a link that lands on an empty list.
+        var head=r[1]
+          ? '<button type="button" class="jumplink" data-tab="applications" data-drill="'+esc(r[2])+'" '+
+            'title="Open these in Applications">'+esc(r[0])+'</button>'
+          : '<span class="jumpdead" title="Nothing has reached this stage yet">'+esc(r[0])+'</span>';
+        return '<div class="bar"><h3>'+head+' <span>'+r[1]+' &middot; '+pct+'%</span></h3>'+
           '<div class="meter"><i style="width:'+pct+'%;background:'+color+'"></i></div></div>';
       }).join("")+'</div>';
 
@@ -1366,6 +1545,7 @@ function dashboard(){
     ? 'Scheduled searches across your '+trackCount+' tracked search'+(trackCount===1?'':'es')+' add rows here every day.'
     : 'Once a tracked search is set up, its scheduled run adds rows here every day.')+
     ' Every posting is opened and confirmed live before it lands; nothing arrives from a search snippet alone.</div>';
+  h+='</div>'; // .panel-scroll
   return h;
 }
 
@@ -1380,11 +1560,22 @@ function leadsTab(key){
   // `tracked` keeps the unfiltered set only so the empty state below can tell
   // a search that has never found anything from one whose finds have all been
   // applied to.
-  var tracked=state.leads.filter(function(l){return l.search===key;});
+  //
+  // The same function draws the cross-track tab (key===ALL_LEADS): one list
+  // over every track instead of one, which is the only difference that
+  // reaches the rows. Everything a single track has and a pooled list can't
+  // - its description, its run stamp, the empty state that explains why a
+  // search found nothing - is skipped rather than faked.
+  var isAll=(key===ALL_LEADS);
+  var scopeLabel=isAll
+    ? ((state.settings&&state.settings.all_leads_label)||"All leads")
+    : TRACKS[key].label;
+  var tracked=state.leads.filter(function(l){return isAll||l.search===key;});
   var all=tracked.filter(function(l){return l.status!=="Applied";});
   var q=ui.q.toLowerCase();
   var rows=all.filter(function(l){
     if(ui.filter!=="All"&&l.status!==ui.filter)return false;
+    if(!drillKeeps("leads",l))return false;
     if(!q)return true;
     return (l.company+" "+l.title+" "+l.location).toLowerCase().indexOf(q)>=0;
   }).sort(leadComparator(ui.leadSort));
@@ -1395,10 +1586,10 @@ function leadsTab(key){
     return '<span><i style="background:'+dot+'"></i>'+(i+1)+'. '+esc(r.label)+'</span>';
   }).join("");
   var h='<div class="toolbar">'+
-    '<div class="search"><input type="search" id="q" placeholder="Filter '+esc(TRACKS[key].label)+'&hellip;" value="'+esc(ui.q)+'"></div>'+
+    '<div class="search"><input type="search" id="q" placeholder="Filter '+esc(scopeLabel)+'&hellip;" value="'+esc(ui.q)+'"></div>'+
     '<div class="chips">'+["All"].concat(LEAD_STATUS.filter(function(s){return s!=="Applied";})).map(function(f){
       return '<button class="chip" data-filter="'+esc(f)+'" aria-pressed="'+(ui.filter===f)+'">'+esc(f)+'</button>';
-    }).join("")+'</div>'+
+    }).join("")+drillChipHtml("leads")+'</div>'+
     viewSwitchHtml()+'</div>'+
     // The controls people touch constantly (search, status, view mode)
     // stay full-weight above. Sort and this row's other contents are all
@@ -1410,8 +1601,17 @@ function leadsTab(key){
       // company means proximity no longer decides the order, so the legend
       // shouldn't claim it does.
       (ui.leadSort==="priority"?'<span>Closest roles sorted first</span>':'')+
-      '<span class="key-run">'+runStampHtml(key)+'</span></div>';
+      // A pooled list has no single run behind it, so it says how many
+      // searches feed it instead of which one last reported.
+      '<span class="key-run">'+(isAll
+        ? esc(trackCountLine())
+        : runStampHtml(key))+'</span></div>';
 
+  if(!all.length&&isAll){
+    return h+'<div class="card empty"><strong>Nothing open right now</strong>'+
+      'No tracked search has a posting waiting to be looked at &mdash; everything found so far has been '+
+      'applied to or ruled out. New postings land here as the daily runs find them.</div>';
+  }
   if(!all.length){
     // An empty track has more than one story behind it, and they read very
     // differently. Whether anything is still tracked separates a search that
@@ -1435,9 +1635,16 @@ function leadsTab(key){
       warn0+'</div>';
   }
   if(!rows.length) return h+'<div class="card empty"><strong>Nothing matches</strong>Try a different filter.</div>';
+  // In the pooled list, which search found a posting is the one thing a row
+  // no longer says by virtue of which tab you are on.
+  function trackTagHtml(l){
+    if(!isAll)return "";
+    var tr=TRACKS[l.search];
+    return '<span class="md-row-track">'+esc(tr?tr.label:l.search)+'</span>';
+  }
 
   if(ui.view==="grid"){
-    h+=leadsGridHtml(rows,key);
+    h+=leadsGridHtml(rows,key,isAll);
     h+='<div class="note">Quick-scan columns only &mdash; referral, notes, team, setup, and the rest are in Detail view (click a row to open them). Edits save when you click away. '+rows.length+' of '+all.length+' shown.</div>';
     return h;
   }
@@ -1451,14 +1658,14 @@ function leadsTab(key){
     return '<div class="'+cls+'" data-select="'+l.id+'" data-scope="'+key+'">'+
       '<div class="md-row-top"><span class="co">'+esc(l.company)+'</span>'+
         '<span class="pill '+pillFor(l.status)+'">'+esc(l.status)+'</span></div>'+
-      '<div class="md-row-ttl">'+esc(l.title)+'</div>'+
+      '<div class="md-row-ttl">'+esc(l.title)+trackTagHtml(l)+'</div>'+
       '<div class="md-row-loc"><span class="md-row-place">'+esc(l.location)+'</span>'+
         (g?'<span class="geo '+g.p+'">'+esc(g.label)+'</span>':'')+
         '<span class="md-row-found" title="Date this listing was added">Found <span class="mono">'+esc(l.found)+'</span></span></div>'+
     '</div>';
   }).join("");
 
-  h+='<div class="md"><div class="md-list">'+listHtml+'</div><div class="md-detail">'+leadDetailHtml(sel,key)+'</div></div>';
+  h+='<div class="md"><div class="md-list">'+listHtml+'</div><div class="md-detail">'+leadDetailHtml(sel,isAll?sel.search:key)+'</div></div>';
   h+='<div class="note">Status, notes, and details save when you click away from the field. '+rows.length+' of '+all.length+' shown.</div>';
   return h;
 }
@@ -1472,11 +1679,14 @@ var LEAD_GRID_FIELDS=[
   ["comp","Comp range"]
 ];
 
-function leadsGridHtml(rows,trackKey){
-  var COLS=6+LEAD_GRID_FIELDS.length; // company/role/location/status + extras + found + details indicator
+function leadsGridHtml(rows,trackKey,isAll){
+  // One more column in the pooled list: which search found the row, the
+  // thing the tab itself says everywhere else.
+  var COLS=6+LEAD_GRID_FIELDS.length+(isAll?1:0); // company/role/location/status + extras + found + details indicator
   var h='<div class="card grid-wrap"><table><thead><tr>'+
     '<th>Company</th><th>Role</th><th>Location</th><th>Status</th>'+
     LEAD_GRID_FIELDS.map(function(f){return '<th>'+esc(f[1])+'</th>';}).join("")+
+    (isAll?'<th>Search</th>':'')+
     '<th>Found</th><th></th>'+
   '</tr></thead><tbody>'+rows.map(function(l){
     var g=geo(l.location);
@@ -1495,6 +1705,8 @@ function leadsGridHtml(rows,trackKey){
         var key=f[0],val=l[key]||"";
         return '<td><input type="text" data-id="'+l.id+'" data-field="'+key+'" value="'+esc(val)+'"></td>';
       }).join("")+
+      (isAll?'<td class="cc" title="'+esc(TRACKS[l.search]?TRACKS[l.search].label:l.search)+'">'+
+        esc(TRACKS[l.search]?TRACKS[l.search].label:l.search)+'</td>':'')+
       '<td class="dt mono">'+esc(l.found)+'</td>'+
       '<td class="exp-ind">'+(open?'Hide':'Details')+'</td>'+
     '</tr>';
@@ -1539,7 +1751,11 @@ function leadDetailHtml(l,key){
 }
 
 function appsTab(){
-  var A=state.applications.slice().sort(appComparator(ui.appSort));
+  var ALL_APPS=state.applications.slice().sort(appComparator(ui.appSort));
+  // `ALL_APPS` stays around so the two empty states below can tell "you
+  // haven't logged anything" from "the filter you arrived with matches
+  // nothing" - which are different problems with different answers.
+  var A=ALL_APPS.filter(function(a){return drillKeeps("apps",a);});
   // The URL box is the whole of adding an application now: paste the posting
   // you applied to, and a nightly run reads the company, role and location off
   // it. Leaving it empty still adds the blank row this button always added -
@@ -1567,10 +1783,15 @@ function appsTab(){
     // Same tiering as leadsTab: Add/search-equivalent controls stay
     // full-weight above, Sort (the one setting this tab has) drops to its
     // own quiet line rather than crowding the primary row.
-    '<div class="key"><div class="sortwrap"><label class="sort-label" for="appSort">Sort</label>'+sortSelectHtml("applications","appSort")+'</div></div>';
-  if(!A.length){
+    '<div class="key"><div class="sortwrap"><label class="sort-label" for="appSort">Sort</label>'+sortSelectHtml("applications","appSort")+'</div>'+
+      (drillChipHtml("apps")?'<div class="chips">'+drillChipHtml("apps")+'</div>':'')+'</div>';
+  if(!ALL_APPS.length){
     return h+'<div class="card empty"><strong>No applications logged</strong>'+
       'When you apply to something, add it here to track the conversation. Days-since and the follow-up list update themselves.</div>';
+  }
+  if(!A.length){
+    return h+'<div class="card empty"><strong>Nothing matches</strong>'+
+      'No application matches this filter. Clear it above to see all '+ALL_APPS.length+'.</div>';
   }
 
   if(ui.view==="grid"){
@@ -1726,9 +1947,20 @@ function render(){
   // otherwise reset its scroll position to the top on every click -
   // including just selecting a different row. Preserve it across the swap.
   var oldList=p.querySelector(".md-list"), scrollTop=oldList?oldList.scrollTop:null;
+  // Same problem, same fix, for the Overview's own scroll region (see
+  // #app.pinned): repainting it after a click would otherwise jump back to
+  // the top of the page.
+  var oldOv=p.querySelector(".panel-scroll"), ovTop=oldOv?oldOv.scrollTop:null;
+  // Only the Overview pins its header and tiles and scrolls the rest - the
+  // other tabs scroll as documents, with their own list panes capped inside
+  // the master/detail card.
+  document.getElementById("app").classList.toggle("pinned",current.kind==="overview");
   if(current.kind==="overview")p.innerHTML=dashboard();
   else if(current.kind==="applications")p.innerHTML=appsTab();
+  else if(current.kind==="allleads")p.innerHTML=leadsTab(ALL_LEADS);
   else p.innerHTML=leadsTab(current.id);
+  var newOv=p.querySelector(".panel-scroll");
+  if(newOv&&ovTop!==null)newOv.scrollTop=ovTop;
   var newList=p.querySelector(".md-list");
   if(newList){
     if(scrollTop!==null){
@@ -1761,8 +1993,18 @@ document.addEventListener("click",function(e){
   // the date modal has.
   if(e.target.id==="pwModal"){closePwModal();return;}
 
+  // Clearing a drill-down without leaving the tab it filters.
+  var dc=e.target.closest("[data-drill-clear]");
+  if(dc){ui.drill=null; render(); return;}
+
   var t=e.target.closest("[data-tab]");
-  if(t){ui.tab=t.getAttribute("data-tab");ui.q="";ui.filter="All";
+  if(t){ui.tab=t.getAttribute("data-tab");ui.q="";
+    // A tab opened from an Overview number arrives filtered to the rows that
+    // number counted - either a plain status filter or a named drill-down.
+    // Anything else (a tab click, a track name) lands unfiltered.
+    var tf=t.getAttribute("data-tab-filter"), td=t.getAttribute("data-drill");
+    ui.filter=tf||"All";
+    ui.drill=(td&&DRILLS[td])?td:null;
     try{localStorage.setItem("bjs.tab",ui.tab);}catch(err){} render(); return;}
 
   var f=e.target.closest("[data-filter]");

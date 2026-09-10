@@ -157,6 +157,7 @@
  * @property {string} display_title
  * @property {string} overview_label
  * @property {string} applications_label
+ * @property {string} all_leads_label
  * @property {number} stale_run_hours
  * @property {Array<Object>} priority_locations
  * @property {string[]} excluded_companies
@@ -207,7 +208,8 @@ export const TRACK_CONFIG_FIELDS = [
 
 // Settings the client renders from...
 export const SETTING_KEYS = [
-  "display_title", "overview_label", "applications_label", "stale_run_hours",
+  "display_title", "overview_label", "applications_label", "all_leads_label",
+  "stale_run_hours",
 ];
 // ...and settings only prompt.js reads. Prose, stored verbatim: these are the
 // per-user half of the search config (the per-track half is TRACK_CONFIG_FIELDS),
@@ -222,6 +224,9 @@ export const DEFAULT_SETTINGS = {
   display_title: "Job Search Tracker",
   overview_label: "Overview",
   applications_label: "Applications",
+  // The cross-track leads tab, alongside the two above - a built-in tab, so
+  // a renameable one.
+  all_leads_label: "All leads",
   stale_run_hours: 36,
   priority_locations: [],
   // Companies this person will not work for, at all. A list rather than a
