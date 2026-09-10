@@ -1,0 +1,21 @@
+name = "job-search-tracker-client-react"
+compatibility_date = "2025-01-01"
+
+# The React client: a third deployable beside ../server/ and ../client/,
+# sharing no code with either and talking to the same API cross-origin. See
+# ../docs/react-adoption-plan.md for why it exists beside the page that ships
+# today rather than replacing it.
+#
+# `directory` points at ./dist, which is BUILT rather than authored - and that
+# is the one meaningful difference from ../client/wrangler.toml. An assets
+# deploy publishes exactly what is in the directory and deletes anything on the
+# live site that is not there, which over in ../client/ makes a missing
+# gitignored file a live-site outage (see ../client/predeploy-check.mjs). Here
+# a clean build always produces the complete set, so that class of accident
+# cannot happen: `npm run deploy` builds before it deploys, and the build
+# itself refuses to run without VITE_API_BASE (see vite.config.ts).
+#
+# Never deploy from a git worktree - main checkout, main branch only. See
+# ../.claude/skills/verify-and-deploy/SKILL.md.
+[assets]
+directory = "./dist"

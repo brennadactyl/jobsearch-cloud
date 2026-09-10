@@ -905,6 +905,44 @@ function drillChipHtml(scope){
     'title="Clear this filter">'+esc(drillLabel(ui.drill))+
     '<span class="x" aria-hidden="true">×</span></button>';
 }
+
+// The rows a leads tab shows before any filter, drill-down or search box:
+// one track's, or every track's for the pooled tab. Applied leads are left
+// out here because they have moved to the Applications tab (see
+// setLeadStatus()) and this tab genuinely cannot show them - so any count of
+// leads has to leave them out too, and taking it from here is what keeps
+// that true without anyone remembering to.
+function leadRows(key){
+  var isAll=(key===ALL_LEADS);
+  return state.leads.filter(function(l){
+    return (isAll||l.search===key)&&l.status!=="Applied";
+  });
+}
+// The Applications tab's equivalent, and deliberately not the mirror image
+// of it: this tab shows every application, "To Apply" rows included. Named
+// anyway, so that a count of applications and the list it opens start from
+// the same place a count of leads does. Returns a copy - callers sort it.
+function appRows(){
+  return state.applications.slice();
+}
+// The rows a tile or funnel row actually opens, given the tab it links to
+// and whichever of the two narrowings it carries. Its *count* is the length
+// of this, which is the whole point: the number on an Overview tile and the
+// list clicking it lands on are one expression, not two that agree.
+//
+// `filter` is a plain status chip; `drill` names an entry in DRILLS, which
+// owns the rule. The scope test is the one drillKeeps() applies, so a tile
+// whose tab and drill disagreed would produce a count matching the equally
+// unfiltered list it opens, rather than a number the tab cannot reproduce.
+function drillRows(t){
+  var isApps=(t.tab==="applications");
+  var rows=isApps?appRows():leadRows(t.tab);
+  if(t.filter)rows=rows.filter(function(r){return r.status===t.filter;});
+  var d=t.drill?DRILLS[t.drill]:null;
+  if(d&&d.scope===(isApps?"apps":"leads"))rows=rows.filter(d.test);
+  return rows;
+}
+
 // [column,label] form, "Applied" first - the order the Stage history table
 // (see stageHistoryHtml) renders in, and the source list for it.
 var STAGE_HISTORY_FIELDS=[["dateApplied","Applied"]].concat(
@@ -1461,18 +1499,19 @@ function selectHtml(opts,val,attrs){
 }
 
 function dashboard(){
-  var L=state.leads, A=state.applications;
-  var fresh=L.filter(function(l){return l.status==="New";}).length;
-  var active=A.filter(function(a){return ACTIVE.indexOf(a.status)>=0;}).length;
-  var stale=A.filter(function(a){var d=daysSince(a.dateApplied);
-    return a.status==="Applied"&&d!==null&&d>14;}).length;
+  var A=state.applications;
+  // Everything applied to, which is both a tile's number and the population
+  // the whole pipeline below is measured against. Taken from drillRows() so
+  // it is the same set the tile opens rather than a second reading of the
+  // same rule - see DRILLS and drillRows().
+  var appliedRows=drillRows({tab:"applications",drill:"applied"});
+  var appliedCount=appliedRows.length;
+  var active=drillRows({tab:"applications",drill:"in-conversation"}).length;
   // "To Apply" rows sit in the Applications tab without having been applied
   // to, so they'd inflate an "Applied" count - split them out and show them
-  // as their own line under the tile instead.
-  var toApply=A.filter(function(a){return a.status==="To Apply";}).length;
-  var appliedCount=A.length-toApply;
-  var near=L.filter(function(l){var g=geo(l.location);
-    return g&&g.i===0&&l.status!=="Not a fit"&&l.status!=="Applied";}).length;
+  // as their own line under the tile instead. The complement of the count
+  // above, so the two cannot disagree about which rows are which.
+  var toApply=A.length-appliedCount;
   // The first rule is the top ranking by definition now, so this counts and
   // labels the same thing - it used to count every p-high rule but label only
   // the first, so with two of them the number and the heading disagreed.
@@ -1480,37 +1519,39 @@ function dashboard(){
   var topLabel=topRule?topRule.label:"Top locations";
   var trackCount=state.tracks.length;
 
-  // Every tile opens the rows behind its own number: the tab it lands on
-  // plus the filter that reproduces the count, so what you clicked and what
-  // you land in are the same set. `drill` names an entry in DRILLS, which
-  // owns the rule; `filter` is a plain status chip where one already says
-  // it. A tile counting zero has nothing to open and says so by being
-  // disabled - derived from the count, so it comes back on its own.
+  // Every tile opens the rows behind its own number, and takes the number
+  // from them: a tile says which tab it lands on and how that tab arrives
+  // narrowed, and drillRows() turns exactly that into the list. The count is
+  // its length, so what you clicked and what you land in cannot be two
+  // different sets - there is only one expression. `drill` names an entry in
+  // DRILLS, which owns the rule; `filter` is a plain status chip where one
+  // already says it; a tile with neither opens the whole tab.
+  //
+  // A tile counting zero has nothing to open and says so by being disabled -
+  // derived from the count, so it comes back on its own.
   var TILES=[
-    {k:"Untriaged",v:fresh,f:"leads marked New",hi:true,tab:ALL_LEADS,filter:"New"},
-    {k:topLabel,v:near,f:"still open",color:"var(--pri-0)",tab:ALL_LEADS,drill:"top-geo-open"},
-    // Counts what the tab it opens can show - leads marked Applied have
-    // moved to Applications and aren't in that list, so counting them here
-    // would send you to a shorter list than the number promised.
-    {k:"Tracked leads",v:L.filter(function(l){return l.status!=="Applied";}).length,
+    {k:"Untriaged",f:"leads marked New",hi:true,tab:ALL_LEADS,filter:"New"},
+    {k:topLabel,f:"still open",color:"var(--pri-0)",tab:ALL_LEADS,drill:"top-geo-open"},
+    {k:"Tracked leads",
      f:"across "+trackCount+" tracked search"+(trackCount===1?"":"es"),tab:ALL_LEADS},
-    {k:"Applied",v:appliedCount,
+    {k:"Applied",
      f:toApply?"plus "+toApply+" still to apply":"in your Applications tab",
      tab:"applications",drill:"applied"},
-    {k:"In conversation",v:active,f:"screen or loop stage",
+    {k:"In conversation",f:"screen or loop stage",
      tab:"applications",drill:"in-conversation"},
-    {k:"Gone quiet",v:stale,f:"applied 14+ days ago",
+    {k:"Gone quiet",f:"applied 14+ days ago",
      tab:"applications",drill:"gone-quiet"}
   ];
   var h='<div class="tiles">'+TILES.map(function(t){
-    var dead=!t.v;
+    var v=drillRows(t).length;
+    var dead=!v;
     return '<button type="button" class="tile'+(t.hi?" hi":"")+'"'+
       (dead?' disabled title="Nothing to open yet"'
            :' data-tab="'+esc(t.tab)+'"'+
             (t.filter?' data-tab-filter="'+esc(t.filter)+'"':'')+
             (t.drill?' data-drill="'+esc(t.drill)+'"':''))+'>'+
       '<div class="k">'+esc(t.k)+(dead?'':'<span class="go" aria-hidden="true">&rsaquo;</span>')+'</div>'+
-      '<div class="v mono"'+(t.color?' style="color:'+t.color+'"':'')+'>'+t.v+'</div>'+
+      '<div class="v mono"'+(t.color?' style="color:'+t.color+'"':'')+'>'+v+'</div>'+
       '<div class="f">'+esc(t.f)+'</div></button>';
   }).join("")+'</div>';
 
@@ -1573,7 +1614,6 @@ function dashboard(){
   // survives a later status change (an app rejected after Tech Screen still
   // shows it reached Tech Screen) - current `status` alone can't tell that
   // story, only where something landed.
-  var appsApplied=A.filter(function(a){return a.status!=="To Apply";});
   h+='<div class="sec"><h2>Application pipeline</h2><p>'+
     (appliedCount?appliedCount+' applied &middot; '+active+' in active conversation':'Nothing applied yet')+
     '</p></div>';
@@ -1584,12 +1624,17 @@ function dashboard(){
         : 'Move a lead to Applied, or add one directly from the Applications tab, and its progress shows up here.')+
       '</div>';
   }else{
-    // Each row carries the drill-down that reproduces it, so its header can
-    // open the same set in Applications - "applied" for the first row, and
-    // the per-stage entries DRILLS builds from this very list for the rest.
-    var FUNNEL=[["Applied",appliedCount,"applied"]].concat(STAGE_DATE_FIELDS.slice(0,4).map(function(s){
-      return [s[0],appsApplied.filter(function(a){return a[s[1]];}).length,"reached-"+s[1]];
-    }));
+    // [label, count, drill id]. Each row is named by the drill-down that
+    // reproduces it - "applied" for the first, and the per-stage entries
+    // DRILLS builds from this very list for the rest - and its count comes
+    // from that drill through drillRows(), the same way a tile's does. So
+    // the bar, the number beside it and the rows its header opens are all
+    // one set.
+    var FUNNEL=[["Applied","applied"]].concat(STAGE_DATE_FIELDS.slice(0,4).map(function(s){
+      return [s[0],"reached-"+s[1]];
+    })).map(function(r){
+      return [r[0],drillRows({tab:"applications",drill:r[1]}).length,r[1]];
+    });
     h+='<div class="card" style="padding:19px"><div class="bars">'+
       FUNNEL.map(function(r,i){
         var pct=Math.round(r[1]/appliedCount*100);
@@ -1609,10 +1654,10 @@ function dashboard(){
     // the funnel's own forward-progress stages. Withdrawn is excluded from
     // both halves of that count: it's Brenna's action, not the company's.
     var RESPONSE_FIELDS=["dateRecruiterScreen","dateTechScreen","dateOnsite","dateOffer","dateRejected"];
-    var responded=appsApplied.filter(function(a){
+    var responded=appliedRows.filter(function(a){
       return RESPONSE_FIELDS.some(function(f){return a[f];});
     }).length;
-    var respTimes=appsApplied.map(function(a){
+    var respTimes=appliedRows.map(function(a){
       if(!a.dateApplied)return null;
       var d0=Date.parse(a.dateApplied); if(isNaN(d0))return null;
       var earliest=null;
@@ -1626,9 +1671,9 @@ function dashboard(){
       return days>=0?days:null;
     }).filter(function(n){return n!==null;});
     var avgResp=respTimes.length?Math.round(respTimes.reduce(function(a,b){return a+b;},0)/respTimes.length):null;
-    var offerNow=appsApplied.filter(function(a){return a.status==="Offer";}).length;
-    var rejectedNow=appsApplied.filter(function(a){return a.status==="Rejected";}).length;
-    var withdrawnNow=appsApplied.filter(function(a){return a.status==="Withdrawn";}).length;
+    var offerNow=appliedRows.filter(function(a){return a.status==="Offer";}).length;
+    var rejectedNow=appliedRows.filter(function(a){return a.status==="Rejected";}).length;
+    var withdrawnNow=appliedRows.filter(function(a){return a.status==="Withdrawn";}).length;
     h+='<div class="legend" style="margin-top:15px;padding-top:14px;border-top:1px solid var(--line)">'+
       '<span><b style="background:var(--good)"></b>'+offerNow+' offer'+(offerNow===1?'':'s')+'</span>'+
       '<span><b style="background:var(--crit)"></b>'+rejectedNow+' rejected</span>'+
@@ -1647,13 +1692,13 @@ function dashboard(){
 }
 
 function leadsTab(key){
-  // One reason a tracked lead isn't shown here: it's been marked "Applied"
-  // and moved to the Applications tab (see setLeadStatus()). The row itself
-  // stays in state.leads/the DB, which URL dedup needs. A lead whose posting
-  // has been taken down isn't filtered out here because it isn't in
-  // state.leads at all - the server deletes it when a search reports it dead
-  // (see api.js's removeDelistedLead), so there's no dead-posting state left
-  // for this function to know about.
+  // The rows themselves come from leadRows(), which is also where every
+  // count of them comes from - see the note there on why a lead marked
+  // "Applied" is not one of them. A lead whose posting has been taken down
+  // isn't filtered out here because it isn't in state.leads at all - the
+  // server deletes it when a search reports it dead (see routes/delisting.js's
+  // removeDelistedLead), so there's no dead-posting state left for this
+  // function to know about.
   // `tracked` keeps the unfiltered set only so the empty state below can tell
   // a search that has never found anything from one whose finds have all been
   // applied to.
@@ -1668,7 +1713,7 @@ function leadsTab(key){
     ? ((state.settings&&state.settings.all_leads_label)||"All leads")
     : TRACKS[key].label;
   var tracked=state.leads.filter(function(l){return isAll||l.search===key;});
-  var all=tracked.filter(function(l){return l.status!=="Applied";});
+  var all=leadRows(key);
   var q=ui.q.toLowerCase();
   var rows=all.filter(function(l){
     if(ui.filter!=="All"&&l.status!==ui.filter)return false;
@@ -1847,7 +1892,7 @@ function leadDetailHtml(l,key){
 }
 
 function appsTab(){
-  var ALL_APPS=state.applications.slice().sort(appComparator(ui.appSort));
+  var ALL_APPS=appRows().sort(appComparator(ui.appSort));
   // `ALL_APPS` stays around so the two empty states below can tell "you
   // haven't logged anything" from "the filter you arrived with matches
   // nothing" - which are different problems with different answers.
