@@ -336,6 +336,32 @@ Log "----- end output -----"
 
 $exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
 
+# The CLI exiting cleanly is not the same as the CLI having done anything. An
+# unauthenticated run prints "Not logged in - Please run /login" and exits 0:
+# job state Completed, twenty seconds, nothing searched, nothing synced, and
+# Task Scheduler records a success. run-fill.ps1 has guarded this since its own
+# first real invocation did exactly that; this one never did, and it cost a run
+# on 2026-09-09 that reported 0x0 having done nothing at all.
+#
+# It matters as much here as there. A search that finds nothing writes nothing,
+# so "ran and found nothing" and "never ran" look identical on the page - the
+# run record is what tells them apart, and an unauthenticated run does not
+# write one either. The task's Last Run Result is then the only honest signal
+# available, and it has to be honest.
+#
+# Checked against the output rather than by pre-flighting the credential: the
+# token is read by the CLI in a child process, and what matters is whether that
+# process could use it, not whether this one can see it.
+$outputText = if ($output) { ($output | Out-String).Trim() } else { "" }
+if (-not $outputText) {
+    Log "ERROR: the CLI produced no output at all - nothing was searched or synced"
+    $exitCode = 1
+} elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error") {
+    Log "ERROR: the CLI is not authenticated - nothing was searched or synced."
+    Log "       Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
+    $exitCode = 1
+}
+
 # ---- Write back what the run edited. --------------------------------------
 #
 # Only docs\. resumes\ and reference\ are inputs, and a rule that discards
