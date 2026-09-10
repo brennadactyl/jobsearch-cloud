@@ -20,7 +20,8 @@ export async function handleGetConfig({ db }) {
 
 /**
  * POST /api/config - requires a Bearer token. Body `{ tracks?, display_title?,
- * overview_label?, applications_label?, stale_run_hours?, priority_locations?,
+ * overview_label?, applications_label?, all_leads_label?, stale_run_hours?,
+ * priority_locations?,
  * geo_scope_line?, scope_clause?, scope_disqualifier?, location_guidance?,
  * footer_note?, pronouns? }`.
  *
@@ -56,7 +57,7 @@ export async function handleSetConfig({ request, db }) {
     await db.replaceTracks(valid);
   }
 
-  // display_title, overview_label, applications_label, stale_run_hours,
+  // display_title, overview_label, applications_label, all_leads_label, stale_run_hours,
   // priority_locations, plus the prompt-only prose settings
   // (PROMPT_SETTING_KEYS in db.js). db.setSettings reads only the keys it
   // cares about, so it's a safe no-op to call even when `body` had none of
