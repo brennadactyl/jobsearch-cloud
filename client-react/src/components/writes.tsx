@@ -65,9 +65,23 @@ export function EditableField({
       // what it is showing, so ask it.
       onBlur={(e) => {
         const value = e.target.value;
-        setDraft(null);
-        if (value === serverValue) return;
-        update.mutate({ kind, id: row.id, field, value });
+        if (value === serverValue) {
+          setDraft(null);
+          return;
+        }
+        // The draft is held until the write settles, not dropped here. The
+        // optimistic cache patch lands a tick later (onMutate awaits
+        // cancelQueries), so clearing now would render one frame of the *old*
+        // value in between - which on an empty field is the placeholder
+        // flashing back up behind what was just typed.
+        //
+        // By the time onSettled runs the field agrees either way: on success
+        // the patch has made serverValue this value, and on failure the
+        // rollback has restored the old one, which is what should be shown.
+        update.mutate(
+          { kind, id: row.id, field, value },
+          { onSettled: () => setDraft(null) },
+        );
       }}
     />
   );
@@ -88,9 +102,15 @@ export function EditableNotes({ row, kind }: { row: Lead | Application; kind: "l
       onChange={(e) => setDraft(e.target.value)}
       onBlur={(e) => {
         const value = e.target.value;
-        setDraft(null);
-        if (value === serverValue) return;
-        update.mutate({ kind, id: row.id, field: "notes", value });
+        if (value === serverValue) {
+          setDraft(null);
+          return;
+        }
+        // Held until settled, same as EditableField - see the note there.
+        update.mutate(
+          { kind, id: row.id, field: "notes", value },
+          { onSettled: () => setDraft(null) },
+        );
       }}
     />
   );

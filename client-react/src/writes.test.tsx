@@ -10,7 +10,7 @@
  * rather than a mystery.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -261,5 +261,35 @@ describe("adding an application", () => {
     expect(screen.getByRole("button", { name: "Add empty row" })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Link to a job posting"), "https://example.com/x");
     expect(await screen.findByRole("button", { name: "Add from link" })).toBeInTheDocument();
+  });
+});
+
+describe("what a field shows while its save is in flight", () => {
+  it("never falls back to the old value between blur and the save landing", async () => {
+    // The bug this guards: blur cleared the local draft immediately, but the
+    // optimistic cache patch lands a tick later (onMutate awaits
+    // cancelQueries). In between, the field fell back to the server value -
+    // which for a blank field means the placeholder flashes back up behind
+    // what you just typed.
+    let settle!: (l: typeof FIRST_LEAD) => void;
+    vi.spyOn(client, "updateLeadField").mockReturnValue(
+      new Promise((r) => {
+        settle = r;
+      }),
+    );
+    await openLeads();
+
+    const comp = screen.getByLabelText("Comp range");
+    await userEvent.type(comp, "£100k");
+
+    // Synchronous, and asserted before any microtask runs. An awaited
+    // interaction would flush the optimistic patch first and hide the very
+    // render this is about - which is the paint the eye actually catches.
+    fireEvent.focusOut(comp);
+    expect(comp).toHaveValue("£100k");
+
+    settle({ ...FIRST_LEAD, comp: "£100k" });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved"));
+    expect(screen.getByLabelText("Comp range")).toHaveValue("£100k");
   });
 });
