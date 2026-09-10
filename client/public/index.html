@@ -355,6 +355,11 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 #app.pinned .panel-scroll{flex:1;min-height:0;overflow-y:auto;
   padding:6px 0 24px;scrollbar-gutter:stable}
 #app.pinned .panel-scroll .sec:first-child{margin-top:0}
+/* Says the region has more above it. Only once something has actually
+   scrolled under it - a hairline over content sitting flush at the top
+   would read as a stray rule. Inset, so it stays on the region's edge
+   instead of scrolling away with the content. */
+#app.pinned .panel-scroll.scrolled{box-shadow:inset 0 1px 0 var(--line)}
 /* The scroll region gives up its scrollbar's width; the pinned tile row
    above it doesn't, so without this the tiles sit ~15px wider than every
    card below them. --sbw is measured in render() rather than assumed -
@@ -1962,6 +1967,12 @@ function syncScrollGutter(){
 }
 window.addEventListener("resize",syncScrollGutter);
 
+// The hairline on the Overview's scroll region (see #app.pinned
+// .panel-scroll.scrolled) - on only while there is content above the fold.
+function markScrolled(ov){
+  ov.classList.toggle("scrolled",ov.scrollTop>0);
+}
+
 function render(){
   var tabs=buildTabs();
   // ui.tab is restored from localStorage, so it can name a track that has
@@ -1990,7 +2001,14 @@ function render(){
   else p.innerHTML=leadsTab(current.id);
   var newOv=p.querySelector(".panel-scroll");
   syncScrollGutter();
-  if(newOv&&ovTop!==null)newOv.scrollTop=ovTop;
+  if(newOv){
+    // render() replaces the panel wholesale, so this is a fresh element
+    // every time and the old listener goes with the old node.
+    newOv.addEventListener("scroll",function(){markScrolled(newOv);});
+    if(ovTop!==null)newOv.scrollTop=ovTop;
+    // Restoring a scroll position has to restore the edge with it.
+    markScrolled(newOv);
+  }
   var newList=p.querySelector(".md-list");
   if(newList){
     if(scrollTop!==null){
