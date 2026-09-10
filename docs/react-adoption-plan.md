@@ -11,13 +11,29 @@
 > deciding requirement is a stated goal that a maintenance-cost argument does not
 > speak to: hands-on experience with the industry-standard stack, which means the
 > toolchain, the type system and the test runner, not only the rendering model.
+>
+> **Phase 0 has shipped** (`0083ae9`). It found more than this document had
+> assumed: the drill-parity problem below was not only unenforced but already
+> extended to every funnel row, which held its own copy of the stage predicate
+> too. It is now demonstrable rather than asserted — change `DRILLS["gone-quiet"]`
+> from 14 days to 21 and nothing else, and the page as it stood showed a tile
+> reading 3 above a list of 2. That is the best single piece of evidence in this
+> document, and it is worth more than the bug list: a one-off slip says someone
+> was unlucky, while a defect the structure invites in four places at once says
+> something about the structure.
 
 ## Context
 
-`client/public/index.html` is 2,420 lines and 127 KB: HTML shell, 481 lines of
-CSS and ~1,830 lines of JS in one file, no build step, no bundler, no framework,
+`client/public/index.html` is 2,480 lines and 128 KB: HTML shell, 491 lines of
+CSS and 1,874 lines of JS in one file, no build step, no bundler, no framework,
 no dependencies but two Google Fonts links. Open it in a browser and it runs.
 `npm run deploy` uploads `public/` to a Worker as static assets.
+
+Measured at `d5a68d4`, and the number is a moving target rather than a fact:
+the same file was 2,420 lines earlier the same day, and a grouped-row change
+to the Applications grid is in flight as this is written. **The growth rate is
+itself part of the argument** — a file that gains 60 lines between a plan being
+started and finished is not one that has settled.
 
 It works, and the properties that make it cheap to edit are real: a two-line CSS
 fix is a two-line change, there is no supply chain, and the "Deploy to
