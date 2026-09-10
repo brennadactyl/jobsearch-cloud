@@ -7,6 +7,7 @@
  * track no longer in config falls back to the first tab, the same way the old
  * page's restored-from-localStorage tab did.
  */
+import { useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS } from "../domain/constants";
@@ -14,6 +15,7 @@ import { buildTabs, buildTracks } from "../domain/tabs";
 import { usePinnedLayout, useTheme } from "../ui/hooks";
 import { useSaved } from "../ui/saved";
 import ApplicationsTab from "./ApplicationsTab";
+import PasswordModal from "./PasswordModal";
 import LeadsTab from "./LeadsTab";
 import Overview from "./Overview";
 
@@ -41,6 +43,7 @@ export default function Shell({
   const tabs = buildTabs(data.leads, data.applications, tracks, settings);
   const location = useLocation();
   const save = useSaved();
+  const [pwOpen, setPwOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const pinned = usePinnedLayout(isOverview);
 
@@ -73,7 +76,11 @@ export default function Shell({
                   {save.text}
                 </span>
               </div>
-              <span className="who">Signed in as {data.user.name}</span>
+              {/* A button, not a label: this is how you reach the password
+                  dialog without needing the operator or the admin secret. */}
+              <button className="who" type="button" title="Account details" onClick={() => setPwOpen(true)}>
+                Signed in as {data.user.name}
+              </button>
               <button className="btn ghost" type="button" onClick={onSignOut} title="Sign out of this browser">
                 Log out
               </button>
@@ -125,6 +132,7 @@ export default function Shell({
           </Routes>
         </main>
       </div>
+      <PasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
     </div>
   );
 }

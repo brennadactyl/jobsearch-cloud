@@ -268,3 +268,22 @@ export function deleteApplication(id: number) {
     body: { id },
   });
 }
+
+/**
+ * Changes your own password.
+ *
+ * A session route rather than an admin one: the person it belongs to is the
+ * caller. It takes the current password on top of the token deliberately - the
+ * session alone is not enough, so a borrowed browser cannot lock its owner out.
+ *
+ * `signOutOthers` revokes every *other* browser session and leaves this one,
+ * and never touches the long-lived credential a scheduled search holds.
+ * `signedOut` is the count, which is the only evidence the checkbox did
+ * anything.
+ */
+export function changePassword(currentPassword: string, newPassword: string, signOutOthers: boolean) {
+  return request("/api/password", z.object({ ok: z.boolean().optional(), signedOut: z.number().default(0) }), {
+    method: "POST",
+    body: { currentPassword, newPassword, signOutOthers },
+  });
+}

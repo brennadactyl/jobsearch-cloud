@@ -20,5 +20,11 @@ class ResizeObserverStub implements ResizeObserver {
 }
 globalThis.ResizeObserver ??= ResizeObserverStub;
 
-/** jsdom has no scrollIntoView either, and the master/detail list calls it. */
+/**
+ * jsdom has no scrollIntoView. Nothing calls it today - the old page needed it
+ * to put a selected row back after a wholesale repaint, and here the row is
+ * never replaced - but it is cheap insurance against a component reaching for
+ * it later and failing in tests for a reason that has nothing to do with the
+ * behaviour under test.
+ */
 Element.prototype.scrollIntoView ??= function scrollIntoView() {};

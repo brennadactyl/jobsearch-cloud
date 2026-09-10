@@ -293,3 +293,94 @@ describe("what a field shows while its save is in flight", () => {
     expect(screen.getByLabelText("Comp range")).toHaveValue("£100k");
   });
 });
+
+describe("changing your own password", () => {
+  it("is reachable from the header without the operator or an admin secret", async () => {
+    await openLeads();
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+    expect(await screen.findByRole("dialog", { name: /change your password/i })).toBeInTheDocument();
+  });
+
+  it("catches the common typos without sending the password anywhere", async () => {
+    const change = vi.spyOn(client, "changePassword");
+    await openLeads();
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+
+    // Too short.
+    await userEvent.type(screen.getByLabelText("Current password"), "old-password");
+    await userEvent.type(screen.getByLabelText("New password"), "short");
+    await userEvent.click(screen.getByRole("button", { name: "Change it" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/at least 12 characters/i);
+    expect(change).not.toHaveBeenCalled();
+
+    // Long enough, but the confirmation disagrees.
+    await userEvent.clear(screen.getByLabelText("New password"));
+    await userEvent.type(screen.getByLabelText("New password"), "a-long-enough-password");
+    await userEvent.type(screen.getByLabelText("Confirm new password"), "a-different-one-entirely");
+    await userEvent.click(screen.getByRole("button", { name: "Change it" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/don’t match/i);
+    expect(change).not.toHaveBeenCalled();
+  });
+
+  it("reports how many other browsers were signed out", async () => {
+    // The count is the only evidence the checkbox did anything.
+    vi.spyOn(client, "changePassword").mockResolvedValue({ ok: true, signedOut: 2 });
+    await openLeads();
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+
+    await userEvent.type(screen.getByLabelText("Current password"), "old-password");
+    await userEvent.type(screen.getByLabelText("New password"), "a-long-enough-password");
+    await userEvent.type(screen.getByLabelText("Confirm new password"), "a-long-enough-password");
+    await userEvent.click(screen.getByRole("button", { name: "Change it" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("2 other browsers were signed out");
+  });
+
+  it("says so plainly when there were no other sessions", async () => {
+    vi.spyOn(client, "changePassword").mockResolvedValue({ ok: true, signedOut: 0 });
+    await openLeads();
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+    await userEvent.type(screen.getByLabelText("Current password"), "old-password");
+    await userEvent.type(screen.getByLabelText("New password"), "a-long-enough-password");
+    await userEvent.type(screen.getByLabelText("Confirm new password"), "a-long-enough-password");
+    await userEvent.click(screen.getByRole("button", { name: "Change it" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No other browsers were signed in");
+  });
+
+  it("passes the server's own refusal through rather than a generic one", async () => {
+    // "that isn't your current password" is worth reading as written.
+    vi.spyOn(client, "changePassword").mockRejectedValue(new Error("that isn't your current password"));
+    await openLeads();
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+    await userEvent.type(screen.getByLabelText("Current password"), "wrong-password");
+    await userEvent.type(screen.getByLabelText("New password"), "a-long-enough-password");
+    await userEvent.type(screen.getByLabelText("Confirm new password"), "a-long-enough-password");
+    await userEvent.click(screen.getByRole("button", { name: "Change it" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("that isn't your current password");
+  });
+
+  it("never leaves a password in the dialog after it closes", async () => {
+    await openLeads();
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+    await userEvent.type(screen.getByLabelText("Current password"), "old-password");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+    expect(await screen.findByLabelText("Current password")).toHaveValue("");
+  });
+
+  it("does not touch the header's save indicator", async () => {
+    // "Saved" in the header would be a strange thing to say about a password,
+    // and this write has no row behind it.
+    vi.spyOn(client, "changePassword").mockResolvedValue({ ok: true, signedOut: 0 });
+    await openLeads();
+    const before = screen.getByRole("status").textContent;
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+    await userEvent.type(screen.getByLabelText("Current password"), "old-password");
+    await userEvent.type(screen.getByLabelText("New password"), "a-long-enough-password");
+    await userEvent.type(screen.getByLabelText("Confirm new password"), "a-long-enough-password");
+    await userEvent.click(screen.getByRole("button", { name: "Change it" }));
+    await screen.findByText(/password changed/i);
+    expect(screen.getByRole("status").textContent).toBe(before);
+  });
+});

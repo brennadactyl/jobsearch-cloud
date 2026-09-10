@@ -1,6 +1,6 @@
 # Build the tracker page a second time, in React
 
-> Status: **proposed** (2026-09-10). A new `client-react/` deployable — React,
+> Status: **phases 0-5 built** (2026-09-10). A `client-react/` deployable — React,
 > Vite, TypeScript, TanStack Query, Vitest — built alongside the page that ships
 > today rather than converting it. The existing `client/` keeps working and keeps
 > deploying throughout, and the two only ever meet at a cutover decision that is
@@ -382,6 +382,31 @@ The server keeps `verify-local.mjs` (270 checks) and is untouched by all of this
 Adding a second CI job that runs it against `wrangler dev --local` is worth doing
 and is independent of this plan; pin the wrangler version in the workflow, since
 the repo deliberately commits no lockfile.
+
+## Where the parity bar stands (2026-09-10)
+
+Phases 0-5 are built. Measured against the bar above, with 116 tests passing:
+
+| Bar item | Status | How it is held |
+|---|---|---|
+| XSS at the data boundary | **clear** | `dangerouslySetInnerHTML` and `innerHTML` are zero across `src/`, asserted by a source scan; a hostile fixture renders as text; every `href` goes through `safeUrl` |
+| Config-driven tabs | **clear** | no track key or label appears in any shipped file; renaming a tab in config renames it on the page |
+| Drill parity | **clear** | asserted for every tile and funnel row, plus a mutation test that edits one rule and an end-to-end component walk from tile to rows |
+| Three-way theming | **clear** | all three blocks declare identical token sets; verified toggling both directions with the tokens actually changing |
+| Scroll and focus across re-render | **clear** | the list node survives a re-render — scrollTop 90 held across selecting a different row, with 482px of content in a 120px box — and the filter input keeps focus. **Zero** manual restore calls, against four in the page this replaces |
+| Keyboard reachability | **clear, with one deviation** | nothing clickable is unreachable. The master/detail row is a `div` with `role="button"`, `tabIndex=0` and Enter/Space handling rather than a native `button`, because it contains block layout. It is nevertheless *better* than the original, whose row has neither role nor tabindex and cannot be reached by keyboard at all |
+| One authenticated path to the server | **clear** | `fetch` appears in `api/client.ts` only, twice — `request()` and `logout`. Login needs no exception here, unlike the original's three sites |
+| The write indicator | **clear** | every mutation sets it; asserted on success, on failure, and on the two failures worth reading as written |
+
+Not yet done, and not blocking: a same-account side-by-side against the live
+API. Everything above was verified against a local mock serving the same fixture
+both clients render, which is the right substitute for looking at real job data
+to check a layout, but it is not the same as the real thing.
+
+**The cutover decision is open.** All three answers in Phase 5 remain live and
+none of them is implied by the table above - clearing the bar makes the React
+client *eligible* to replace the page that ships, which is a different question
+from whether it should.
 
 ## Cost
 
