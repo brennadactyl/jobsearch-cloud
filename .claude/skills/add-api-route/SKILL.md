@@ -53,6 +53,20 @@ Three rules, each of which exists because it was broken once:
   ordinary "not found" path *is* the cross-user access check. Writing an
   explicit `if (row.user_id !== ...)` means you have reached around `Db`.
 
+  `ctx.docs` (`src/r2.js`) works the same way for documents and for the same
+  reason: every key is prefixed with the owner's id in a private method, so a
+  handler cannot name an object outside its caller's own space. A new store
+  gets this property deliberately or it does not have it.
+
+## When a convention has to bend
+
+`routes/documents.js` is the one module that does not return `json()` or
+`text()`: its body is raw bytes in both directions, and it is the only place
+with `PUT` and `DELETE`. Both are commented in place with why. If a new route
+needs the same, say so at the call site rather than quietly diverging - the
+value of "every response goes through `http.js`" is that the exceptions are
+countable.
+
 Open with the parse-or-400 preamble if it takes a body:
 
 ```js
@@ -135,8 +149,9 @@ checks is a route that is only ever tested by the person whose data leaks.
 
 The callers are not all in this repo. A route is potentially called by the
 page, by `scripts/*.ps1`, by a composed prompt in `prompt.js`, and by prose in
-each installer's `private/<user-id>/docs/tracked_<key>_postings.md` on some
-machine you cannot see. Grep the first three; for the fourth, assume it says
-something and check `change-search-prompt`. A scheduled run that confidently
-published through a retired mechanism is a thing that has actually happened
-here.
+each track's baseline doc - which now lives in the tracker rather than on
+somebody's machine, so it can at least be read: `GET /api/documents` per
+account, then fetch each `docs/` entry. Grep the first three and check the
+fourth rather than assuming; `change-search-prompt` has the procedure. A
+scheduled run that confidently published through a retired mechanism is a
+thing that has actually happened here.

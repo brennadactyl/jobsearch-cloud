@@ -12,10 +12,12 @@ your resume(s), asks what roles/companies/locations you're after, and
 generates everything else.
 
 **This repo contains no personal data.** Resumes, candidate profile, target
-companies, and search results live in a separate local "private" folder -
-see [private.example/README.md](private.example/README.md) for the expected
-layout. That separation is what makes this repo safe to keep on GitHub (public
-or private) and to reuse across machines.
+companies and search results live in the deployment - search config and results
+in D1, documents in R2 - reached with a per-person token. What is left on the
+machine that runs the searches is that token and its logs, in a gitignored
+`private/` folder; see [private.example/README.md](private.example/README.md).
+That separation is what makes this repo safe to keep on GitHub (it is public)
+and to reuse across machines.
 
 **The tracker is a plain webpage backed by an API, deployed as two
 independent pieces** - a static client ([client/README.md](client/README.md),
@@ -37,7 +39,7 @@ genuine zero-result day.
 
 ## Architecture
 
-![Architecture diagram: Task Scheduler fires the headless Claude CLI daily, once per configured track, which reads and writes the local private/ folder, searches and verifies career sites, and posts new leads to server/'s Cloudflare Worker API. That API reads and writes a D1 database and answers the browser's cross-origin API calls; a separate static-assets Worker deployment, client/, serves the browser the tracker page itself.](docs/architecture.svg)
+![Architecture diagram: Task Scheduler fires the headless Claude CLI daily, once per configured track, which fetches that track's documents from the tracker into a throwaway run folder, searches and verifies career sites, writes back the doc it edited, and posts new leads to server/'s Cloudflare Worker API. That API reads and writes a D1 database and answers the browser's cross-origin API calls; a separate static-assets Worker deployment, client/, serves the browser the tracker page itself.](docs/architecture.svg)
 
 Full write-up with a reference table of routes and schedules:
 [docs/architecture.html](docs/architecture.html) (open locally in a browser -
@@ -52,8 +54,9 @@ docs/
   architecture.svg           the diagram above
   architecture.html           full architecture write-up (open in a browser)
 scripts/
-  run-search.ps1              runs one track for one person (fetches its prompt from the API)
+  run-search.ps1              runs one track for one person (fetches its prompt AND documents from the API)
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
+  import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
   setup-scheduler.ps1          registers every person's tracks as daily Windows Scheduled Tasks
   seed-demo-user.ps1           creates the demo account and fills it with invented postings
   demo-user.json               that invented data - the only fabricated content in this repo
@@ -68,6 +71,7 @@ server/                        API only - Cloudflare Worker + D1, no HTML served
   src/validate.js               the checks more than one route makes
   src/auth.js                   passwords, session tokens, who a token belongs to
   src/db.js                     all D1 access for a person's own data
+  src/r2.js                     all R2 access for their documents - resumes, baseline docs
   src/prompt.js                 composes each track's daily search prompt from its config
   migrations/                   the D1 schema, applied via `wrangler d1 migrations apply`
   wrangler.toml                  deploy config
@@ -193,8 +197,11 @@ note after each step if you'd rather do it the traditional way instead.
      [job-search-setup](.claude/skills/job-search-setup/) skill. It'll ask
      what tracks/companies/locations you want and generate everything in
      step 6 below for you, then run that step itself.
-   - **By hand:** see [private.example/README.md](private.example/README.md)
-     for the exact files to author yourself.
+   - **By hand:** it is one file now - `private\<user-id>\tracker.json` with
+     your API URL and a session token. Resumes and baseline docs go into the
+     tracker rather than into that folder; `scripts\import-documents.ps1`
+     uploads a folder you already have. See
+     [private.example/README.md](private.example/README.md).
 
    Either way, point at the resulting folder with
    `setx JOB_SEARCH_DATA_DIR "C:\path\to\private"`, or just place it at
@@ -419,10 +426,12 @@ finding. Watch especially for URLs that resolve to a company's *listing
 index* rather than the individual posting - the title text matches, so it
 looks right, and it isn't.
 
-**Fetch reliability varies by company and drifts week to week.** Your
-`private/docs/` files (not this repo's top-level `docs/`, which is just the
-architecture write-up) keep per-company notes; re-verify rather than trusting
-them blindly.
+**Fetch reliability varies by company and drifts week to week.** Each track's
+baseline doc in the tracker keeps per-company notes; re-verify rather than
+trusting them blindly. A note saying a domain is blocked is a claim from some
+past night, and it has been wrong: one company sat on the "blocked" list for
+two weeks on the strength of its direct site 403ing, while its Greenhouse board
+answered fine the whole time.
 
 **Scheduled tasks only run while you're logged in.** For true run-when-closed
 scheduling you'd need the machine to stay logged in (Task Scheduler can be
@@ -486,8 +495,11 @@ see `scripts/run-search.ps1`. If a search prompt ever needs a new capability,
 add it there deliberately rather than reaching for `--dangerously-skip-permissions`.
 
 **A cross-cutting convention changed in one track's doc silently drifts out
-of sync in the others.** Each `private/docs/tracked_<key>_postings.md` is
-self-contained - nothing at runtime cross-checks it against its siblings.
+of sync in the others.** Each `docs/tracked_<key>_postings.md` is
+self-contained - nothing at runtime cross-checks it against its siblings. They
+are at least all reachable now (`GET /api/documents` per account) rather than
+scattered across whichever machines hold them, so the reconciling is possible
+without being automatic.
 If you change something that's supposed to apply to every track (how leads
 sync to the tracker, the fetch-efficiency rule, the fit-filter philosophy),
 update every existing track's doc to match, not just the one you're actively

@@ -53,6 +53,17 @@ const DESTRUCTIVE = [
     what: "rolls the whole database back in place, discarding everything written since that point - for every user on the deployment, not just one",
   },
   {
+    re: invoking(String.raw`r2\s+bucket\s+delete\b`),
+    what: "deletes the documents bucket - every resume and every track's baseline doc, which `wrangler d1 export` does not cover and Time Travel does not protect",
+  },
+  {
+    re: invoking(String.raw`r2\s+object\s+delete\b`),
+    what: "deletes a document from the bucket - a resume or a baseline doc holding weeks of accumulated findings, with no undo",
+  },
+  {
+    // `delete` immediately after `wrangler`, so this is the Worker and not the
+    // r2 subcommands above - those have `r2 bucket`/`r2 object` in between and
+    // never reach this row.
     re: invoking(String.raw`delete\b`),
     what: "deletes the deployed Worker, taking the tracker offline",
   },
