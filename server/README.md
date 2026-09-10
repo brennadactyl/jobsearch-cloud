@@ -607,3 +607,28 @@ node verify-migration.mjs
   [Accounts](#accounts)). Losing a laptop means revoking its session, not
   rotating one secret shared by every machine and person - which is what the
   old model would have required.
+- **Every session token can reach every session route.** A browser sign-in and
+  the long-lived credential a scheduled search keeps on disk are the same kind
+  of thing to this API: `sessions.label` records which is which, but only
+  `deleteOtherBrowserSessions` reads it, and no route enforces on it.
+
+  That points the wrong way. The weakest credential holds the most authority -
+  the `scheduled-search` token sits in plaintext in a `tracker.json` on a
+  Windows box, never expires, and can today delete every lead, rewrite the
+  search config or change what the tabs are called. A nightly run needs none of
+  that; it posts findings and reads its own prompt.
+
+  The fix is to split the routes the way the callers already are. Roughly:
+  a machine-to-machine credential gets the run's endpoints (`/api/leads`,
+  `/api/screened`, `/api/runs`, `/api/verified`, `/api/delist`, the coverage
+  and dedup reads, the prompt reads, the application fill) and the document
+  reads and writes it materializes from; a signed-in person gets the rest, and
+  the destructive and configuring ones - `/api/config`, `/api/password`,
+  `/api/delete-leads`, `/api/delete-application`, `/api/unscreen` - go to a
+  human session only. Some of that boundary already exists as prose: `/api/unscreen`'s
+  handler says it is deliberately in no prompt, which is a convention where it
+  could be a rule.
+
+  The shape to reach for is the one `./routes/index.js` already uses for
+  public-vs-session: another list, not a flag per row, so membership cannot be
+  got wrong by omission. Not built yet.
