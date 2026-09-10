@@ -227,6 +227,12 @@ tr.more-row td{padding:4px 12px 14px}
 td.rc{max-width:260px}
 td.rc a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.cc{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+/* The posting's host in the applications grid. Capped and clipped: a job
+   board hostname is short, but nothing stops one being long, and this column
+   sits between two the eye needs. */
+td.lk{max-width:150px}
+td.lk a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.lk .lk-none{color:var(--ink3)}
 td:first-child{border-left:3px solid transparent}
 tr.pri0 td:first-child{border-left-color:var(--pri-0)}
 tr.pri1 td:first-child{border-left-color:var(--pri-1)}
@@ -1869,17 +1875,23 @@ function appsTab(){
 }
 
 function appsGridHtml(A){
-  var COLS=8; // company/role/location/status/applied/days/details/remove
+  var COLS=9; // company/role/location/link/status/applied/days/details/remove
   var h='<div class="card grid-wrap"><table><thead><tr>'+
     // Location sits between Role and Status, the slot it has in the leads
     // grid - and it has to be here at all now that Location A-Z is one of
     // this tab's sorts (see APP_SORTS), or Grid view reorders on a column it
     // doesn't show.
-    '<th>Company</th><th>Role</th><th>Location</th><th>Status</th><th>Applied</th><th>Days</th>'+
+    //
+    // Link closes the identity block rather than living only in Detail view.
+    // A row added by pasting a URL has nothing else in it until the overnight
+    // fill reads the posting - company, role and location are all blank - so
+    // without this column that row is an unidentifiable blank line in the one
+    // view meant for scanning.
+    '<th>Company</th><th>Role</th><th>Location</th><th>Link</th><th>Status</th><th>Applied</th><th>Days</th>'+
     '<th></th><th></th>'+
   '</tr></thead><tbody>'+A.map(function(a){
     var d=daysSince(a.dateApplied);
-    var g=geo(a.location);
+    var link=safeUrl(a.link);
     var open=!!ui.expanded[a.id];
     // Row is the expand/select click target (see leadsGridHtml above for
     // why); most of an application row is form fields though, so the
@@ -1891,8 +1903,18 @@ function appsGridHtml(A){
       '<td><input type="text" data-id="'+a.id+'" data-field="title" data-app="1" value="'+esc(a.title)+'" placeholder="Role"></td>'+
       // An input, not the leads grid's plain text: an application's location
       // is the installer's own field, correctable like every other cell here.
-      '<td class="loc"><input type="text" data-id="'+a.id+'" data-field="location" data-app="1" value="'+esc(a.location)+'" placeholder="Location">'+
-        (g?'<span class="geo '+g.p+'">'+esc(g.label)+'</span>':'')+'</td>'+
+      // No geo tier badge here. Grid view is a scan of rows you have already
+      // decided to apply to, where how close a job is has stopped being a
+      // question - it earns its place on a leads row, which is a decision,
+      // and it was only doubling the location text on this one.
+      '<td class="loc"><input type="text" data-id="'+a.id+'" data-field="location" data-app="1" value="'+esc(a.location)+'" placeholder="Location"></td>'+
+      // The host, not the URL: enough to say where the posting lives and to
+      // click through, in a column narrow enough to sit between two others.
+      // Typing or correcting the URL itself stays in Detail view, where the
+      // field has room for it.
+      '<td class="lk">'+(link
+        ? '<a href="'+esc(link)+'" target="_blank" rel="noopener" title="'+esc(link)+'">'+esc(hostOf(link))+' &#8599;</a>'
+        : '<span class="lk-none">&mdash;</span>')+'</td>'+
       '<td>'+selectHtml(APP_STATUS,a.status,'data-id="'+a.id+'" data-field="status" data-app="1"')+'</td>'+
       '<td><input type="date" data-id="'+a.id+'" data-field="dateApplied" data-app="1" value="'+esc(a.dateApplied)+'"></td>'+
       '<td class="dt mono">'+(d===null?"&mdash;":d)+'</td>'+
