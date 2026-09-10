@@ -1,19 +1,29 @@
 ---
 name: change-search-prompt
-description: Change what a nightly job search does - across the three places its instructions live (server/src/prompt.js, each person's D1 track config, and every private/<user>/docs/tracked_<key>_postings.md on disk) - and reconcile the existing track docs so no track silently keeps following the old convention. Use when editing prompt.js, a track's baseline doc, the daily search or application-fill instructions, or any convention a scheduled run follows.
+description: Change what a nightly job search does - across the four places its instructions live (scripts/tracker.ps1, server/src/prompt.js, each person's D1 track config, and every private/<user>/docs/tracked_<key>_postings.md on disk) - and reconcile the existing track docs so no track silently keeps following the old convention. Use when editing prompt.js or tracker.ps1, a track's baseline doc, the daily search or application-fill instructions, or any convention a scheduled run follows.
 ---
 
 # Changing what a nightly run does
 
-A run's instructions come from three surfaces, and picking the wrong one is
+A run's instructions come from four surfaces, and picking the wrong one is
 how a change reaches one track and not its siblings. Decide which before
 editing anything.
 
 | Surface | Holds | Reaches |
 |---|---|---|
-| `server/src/prompt.js` | this API's own calling convention - the numbered steps that fetch, sync, delist and report | every track, every person, on the next server deploy |
+| `scripts/tracker.ps1` | the mechanics of every API call a run makes - the route, the body, the track key, the date, what a bad row does | every track, every person, on the next run; nothing to deploy |
+| `server/src/prompt.js` | which command each numbered step invokes and what only the run can decide - what counts as verified, what to report | every track, every person, on the next server deploy |
 | D1 track config (`/api/config`) | one track's stored prose - role line, resume line, fit filter, company list, location guidance | that one track, immediately, no deploy |
 | `private/<user-id>/docs/tracked_<key>_postings.md` | knowledge with no DB equivalent - fit reasoning, per-company fetch-reliability notes, scope rules | that one track, on whichever machine holds the folder |
+
+The first two are one decision made twice: **if the change has a single right
+answer, it goes in `tracker.ps1`, not in the prompt.** A rule stated in prose
+is a rule the model can have a bad night about; the same rule in the helper
+cannot come out wrong. That is why `search`, the local date, url-not-id and
+"omit the key rather than sending an empty string" are no longer sentences
+anywhere - see `docs/prompt-size-plan.md`. Prose is for what genuinely depends
+on judgement: whether a page renders a real job description, whether a posting
+is dead or merely unreachable, which tab a finding belongs in.
 
 Posting data is in none of them. Leads, screened rows, coverage and run
 history live in D1 and are fetched per run - a doc that keeps its own copy is
@@ -32,14 +42,51 @@ retired mechanism. It had no way to know the convention had moved on.
 source of truth for a **new** track only. Nothing reconciles existing tracks
 against it. That is the job below, and it is on whoever makes the change.
 
-## Changing the calling convention (`prompt.js`)
+## Changing the calling convention (`scripts/tracker.ps1`)
 
-This is the right surface for anything that is the same for everybody: which
-route a step calls, what it posts, what counts as verified, what a run must
+Adding a route a run has to reach, changing a body, changing what happens to a
+row that can't be sent: all of it lives here, as a command the prompt names.
+`run-search.ps1` copies the file into each run's working directory alongside
+the documents and sets `TRACKER_URL`, `TRACKER_API_TOKEN` and `TRACKER_SEARCH`,
+so a change ships on the next run with nothing to deploy and nothing to
+re-register.
+
+Two rules the file is built around, both worth keeping:
+
+- **A row it won't send is refused loudly** - named on stdout and counted in
+  the summary line. The run writes its own report from that output, so a row
+  dropped quietly is a run that reports a success it didn't have.
+- **It decides nothing about the search.** It will not invent a lead, drop one
+  for looking wrong, or turn an unreadable page into a delisting. Validation
+  is limited to what makes a call well-formed.
+
+Test it directly before trusting a run to it - it takes the same environment:
+
+```powershell
+$env:TRACKER_URL="..."; $env:TRACKER_API_TOKEN="..."; $env:TRACKER_SEARCH="<key>"
+.\scripts\tracker.ps1 dedup
+```
+
+## Changing what the run is asked to do (`prompt.js`)
+
+This is the right surface for anything that is the same for everybody and
+genuinely needs judgement: what counts as verified, when a posting is dead
+rather than unreachable, which tab a finding belongs in, what a run must
 report. Those steps moved here precisely because they were byte-identical
 across every hand-maintained copy, and a copy that silently lacked step 9c -
 the run record - was a real documented failure: it is the only thing that
 distinguishes "searched, found nothing" from "stopped running weeks ago".
+
+- **Rationale goes in a comment, not in the emitted text.** Most of what a rule
+  needs said about it - the incident that produced it, what the earlier
+  approach got wrong - is for whoever might undo it, and that person is reading
+  this file, not the prompt. Keep the operative sentence; put the post-mortem
+  in the comment beside it. Step 4's verification requirement is the standing
+  exception: it is stated at whatever length it takes.
+- `server/verify-local.mjs` asserts that the composed prompt still names every
+  `./tracker` command a run has to reach, and that step 4 still demands every
+  candidate URL be opened. Add to that list when you add a step - a prompt
+  that loses one does not error, it just searches more quietly.
 
 - Keep structured what the *app* reads (`key`, `label`, `sort_order`,
   `schedule_time`, `target_companies`). Keep verbatim what only the model

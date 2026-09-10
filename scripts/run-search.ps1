@@ -19,6 +19,13 @@
   in the durable folder, which is what happened when that folder *was* the
   working directory.
 
+  tracker.ps1 is copied in beside them, with a `tracker` shim next to it, and
+  that is what the prompt's sync steps invoke (`./tracker leads leads.json`)
+  instead of composing curl calls out of prose. The helper reads TRACKER_URL,
+  TRACKER_API_TOKEN and TRACKER_SEARCH from the environment this script sets
+  for the run, so nothing about the calling convention has to reach the model.
+  See ./tracker.ps1 and ../docs/prompt-size-plan.md.
+
   Afterwards, any file under docs\ whose contents changed is written back
   (`PUT /api/documents/<path>`), because the baseline doc is the one thing a
   run edits as it goes. What to send is decided by comparing SHA-256 against a
@@ -40,10 +47,11 @@
 
   Runs with a scoped tool allowlist (Read/Write/Edit/Glob/Grep/WebSearch/WebFetch/
   Bash) so it doesn't stall on a permission prompt with nobody there to answer
-  it. Bash is unscoped rather than limited to e.g. "Bash(curl:*)" - a narrower
-  pattern blocked the model from even checking whether TRACKER_URL/
-  TRACKER_API_TOKEN were set before attempting curl, since env-checking
-  commands (printenv etc.) didn't match the pattern.
+  it. Bash is unscoped rather than limited to a pattern: back when the prompt
+  carried curl invocations, "Bash(curl:*)" blocked the model from even checking
+  whether TRACKER_URL/TRACKER_API_TOKEN were set first. It is now what runs
+  ./tracker, and narrowing it to that would be a fresh version of the same
+  mistake the first time a run has a reason to run anything else.
 
   Logs a config summary at the start, a heartbeat line every 20s while the
   search is running (searches take several minutes - without this the log
@@ -267,6 +275,33 @@ if ($UseLocalFiles) {
 # Only the working directory moves. $workDir still holds tracker.json and logs\.
 $cwd = if ($runDir) { $runDir } else { $workDir }
 
+# ---- Ship the API helper into the working directory. -----------------------
+#
+# The prompt names commands (`./tracker leads leads.json`) rather than
+# describing curl calls, so the helper has to be somewhere the run can reach by
+# a relative path - the same reasoning that puts the documents there. Copied
+# fresh every run, so an edit to tracker.ps1 takes effect on the next search
+# with nothing to redeploy.
+#
+# The shim exists because the run's shell is POSIX (that is what let the old
+# prompt's `curl -d '{...}'` work at all) and cannot execute a .ps1. It is
+# written with LF endings and no BOM on purpose: a CR or a BOM ahead of the
+# shebang is not a shebang, and the failure is an unrunnable file rather than a
+# readable error.
+$helperSrc = Join-Path $PSScriptRoot "tracker.ps1"
+if (-not (Test-Path $helperSrc)) {
+    Log "ERROR: $helperSrc is missing - the run would have no way to sync anything"
+    Write-Error "scripts\tracker.ps1 not found. The search prompt invokes it for every API call."
+    exit 1
+}
+Copy-Item -Path $helperSrc -Destination (Join-Path $cwd "tracker.ps1") -Force
+$shim = "#!/bin/sh`n" +
+        "# Written by run-search.ps1 - see tracker.ps1.`n" +
+        "exec powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tracker.ps1 `"`$@`"`n"
+[System.IO.File]::WriteAllText(
+    (Join-Path $cwd "tracker"), $shim, (New-Object System.Text.UTF8Encoding($false)))
+Log "helper:           tracker.ps1 + tracker -> $cwd"
+
 # This runs as a single headless, non-interactive `claude -p` turn - nobody is
 # there to read a "kicked off as a background agent, I'll report back" reply.
 # If the model backgrounds any part of the work (a Bash run_in_background
@@ -300,14 +335,18 @@ Log "allowed tools:    $allowedTools"
 Log "CLAUDE_CODE_OAUTH_TOKEN set: $([bool]$env:CLAUDE_CODE_OAUTH_TOKEN)"
 
 $job = Start-Job -ScriptBlock {
-    param($claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken)
+    param($claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken, $task)
     Set-Location $cwd
-    # The prompt's own curl calls read these from the environment. Set inside
-    # the script block because Start-Job runs in its own process - and set from
-    # the resolved per-user values, so two people's searches on one machine
-    # each authenticate as themselves.
+    # tracker.ps1 reads these from the environment. Set inside the script block
+    # because Start-Job runs in its own process - and set from the resolved
+    # per-user values, so two people's searches on one machine each
+    # authenticate as themselves.
     $env:TRACKER_URL = $trackerUrl
     $env:TRACKER_API_TOKEN = $trackerToken
+    # Which track this run is. The helper stamps it on every row it sends, so
+    # a `search` value is one thing the prompt no longer has to state and the
+    # run no longer has to get right.
+    $env:TRACKER_SEARCH = $task
     # The claude CLI writes UTF-8. Without this, PowerShell decodes its stdout
     # using the console's OEM codepage instead, so every non-ASCII character
     # the model writes is mangled before it ever reaches the log file - an
@@ -315,7 +354,7 @@ $job = Start-Job -ScriptBlock {
     # encoding recovers it, because the damage happened upstream of the write.
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     & $claudePath -p $prompt --allowedTools $allowedTools 2>&1
-} -ArgumentList $claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken
+} -ArgumentList $claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken, $Task
 
 $start = Get-Date
 Log "job started (id $($job.Id)), waiting..."

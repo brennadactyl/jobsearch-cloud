@@ -475,6 +475,43 @@ check("the prompt gains the rotation steps once a track has rows",
   (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text.includes("1c. Get this run's companies"));
 check("and B's, with no rows, does not",
   !(await req("GET", "/api/prompt/SWE", { token: B_TOK })).text.includes("1c. Get this run's companies"));
+
+// ---- Every call the nightly run has to make, still reachable from the text.
+//
+// A prompt that loses a step does not error - it produces a quieter search.
+// A run that never learns to record its sweeps covers the same twelve
+// companies every night; one that never learns step 9c looks, on the page,
+// exactly like a search that stopped firing. Both are invisible until someone
+// notices weeks of nothing, which is why the shape of the prompt is asserted
+// here rather than left to a reading of the diff.
+//
+// Commands rather than endpoints since the API prose moved into
+// scripts/tracker.ps1 (see ../docs/prompt-size-plan.md): the run reaches
+// /api/leads by invoking `./tracker leads`, so that is what has to survive an
+// edit. A's SWE has coverage rows, so its prompt carries the rotation pair too.
+const sweSteps = (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text;
+const boSteps = (await req("GET", "/api/prompt/SWE", { token: B_TOK })).text;
+for (const cmd of [
+  "./tracker dedup",
+  "./tracker verified live.json",
+  "./tracker delist dead.json",
+  "./tracker leads leads.json",
+  "./tracker screened screened.json",
+  "./tracker run --status ok",
+  "./tracker companies",
+  "./tracker swept swept.json",
+]) {
+  check(`the prompt still reaches the tracker via \`${cmd}\``, sweSteps.includes(cmd));
+}
+check("the prompt says where the helper is and how to run it if the shim won't execute",
+  sweSteps.includes("-File tracker.ps1"));
+// The one instruction a shorter prompt is most tempting to soften, and the
+// premise everything else rests on: a search-snippet URL is not a finding.
+check("step 4 still requires every candidate URL to be opened and confirmed",
+  /MANDATORY VERIFICATION: fetch every candidate URL directly and confirm it renders an actual job description/
+    .test(sweSteps) && /A search-snippet URL is a lead, not a finding, until opened and confirmed/.test(sweSteps));
+check("a track with no rotation gets neither rotation command",
+  !boSteps.includes("./tracker companies") && !boSteps.includes("./tracker swept"));
 // The cap is the whole point, and it has to hold on the night it matters most:
 // a freshly seeded list, where every row is never-swept and nothing has a date
 // to sort by. It also has to be the *server's* cap - the prompt describing one
@@ -668,10 +705,19 @@ const feedPrompt = (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text;
 // appeared in the per-tab run-record instruction. The server fans that out
 // now, so the literal is gone by design; what still has to be true is that the
 // fed tab is a place step 9 can file a posting under.
+//
+// The first used to look for `/api/dedup/LEAD`, from the days when the prompt
+// listed one dedup call per tab. `./tracker dedup` asks the config which
+// tracks this one feeds and merges them itself, so no per-tab call is named
+// any more - the fed tab has to appear in the header and in the filing step
+// instead, which is where a run learns the tab exists at all.
 check("the feeding track's prompt covers both tabs",
-  feedPrompt.includes("/api/dedup/LEAD") &&
+  /# Also fills: LEAD /.test(feedPrompt) &&
   feedPrompt.includes("a role leading a team") &&
   feedPrompt.includes('`"LEAD"`'));
+check("and says its one dedup command covers them together",
+  /covers all 2 tabs this run fills/.test(feedPrompt) &&
+  !/\/api\/dedup\//.test(feedPrompt));
 // The filing step's tie-break. It used to send an ambiguous posting to the
 // feeding track, which is whichever tab happens to own the scheduled search
 // and not a general-purpose one: on the deployment this came from it was the

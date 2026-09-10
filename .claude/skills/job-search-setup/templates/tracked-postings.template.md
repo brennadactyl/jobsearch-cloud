@@ -5,21 +5,21 @@ This doc is the running knowledge base for the daily "{{SEARCH_GOAL_SENTENCE}}" 
 **Posting data lives in the tracker DB, not this doc.** The "found" list (what's already tracked) and the "screened" list (what's been looked at and rejected) are both fetched from the tracker each run - see step 1b of the daily prompt (composed by the tracker - `GET /api/prompt/{{TRACK_KEY}}`). This doc holds only the knowledge that has no DB equivalent.
 
 Each run should:
-1. Fetch the tracker's current leads AND screened data (step 1b of the daily prompt: `GET /api/dedup/{{TRACK_KEY}}` → `leads[]`, `screened[]`) to see what's already found or already ruled out (compare by URL). Not `/api/data`: that returns every field of every row across every track, which is far larger and grows every day.
+1. Fetch the tracker's current leads AND screened data (step 1b of the daily prompt: `./tracker dedup`, which writes `dedup.json` with `leads[]` and `screened[]`) to see what is already found or already ruled out (compare by URL).
 2. Re-search the target companies below for {{ROLE_SEARCH_LINE}} matching the Candidate Profile below.
 3. **Also run a broader discovery search beyond the fixed target list**: search generally for other companies currently hiring for these roles, plus targeted searches on companies with a strong fit not on the core list (see "Expanded net" below for ones tried so far; add more each run). Apply the same mandatory verification - a new company is not exempt.
 
    **This explicitly includes companies outside tech**: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities and manufacturing all run large engineering orgs, and they are the easiest thing to miss when the named list reads as big tech. Rotate through a couple of those verticals per run rather than all of them.
 
-   **A company discovery turns up joins the rotation, or the run that found it is the last one that ever sees it.** When a new company yields a verified posting - tracked or screened, either counts as evidence it is worth watching - add it with the same `POST /api/coverage` call step 9d makes. The route creates a row for any company it is handed and appends it after the last position, so it gets swept on a later cycle without jumping the queue.
+   **A company discovery turns up joins the rotation, or the run that found it is the last one that ever sees it.** When a new company yields a verified posting - tracked or screened, either counts as evidence it is worth watching - record it with the same `./tracker swept` call step 9d makes. The route creates a row for any company it is handed and appends it after the last position, so it gets swept on a later cycle without jumping the queue.
 
    Writing the name only into "Expanded net" below does *nothing* for future runs: the rotation is what the next run reads, and a company that exists only in this doc's prose is one no run will ever draw. This is not hypothetical - a track ran for eight days with this step in its doc, found nothing outside its seed list, and finished with an empty expanded net and a rotation still exactly the size it was seeded at. Keep the expanded-net list for *why* a company was tried and what came of it; the rotation decides *whether it is ever looked at again*.
 4. **MANDATORY: fetch every candidate URL directly and confirm it renders an actual job description (title, responsibilities, etc.) before including it anywhere** - in the tracker or the summary to the user. A URL surfaced only by a search-engine snippet is a lead, not a finding, until opened and confirmed. Many "found" links turn out closed/expired/wrong even when freshly searched - check every single one, every run, including previously-tracked ones (they close later). Watch for search snippets that resolve to a listing/index page instead of the individual posting - that does not count as verified, even if the title text matches.
 5. Identify postings that are genuinely new - URL not already in `leads[]` or `screened[]` from step 1 - and verified live. Match on the posting, not the string: the same job often turns up under a URL that differs by a `?gh_jid=` suffix, a slug, or a tracking param. The tracker collapses those itself on the way in, so a duplicate you miss is dropped rather than stored, and the response tells you how many it collapsed.
-6. **Sync new verified postings to the tracker** via `POST /api/leads` (step 9 of the daily prompt). The tracker DB is the durable source of truth for postings; this doc doesn't keep its own copy.
-6b. **Record rejected candidates too.** For any URL checked this run that's genuinely new but does NOT qualify (dead-on-arrival, out of scope, wrong level, duplicate), `POST /api/screened` with a one-line `reason` (step 9b of the daily prompt) instead of writing a doc bullet. That's what lets tomorrow's run skip re-verifying it.
-7. **Update the live tracker** (a self-hosted Cloudflare Worker API + D1, see `../../server/README.md`, plus a separate Pages client - see `../../client/README.md`). Sync is done via `curl POST $TRACKER_URL/api/leads` / `/api/screened` with a Bearer token from `$TRACKER_API_TOKEN`, from the daily prompt (`GET /api/prompt/{{TRACK_KEY}}`) - see that for the exact procedure. If there's nothing new either way, skip the relevant call. If the required environment variables aren't readable in the current session, say so and skip rather than guessing.
-8. If a previously-tracked lead is confirmed dead on a later check, **never delete or move it yourself** - report it and let the tracker decide. Report by URL, not by id, in one call listing every posting confirmed dead (`POST /api/delist`; procedure is step 8 of the daily prompt), whatever `status` each lead is in. Report the ones you re-checked and found **still live** in the same step (`POST /api/verified`) - that is the only thing that writes a lead's "confirmed live" date, and it matters because a dead posting is now removed from the board rather than flagged, so a lead still showing is presumed live. Only report a posting dead when you actually confirmed it: a timeout, a blocked domain, a 403/429, truncated content or a JS shell that renders nothing all mean *unknown*, and an unknown belongs in neither list - leave the lead alone and note the tooling problem. The delist report cannot be undone.
+6. **Sync new verified postings to the tracker** via `./tracker leads leads.json` (step 9 of the daily prompt). The tracker DB is the durable source of truth for postings; this doc doesn't keep its own copy.
+6b. **Record rejected candidates too.** For any URL checked this run that's genuinely new but does NOT qualify (dead-on-arrival, out of scope, wrong level, duplicate), record it with `./tracker screened screened.json`, each row carrying a one-line `reason` (step 9b of the daily prompt), instead of writing a doc bullet. That's what lets tomorrow's run skip re-verifying it.
+7. **Update the live tracker** (a self-hosted Cloudflare Worker API + D1, see `../../server/README.md`, plus a separate Pages client - see `../../client/README.md`). Every call a run makes goes through the `./tracker` helper that `run-search.ps1` materializes into the run directory - it builds the request, stamps the track key and the local date, and reports what the tracker accepted. The daily prompt (`GET /api/prompt/{{TRACK_KEY}}`) names the command for each step; see that for the exact procedure.
+8. If a previously-tracked lead is confirmed dead on a later check, **never delete or move it yourself** - report it and let the tracker decide. Report by URL, not by id, in one file listing every posting confirmed dead (`./tracker delist dead.json`; procedure is step 8 of the daily prompt), whatever `status` each lead is in. Report the ones you re-checked and found **still live** in the same step (`./tracker verified live.json`) - that is the only thing that writes a lead's "confirmed live" date, and it matters because a dead posting is now removed from the board rather than flagged, so a lead still showing is presumed live. Only report a posting dead when you actually confirmed it: a timeout, a blocked domain, a 403/429, truncated content or a JS shell that renders nothing all mean *unknown*, and an unknown belongs in neither list - leave the lead alone and note the tooling problem. The delist report cannot be undone.
 
 
 ## Fetch efficiency (apply on every run)
@@ -46,9 +46,9 @@ step 9e work - and that a run which dies before recording re-reads its slice
 rather than skipping it.
 
 **That state lives in the tracker, not this doc** - same reason posting data
-does. `GET /api/coverage/{{TRACK_KEY}}` is the list with each company's
-position, last-attempted date and the cursor; `POST /api/coverage` stamps it
-and advances the cursor. Don't keep a parallel
+does. `./tracker companies` writes out the slice with each company's
+last-attempted date and the cursor; `./tracker swept` stamps what a run
+attempted and advances the cursor. Don't keep a parallel
 table here: what belongs in this doc is which companies are worth searching
 (Target Companies below) and what is known about fetching each one (Fetch
 efficiency above). A confirmed board endpoint belongs in both - here as the
@@ -66,7 +66,7 @@ knows it can be had in one fetch.
 {{LOCATION_TIER_ROWS}}
 | Standard | any other{{SCOPE_ADJECTIVE}} location | no stripe |
 
-Out-of-scope candidates get recorded via `POST /api/screened` (step 6b above), not a list here.
+Out-of-scope candidates get recorded via `./tracker screened` (step 6b above), not a list here.
 
 ## Candidate Profile (from {{RESUME_FILENAME}})
 {{CANDIDATE_PROFILE_PARAGRAPH}}

@@ -1,7 +1,8 @@
 # Cut the nightly prompt down
 
-> Status: **proposed, not started** (2026-09-09). Measured against the live
-> deployment at commit `372ac4e`.
+> Status: **built, not yet run against a live search** (2026-09-09). Originally
+> measured against the live deployment at commit `372ac4e`. What landed, and
+> what it actually saved, is at the bottom.
 
 ## Context
 
@@ -96,3 +97,51 @@ merging, run one track against both prompts on the same evening from a **test
 account** and compare: leads added, screened added, companies swept, and whether
 the run record and the doc write-back both landed. A shorter prompt that finds
 fewer postings is a regression, not a saving.
+
+## What landed
+
+All three levers, plus a fourth surface nobody had counted: the per-track
+baseline docs, whose numbered process named the same endpoints the prompt did.
+Those are reconciled through
+`.claude/skills/job-search-setup/templates/tracked-postings.template.md` and the
+`change-search-prompt` skill, which now describes four surfaces rather than
+three.
+
+`scripts/tracker.ps1` is the helper. `run-search.ps1` copies it into the run
+directory beside the documents, writes a `tracker` shim next to it (the run's
+shell is POSIX and cannot execute a `.ps1`), and sets `TRACKER_SEARCH` alongside
+the two variables it already set. Eight commands cover every call a run makes:
+`dedup`, `companies`, `leads`, `screened`, `verified`, `delist`, `swept`, `run`.
+Beyond building the request it decides four things the prose used to ask for and
+could not enforce - the track key, today's **local** date, url-not-id, and
+omitting an unstated optional field rather than sending `""` - and refuses a
+malformed row loudly, naming it, rather than dropping it. `./tracker dedup`
+also asks the config which tabs this search feeds and merges them, so a
+branched run no longer needs to be told its own tab list.
+
+Measured on a fixture track with a deliberately tiny config, so the whole
+difference is text this repo writes:
+
+| | before | after |
+|---|---|---|
+| single tab, no rotation | 16,021 | 11,035 |
+| branched + rotation | 22,470 | 15,765 |
+
+The eight API steps went from 14,972 characters to 8,392; a 618-character
+paragraph naming the helper once replaces what five steps each repeated about
+checking a response, the environment variables being set, and when to skip a
+call. That is about 6,400 characters off the fixed text, not the 15,000 the
+steps used to occupy - because a good share of those steps was never calling
+convention. "Only delist a posting you actually confirmed dead", "record the
+run every single night without exception", "record what you swept or the
+rotation starves" are judgements a helper cannot make, and they stayed at close
+to full length.
+
+Step 4 is untouched apart from one clause: the Google Careers case history
+behind the truncated-vs-blocked rule moved into a comment in `prompt.js`. The
+rule itself, and the verification requirement above it, are unchanged, and
+`verify-local.mjs` now asserts both survive an edit - along with every
+`./tracker` command the prompt has to name.
+
+Still outstanding: the same-evening behavioural comparison above. It has not
+been run.

@@ -23,7 +23,8 @@ a Cloudflare Worker serving static assets) and a Cloudflare Worker + D1 API
 ([server/README.md](server/README.md)), talking to each other cross-origin
 over CORS. Neither is a Claude-specific artifact - the whole pipeline runs
 through the standalone `claude` CLI with no desktop app or special tooling
-required. Search results reach the tracker via a `curl` POST to the API;
+required. Search results reach the tracker through a small helper the run
+invokes (`scripts/tracker.ps1`) rather than through prose describing a call;
 every edit is one D1 row write, not a shared blob, so a headless sync and a
 browser edit landing at the same moment can't clobber each other. Every tab
 the page draws, its label, the page title, and which locations count as
@@ -53,6 +54,7 @@ docs/
   architecture.html           full architecture write-up (open in a browser)
 scripts/
   run-search.ps1              runs one track for one person (fetches its prompt from the API)
+  tracker.ps1                  every API call a run makes, as a command - copied into the run directory
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
   setup-scheduler.ps1          registers every person's tracks as daily Windows Scheduled Tasks
   seed-demo-user.ps1           creates the demo account and fills it with invented postings
