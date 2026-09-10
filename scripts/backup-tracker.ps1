@@ -179,6 +179,43 @@ $inserts = ([regex]::Matches($text, '(?im)^\s*INSERT INTO')).Count
 $userCount = ([regex]::Matches($text, '(?im)^\s*INSERT INTO\s+"?users"?\s')).Count
 Log ("staged: {0:N0} bytes, {1} CREATE TABLE, {2} INSERT INTO, {3} account(s)" -f $size, $tables, $inserts, $userCount)
 
+# Accounts that are *expected* to have no folder on this machine, discounted
+# from the completeness check further down so it only speaks when something is
+# genuinely missing.
+#
+# The demo account is the standing case: seed-demo-user.ps1 creates it through
+# the API with invented data, and it never gets a private folder or a nightly
+# run. Counted as a person it produces a NOTE on every single run, for a
+# condition that is permanent and fine - and a warning that is always there is
+# the one nobody reads on the night it finally means something.
+#
+# Matching on the name alone would be the exact mistake seed-demo-user.ps1
+# warns about, since "Demo" can be handed to a real person. So this reuses that
+# script's own test, the one standing between -Force and somebody's real
+# application history: every posting on the account is an example.com URL. One
+# row from a real job board and it counts as a person again.
+$exportLines = $text -split "`n"
+$demoIds = @()
+foreach ($m in [regex]::Matches($text, '(?im)^\s*INSERT INTO\s+"?users"?\s[^\r\n]*')) {
+    $idm = [regex]::Match($m.Value, "'([0-9a-fA-F-]{36})'")
+    $nm  = [regex]::Match($m.Value, "'[0-9a-fA-F-]{36}'\s*,\s*'([^']*)'")
+    if (-not $idm.Success -or $nm.Groups[1].Value -ne 'Demo') { continue }
+    $id = $idm.Groups[1].Value
+    $urls = @()
+    foreach ($line in $exportLines) {
+        if ($line.IndexOf($id, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+        foreach ($u in [regex]::Matches($line, 'https?://[^''"\s,)]+')) { $urls += $u.Value }
+    }
+    $real = $urls | Where-Object { $_ -notmatch '(?i)^https?://([\w-]+\.)*example\.com(/|$|[/?#])' }
+    if ($urls.Count -gt 0 -and -not $real) {
+        $demoIds += $id
+        Log ("  '{0}' ({1}...) is the demo account - {2} posting(s), all example.com - no folder expected here." -f $nm.Groups[1].Value, $id.Substring(0, 8), $urls.Count)
+    } elseif ($urls.Count -gt 0) {
+        Log ("  '{0}' ({1}...) is named Demo but has {2} non-example.com posting(s) - treating it as a person." -f $nm.Groups[1].Value, $id.Substring(0, 8), @($real).Count)
+    }
+}
+$expectedAccounts = $userCount - $demoIds.Count
+
 $problems = @()
 if ($size -lt $MinBytes) { $problems += "only $size bytes (under the $MinBytes floor)" }
 if ($tables -lt 1)       { $problems += "no CREATE TABLE statements" }
@@ -340,13 +377,15 @@ if (-not $NoDocuments) {
             Log "documents: none - listed $covered account(s) and every one is empty."
         }
 
-        # The completeness check. $userCount is every account in the database;
+        # The completeness check. $expectedAccounts is every account in the
+        # database that ought to have a folder on some machine - that is, all of
+        # them less the demo, which is identified above rather than assumed.
         # $covered is the ones this machine held a credential for. A shortfall is
-        # not an error - the demo account has no folder by design, and a second
-        # machine may hold the rest - but it has to be said out loud, because the
-        # alternative is a backup folder that looks complete and isn't.
-        if ($userCount -gt 0 -and $covered -lt $userCount) {
-            Log "NOTE: backed up documents for $covered of the $userCount account(s) in the database."
+        # still not an error, since a second machine may hold the rest, but it
+        # has to be said out loud, because the alternative is a backup folder
+        # that looks complete and isn't.
+        if ($expectedAccounts -gt 0 -and $covered -lt $expectedAccounts) {
+            Log "NOTE: backed up documents for $covered of the $expectedAccounts account(s) that should have one."
             Log "      The rest have no tracker.json under $DataDir. If their documents matter,"
             Log "      run this where their folder lives, or copy their tracker.json here."
         }
