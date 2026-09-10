@@ -266,3 +266,32 @@ describe("the XSS boundary", () => {
     expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined();
   });
 });
+
+describe("the theme toggle", () => {
+  beforeEach(signedIn);
+
+  it("shows the theme it switches to, not the one you are in", async () => {
+    // These disagreed: the icon showed the current theme while the label beside
+    // it named the destination. Caught by putting the two clients side by side
+    // on the same account, not by any test - so here is the test.
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    const toggle = screen.getByRole("button", { name: /switch to (light|dark) theme/i });
+    const label = toggle.getAttribute("aria-label")!;
+    const destination = /light/i.test(label) ? "☀️" : "🌙";
+    expect(toggle.textContent, `label says "${label}" so the icon should be ${destination}`).toBe(destination);
+  });
+
+  it("keeps icon and label agreeing after it is pressed", async () => {
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    const toggle = screen.getByRole("button", { name: /switch to (light|dark) theme/i });
+    await userEvent.click(toggle);
+
+    const after = screen.getByRole("button", { name: /switch to (light|dark) theme/i });
+    const label = after.getAttribute("aria-label")!;
+    expect(after.textContent).toBe(/light/i.test(label) ? "☀️" : "🌙");
+  });
+});
