@@ -1349,6 +1349,45 @@ for (const bad of ["docs/sub/nested.md", "wat/x.md", "docs/.hidden", "docs/", "d
   check(`"${bad}" is refused by the path validator`,
     (await req("PUT", `/api/documents/${bad}`, { token: D_TOK, raw: "x" })).status === 400);
 }
+
+// Names Windows will not store as given. These are not traversal - they are
+// accepted-then-renamed, which is worse, because the runner materializes each
+// document to a real file and decides what to send back by hashing what it
+// finds there. A name the filesystem alters is a document that comes back under
+// a different path, silently, leaving the original orphaned.
+for (const hostile of ["docs/trailing_space.md ", "docs/trailing_dot.md."]) {
+  check(`"${hostile}" is refused - Windows would rename it`,
+    (await req("PUT", `/api/documents/${encodeURI(hostile)}`, { token: D_TOK, raw: "x" })).status === 400);
+}
+// Stricter than Windows strictly needs: a name ending in a hyphen is legal
+// there, and the rule refuses it anyway because "starts and ends with a word
+// character" is one condition rather than a list of characters to remember.
+check('"docs/ends-with-hyphen-" is refused',
+  (await req("PUT", "/api/documents/docs/ends-with-hyphen-", { token: D_TOK, raw: "x" })).status === 400);
+// DOS device names, with and without an extension, in either case. On Windows
+// these resolve to a device rather than a file: the write appears to succeed
+// and the file is then reported as not existing.
+for (const dev of ["docs/CON", "docs/PRN.md", "docs/aux.txt", "docs/com1.md", "docs/LPT9.md"]) {
+  check(`"${dev}" is refused as a reserved device name`,
+    (await req("PUT", `/api/documents/${dev}`, { token: D_TOK, raw: "x" })).status === 400);
+}
+// The near-misses, so the device rule cannot quietly widen into real names.
+for (const ok of ["docs/console.md", "docs/auxiliary.md", "docs/company1.md", "docs/prnt.md",
+                  "docs/name-.md", "docs/a.md", "docs/x"]) {
+  check(`"${ok}" is still accepted`,
+    (await req("PUT", `/api/documents/${ok}`, { token: D_TOK, raw: "x", type: "text/markdown" })).status === 200);
+}
+
+// Size. Every document is re-downloaded by every nightly run and every backup,
+// so an unbounded upload is a cost paid twice a day rather than a storage bill.
+const under = await req("PUT", "/api/documents/resumes/under_cap.pdf", {
+  token: D_TOK, raw: new Uint8Array(1024 * 1024), type: "application/pdf" });
+check("a 1 MB document is accepted", under.status === 200, JSON.stringify(under.json));
+const over = await req("PUT", "/api/documents/resumes/over_cap.pdf", {
+  token: D_TOK, raw: new Uint8Array(9 * 1024 * 1024), type: "application/pdf" });
+check("a 9 MB document is refused with 413", over.status === 413, `got ${over.status}`);
+check("and the oversized document was not stored",
+  (await req("GET", "/api/documents/resumes/over_cap.pdf", { token: D_TOK })).status === 404);
 for (const bad of ["../secrets.md", "docs/../../etc/passwd"]) {
   check(`"${bad}" never reaches a handler`,
     (await req("PUT", `/api/documents/${bad}`, { token: D_TOK, raw: "x" })).status === 404);

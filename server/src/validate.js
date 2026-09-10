@@ -95,11 +95,29 @@ export const DOCUMENT_FOLDERS = ["docs", "resumes", "reference"];
 // and `Someone_Resume.docx`; a name needing anything outside word characters,
 // spaces, dots and hyphens is likelier a mistake or an attempt than a document
 // somebody meant to store.
-const DOCUMENT_PATH = new RegExp(`^(${DOCUMENT_FOLDERS.join("|")})/[\\w][\\w .-]*$`);
+//
+// First and last character must both be word characters, which is what rules
+// out a name ending in a space or a dot. Windows drops both silently when it
+// creates a file, so `x.md ` stored here materializes on the runner as `x.md` -
+// and the write-back, which decides what to send by comparing hashes of what is
+// on disk, would then PUT to `x.md` and leave the original orphaned. Nothing
+// errors; the account quietly grows a second copy of its most important
+// document and starts editing the wrong one.
+const DOCUMENT_PATH = new RegExp(`^(${DOCUMENT_FOLDERS.join("|")})/\\w(?:[\\w .-]*\\w)?$`);
+
+// The DOS device names, which are not filenames on Windows whatever extension
+// follows them: `CON`, `PRN.md` and `aux.txt` all resolve to a device rather
+// than a file. The failure mode is not an error - the runner's write appears to
+// succeed while `Test-Path` reports the file does not exist, so a materialized
+// document is written and absent at the same time. Matched against the stem
+// before the first dot, case-insensitively, the way Windows resolves it.
+const DOS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
 
 /** @param {unknown} path @returns {boolean} */
 export function isDocumentPath(path) {
-  return typeof path === "string" && DOCUMENT_PATH.test(path);
+  if (typeof path !== "string" || !DOCUMENT_PATH.test(path)) return false;
+  const name = path.slice(path.indexOf("/") + 1);
+  return !DOS_DEVICE.test(name.split(".")[0]);
 }
 
 // The refusal every document route gives for a path it will not store. Names
@@ -111,7 +129,9 @@ export function badDocumentPath(path) {
       error:
         `invalid document path "${path}" - must be ` +
         `<${DOCUMENT_FOLDERS.join("|")}>/<filename>, one folder deep, ` +
-        "with a filename of word characters, spaces, dots or hyphens",
+        "with a filename of word characters, spaces, dots or hyphens, " +
+        "starting and ending with a letter or digit, and not a reserved " +
+        "Windows device name (CON, PRN, AUX, NUL, COM0-9, LPT0-9)",
     },
     400
   );

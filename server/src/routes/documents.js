@@ -30,6 +30,32 @@ import { json, CORS_HEADERS } from "../http.js";
 import { badDocumentPath, isDocumentPath } from "../validate.js";
 
 /**
+ * The largest document this API will store.
+ *
+ * R2 would take five terabytes and never complain, which is the problem: every
+ * object here is downloaded in full by *every* nightly run that materializes it
+ * (scripts/run-search.ps1) and again by every backup (scripts/backup-tracker.ps1).
+ * An unbounded upload is not primarily a storage bill, it is a cost paid twice a
+ * day forever on a machine nobody is watching.
+ *
+ * 8 MB against a real corpus whose largest member is a 250 KB PDF - thirty
+ * times the biggest thing anyone has actually stored, which leaves room for a
+ * scanned resume without leaving room for a video.
+ */
+const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
+
+function tooLarge(bytes) {
+  return json(
+    {
+      error:
+        `document is ${bytes} bytes; the limit is ${MAX_DOCUMENT_BYTES} ` +
+        "(8 MB). Documents are re-downloaded by every nightly run and every backup.",
+    },
+    413
+  );
+}
+
+/**
  * The refusal for a deployment that has this code but no `DOCS` bucket.
  *
  * Reachable exactly one way: a worker deployed from a wrangler.toml without the
@@ -143,7 +169,23 @@ export async function handlePutDocument({ request, docs, params }) {
   const contentType = request.headers.get("content-type") || "application/octet-stream";
   const ifMatch = request.headers.get("if-match") || "";
 
-  const written = await docs.put(path, request.body, contentType, ifMatch);
+  // Two size checks, and both earn their place. The header is a claim, so it is
+  // refused before anything is read - that is what stops a huge upload being
+  // pulled across the wire at all. The buffered length is the fact, and it is
+  // what a caller sending chunked (no content-length) or simply lying is
+  // measured against.
+  //
+  // Buffering rather than streaming to R2: at 8 MB it is comfortably inside a
+  // Worker's memory, and it is the only way to know the real size before the
+  // object exists rather than after. A streamed put would have to delete what
+  // it had already written, which is a worse thing to get wrong.
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (declared > MAX_DOCUMENT_BYTES) return tooLarge(declared);
+
+  const bytes = await request.arrayBuffer();
+  if (bytes.byteLength > MAX_DOCUMENT_BYTES) return tooLarge(bytes.byteLength);
+
+  const written = await docs.put(path, bytes, contentType, ifMatch);
   if (!written) {
     return json(
       {
