@@ -7,6 +7,8 @@
   ["Remove-Item C:\\VibeCoding\\private\\backups\\*.sql -Force", "PowerShell: delete every backup"],
   ["Remove-Item -Recurse -Force C:\\VibeCoding\\private", "PowerShell: remove the whole private folder"],
   ["rm -rf /c/VibeCoding/private/backups", "bash: remove the backups folder"],
+  ["rm -rf /c/VibeCoding/jobsearch-cloud/private/ab266b6c/docs", "bash: git bash mount path into the silo"],
+  ["rm -rf /c/vibecoding/jobsearch-cloud/private", "bash: git bash mount, lowercase"],
   ["rm C:/VibeCoding/private/backups/d1-2026-08-31.sql", "bash: remove one backup file"],
   ["cd /c/VibeCoding && rm -rf .claude/hooks", "bash: remove the guard itself"],
   ["Move-Item C:\\VibeCoding\\private\\backups D:\\elsewhere", "PowerShell: move the backups away"],
