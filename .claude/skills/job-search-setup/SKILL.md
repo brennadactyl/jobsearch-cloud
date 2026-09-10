@@ -264,12 +264,16 @@ step 6 - plus one document:
   string, so the order you post them in is the order they rank in.
 
 **If this search fills a `fed_by` tab, say so in the doc.** One search, one
-doc - the fed tab shares the feeder's. The template is written as though the
-track were the only tab, so two of its lines are then wrong in a way that
-matters: step 1 tells the run to dedup against `/api/dedup/<key>` alone, when
-the composed prompt correctly fetches every tab's key and merges them. Left
-as the template has it, the doc and the prompt disagree about what "already
-seen" means, and the doc is the thing the run reads first. Add to that step
+doc - the fed tab shares the feeder's, and the template is written as though
+the track were the only tab. This used to make the template's step 1 actively
+wrong: it named `/api/dedup/<key>`, one tab's worth, while the prompt fetched
+every tab and merged them, so the doc and the prompt disagreed about what
+"already seen" meant - and the doc is what the run reads first. That
+particular trap is gone: step 1 now names `./tracker dedup`, which asks the
+config which tabs this search feeds and merges them itself, so the doc cannot
+disagree with the prompt about it any more.
+
+What is still worth adding to that step is the part no command can supply:
 which tabs this search fills, and that a posting tracked under *either* key is
 not new whichever tab today's run would file it under.
 
@@ -475,12 +479,12 @@ So when setting a track up:
 
 - **Say the discovery step out loud in the track's doc**, including the
   non-tech verticals - `templates/tracked-postings.template.md` now carries
-  both, and the rule that a discovered company is added with
-  `POST /api/coverage` rather than only written down.
+  both, and the rule that a discovered company is recorded with
+  `./tracker swept` rather than only written down.
 - **Make sure discovery can write back, and check that it did.** This is the
   one that matters. The doc must tell the run to register what it finds with
-  `POST /api/coverage`, not merely to note the name in prose - the route
-  appends any company handed to it, so a discovered name joins the rotation
+  `./tracker swept`, not merely to note the name in prose - the route behind
+  it appends any company handed to it, so a discovered name joins the rotation
   without jumping the queue. A track whose `total` never moves has a broken
   discovery step no matter how good its seed was.
 - **Seed as many strong names as you have.** There is no penalty for a long
@@ -612,7 +616,7 @@ and the elapsed time, never by the exit code: a real run takes minutes.
 Then check `<data dir>\<user id>\logs\<key>.log` for what happened, and confirm on the
 tracker webpage that the new track's tab shows up *and* now reports when it
 last ran. A tab still reading "No run recorded yet" after a completed run
-means the prompt's step 9c (`POST /api/runs`) didn't land - worth chasing,
+means the prompt's step 9c (`./tracker run`) didn't land - worth chasing,
 since that record is the only thing that will later distinguish a quiet day
 from a search that stopped firing. (It is also the backstop for the exit-code
 problem above: a run that died early never reaches 9c, so the stale tab is
