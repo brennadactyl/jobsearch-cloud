@@ -33,6 +33,11 @@ There is no list size at which rotating is wrong. A batch is
 all five every night and wraps — identical to not rotating, plus sweep records
 and shared `company_fetch` intel.
 
+The switch is gated on data, not on config, so a track's prompt changes the
+moment rows exist and no deploy is involved. Seeding `CPM`'s 64 rows on
+2026-09-10 took its prompt from 17,499 to 20,544 characters that evening.
+Anything measuring prompt size or run output has to treat a seeding as an event.
+
 All four searching tracks rotate today (48, 59, 64, 64). This governs the next
 track added.
 
@@ -66,6 +71,9 @@ run starts at the front of the list.
 `total: 0`. Under this plan that state is a misconfiguration, and the route says
 so the way it already does for an unknown key.
 
+Ships after §2, never with it or before it — a track created between the two
+deploys would be unreachable rather than merely un-rotating.
+
 ### 4. Remove the optionality at its source
 
 `job-search-setup` introduces the switch in prose:
@@ -77,24 +85,43 @@ Seeding becomes part of creating a track, not a judgment about list length.
 `add-target-company` writes the company to the rotation, since the rotation is
 the list.
 
-## The company list lives in one place
+## Where target_companies goes
 
-`tracks.target_companies` holds two different things today. For
-`engineering-management` and `product` it is a plain list of 37 and 43 names,
-36 and 42 of which are already in the rotation — a frozen subset that discovery
-has since overtaken. For `SWE` and `CPM` it is not a list at all but ~2,800
-characters of strategy: vertical ordering, which ATS endpoint to hit per company,
-why to enumerate Hasbro's Greenhouse board rather than `company.wizards.com`.
+`${companies}` appears once in `prompt.js`, in step 3. Step 3 is the only path
+by which `target_companies` reaches a run, so step 3 dropping it and the field
+keeping its contents cannot both hold — emptying the step empties the field of
+any effect. Each of the three things it currently carries needs a destination
+before that step changes.
 
-The list half moves to the rotation. The prose half stays where it is —
-`prompt-size-plan.md` files it under "what stays", and that judgment is about
-the prose.
+**The list.** For `engineering-management` and `product` it is a plain list of
+37 and 43 names, 36 and 42 of which are already rotation rows — a frozen subset
+that discovery has overtaken. Goes to `company_sweeps`.
+
+**How to reach each company.** Most of `SWE`'s and `CPM`'s ~2,800 characters:
+which ATS endpoint to hit, that Twitch's Greenhouse JSON API works where its
+HTML mirror does not, why to enumerate Hasbro's Greenhouse board rather than
+`company.wizards.com`. These are facts about a careers site, true for anyone
+who fetches it, which is what `company_fetch` is for —
+`0010_company_fetch.sql`: "a row here describes a *website*, never a *search*."
+The delivery path already exists: `handleGetCoverage` attaches the shared row to
+each company it hands a run, and `./tracker companies` writes the whole response
+to `companies.json`. Per company, on the night that company comes round, instead
+of a wall of prose every night.
+
+**Which verticals to prioritise, and why.** Gaming before creator platforms
+before the expanded net. This is the person's own strategy, it is small, and it
+stays in `target_companies` — which is what `prompt-size-plan.md` keeps under
+"what stays".
+
+Step 3 changes only after the first two have somewhere to be.
 
 One name needs reconciling before the list half is redundant:
 `Hasbro/Wizards of the Coast` in `target_companies` against
-`Wizards of the Coast` in the rotation. Same company, two names. `SWE`'s
-rotation has the same problem internally with `Cursor (Anysphere)` and
-`Cursor Anysphere` as separate rows.
+`Wizards of the Coast` in the rotation. Reconcile to `Wizards of the Coast` —
+the applications fill wrote that spelling onto application 84 from the
+Greenhouse board itself, so it is what the postings say and it now reaches the
+tracker from two independent sources. `SWE`'s rotation has the same problem
+internally, with `Cursor (Anysphere)` and `Cursor Anysphere` as separate rows.
 
 ## Files
 
@@ -117,8 +144,9 @@ deployment is in the second case.
 
 ## Not in scope
 
-Retiring `target_companies` as a field. The prose half is doing real work and
-`prompt-size-plan.md` keeps it.
+Retiring `target_companies` as a field. What is left after the list and the
+fetch facts move — which verticals to prioritise and why — is the person's own
+strategy and stays.
 
 The `board` column duplicated across `company_sweeps` and `company_fetch` —
 tracked separately in issue #2.
