@@ -314,7 +314,20 @@ $job = Start-Job -ScriptBlock {
     # em-dash lands as "-o" garbage, and no amount of fixing the file's own
     # encoding recovers it, because the damage happened upstream of the write.
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    & $claudePath -p $prompt --allowedTools $allowedTools 2>&1
+    # The prompt goes in on stdin rather than as an argument. Windows caps a
+    # command line at ~32k characters and the composed prompt is most of the way
+    # there on its own, so a track whose config gains a paragraph pushes the
+    # whole invocation over. What comes back is not a prompt error - it is
+    # `Program 'claude.exe' failed to run: The filename or extension is too long`
+    # from the npm shim, i.e. the CLI never starts.
+    #
+    # That happened on 2026-09-10: 31,877 characters of prompt, twenty seconds,
+    # nothing searched, nothing synced - and because the *job* completed, the
+    # runner reported exit 0 and Task Scheduler recorded a success. Piping has no
+    # such ceiling, so prompt length stops being something the runner can die of.
+    # Shrinking the prompt is worth doing on its own merits (see
+    # docs/prompt-size-plan.md); it is not what keeps this from breaking again.
+    $prompt | & $claudePath -p --allowedTools $allowedTools 2>&1
 } -ArgumentList $claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken
 
 $start = Get-Date
@@ -359,6 +372,17 @@ if (-not $outputText) {
 } elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error") {
     Log "ERROR: the CLI is not authenticated - nothing was searched or synced."
     Log "       Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
+    $exitCode = 1
+} elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
+    # The CLI never started. This is the same class of failure as the one above -
+    # the job completes, the elapsed time looks like a fast run, and nothing was
+    # searched - but it comes from the shim rather than from the CLI, so the
+    # authentication patterns miss it entirely. Seen on 2026-09-10 when the
+    # prompt was passed as an argument and exceeded the Windows command-line
+    # limit; that specific cause is fixed above, and this stays because "the
+    # launcher failed" must not keep reading as success.
+    Log "ERROR: the CLI failed to start - nothing was searched or synced."
+    Log "       See the output above; a launcher failure is not a search result."
     $exitCode = 1
 }
 
