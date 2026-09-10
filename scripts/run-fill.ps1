@@ -223,7 +223,16 @@ $job = Start-Job -ScriptBlock {
     # using the console's OEM codepage and mangles every non-ASCII character
     # before it reaches the log.
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    & $claudePath -p $prompt --allowedTools $allowedTools 2>&1
+    # The prompt goes in on stdin rather than as an argument, for the reason
+    # run-search.ps1 documents at length: Windows caps a command line at ~32k
+    # characters, and going over it is not a prompt error but
+    # `Program 'claude.exe' failed to run: The filename or extension is too
+    # long` from the npm shim - the CLI never starts, the job still completes,
+    # and the task records a success. This prompt is shorter than a search's
+    # and has not hit that ceiling; it is piped anyway so that prompt length
+    # stops being something either runner can die of, rather than something
+    # one of them is currently under.
+    $prompt | & $claudePath -p --allowedTools $allowedTools 2>&1
 } -ArgumentList $claudePath, $prompt, $allowedTools, $DataDir, $trackerUrl, @($accounts | ForEach-Object { $_.Token })
 
 $start = Get-Date
@@ -266,6 +275,15 @@ if (-not $outputText) {
 } elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error") {
     Log "ERROR: the CLI is not authenticated - nothing was filled in."
     Log "       Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
+    $exitCode = 1
+} elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
+    # The CLI never started - the launcher failed above it. Same silence and
+    # same false success as the case above, but from a source the authentication
+    # patterns do not match, so it needs saying separately. run-search.ps1 grew
+    # this branch after 2026-09-10; this script has the same exposure and, with
+    # no run record of its own, even less to fall back on.
+    Log "ERROR: the CLI failed to start - nothing was filled in."
+    Log "       See the output above; a launcher failure is not an empty queue."
     $exitCode = 1
 }
 

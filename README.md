@@ -12,10 +12,12 @@ your resume(s), asks what roles/companies/locations you're after, and
 generates everything else.
 
 **This repo contains no personal data.** Resumes, candidate profile, target
-companies, and search results live in a separate local "private" folder -
-see [private.example/README.md](private.example/README.md) for the expected
-layout. That separation is what makes this repo safe to keep on GitHub (public
-or private) and to reuse across machines.
+companies and search results live in the deployment - search config and results
+in D1, documents in R2 - reached with a per-person token. What is left on the
+machine that runs the searches is that token and its logs, in a gitignored
+`private/` folder; see [private.example/README.md](private.example/README.md).
+That separation is what makes this repo safe to keep on GitHub (it is public)
+and to reuse across machines.
 
 **The tracker is a plain webpage backed by an API, deployed as two
 independent pieces** - a static client ([client/README.md](client/README.md),
@@ -23,7 +25,8 @@ a Cloudflare Worker serving static assets) and a Cloudflare Worker + D1 API
 ([server/README.md](server/README.md)), talking to each other cross-origin
 over CORS. Neither is a Claude-specific artifact - the whole pipeline runs
 through the standalone `claude` CLI with no desktop app or special tooling
-required. Search results reach the tracker via a `curl` POST to the API;
+required. Search results reach the tracker through a small helper the run
+invokes (`scripts/tracker.ps1`) rather than through prose describing a call;
 every edit is one D1 row write, not a shared blob, so a headless sync and a
 browser edit landing at the same moment can't clobber each other. Every tab
 the page draws, its label, the page title, and which locations count as
@@ -37,7 +40,7 @@ genuine zero-result day.
 
 ## Architecture
 
-![Architecture diagram: Task Scheduler fires the headless Claude CLI daily, once per configured track, which reads and writes the local private/ folder, searches and verifies career sites, and posts new leads to server/'s Cloudflare Worker API. That API reads and writes a D1 database and answers the browser's cross-origin API calls; a separate static-assets Worker deployment, client/, serves the browser the tracker page itself.](docs/architecture.svg)
+![Architecture diagram: Task Scheduler fires the headless Claude CLI daily, once per configured track, which fetches that track's documents from the tracker into a throwaway run folder, searches and verifies career sites, writes back the doc it edited, and posts new leads to server/'s Cloudflare Worker API. That API reads and writes a D1 database and answers the browser's cross-origin API calls; a separate static-assets Worker deployment, client/, serves the browser the tracker page itself.](docs/architecture.svg)
 
 Full write-up with a reference table of routes and schedules:
 [docs/architecture.html](docs/architecture.html) (open locally in a browser -
@@ -46,15 +49,16 @@ GitHub shows source for `.html` files rather than rendering them).
 ## Contents
 
 ```
-.claude-plugin/plugin.json    lets this repo be installed as a Claude Code plugin (see Setup)
 .claude/skills/
   job-search-setup/           AI-assisted onboarding - see Setup below
 docs/
   architecture.svg           the diagram above
   architecture.html           full architecture write-up (open in a browser)
 scripts/
-  run-search.ps1              runs one track for one person (fetches its prompt from the API)
+  run-search.ps1              runs one track for one person (fetches its prompt AND documents from the API)
+  tracker.ps1                  every API call a run makes, as a command - copied into the run directory
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
+  import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
   setup-scheduler.ps1          registers every person's tracks as daily Windows Scheduled Tasks
   seed-demo-user.ps1           creates the demo account and fills it with invented postings
   demo-user.json               that invented data - the only fabricated content in this repo
@@ -69,6 +73,7 @@ server/                        API only - Cloudflare Worker + D1, no HTML served
   src/validate.js               the checks more than one route makes
   src/auth.js                   passwords, session tokens, who a token belongs to
   src/db.js                     all D1 access for a person's own data
+  src/r2.js                     all R2 access for their documents - resumes, baseline docs
   src/prompt.js                 composes each track's daily search prompt from its config
   migrations/                   the D1 schema, applied via `wrangler d1 migrations apply`
   wrangler.toml                  deploy config
@@ -93,6 +98,21 @@ currently supported).
 No Node.js, no git, and no `wrangler` CLI required for any of this - see the
 note after each step if you'd rather do it the traditional way instead.
 
+> **If PowerShell refuses with "running scripts is disabled on this system"**,
+> that is Windows' default execution policy, not anything about this repo. It
+> blocks the PowerShell shims Node installs, so `npm`, `npx` and a globally
+> installed `wrangler` all fail the same way while the `.cmd` next to each one
+> works. Either call those: `npx.cmd wrangler ...`, `npm.cmd run deploy`. Or
+> allow local scripts once, which is what most people want:
+>
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+> ```
+>
+> `RemoteSigned` still requires downloaded scripts to be signed; it only trusts
+> the ones on your own disk. The commands below are written plainly and work as
+> shown in `cmd.exe` and Git Bash either way.
+
 1. **Install Claude Code**:
    ```powershell
    irm https://claude.ai/install.ps1 | iex
@@ -100,15 +120,31 @@ note after each step if you'd rather do it the traditional way instead.
    Then authenticate for headless use: `claude setup-token`, then
    `setx CLAUDE_CODE_OAUTH_TOKEN "<token it gives you>"` (open a new
    terminal afterward so the variable takes effect).
-2. **Get this tooling onto your machine** - inside a Claude Code session:
+2. **Get this tooling onto your machine** - clone it:
+   ```bash
+   git clone https://github.com/brennadactyl/jobsearch-cloud.git
    ```
-   /plugin marketplace add brennadactyl/JobSearchTracker
-   /plugin install job-search-tracker@JobSearchTracker
-   ```
-   Claude Code fetches everything itself - no `git clone` needed. (If you'd
-   rather have an editable local copy - e.g. to change the code - `git clone`
-   still works exactly as before; everything below is the same either way.)
-3. **Deploy the tracker** (once - not per machine). Two separate one-click
+   Open the clone in Claude Code and the skills under `.claude/skills/` load
+   as project skills, which is all they were ever doing. This is not published
+   as an installable Claude Code plugin, so there is no `/plugin install` for
+   it - a clone is the supported way in.
+3. **Turn on R2** (once per Cloudflare account, before the deploys below).
+   The API stores documents - resumes and each track's baseline doc - in an R2
+   bucket, and R2 is off by default on a new account. The deploy button
+   provisions the bucket for you, but only once R2 itself is enabled;
+   otherwise that deploy fails with `Please enable R2 through the Cloudflare
+   Dashboard. [code: 10042]`.
+
+   Go to **[dash.cloudflare.com](https://dash.cloudflare.com/) → R2 Object
+   Storage → Overview** and complete the checkout flow. It is a subscription
+   with a free allowance, not a paid plan - 10 GB stored, 1M writes and 10M
+   reads a month, no egress fees - so it asks for billing details, and a
+   personal job search uses about a megabyte of that. Skipping this is a
+   supported choice: everything else works and the document endpoints answer
+   503, but then each machine running searches needs its own copy of the
+   baseline docs and resumes. See [server/README.md](server/README.md).
+
+4. **Deploy the tracker** (once - not per machine). Two separate one-click
    deploys, server first:
 
    [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/brennadactyl/JobSearchTracker/tree/main/server)
@@ -127,7 +163,7 @@ note after each step if you'd rather do it the traditional way instead.
      -H "Content-Type: application/json" \
      -d '{"name":"Your Name","password":"a-long-password-you-pick"}'
    ```
-   Keep the `id` it returns - that's your user id, and step 4 puts your
+   Keep the `id` it returns - that's your user id, and step 5 puts your
    search data under it.
 
    Then the client:
@@ -151,25 +187,28 @@ note after each step if you'd rather do it the traditional way instead.
 
    **The page will be empty at this point, and that's correct** - no track
    tabs, just Overview and Applications. A fresh database ships with no
-   tracks, no title and no location rules of its own; step 4 is what fills
+   tracks, no title and no location rules of its own; step 5 is what fills
    them in. (Nothing here is pre-seeded with anyone else's job search.)
 
    (Prefer the CLI, or need to apply a schema change later?
    [server/README.md](server/README.md) and [client/README.md](client/README.md)
    document the manual `wrangler`-based path too - same end result.)
-4. **Set up your private data folder** - either:
+5. **Set up your private data folder** - either:
    - **With Claude's help (recommended):** put your resume(s) somewhere
      Claude can read them, then ask it to run the
      [job-search-setup](.claude/skills/job-search-setup/) skill. It'll ask
      what tracks/companies/locations you want and generate everything in
-     step 5 below for you, then run that step itself.
-   - **By hand:** see [private.example/README.md](private.example/README.md)
-     for the exact files to author yourself.
+     step 6 below for you, then run that step itself.
+   - **By hand:** it is one file now - `private\<user-id>\tracker.json` with
+     your API URL and a session token. Resumes and baseline docs go into the
+     tracker rather than into that folder; `scripts\import-documents.ps1`
+     uploads a folder you already have. See
+     [private.example/README.md](private.example/README.md).
 
    Either way, point at the resulting folder with
    `setx JOB_SEARCH_DATA_DIR "C:\path\to\private"`, or just place it at
    `private\` next to this repo (already gitignored).
-5. **Register the scheduled tasks** (the setup skill does this for you; run
+6. **Register the scheduled tasks** (the setup skill does this for you; run
    it yourself if you set up by hand or are adding a track):
    ```powershell
    .\scripts\setup-scheduler.ps1
@@ -177,7 +216,7 @@ note after each step if you'd rather do it the traditional way instead.
    It discovers each person by their `private\<user-id>\tracker.json` and
    asks their account what tracks it has - nothing to tell it about how many
    you have, or how many people share the machine.
-6. **Test one run before trusting the schedule** - the previous step prints
+7. **Test one run before trusting the schedule** - the previous step prints
    the exact command for whichever tracks it just registered, e.g.:
    ```bat
    schtasks /Run /TN JobSearch-ab266b6c-Engineering
@@ -187,7 +226,7 @@ note after each step if you'd rather do it the traditional way instead.
    it found. Until a track's first run reports in it reads "No run recorded
    yet", which is also what you'll see on a brand-new install.
 
-7. **Set up backups** - see [Backups](#backups) below. One elevated command,
+8. **Set up backups** - see [Backups](#backups) below. One elevated command,
    and it's the step you won't think to do until you need it: nothing above
    this line leaves a copy of your data anywhere but Cloudflare.
 
@@ -230,7 +269,7 @@ One deployment holds any number of job searches, each with its own tracks,
 leads, page title and location rules, and its own sign-in. To add someone:
 
 1. Create their account with the `ADMIN_TOKEN` (same `POST /api/users` call
-   as step 3 of Setup above). It returns their user id.
+   as step 4 of Setup above). It returns their user id.
 2. Run the [job-search-setup](.claude/skills/job-search-setup/) skill for
    them - it makes `private\<their id>\`, mints the token their scheduled
    runs use, reads their resume, asks about their tracks and locations,
@@ -389,10 +428,12 @@ finding. Watch especially for URLs that resolve to a company's *listing
 index* rather than the individual posting - the title text matches, so it
 looks right, and it isn't.
 
-**Fetch reliability varies by company and drifts week to week.** Your
-`private/docs/` files (not this repo's top-level `docs/`, which is just the
-architecture write-up) keep per-company notes; re-verify rather than trusting
-them blindly.
+**Fetch reliability varies by company and drifts week to week.** Each track's
+baseline doc in the tracker keeps per-company notes; re-verify rather than
+trusting them blindly. A note saying a domain is blocked is a claim from some
+past night, and it has been wrong: one company sat on the "blocked" list for
+two weeks on the strength of its direct site 403ing, while its Greenhouse board
+answered fine the whole time.
 
 **Scheduled tasks only run while you're logged in.** For true run-when-closed
 scheduling you'd need the machine to stay logged in (Task Scheduler can be
@@ -456,8 +497,11 @@ see `scripts/run-search.ps1`. If a search prompt ever needs a new capability,
 add it there deliberately rather than reaching for `--dangerously-skip-permissions`.
 
 **A cross-cutting convention changed in one track's doc silently drifts out
-of sync in the others.** Each `private/docs/tracked_<key>_postings.md` is
-self-contained - nothing at runtime cross-checks it against its siblings.
+of sync in the others.** Each `docs/tracked_<key>_postings.md` is
+self-contained - nothing at runtime cross-checks it against its siblings. They
+are at least all reachable now (`GET /api/documents` per account) rather than
+scattered across whichever machines hold them, so the reconciling is possible
+without being automatic.
 If you change something that's supposed to apply to every track (how leads
 sync to the tracker, the fetch-efficiency rule, the fit-filter philosophy),
 update every existing track's doc to match, not just the one you're actively

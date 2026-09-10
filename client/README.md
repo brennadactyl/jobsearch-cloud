@@ -48,6 +48,13 @@ token lives in `localStorage` (`tracker_token`, alongside `tracker_name` for
 prefilling the gate next time) - per-browser, never sent anywhere but to
 `LOCAL_API_BASE` - so each device signs in once.
 
+**"Signed in as ..."** (in the header) is a button: it opens the dialog that
+changes your own password, without needing the operator or the admin secret. It asks for the current one as well - the
+session alone is not enough, deliberately - and offers to sign out your other
+browsers, which leaves this one and never touches the credential your
+scheduled search holds. See
+[`../server/README.md`](../server/README.md)'s "Changing your own password".
+
 **Log out** (in the header) revokes that token on the server, not just
 locally, and clears the view preferences with it, so the next person to sign
 in on the same browser doesn't land on someone else's tab. It leaves that
@@ -116,10 +123,32 @@ step 6 until your config is posted.
 merge/fast-forward `main` and push first, then deploy from a checkout that's
 actually on `main`.
 
+A worktree is the dangerous one, and it's worth knowing exactly why rather
+than taking the rule on trust. `[assets]` publishes *exactly* what's in
+`public/`, so a deploy replaces the live file list rather than merging into
+it - anything up there that isn't on disk here comes down. Worktrees never
+carry gitignored files, so a fresh one has no `local-config.js` at all, and
+nothing about it looks wrong: `git status` is clean and the deploy reports
+success while it quietly takes the API URL off the live site and leaves every
+visitor at "This deployment has no API URL configured". This is not
+hypothetical - it happened on 2026-09-08 and the sign-in page was down for a
+few hours before anyone noticed.
+
 ```bat
 cd client
-wrangler deploy
+npm run deploy
 ```
+
+`npm run deploy`, not a bare `wrangler deploy`: it runs `predeploy-check.mjs`
+first, which refuses the deploy when `local-config.js` is missing rather than
+letting it succeed into an unusable site. A bare `wrangler deploy` still works
+and is still fine from a checkout on `main` - it just has nothing watching it.
+
+The blocks here are `cmd.exe`. In PowerShell these die with "running scripts is
+disabled on this system" before running anything - that is Windows' default
+execution policy blocking Node's `.ps1` shims, and
+[`../server/README.md`](../server/README.md)'s setup section has the two ways
+round it.
 
 A client-only change (styling, a new field, a UI fix) never needs a server
 redeploy. A change that depends on a new API field/route does need the

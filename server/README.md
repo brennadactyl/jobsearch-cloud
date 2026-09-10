@@ -47,6 +47,12 @@ tracks, leads, applications, page titles and location rules.
   looking a bearer token up to a user. The only file that touches either.
 - `src/db.js` - all D1 access for a person's own data. Every instance is
   bound to one user id at construction, so no query can forget to filter.
+- `src/r2.js` - all R2 access for their documents: resumes, and the per-track
+  baseline doc the nightly search reads and edits. Scoped the same way `db.js`
+  is - every key is prefixed with the owner's id at construction, so no method
+  can address another person's object. An object's key is
+  `<user-id>/<relative path>`, and there is no table beside it: `kind` is the
+  first path segment and R2's own `list()` returns the rest.
 - `src/prompt.js` - composes the two prompts the scheduled runs execute:
   `buildSearchPrompt`, one track's daily search, from that track's config; and
   `buildAutofillPrompt`, the nightly fill for applications logged as a bare
@@ -62,6 +68,48 @@ tracks, leads, applications, page titles and location rules.
 You need to do the account creation and login yourself - not something that
 can be done on your behalf.
 
+> **PowerShell and "running scripts is disabled on this system".** Windows'
+> default execution policy blocks the PowerShell shims Node installs, so `npm`,
+> `npx` and a globally installed `wrangler` all fail that way - including
+> `npm run deploy`. The `.cmd` beside each one is unaffected
+> (`npx.cmd wrangler ...`, `npm.cmd run deploy`), or allow local scripts once
+> with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Commands here are
+> written plainly and work as shown in `cmd.exe` and Git Bash.
+
+### First: turn on R2
+
+**Do this before either path below.** This worker binds an R2 bucket for
+documents - resumes and each track's baseline doc (see [`src/r2.js`](src/r2.js)).
+R2 is off by default on a new Cloudflare account, and nothing can create a
+bucket until it is switched on: the deploy button's auto-provisioning and
+`wrangler` alike fail with
+
+```
+Please enable R2 through the Cloudflare Dashboard. [code: 10042]
+```
+
+To enable it: **[dash.cloudflare.com](https://dash.cloudflare.com/) → R2 Object
+Storage** (under **Storage & databases**) **→ Overview**, then complete the
+checkout flow to add an R2 subscription. It is a subscription with a free
+allowance rather than a paid plan - 10 GB of storage, 1 million writes and 10
+million reads a month, and no egress charges - so Cloudflare wants billing
+details on file, but this deployment's documents run to about a megabyte and
+stay inside the free tier by three or four orders of magnitude.
+
+Confirm it took (in PowerShell, `npx.cmd` - see the note above):
+
+```bash
+npx wrangler r2 bucket list
+```
+
+An empty list is the answer you want. The 10042 above means it did not take.
+
+If you would rather not enable R2 at all, the tracker still runs without it:
+every other endpoint works, and the four `/api/documents` routes answer 503
+saying documents are not configured. What you lose is the document store - the
+searches then need their baseline docs and resumes on the machine that runs
+them, which is where they lived before.
+
 ### Quick deploy (recommended)
 
 No Node.js or `wrangler` CLI required locally - the build/deploy happens in
@@ -72,10 +120,14 @@ Cloudflare's own environment.
 1. Click the button, sign in to Cloudflare (creates a free account if you
    don't have one), and accept the defaults on the setup page it shows you.
 2. It forks this `server/` directory into a new repo in your own GitHub, and
-   reads `wrangler.toml` to auto-provision a D1 database for you (filling in
-   the `database_id` for you - nothing to paste in by hand). `package.json`'s
-   `deploy` script (`wrangler d1 migrations apply DB --remote && wrangler
-   deploy`) runs the schema migrations and deploys in one step.
+   reads `wrangler.toml` to auto-provision both a D1 database and the R2
+   documents bucket for you (filling in the `database_id` for you - nothing to
+   paste in by hand). `package.json`'s `deploy` script (`wrangler d1 migrations
+   apply DB --remote && wrangler deploy`) runs the schema migrations and
+   deploys in one step.
+
+   The bucket is only auto-provisioned if you enabled R2 first - see above.
+   Skip that and this step is where it fails.
 3. It lands you on your new Worker's dashboard. Go to **Settings → Variables
    and Secrets** and add a secret named `ADMIN_TOKEN` - any long random value
    you pick (a password generator, or `-join ((48..57)+(97..122)|Get-Random
@@ -110,7 +162,15 @@ Cloudflare's own environment.
    It prints a `database_id`. Paste it into `wrangler.toml`, replacing
    `REPLACE_WITH_YOUR_D1_DATABASE_ID`.
 
-4. **Apply the schema:**
+4. **Create the documents bucket:**
+   ```bat
+   wrangler r2 bucket create job-search-tracker-docs
+   ```
+   Unlike D1 there is no id to paste - `wrangler.toml` binds it by name, so
+   this only has to match. If it errors with `[code: 10042]`, R2 is not enabled
+   on the account yet; see "First: turn on R2" above.
+
+5. **Apply the schema:**
    ```bat
    wrangler d1 migrations apply job-search-tracker-db --remote
    ```
@@ -119,7 +179,7 @@ Cloudflare's own environment.
    skill does it), so the page is deliberately empty until then rather than
    pre-filled with someone else's job search.
 
-5. **Set the admin token.** This creates accounts and resets passwords; it is
+6. **Set the admin token.** This creates accounts and resets passwords; it is
    not a login and nothing else accepts it. Pick a long random value:
    ```powershell
    -join ((48..57)+(97..122)|Get-Random -Count 40|%{[char]$_})
@@ -129,23 +189,32 @@ Cloudflare's own environment.
    wrangler secret put ADMIN_TOKEN
    ```
 
-6. **Deploy:**
+7. **Deploy:**
    ```bat
    wrangler deploy
    ```
    Prints your live URL, something like
    `https://job-search-tracker.<your-subdomain>.workers.dev`.
 
-7. **Create your account** and mint the token your scheduled searches will
+8. **Create your account** and mint the token your scheduled searches will
    use - see [Accounts](#accounts) below.
 
-8. **Deploy the client** - see [`../client/README.md`](../client/README.md).
+9. **Deploy the client** - see [`../client/README.md`](../client/README.md).
 
 ## Accounts
 
 There is no sign-up page, and deliberately so: this is a handful of people
 who know each other, not a service. Accounts are created by whoever operates
 the deployment, using the `ADMIN_TOKEN` secret.
+
+**Changing a password is not an operator job, though.** Anyone signed in can
+change their own from the tracker page (click "Signed in as ..." in the header),
+which posts `/api/password` with their current password alongside their
+session. That route is the only one that sets a password without the admin
+secret, and it is deliberately narrow - see [Changing your own
+password](#changing-your-own-password) below. The admin path stays for the two
+cases it is actually for: making an account, and resetting a password nobody
+knows any more.
 
 **Create someone (or reset their password)** - same call either way, because
 nothing else in the system can hash a password:
@@ -175,6 +244,37 @@ Returns `{"token": "...", "user": {...}}`. Put that token, with the worker
 URL, in `<data dir>/<their id>/tracker.json` (see
 [`../private.example/README.md`](../private.example/README.md)). The password
 itself never goes on disk.
+
+### Changing your own password
+
+Signed in, from the page. `POST /api/password` takes `currentPassword` and
+`newPassword`, and it requires both the session and the current password.
+
+**The session token alone is deliberately not enough.** A token copied off a
+shared machine already reads and writes that person's data, which is bad and
+recoverable - they can sign out everywhere. If the same token could set the
+password, it would turn that into "someone has your account and you don't",
+which is not recoverable without the operator.
+
+**Sessions survive it by default**, the same promise `POST /api/users` makes.
+The one that matters is the long-lived token a scheduled search keeps in
+`tracker.json`: a password change that revoked it would stop that person's
+nightly search silently, and a search that never fired looks exactly like one
+that found nothing, so they would find out weeks later from an empty tab.
+
+`signOutOthers: true` is the opt-in for when that isn't what you want - you
+are changing it *because* something is wrong. It revokes only sessions
+labelled `browser`, and not the one making the request. That filter is an
+allowlist of what may be revoked rather than a denylist of what must be
+spared, on purpose: written the other way round, any credential someone later
+labels something else - a second machine, a script - would die the first time
+anybody changed their password. An unrecognised label is kept, so the worst
+case is a session that should have gone and didn't, which they can see and log
+out of.
+
+This is the first thing to use `sessions.label` the way it was added to be
+used: revoking a credential by what it is rather than by guessing which opaque
+string is which.
 
 **Revoke one credential.** `label` is why sessions are worth having: a
 browser signing out kills only its own token, and you can drop a leaked
@@ -351,6 +451,7 @@ application id or track key simply doesn't resolve, and comes back as a 404.
 - `POST /api/login` - **no auth** - body `{ name, password, label? }` -> `{ token, user: { id, name } }`, or `401` for both a wrong password and an unknown name (told apart, they'd enumerate who has an account). `label` records what the token is for (`"browser"`, `"scheduled-search"`) so it can be revoked by purpose later; defaults to `"browser"`. Tokens don't expire - the shared token they replaced didn't either, and a headless search that had to re-authenticate on a schedule would be a new failure mode for no gain.
 - `POST /api/logout` - revokes **only the token that made the request**, so signing out of a browser leaves the scheduled search's credential alone.
 - `POST /api/users` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ name, password }` -> creates an account with a fresh GUID, or sets an existing name's password (`201` vs `200`, `{id, name, created}`). Doubles as password reset because nothing else can run PBKDF2. Minimum 12 characters. See [Accounts](#accounts).
+- `POST /api/password` - body `{ currentPassword, newPassword, signOutOthers? }` -> `{ ok, signedOut }`. Changes the caller's own password. Requires the current one as well as the session - see [Changing your own password](#changing-your-own-password) for why the token alone is not enough. `403` for a wrong current password, `400` for a new one under 12 characters or identical to the old. Those are told apart in the reply, unlike `/api/login`'s deliberately ambiguous refusal: there is nothing to withhold from a caller already authenticated as this person, and the two need different corrections. Sessions survive by default; `signOutOthers: true` revokes only this person's other `browser`-labelled sessions and reports how many, never the scheduled search's. Absent, it defaults to false, so a scripted caller never gets a revocation it did not ask for.
 - `GET /api/me` -> `{ id, name }` - who this token belongs to.
 
 ### Data
@@ -434,7 +535,7 @@ guard.
 
 - `GET /api/config` -> `{ tracks: [{key, label, full_description, sort_order, last_run, ...search config}], settings }` - this person's config: the track tabs, labels, display title, priority-location rules and staleness threshold the client renders from, plus the per-track search config and prose settings the prompt is composed from. Each track's `last_run` is its `search_runs` row (`{at, on, status, leads_added, screened_added, delisted, note}`; all-empty means never recorded).
 - `POST /api/config` - body `{ tracks?, display_title?, overview_label?, applications_label?, stale_run_hours?, priority_locations?, excluded_companies?, geo_scope_line?, scope_clause?, scope_disqualifier?, location_guidance?, footer_note?, pronouns? }`. `tracks`, if present, **replaces this person's whole track list** (existing leads keep their `search` value even if its track is removed - they just lose their tab, they're never deleted) and keeps `search_runs` 1:1 with it. It never touches anyone else's tracks. Each track entry may carry its search config: `role_search_line`, `target_companies` (array, or a string when the list has prose structure), `search_note`, `resume_line`, `fit_clause`, `fit_disqualifier`, `fit_filter_step`, `leads_note`, `doc_file`, `doc_summary`, `doc_update_line`, `intro_note`, `report_line`, `screened_examples`, `schedule_time`, `fed_by`.
-- `fed_by` (in the POST above) is how **one search fills more than one tab**. A track with `fed_by` set to a sibling's key has no search of its own: `setup-scheduler.ps1` registers no task for it, `GET /api/prompt` refuses to compose one (409, naming the track to run instead), and the feeding track's prompt turns multi-tab - it fetches `/api/dedup/:key` for every tab it fills, files each finding under one of them (using each tab's `full_description` as the rule for what belongs there), and records a run against each (a tab with no run record of its own reads as stale forever). Use it when the split is by *level or kind of role* over an identical search - same companies, same resume, same scope; a genuinely different search should just be its own track. Refused if `fed_by` names anything but another track in the same posted list.
+- `fed_by` (in the POST above) is how **one search fills more than one tab**. A track with `fed_by` set to a sibling's key has no search of its own: `setup-scheduler.ps1` registers no task for it, `GET /api/prompt` refuses to compose one (409, naming the track to run instead), and the feeding track's prompt turns multi-tab - its `./tracker dedup` covers every tab it fills, it files each finding under one of them (using each tab's `full_description` as the rule for what belongs there), and records a run against each (a tab with no run record of its own reads as stale forever). Use it when the split is by *level or kind of role* over an identical search - same companies, same resume, same scope; a genuinely different search should just be its own track. Refused if `fed_by` names anything but another track in the same posted list.
 - `excluded_companies` (in the POST above) is a list of companies this person will not work for at all - plain names, or a catch-all phrase ("any other company X owns or leads"). The composed prompt renders it into a single never-search sentence, so adding an exclusion is an append to a list rather than a sentence hand-written into a track's prose - which is how the first two ended up in two different fields, discovered only by accident.
 - `GET /api/dedup/:key` -> `{ leads: [{id, url, status}], screened: [url, ...] }` - the smallest thing a scheduled run needs to know what it has already found or ruled out, for one track. This exists because the runs were using `/api/data` for it, which returns every field of every row across every track: 398KB to use 22KB of, with screened rows accumulating ~150/day. That lands in the run's context every night and grows without bound, so the failure mode was a run eventually truncating its own dedup list and re-adding postings it had already screened. 404s on an unknown key rather than returning empty arrays - empty is exactly what a mistyped key would produce, and a run that believes it has seen nothing re-adds everything.
 - `GET /api/coverage/:key` -> `{ companies: [{company, last_swept, board, note}], total, batch }` - **the companies this run should cover**, not the whole list: the least-recently-swept `COVERAGE_BATCH` of them (12), never-swept first. A company list long enough to be worth having is longer than one run can verify properly, and the failure isn't a company going uncovered for a day, it's every company being skimmed. The server picks rather than the prompt describing how to pick, because a cap a run is asked to respect is one it can talk itself out of on a night the list looks short. There is no privileged tier: a confirmed `board` makes a company cheap to cover, not exempt from the rotation. `?all=1` returns the whole table (seeding, and looking at it). 404s on an unknown key for the same reason `/api/dedup/:key` does - an empty list would read as "nothing to sweep" and the run would search nothing at all.
@@ -506,3 +607,28 @@ node verify-migration.mjs
   [Accounts](#accounts)). Losing a laptop means revoking its session, not
   rotating one secret shared by every machine and person - which is what the
   old model would have required.
+- **Every session token can reach every session route.** A browser sign-in and
+  the long-lived credential a scheduled search keeps on disk are the same kind
+  of thing to this API: `sessions.label` records which is which, but only
+  `deleteOtherBrowserSessions` reads it, and no route enforces on it.
+
+  That points the wrong way. The weakest credential holds the most authority -
+  the `scheduled-search` token sits in plaintext in a `tracker.json` on a
+  Windows box, never expires, and can today delete every lead, rewrite the
+  search config or change what the tabs are called. A nightly run needs none of
+  that; it posts findings and reads its own prompt.
+
+  The fix is to split the routes the way the callers already are. Roughly:
+  a machine-to-machine credential gets the run's endpoints (`/api/leads`,
+  `/api/screened`, `/api/runs`, `/api/verified`, `/api/delist`, the coverage
+  and dedup reads, the prompt reads, the application fill) and the document
+  reads and writes it materializes from; a signed-in person gets the rest, and
+  the destructive and configuring ones - `/api/config`, `/api/password`,
+  `/api/delete-leads`, `/api/delete-application`, `/api/unscreen` - go to a
+  human session only. Some of that boundary already exists as prose: `/api/unscreen`'s
+  handler says it is deliberately in no prompt, which is a convention where it
+  could be a rule.
+
+  The shape to reach for is the one `./routes/index.js` already uses for
+  public-vs-session: another list, not a flag per row, so membership cannot be
+  got wrong by omission. Not built yet.

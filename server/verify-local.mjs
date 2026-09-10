@@ -23,16 +23,28 @@ const A = process.argv[2] || "http://127.0.0.1:8787";
 const ADMIN = process.argv[3] || "local-admin-token-for-testing";
 let pass = 0, fail = 0;
 
-const req = async (method, path, { token, body, admin } = {}) => {
+// `raw`, `type`, `ifMatch` and `bytes` are for /api/documents, the one resource
+// whose body is not JSON in either direction (see src/routes/documents.js).
+// Everything else ignores them and behaves exactly as it always did.
+const req = async (method, path, { token, body, admin, raw, type, ifMatch, bytes } = {}) => {
   const headers = {};
   if (body) headers["content-type"] = "application/json";
+  if (type) headers["content-type"] = type;
+  if (ifMatch) headers["if-match"] = ifMatch;
   if (token) headers.authorization = "Bearer " + token;
   if (admin) headers.authorization = "Bearer " + ADMIN;
-  const res = await fetch(A + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(A + path, {
+    method,
+    headers,
+    body: raw !== undefined ? raw : body ? JSON.stringify(body) : undefined,
+  });
+  if (bytes) {
+    return { status: res.status, body: new Uint8Array(await res.arrayBuffer()), headers: res.headers };
+  }
   const text = await res.text();
   let json = null;
   try { json = JSON.parse(text); } catch {}
-  return { status: res.status, json, text };
+  return { status: res.status, json, text, headers: res.headers };
 };
 
 function check(name, ok, detail) {
@@ -463,6 +475,43 @@ check("the prompt gains the rotation steps once a track has rows",
   (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text.includes("1c. Get this run's companies"));
 check("and B's, with no rows, does not",
   !(await req("GET", "/api/prompt/SWE", { token: B_TOK })).text.includes("1c. Get this run's companies"));
+
+// ---- Every call the nightly run has to make, still reachable from the text.
+//
+// A prompt that loses a step does not error - it produces a quieter search.
+// A run that never learns to record its sweeps covers the same twelve
+// companies every night; one that never learns step 9c looks, on the page,
+// exactly like a search that stopped firing. Both are invisible until someone
+// notices weeks of nothing, which is why the shape of the prompt is asserted
+// here rather than left to a reading of the diff.
+//
+// Commands rather than endpoints since the API prose moved into
+// scripts/tracker.ps1 (see ../docs/prompt-size-plan.md): the run reaches
+// /api/leads by invoking `./tracker leads`, so that is what has to survive an
+// edit. A's SWE has coverage rows, so its prompt carries the rotation pair too.
+const sweSteps = (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text;
+const boSteps = (await req("GET", "/api/prompt/SWE", { token: B_TOK })).text;
+for (const cmd of [
+  "./tracker dedup",
+  "./tracker verified live.json",
+  "./tracker delist dead.json",
+  "./tracker leads leads.json",
+  "./tracker screened screened.json",
+  "./tracker run --status ok",
+  "./tracker companies",
+  "./tracker swept swept.json",
+]) {
+  check(`the prompt still reaches the tracker via \`${cmd}\``, sweSteps.includes(cmd));
+}
+check("the prompt says where the helper is and how to run it if the shim won't execute",
+  sweSteps.includes("-File tracker.ps1"));
+// The one instruction a shorter prompt is most tempting to soften, and the
+// premise everything else rests on: a search-snippet URL is not a finding.
+check("step 4 still requires every candidate URL to be opened and confirmed",
+  /MANDATORY VERIFICATION: fetch every candidate URL directly and confirm it renders an actual job description/
+    .test(sweSteps) && /A search-snippet URL is a lead, not a finding, until opened and confirmed/.test(sweSteps));
+check("a track with no rotation gets neither rotation command",
+  !boSteps.includes("./tracker companies") && !boSteps.includes("./tracker swept"));
 // The cap is the whole point, and it has to hold on the night it matters most:
 // a freshly seeded list, where every row is never-swept and nothing has a date
 // to sort by. It also has to be the *server's* cap - the prompt describing one
@@ -656,10 +705,30 @@ const feedPrompt = (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text;
 // appeared in the per-tab run-record instruction. The server fans that out
 // now, so the literal is gone by design; what still has to be true is that the
 // fed tab is a place step 9 can file a posting under.
+//
+// The first used to look for `/api/dedup/LEAD`, from the days when the prompt
+// listed one dedup call per tab. `./tracker dedup` asks the config which
+// tracks this one feeds and merges them itself, so no per-tab call is named
+// any more - the fed tab has to appear in the header and in the filing step
+// instead, which is where a run learns the tab exists at all.
 check("the feeding track's prompt covers both tabs",
-  feedPrompt.includes("/api/dedup/LEAD") &&
+  /# Also fills: LEAD /.test(feedPrompt) &&
   feedPrompt.includes("a role leading a team") &&
   feedPrompt.includes('`"LEAD"`'));
+check("and says its one dedup command covers them together",
+  /covers all 2 tabs this run fills/.test(feedPrompt) &&
+  !/\/api\/dedup\//.test(feedPrompt));
+// The filing step's tie-break. It used to send an ambiguous posting to the
+// feeding track, which is whichever tab happens to own the scheduled search
+// and not a general-purpose one: on the deployment this came from it was the
+// narrowest tab on the board, and a Senior SWE role at an insurance company
+// landed in Eng - Gaming citing exactly this rule while its own note said the
+// tabs it read as were the other two. So a tie has to resolve among the tabs
+// it does read as, and the feeding key has to be named as not being a default.
+check("a tie in the filing step resolves among the tabs a posting reads as, not to the feeding tab",
+  feedPrompt.includes("whichever of *those* tabs comes first in the list above") &&
+  /already ruled out is never the answer/.test(feedPrompt) &&
+  !/reads more than one way after checking, file it under `SWE`/.test(feedPrompt));
 // The fan-out is one transaction, so a run record either exists for every tab
 // the run fills or for none. The failure it replaced was a half-written
 // fan-out leaving a tab that had just been searched reading as never-run - the
@@ -1073,6 +1142,85 @@ const twice = await req("POST", "/api/purge", { admin: true, body: { user: "Ada"
 check("purging again is a no-op, not an error",
   twice.status === 200 && twice.json.purged.leads === 0, twice.text.slice(0, 120));
 
+
+// ---------------------------------------------------------------------------
+// Changing your own password.
+//
+// Two properties carry this, and both fail quietly if they break.
+//
+// The current password has to be required. A session token that could set the
+// password would turn "someone copied your token" into "someone owns your
+// account", and nothing about the code would look wrong.
+//
+// And the scheduled search's credential has to survive. Its failure mode is
+// the worst one here: the nightly run just stops, and a search that never
+// fired is indistinguishable from one that found nothing, so the person finds
+// out weeks later from an empty tab.
+console.log("\n== changing your own password ==");
+const PW_RUN = Date.now().toString(36);
+const pwName = `Pip ${PW_RUN}`;
+await req("POST", "/api/users", { admin: true, body: { name: pwName, password: "pip-first-password" } });
+
+// Three sessions: the browser doing the change, another browser, and the
+// long-lived one a scheduled search would hold.
+const pwHere = (await req("POST", "/api/login", { body: { name: pwName, password: "pip-first-password", label: "browser" } })).json.token;
+const pwOther = (await req("POST", "/api/login", { body: { name: pwName, password: "pip-first-password", label: "browser" } })).json.token;
+const pwSearch = (await req("POST", "/api/login", { body: { name: pwName, password: "pip-first-password", label: "scheduled-search" } })).json.token;
+
+check("changing a password needs a session at all",
+  (await req("POST", "/api/password", { body: { currentPassword: "pip-first-password", newPassword: "pip-second-password" } })).status === 401);
+check("the current password is required, not just the token",
+  (await req("POST", "/api/password", { token: pwHere, body: { newPassword: "pip-second-password" } })).status === 400);
+check("a wrong current password is refused",
+  (await req("POST", "/api/password", { token: pwHere, body: { currentPassword: "not-my-password", newPassword: "pip-second-password" } })).status === 403);
+check("and that refusal does not change anything",
+  (await req("POST", "/api/login", { body: { name: pwName, password: "pip-first-password" } })).status === 200);
+check("a new password under 12 characters is refused",
+  (await req("POST", "/api/password", { token: pwHere, body: { currentPassword: "pip-first-password", newPassword: "short" } })).status === 400);
+check("the length rule is checked before the current password, so the two answers can't be confused",
+  (await req("POST", "/api/password", { token: pwHere, body: { currentPassword: "wrong-entirely", newPassword: "short" } })).status === 400);
+check("re-setting the same password is refused rather than silently doing nothing",
+  (await req("POST", "/api/password", { token: pwHere, body: { currentPassword: "pip-first-password", newPassword: "pip-first-password" } })).status === 400);
+
+// The default: no revocation at all, matching what POST /api/users does.
+const pwPlain = await req("POST", "/api/password", {
+  token: pwHere, body: { currentPassword: "pip-first-password", newPassword: "pip-second-password" } });
+check("a valid change succeeds", pwPlain.status === 200 && pwPlain.json.ok === true, pwPlain.text.slice(0, 120));
+check("and signs nobody out unless asked", pwPlain.json.signedOut === 0);
+check("the new password works", (await req("POST", "/api/login", { body: { name: pwName, password: "pip-second-password" } })).status === 200);
+check("the old one doesn't", (await req("POST", "/api/login", { body: { name: pwName, password: "pip-first-password" } })).status === 401);
+check("every existing session still works - a change is not a logout",
+  (await req("GET", "/api/me", { token: pwHere })).status === 200 &&
+  (await req("GET", "/api/me", { token: pwOther })).status === 200 &&
+  (await req("GET", "/api/me", { token: pwSearch })).status === 200);
+
+// Opting in. The one that must not take the search's token with it.
+const pwSwept = await req("POST", "/api/password", {
+  token: pwHere, body: { currentPassword: "pip-second-password", newPassword: "pip-third-password", signOutOthers: true } });
+// Not asserted as an exact number. Several checks above prove a password by
+// logging in with it, and every one of those mints a real `browser` session -
+// so the honest count here is "the one opened as pwOther, plus however many
+// assertions logged in". What actually matters is checked on its own three
+// lines below.
+check("signing out other browsers reports how many",
+  pwSwept.status === 200 && typeof pwSwept.json.signedOut === "number" && pwSwept.json.signedOut >= 1,
+  pwSwept.text.slice(0, 120));
+check("the other browser is signed out", (await req("GET", "/api/me", { token: pwOther })).status === 401);
+check("the browser that made the change is not", (await req("GET", "/api/me", { token: pwHere })).status === 200);
+check("**the scheduled search's token survives**", (await req("GET", "/api/me", { token: pwSearch })).status === 200);
+check("and it is still that person's", (await req("GET", "/api/me", { token: pwSearch })).json.name === pwName);
+
+// A fixture of its own rather than Ada's token: by this point in the file Ada
+// has been logged out and re-logged-in several times, and a revoked token
+// would answer 401 at the routing layer - passing this check for entirely the
+// wrong reason, and never exercising the handler at all.
+await req("POST", "/api/users", { admin: true, body: { name: `Quill ${PW_RUN}`, password: "quill-long-password" } });
+const pwStranger = (await req("POST", "/api/login", { body: { name: `Quill ${PW_RUN}`, password: "quill-long-password" } })).json.token;
+check("a live session belonging to someone else cannot change this person's password",
+  (await req("POST", "/api/password", { token: pwStranger, body: { currentPassword: "pip-third-password", newPassword: "stolen-password-x" } })).status === 403);
+check("and Pip's password is untouched by that attempt",
+  (await req("POST", "/api/login", { body: { name: pwName, password: "pip-third-password" } })).status === 200);
+
 console.log("\n== unscreening: the way back from a wrong delist ==");
 // Runs last, and against B, whose SWE track the purge section just proved is
 // untouched. A screened row is a standing instruction to skip a url forever -
@@ -1160,6 +1308,156 @@ check("a delisted fed-tab row is reachable when asking by the feeder's name",
 check("and the posting can go back on the board",
   ((await req("POST", "/api/leads", { token: F_TOK, body: { leads: [
     { search: "ENG-SENIOR", url: fedUrl, company: "Example", title: "Principal Engineer" } ] } })).json.added || 0) === 1);
+
+console.log("\n== documents ==");
+// The resumes and per-track baseline docs, which live in R2 rather than D1 (see
+// src/r2.js). `wrangler dev --local` gives these a local bucket, so this needs
+// no cloud R2 and no account with R2 enabled.
+// A_TOK was spent by the logout check in the sessions section above, so this
+// mints a fresh one. Worth doing explicitly rather than moving this section
+// higher: an expired token here fails as `{"error":"unauthorized"}` on the
+// writes while the "is it gone?" reads pass anyway, which looks like a partial
+// feature rather than a dead credential.
+const D_TOK = (await req("POST", "/api/login", {
+  body: { name: "Ada", password: "ada-new-password-1" } })).json.token;
+check("a fresh session for the document checks", !!D_TOK);
+
+// Unique per run, like the shared-posting urls above. The cross-user check
+// below asserts Bo has *no* document at this path, and re-running against the
+// same local bucket would otherwise find the copy Bo wrote last time - a pass
+// turning into a failure on the second run, for no change in the code.
+const DOC = `docs/tracked_ENG_${Date.now()}_postings.md`;
+const put1 = await req("PUT", `/api/documents/${DOC}`, {
+  token: D_TOK, raw: "# Baseline\nAda's notes.", type: "text/markdown" });
+check("a document can be written", put1.status === 200 && !!put1.json.etag, JSON.stringify(put1.json));
+
+const index = await req("GET", "/api/documents", { token: D_TOK });
+const row = (index.json.documents || []).find((d) => d.path === DOC);
+check("it appears in the index with kind derived from its folder",
+  !!row && row.kind === "docs" && row.content_type === "text/markdown", JSON.stringify(row));
+check("the index reports the same etag and size the write did",
+  row && row.etag === put1.json.etag && row.bytes === put1.json.bytes, JSON.stringify(row));
+check("the index carries no bodies",
+  row && !("body" in row) && !("content" in row), JSON.stringify(row));
+check("reading it back returns what was written",
+  (await req("GET", `/api/documents/${DOC}`, { token: D_TOK })).text === "# Baseline\nAda's notes.");
+
+// The cross-user check that matters most here: a resume is the most private
+// thing this deployment holds, and `Docs` prefixes every key with the caller's
+// id, so Bo naming Ada's exact path reaches an object that isn't there.
+check("another user gets 404 for the same document path",
+  (await req("GET", `/api/documents/${DOC}`, { token: B_TOK })).status === 404);
+await req("PUT", `/api/documents/${DOC}`, { token: B_TOK, raw: "BO", type: "text/markdown" });
+check("and their write of that path is a separate object",
+  (await req("GET", `/api/documents/${DOC}`, { token: D_TOK })).text === "# Baseline\nAda's notes.");
+check("which they can read as their own",
+  (await req("GET", `/api/documents/${DOC}`, { token: B_TOK })).text === "BO");
+
+// Byte-identical round trip. Every byte value 0-255, because the failure this
+// guards against - a body decoded as UTF-8 somewhere in the middle - corrupts
+// exactly the high bytes a .docx or .pdf is full of and leaves ASCII intact.
+const blob = new Uint8Array(256).map((_, i) => i);
+await req("PUT", "/api/documents/resumes/Someone_Resume.pdf", {
+  token: D_TOK, raw: blob, type: "application/pdf" });
+const back = await req("GET", "/api/documents/resumes/Someone_Resume.pdf", { token: D_TOK, bytes: true });
+check("a binary round-trips byte-identical",
+  back.body.length === 256 && back.body.every((b, i) => b === i),
+  `got ${back.body.length} bytes`);
+check("and comes back with the content type it was stored with",
+  back.headers.get("content-type") === "application/pdf");
+
+// The conditional write the nightly run depends on. A run reads the doc at the
+// start of a turn lasting many minutes and hands back an edited copy at the
+// end; without this, anything written in between is erased by a copy made
+// before it existed.
+const stale = put1.json.etag;
+const put2 = await req("PUT", `/api/documents/${DOC}`, {
+  token: D_TOK, raw: "# Baseline v2", type: "text/markdown", ifMatch: stale });
+check("a conditional write with the current etag succeeds", put2.status === 200);
+const clobber = await req("PUT", `/api/documents/${DOC}`, {
+  token: D_TOK, raw: "# CLOBBER", type: "text/markdown", ifMatch: stale });
+check("the same etag a second time is 412", clobber.status === 412, JSON.stringify(clobber.json));
+check("and the 412 wrote nothing",
+  (await req("GET", `/api/documents/${DOC}`, { token: D_TOK })).text === "# Baseline v2");
+// curl users echo back the quoted header spelling; the property form is bare.
+// A mismatch between the two would look exactly like a real conflict.
+check("a quoted etag is accepted as If-Match",
+  (await req("PUT", `/api/documents/${DOC}`, { token: D_TOK, raw: "# v3",
+    type: "text/markdown", ifMatch: `"${put2.json.etag}"` })).status === 200);
+
+// The runner writes these paths to a real directory, so a path that escapes the
+// three known folders is a write-anywhere primitive on that machine. Note the
+// two refusal codes: `..` is normalised out of the URL before routing and 404s
+// on no matching route, while an encoded or malformed path reaches the
+// validator and 400s. Both refuse; asserting only one would miss a regression
+// in the other.
+for (const bad of ["docs/sub/nested.md", "wat/x.md", "docs/.hidden", "docs/", "docs/..%2Fx.md"]) {
+  check(`"${bad}" is refused by the path validator`,
+    (await req("PUT", `/api/documents/${bad}`, { token: D_TOK, raw: "x" })).status === 400);
+}
+
+// Names Windows will not store as given. These are not traversal - they are
+// accepted-then-renamed, which is worse, because the runner materializes each
+// document to a real file and decides what to send back by hashing what it
+// finds there. A name the filesystem alters is a document that comes back under
+// a different path, silently, leaving the original orphaned.
+for (const hostile of ["docs/trailing_space.md ", "docs/trailing_dot.md."]) {
+  check(`"${hostile}" is refused - Windows would rename it`,
+    (await req("PUT", `/api/documents/${encodeURI(hostile)}`, { token: D_TOK, raw: "x" })).status === 400);
+}
+// Stricter than Windows strictly needs: a name ending in a hyphen is legal
+// there, and the rule refuses it anyway because "starts and ends with a word
+// character" is one condition rather than a list of characters to remember.
+check('"docs/ends-with-hyphen-" is refused',
+  (await req("PUT", "/api/documents/docs/ends-with-hyphen-", { token: D_TOK, raw: "x" })).status === 400);
+// DOS device names, with and without an extension, in either case. On Windows
+// these resolve to a device rather than a file: the write appears to succeed
+// and the file is then reported as not existing.
+for (const dev of ["docs/CON", "docs/PRN.md", "docs/aux.txt", "docs/com1.md", "docs/LPT9.md"]) {
+  check(`"${dev}" is refused as a reserved device name`,
+    (await req("PUT", `/api/documents/${dev}`, { token: D_TOK, raw: "x" })).status === 400);
+}
+// The near-misses, so the device rule cannot quietly widen into real names.
+for (const ok of ["docs/console.md", "docs/auxiliary.md", "docs/company1.md", "docs/prnt.md",
+                  "docs/name-.md", "docs/a.md", "docs/x"]) {
+  check(`"${ok}" is still accepted`,
+    (await req("PUT", `/api/documents/${ok}`, { token: D_TOK, raw: "x", type: "text/markdown" })).status === 200);
+}
+
+// Size. Every document is re-downloaded by every nightly run and every backup,
+// so an unbounded upload is a cost paid twice a day rather than a storage bill.
+const under = await req("PUT", "/api/documents/resumes/under_cap.pdf", {
+  token: D_TOK, raw: new Uint8Array(1024 * 1024), type: "application/pdf" });
+check("a 1 MB document is accepted", under.status === 200, JSON.stringify(under.json));
+const over = await req("PUT", "/api/documents/resumes/over_cap.pdf", {
+  token: D_TOK, raw: new Uint8Array(9 * 1024 * 1024), type: "application/pdf" });
+check("a 9 MB document is refused with 413", over.status === 413, `got ${over.status}`);
+check("and the oversized document was not stored",
+  (await req("GET", "/api/documents/resumes/over_cap.pdf", { token: D_TOK })).status === 404);
+for (const bad of ["../secrets.md", "docs/../../etc/passwd"]) {
+  check(`"${bad}" never reaches a handler`,
+    (await req("PUT", `/api/documents/${bad}`, { token: D_TOK, raw: "x" })).status === 404);
+}
+
+check("deleting a document works",
+  (await req("DELETE", `/api/documents/${DOC}`, { token: D_TOK })).status === 200);
+check("it is gone from the index",
+  !((await req("GET", "/api/documents", { token: D_TOK })).json.documents || []).some((d) => d.path === DOC));
+// R2's delete is happy to remove a key that was never there. Reporting success
+// would tell a caller its cleanup worked when it was aiming at the wrong path.
+check("deleting it again is 404",
+  (await req("DELETE", `/api/documents/${DOC}`, { token: D_TOK })).status === 404);
+check("the other user's copy survived that delete",
+  (await req("GET", `/api/documents/${DOC}`, { token: B_TOK })).text === "BO");
+
+// PUT and DELETE are this API's first non-GET/POST verbs, so the preflight has
+// to advertise them or a browser refuses the call before it is ever routed.
+const preflight = await req("OPTIONS", "/api/documents");
+const allowed = preflight.headers.get("access-control-allow-methods") || "";
+check("the preflight advertises PUT and DELETE",
+  allowed.includes("PUT") && allowed.includes("DELETE"), allowed);
+check("and allows the If-Match header",
+  (preflight.headers.get("access-control-allow-headers") || "").includes("If-Match"));
 
 console.log("\n== shared company fetch intel ==");
 // The one table with no user_id (migrations/0010_company_fetch.sql). These

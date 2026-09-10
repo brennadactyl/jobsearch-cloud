@@ -17,7 +17,13 @@
  * version. Persistence: ../db.js. Schema: ../../migrations/.
  */
 
-import { handleGetMe, handleLogin, handleLogout, handleUpsertUser } from "./accounts.js";
+import {
+  handleChangePassword,
+  handleGetMe,
+  handleLogin,
+  handleLogout,
+  handleUpsertUser,
+} from "./accounts.js";
 import { handlePurgeSearch } from "./admin.js";
 import {
   handleDeleteApplication,
@@ -29,6 +35,12 @@ import {
 import { handleGetConfig, handleSetConfig } from "./config.js";
 import { handleGetCoverage, handleRecordSweeps } from "./coverage.js";
 import { handleGetData } from "./data.js";
+import {
+  handleDeleteDocument,
+  handleGetDocument,
+  handleListDocuments,
+  handlePutDocument,
+} from "./documents.js";
 import { handleDelistUrls, handleMarkVerified } from "./delisting.js";
 import { handleAddLeads, handleDeleteLeads, handleSetLeadStatus } from "./leads.js";
 import { handleGetAutofillPrompt, handleGetPrompt } from "./prompt.js";
@@ -70,6 +82,10 @@ export const PUBLIC_ROUTES = [
 export const SESSION_ROUTES = [
   ["POST", "/api/logout", handleLogout],
   ["GET", "/api/me", handleGetMe],
+  // Changing your own password. A session route, not an admin one: the person
+  // it belongs to is the caller, and it takes their current password on top of
+  // their token - see the handler for why the token alone is not enough.
+  ["POST", "/api/password", handleChangePassword],
   ["GET", "/api/data", handleGetData],
   ["GET", "/api/config", handleGetConfig],
   ["POST", "/api/config", handleSetConfig],
@@ -112,6 +128,21 @@ export const SESSION_ROUTES = [
   ["GET", /^\/api\/prompt\/([^/]+)$/, handleGetPrompt],
   ["POST", "/api/delete-application", handleDeleteApplication],
   ["POST", "/api/delete-leads", handleDeleteLeads],
+  // The resumes and per-track baseline docs that used to live only in a folder
+  // on whichever machine ran the searches. The only resource here addressed by
+  // its own URI, so the only one whose verb carries the operation - hence the
+  // PUT and DELETE, which are this table's first, and the matching entries in
+  // http.js's CORS_HEADERS. matchRoute compares the method string, so nothing
+  // about dispatch changes.
+  //
+  // `(.+)` rather than the `[^/]+` above: a document path has a slash in it
+  // (`docs/x.md`), because it is the path the file occupies in the person's
+  // folder. See ./documents.js, and validate.js's isDocumentPath for what stops
+  // that meaning "any depth".
+  ["GET", "/api/documents", handleListDocuments],
+  ["GET", /^\/api\/documents\/(.+)$/, handleGetDocument],
+  ["PUT", /^\/api\/documents\/(.+)$/, handlePutDocument],
+  ["DELETE", /^\/api\/documents\/(.+)$/, handleDeleteDocument],
 ];
 
 /**
