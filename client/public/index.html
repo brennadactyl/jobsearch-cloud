@@ -237,6 +237,34 @@ td.cc{max-width:170px;overflow:hidden;text-overflow:ellipsis}
 td.lk{max-width:150px}
 td.lk a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.lk .lk-none{color:var(--ink3)}
+
+/* The applications grid's fill-state groups (see appsGridHtml). A divider
+   with a label rather than a card or a heading, so the table still reads as
+   one table - and the whole divider is the fold control, because an 11px
+   caret is a poor click target and there is nothing else on that row. */
+tr.group td{background:var(--surface2);border-bottom:1px solid var(--line);padding:0}
+.grp{appearance:none;border:0;background:none;cursor:pointer;font:inherit;color:var(--ink3);
+  display:flex;align-items:center;width:100%;text-align:left;padding:7px 12px;
+  font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.grp:hover{background:var(--line)}
+.grp:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.grp .caret{flex:none;margin-right:9px;font-size:10px;line-height:1;
+  transition:transform .12s ease}
+.grp[aria-expanded="false"] .caret{transform:rotate(-90deg)}
+.grp .cnt{font-family:"IBM Plex Mono",monospace;text-transform:none;letter-spacing:0;
+  font-weight:400;margin-left:8px}
+/* Folded away, the count is the only thing left saying what is in there. */
+.grp[aria-expanded="false"] .cnt{color:var(--ink2)}
+tr.group.stuck .grp,tr.group.stuck .grp .cnt{color:var(--warn)}
+
+/* A row still waiting on tonight's run, and one no run will ever read. */
+tr.waiting input::placeholder,tr.stuck input::placeholder{font-style:italic}
+.eta{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ink2)}
+.eta .pulse{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+tr.stuck td:first-child{border-left-color:var(--warn)}
+.stuck-note{display:inline-flex;align-items:center;gap:6px;color:var(--warn);font-weight:500;
+  max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stuck-note .mark{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
 td:first-child{border-left:3px solid transparent}
 tr.pri0 td:first-child{border-left-color:var(--pri-0)}
 tr.pri1 td:first-child{border-left-color:var(--pri-1)}
@@ -766,7 +794,7 @@ function applyConfig(){
       ", refreshed daily. Edit anything — it saves for every device."
     : "No tracked searches configured yet — run the job-search-setup skill to add one.";
 }
-var ui={tab:"dashboard",q:"",filter:"All",selected:{},expanded:{},view:"detail",leadSort:"priority",appSort:"applied-desc",drill:null};
+var ui={tab:"dashboard",q:"",filter:"All",selected:{},expanded:{},view:"detail",leadSort:"priority",appSort:"applied-desc",drill:null,collapsed:{}};
 
 // The id of the cross-track leads tab. A tab id, not a track key: the same
 // shape as "dashboard" and "applications", which are also ids no track can
@@ -1844,9 +1872,24 @@ function appsTab(){
   // here on purpose, which is what makes this tab the record of what was
   // actually applied to.
   var h='<div class="toolbar">'+
-    '<div class="search"><input type="url" id="appurl" placeholder="Paste the job posting URL" aria-label="Job posting URL"></div>'+
-    '<button class="btn primary" id="addapp">Add application</button>'+
-    '<span style="font-size:13px;color:var(--ink3)">Nothing is added here except by you &mdash; a pasted URL is filled in overnight.</span>'+
+    '<div class="search"><input type="url" id="appurl"'+
+      ' placeholder="Paste a link straight to the job posting"'+
+      ' aria-label="Link to a job posting" aria-describedby="addhint"'+
+      // "Straight to" is the constraint: the run opens exactly this URL, so a
+      // search page or a careers index produces a row nothing can fill.
+      ' title="The posting&rsquo;s own page, not a search or a careers index &mdash; that page is what tonight&rsquo;s run opens and reads. Greenhouse, Lever, Workday and company careers pages all work."></div>'+
+    // The button has two jobs and the field decides which. It is never
+    // disabled: adding a row with no posting behind it is a real thing this
+    // button does. It says which one it is about to do instead, and takes
+    // the primary weight only for the path the field has been filled in for
+    // - see syncAddControl(), which keeps this in step as you type.
+    '<button class="btn" id="addapp">Add empty row</button>'+
+    // Says what pressing the button will do, which is the question anyone
+    // standing here actually has. It used to say where these rows come from
+    // ("nothing is added here except by you") - true, and answering a
+    // question nobody asks at this moment; the note at the foot of the tab
+    // still makes that point.
+    '<span class="hint" id="addhint">Adds a row for you to fill in yourself.</span>'+
     viewSwitchHtml()+'</div>'+
     // Same tiering as leadsTab: Add/search-equivalent controls stay
     // full-weight above, Sort (the one setting this tab has) drops to its
@@ -1906,6 +1949,23 @@ function appsTab(){
   return h;
 }
 
+// Which of the overnight fill's three states a row is in.
+//
+// The 'waiting' arm mirrors getAutofillQueue() in ../../server/src/db.js -
+// link, unread flag, and a gap the posting could fill - the same deliberate
+// duplication as LEAD_STATUS/DEFAULT_SETTINGS above, and with the same
+// obligation to stay in step: a row this called waiting that no run would
+// ever fetch would sit there promising a fill that is never coming. The
+// blank-field condition is the easy one to drop and the one that matters -
+// a row with a link whose company, role and location are already filled is
+// not in the queue, because there is nothing left for a posting to supply.
+function fillState(a){
+  if((a.autofill||"")==="failed")return "stuck";
+  if((a.autofill||"")===""&&safeUrl(a.link)&&
+     (!a.company||!a.title||!a.location))return "waiting";
+  return "";
+}
+
 function appsGridHtml(A){
   var COLS=9; // company/role/location/link/status/applied/days/details/remove
   var h='<div class="card grid-wrap"><table><thead><tr>'+
@@ -1921,7 +1981,40 @@ function appsGridHtml(A){
     // view meant for scanning.
     '<th>Company</th><th>Role</th><th>Location</th><th>Link</th><th>Status</th><th>Applied</th><th>Days</th>'+
     '<th></th><th></th>'+
-  '</tr></thead><tbody>'+A.map(function(a){
+  '</tr></thead><tbody>';
+
+  // Order is what needs you first: a posting no run will ever read, then
+  // everything in normal shape, then the rows that need nothing from you
+  // until tonight. The middle group takes the tab's own name from config -
+  // it is not all "applied" (a hand-added row waiting to be applied to sits
+  // there too), it is the ones with nothing wrong.
+  var groups=[
+    {key:"stuck",label:"Couldn’t be read",note:"type it in, no run will fix this"},
+    {key:"",label:(state.settings&&state.settings.applications_label)||"Applications",note:""},
+    {key:"waiting",label:"Waiting on tonight’s fill",note:"added by link, nothing to do"}
+  ].map(function(g){
+    g.rows=A.filter(function(a){return fillState(a)===g.key;});
+    return g;
+  }).filter(function(g){return g.rows.length;});
+
+  // On a day when every posting read cleanly there is one group, and a lone
+  // divider across the whole table says nothing anyone needs - so headers
+  // appear only when there is more than one state to separate, and the tab
+  // goes back to being the plain list it has always been.
+  var grouped=groups.length>1;
+
+  groups.forEach(function(grp){
+    var shut=grouped&&!!ui.collapsed[grp.key];
+    if(grouped){
+      h+='<tr class="group'+(grp.key?" "+grp.key:"")+'"><td colspan="'+COLS+'">'+
+        '<button class="grp" type="button" data-collapse="'+esc(grp.key)+'" '+
+          'aria-expanded="'+(!shut)+'">'+
+          '<span class="caret" aria-hidden="true">&#9662;</span>'+esc(grp.label)+
+          '<span class="cnt">'+grp.rows.length+(grp.note?' &middot; '+esc(grp.note):'')+'</span>'+
+        '</button></td></tr>';
+    }
+    if(shut)return;
+    h+=grp.rows.map(function(a){
     var d=daysSince(a.dateApplied);
     var link=safeUrl(a.link);
     var open=!!ui.expanded[a.id];
@@ -1933,19 +2026,27 @@ function appsGridHtml(A){
     // the two grids read alike and the legend below the toolbar means the
     // same thing on both.
     var g=geo(a.location);
-    var clsList=(g?[g.p]:[]).concat(
+    // A stuck row's edge says stuck rather than saying how close the job is:
+    // it has no location yet to be close to, and the one thing worth knowing
+    // about it is that it is waiting on you.
+    var clsList=(g&&grp.key!=="stuck"?[g.p]:[]).concat(
+      grp.key==="stuck"?["stuck"]:[],
       String(ui.selected.applications)===String(a.id)?["gr-sel"]:[]);
     var cls=clsList.length?' class="'+clsList.join(" ")+'"':'';
+    // The empty cells stay editable in every state - you can always type it
+    // in yourself - but they say which of the two reasons they are empty for
+    // instead of naming the column back at you.
+    var ph=grp.key==="waiting"?"Reads overnight":(grp.key==="stuck"?"Type it in":"");
     var row='<tr data-expand="'+a.id+'" data-scope="applications"'+cls+'>'+
-      '<td><input type="text" data-id="'+a.id+'" data-field="company" data-app="1" value="'+esc(a.company)+'" placeholder="Company"></td>'+
-      '<td><input type="text" data-id="'+a.id+'" data-field="title" data-app="1" value="'+esc(a.title)+'" placeholder="Role"></td>'+
+      '<td><input type="text" data-id="'+a.id+'" data-field="company" data-app="1" value="'+esc(a.company)+'" placeholder="'+esc(ph||"Company")+'"></td>'+
+      '<td><input type="text" data-id="'+a.id+'" data-field="title" data-app="1" value="'+esc(a.title)+'" placeholder="'+esc(ph||"Role")+'"></td>'+
       // An input, not the leads grid's plain text: an application's location
       // is the installer's own field, correctable like every other cell here.
       // No geo tier badge here. Grid view is a scan of rows you have already
       // decided to apply to, where how close a job is has stopped being a
       // question - it earns its place on a leads row, which is a decision,
       // and it was only doubling the location text on this one.
-      '<td class="loc"><input type="text" data-id="'+a.id+'" data-field="location" data-app="1" value="'+esc(a.location)+'" placeholder="Location"></td>'+
+      '<td class="loc"><input type="text" data-id="'+a.id+'" data-field="location" data-app="1" value="'+esc(a.location)+'" placeholder="'+esc(ph||"Location")+'"></td>'+
       // The host, not the URL: enough to say where the posting lives and to
       // click through, in a column narrow enough to sit between two others.
       // Typing or correcting the URL itself stays in Detail view, where the
@@ -1955,7 +2056,16 @@ function appsGridHtml(A){
         : '<span class="lk-none">&mdash;</span>')+'</td>'+
       '<td>'+selectHtml(APP_STATUS,a.status,'data-id="'+a.id+'" data-field="status" data-app="1"')+'</td>'+
       '<td><input type="date" data-id="'+a.id+'" data-field="dateApplied" data-app="1" value="'+esc(a.dateApplied)+'"></td>'+
-      '<td class="dt mono">'+(d===null?"&mdash;":d)+'</td>'+
+      // Days counts from an applied date, which a row in either fill state
+      // hasn't got - so the column says what the row is waiting on instead
+      // of a dash. The stuck row carries the run's own note, which is the
+      // whole reason it is stuck and the thing that tells you whether
+      // typing it in is the answer.
+      '<td class="dt'+(grp.key?"":" mono")+'">'+(
+        grp.key==="waiting"?'<span class="eta"><i class="pulse"></i>Tonight</span>'
+        :grp.key==="stuck"?'<span class="stuck-note" title="'+esc(a.autofill_note||"")+'">'+
+            '<i class="mark"></i>'+esc(a.autofill_note||"Couldn’t read it")+'</span>'
+        :(d===null?"&mdash;":d))+'</td>'+
       '<td class="exp-ind">'+(open?'Hide':'Details')+'</td>'+
       '<td><button class="btn ghost" data-del="'+a.id+'" title="Remove">&times;</button></td>'+
     '</tr>';
@@ -1964,7 +2074,9 @@ function appsGridHtml(A){
         autofillNoteHtml(a)+factsCardsHtml(a,true,true)+'</td></tr>';
     }
     return row;
-  }).join("")+'</tbody></table></div>';
+    }).join("");
+  });
+  h+='</tbody></table></div>';
   return h;
 }
 
@@ -2047,6 +2159,22 @@ function markScrolled(ov){
   ov.classList.toggle("scrolled",ov.scrollTop>0);
 }
 
+// Keeps the add control in step with the URL field as you type: which of its
+// two jobs it is about to do, and the sentence beside it. Called from
+// render() (the control is redrawn with the panel) and on every keystroke.
+function syncAddControl(){
+  var url=document.getElementById("appurl"),
+      btn=document.getElementById("addapp"),
+      hint=document.getElementById("addhint");
+  if(!url||!btn||!hint)return;
+  var has=url.value.trim()!=="";
+  btn.textContent=has?"Add from link":"Add empty row";
+  btn.className=has?"btn primary":"btn";
+  hint.textContent=has
+    ? "Tonight’s run opens the posting and fills in the company, role and location."
+    : "Adds a row for you to fill in yourself.";
+}
+
 function render(){
   var tabs=buildTabs();
   // ui.tab is restored from localStorage, so it can name a track that has
@@ -2074,6 +2202,7 @@ function render(){
   else if(current.kind==="allleads")p.innerHTML=leadsTab(ALL_LEADS);
   else p.innerHTML=leadsTab(current.id);
   var newOv=p.querySelector(".panel-scroll");
+  syncAddControl();
   syncScrollGutter();
   if(newOv){
     // render() replaces the panel wholesale, so this is a fresh element
@@ -2118,6 +2247,17 @@ document.addEventListener("click",function(e){
   // Clearing a drill-down without leaving the tab it filters.
   var dc=e.target.closest("[data-drill-clear]");
   if(dc){ui.drill=null; render(); return;}
+
+  // Folding one of the applications grid's fill-state groups away. The whole
+  // divider is the control - an 11px caret is a poor click target and there
+  // is nothing else on that row to click.
+  var col=e.target.closest("[data-collapse]");
+  if(col){
+    var ck=col.getAttribute("data-collapse");
+    ui.collapsed[ck]=!ui.collapsed[ck];
+    render();
+    return;
+  }
 
   var t=e.target.closest("[data-tab]");
   if(t){ui.tab=t.getAttribute("data-tab");ui.q="";
@@ -2219,6 +2359,10 @@ document.addEventListener("input",function(e){
     var pos=e.target.selectionStart; render();
     var n=document.getElementById("q"); if(n){n.focus();n.setSelectionRange(pos,pos);}
   }
+  // No render() here, deliberately: this changes a label and a class on two
+  // elements, and repainting the panel under a field being typed into is how
+  // you lose a cursor position.
+  if(e.target.id==="appurl")syncAddControl();
 });
 
 // Adding an application: a pasted URL, or nothing at all.
