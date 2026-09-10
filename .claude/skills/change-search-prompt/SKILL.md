@@ -140,6 +140,14 @@ When the change is cross-cutting - how leads sync, the fetch-efficiency rule,
 the fit-filter philosophy, the coverage rotation, anything the template's
 numbered list covers:
 
+**Deploy the server before you touch the docs.** The two halves do not ship
+together: a `prompt.js` change reaches runs only once `server/` is deployed,
+while a document change takes effect on the very next run with no deploy at
+all. Change the docs first and every run reads instructions its prompt has
+never heard of, for as long as the deploy is outstanding. The other order is
+harmless - the docs briefly describe the old mechanism, and the prompt is what
+the run is actually following.
+
 1. Make the change in
    `.claude/skills/job-search-setup/templates/tracked-postings.template.md`
    first, so new tracks are born correct.

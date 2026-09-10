@@ -98,6 +98,23 @@ account** and compare: leads added, screened added, companies swept, and whether
 the run record and the doc write-back both landed. A shorter prompt that finds
 fewer postings is a regression, not a saving.
 
+The last run on the old prompt, for a baseline to compare against: SWE on
+2026-09-10, completed clean in 861s with 4 new leads.
+
+### The order the two halves ship in
+
+They do not ship together, and one ordering is harmful. **A prompt change needs
+the server deployed; a baseline doc change takes effect on the next run with no
+deploy at all**, because the docs are fetched per run from R2. So:
+
+1. Merge, then deploy `server/`.
+2. Then update the baseline docs to name the `./tracker` commands.
+
+Deploying first leaves the docs briefly naming curl while the prompt names
+`./tracker` - harmless, since the docs are reference and the prompt is the
+instruction. The reverse order points every run at a command its prompt has
+never heard of, for as long as the deploy is outstanding.
+
 ## What happened in between
 
 On 2026-09-10 the SWE prompt reached 31,877 characters and a run died on it:
