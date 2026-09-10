@@ -1120,6 +1120,16 @@ function runSummary(run){
 
 // The one-line "when did this search last run" stamp shown above a track's
 // list and in the Overview panel.
+// The ranking legend for the location tiers, shared by every tab that
+// colours a row by one. Numbered so the ranking reads as a ranking - with
+// more than two tiers, colour alone stops saying which outranks which.
+function geoKeyHtml(){
+  return (state.settings.priority_locations||[]).map(function(r,i){
+    var dot=i<5?"var(--pri-"+i+")":"var(--ink3)";
+    return '<span><i style="background:'+dot+'"></i>'+(i+1)+'. '+esc(r.label)+'</span>';
+  }).join("");
+}
+
 // What the pooled leads tab says where a track tab shows its run stamp.
 function trackCountLine(){
   var n=Object.keys(TRACKS).length;
@@ -1619,12 +1629,6 @@ function leadsTab(key){
     if(!q)return true;
     return (l.company+" "+l.title+" "+l.location).toLowerCase().indexOf(q)>=0;
   }).sort(leadComparator(ui.leadSort));
-  // Numbered so the ranking is readable as a ranking - with more than two
-  // tiers, colour alone stops saying which one outranks which.
-  var geoKeyHtml=(state.settings.priority_locations||[]).map(function(r,i){
-    var dot=i<5?"var(--pri-"+i+")":"var(--ink3)";
-    return '<span><i style="background:'+dot+'"></i>'+(i+1)+'. '+esc(r.label)+'</span>';
-  }).join("");
   var h='<div class="toolbar">'+
     '<div class="search"><input type="search" id="q" placeholder="Filter '+esc(scopeLabel)+'&hellip;" value="'+esc(ui.q)+'"></div>'+
     '<div class="chips">'+["All"].concat(LEAD_STATUS.filter(function(s){return s!=="Applied";})).map(function(f){
@@ -1636,7 +1640,7 @@ function leadsTab(key){
     // settings/context you glance at, not fiddle with per-visit, so they
     // share one quieter line instead of competing for the same attention.
     '<div class="key"><div class="sortwrap"><label class="sort-label" for="leadSort">Sort</label>'+sortSelectHtml("leads","leadSort")+'</div>'+
-      geoKeyHtml+
+      geoKeyHtml()+
       // Only true under the default sort - a flat sort by found/location/
       // company means proximity no longer decides the order, so the legend
       // shouldn't claim it does.
@@ -1739,7 +1743,12 @@ function leadsGridHtml(rows,trackKey,isAll){
     var row='<tr data-expand="'+l.id+'" data-scope="'+trackKey+'"'+(cls?' class="'+cls+'"':'')+'>'+
       '<td class="co cc" title="'+esc(l.company)+'">'+esc(l.company)+'</td>'+
       '<td class="rc"><a href="'+esc(l.url)+'" target="_blank" rel="noopener" title="'+esc(l.title)+'">'+esc(l.title)+'</a></td>'+
-      '<td class="loc" title="'+esc(l.location)+'"><div class="loc-txt">'+esc(l.location)+'</div>'+(g?'<span class="geo '+g.p+'">'+esc(g.label)+'</span>':'')+'</td>'+
+      // The tier is the stripe down the row's left edge (tr.pri0-4 above),
+      // not a badge here. A grid is scanned down a column, and the same
+      // ranking said twice on one row - once in colour, once in words
+      // repeating the location beside it - is one more thing to read past.
+      // Detail view keeps the badge, where a row is read rather than scanned.
+      '<td class="loc" title="'+esc(l.location)+'"><div class="loc-txt">'+esc(l.location)+'</div></td>'+
       '<td>'+selectHtml(LEAD_STATUS,l.status,'data-id="'+l.id+'" data-field="status"')+'</td>'+
       LEAD_GRID_FIELDS.map(function(f){
         var key=f[0],val=l[key]||"";
@@ -1824,6 +1833,10 @@ function appsTab(){
     // full-weight above, Sort (the one setting this tab has) drops to its
     // own quiet line rather than crowding the primary row.
     '<div class="key"><div class="sortwrap"><label class="sort-label" for="appSort">Sort</label>'+sortSelectHtml("applications","appSort")+'</div>'+
+      // Rows here carry the same tier stripe the leads grids do, and a
+      // colour down the edge of a row says nothing without the ranking it
+      // belongs to.
+      geoKeyHtml()+
       (drillChipHtml("apps")?'<div class="chips">'+drillChipHtml("apps")+'</div>':'')+'</div>';
   if(!ALL_APPS.length){
     return h+'<div class="card empty"><strong>No applications logged</strong>'+
@@ -1897,7 +1910,13 @@ function appsGridHtml(A){
     // why); most of an application row is form fields though, so the
     // document click handler excludes clicks on those and only the row's
     // non-input area (Days, the indicator cell, empty padding) toggles it.
-    var cls=String(ui.selected.applications)===String(a.id)?' class="gr-sel"':'';
+    // Same left-edge stripe the leads grid uses for the location tier, so
+    // the two grids read alike and the legend below the toolbar means the
+    // same thing on both.
+    var g=geo(a.location);
+    var clsList=(g?[g.p]:[]).concat(
+      String(ui.selected.applications)===String(a.id)?["gr-sel"]:[]);
+    var cls=clsList.length?' class="'+clsList.join(" ")+'"':'';
     var row='<tr data-expand="'+a.id+'" data-scope="applications"'+cls+'>'+
       '<td><input type="text" data-id="'+a.id+'" data-field="company" data-app="1" value="'+esc(a.company)+'" placeholder="Company"></td>'+
       '<td><input type="text" data-id="'+a.id+'" data-field="title" data-app="1" value="'+esc(a.title)+'" placeholder="Role"></td>'+
