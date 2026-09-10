@@ -77,6 +77,21 @@ They all agree right now, and none of them agree *by construction*. That is a
 live bug waiting on one edit, it is independent of anything in this plan, and it
 is Phase 0.
 
+**And it re-formed within the hour, in a different field.** While Phase 0 was
+being written, the Applications grid gained fill-state groups with a single
+`fillState()` predicate behind them — the right shape, done deliberately. The
+rule it owns is nevertheless written four times in the merged file: `buildTabs()`
+(`:747`) for the tab's warning dot, `autofillNoteHtml()` (`:1009`), `appsTab()`
+(`:1979`) for the Detail card, and `fillState()` (`:2008`) itself. Two spell it
+`(a.autofill||"")==="failed"` and two spell it `a.autofill==="failed"`.
+
+They agree, as the tile predicates did. The point is not that anyone was careless
+— the opposite: this happened in careful work, with a shared predicate already
+extracted, in the same file on the same afternoon that five instances of the
+identical pattern were being removed. **A structure that regenerates a defect
+faster than it is being removed is the argument**, and it is a better one than
+any bug that actually fired.
+
 ## Why a second client rather than a conversion
 
 **Nothing is at risk.** The page in daily use during an actual job search does not
