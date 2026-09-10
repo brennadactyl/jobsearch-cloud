@@ -7,11 +7,15 @@
   ["Remove-Item C:\\VibeCoding\\private\\backups\\*.sql -Force", "PowerShell: delete every backup"],
   ["Remove-Item -Recurse -Force C:\\VibeCoding\\private", "PowerShell: remove the whole private folder"],
   ["rm -rf /c/VibeCoding/private/backups", "bash: remove the backups folder"],
+  ["rm -rf /c/VibeCoding/jobsearch-cloud/private/ab266b6c/docs", "bash: git bash mount path into the silo"],
+  ["rm -rf /c/vibecoding/jobsearch-cloud/private", "bash: git bash mount, lowercase"],
   ["rm C:/VibeCoding/private/backups/d1-2026-08-31.sql", "bash: remove one backup file"],
   ["cd /c/VibeCoding && rm -rf .claude/hooks", "bash: remove the guard itself"],
   ["Move-Item C:\\VibeCoding\\private\\backups D:\\elsewhere", "PowerShell: move the backups away"],
   ["rm -rf C:/VibeCoding/job-search-tracker/private", "bash: remove the silo at its post-move path"],
   ["Remove-Item -Recurse -Force C:\\VibeCoding\\job-search-tracker\\private", "PowerShell: remove the silo at its post-move path"],
+  ["wrangler r2 bucket delete job-search-tracker-docs", "r2 bucket delete (every resume and baseline doc)"],
+  ["npx wrangler r2 object delete job-search-tracker-docs/abc/docs/tracked_swe_postings.md", "r2 object delete (one document, no undo)"],
 
   ["wrangler d1 execute db --remote --command \"SELECT COUNT(*) FROM leads\"", "SELECT --remote (must stay allowed)"],
   ["wrangler d1 execute db --local --command \"UPDATE leads SET fit = 1\"", "any --local write (must stay allowed)"],
@@ -23,5 +27,8 @@
   ["cp C:/VibeCoding/private/backups/x.sql D:/safe/", "copying a backup out (must stay allowed)"],
   ["git commit -m \"note: wrangler d1 delete would destroy the history\"", "commit message mentioning d1 delete (must stay allowed)"],
   ["grep -rn \"wrangler delete\" docs/", "grepping for the phrase (must stay allowed)"],
-  ["node -e \"const re=/Remove-Item|rm |private/i\"", "a regex literal containing rm and private (must stay allowed)"]
+  ["node -e \"const re=/Remove-Item|rm |private/i\"", "a regex literal containing rm and private (must stay allowed)"],
+  ["wrangler r2 bucket list", "listing buckets, read-only (must stay allowed)"],
+  ["wrangler r2 bucket create job-search-tracker-docs", "creating the bucket during setup (must stay allowed)"],
+  ["wrangler r2 object get job-search-tracker-docs/abc/docs/x.md --file x.md", "fetching a document (must stay allowed)"]
 ]

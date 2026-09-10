@@ -1,17 +1,32 @@
 # Move the private folders into storage
 
-> Status: **approved, not yet implemented** (2026-09-09), on branch
-> `claude/private-folders-db-migration-26df85`, against commit `ae30e32`.
-> Update this header as phases land.
+> Status: **shipped** (2026-09-09). Documents are in R2, the nightly runs fetch
+> and write them back, and the backup covers them. This is now a record of why
+> the design is shaped this way rather than a description of intended work.
+>
+> Added while building it, none of it in the original plan: an 8 MB upload cap
+> and a filename rule refusing names Windows silently renames (a trailing space
+> or dot) or resolves to a device (`CON`, `PRN.md`) — both because these paths
+> are written to a real disk on every run. A guard answering 503 instead of
+> crashing when the bucket is not bound. `run-search.ps1` refusing to search at
+> all when the document list is empty, since the alternative is screening every
+> posting against no profile and reporting success. And an authentication check
+> in that runner, which had none — an unauthenticated CLI printed "Not logged
+> in", did nothing, and exited 0.
+>
+> Still on a machine, deliberately: each person's `tracker.json` (you need it to
+> reach the API) and their logs. Still to do: teaching `prompt.js` to call
+> `/api/documents` directly rather than reading files, which removes the last
+> machine-shaped step — see `prompt-size-plan.md`, which overlaps it.
 
 ## Context
 
-Resumes and the per-track baseline docs live on one Windows machine in a gitignored
-`private/` folder, copied between machines by hand. Nothing backs them up — `backup-tracker.ps1`
-exports D1 nightly and ignores them. The track doc is also the one artifact the nightly run
-*writes*, which is what ties that run to a single PC.
+Resumes and the per-track baseline docs lived on one Windows machine in a gitignored
+`private/` folder, copied between machines by hand. Nothing backed them up — `backup-tracker.ps1`
+exports D1 nightly and ignored them. The track doc is also the one artifact the nightly run
+*writes*, which is what tied that run to a single PC.
 
-This moves those files into R2 and makes the run fetch and return them over HTTP.
+This moved those files into R2 and made the run fetch and return them over HTTP.
 
 ### What moves
 

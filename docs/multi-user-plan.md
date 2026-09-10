@@ -105,6 +105,12 @@ The mutable `docs/tracked_<key>_postings.md` stays a file - it accumulates
 fetch-reliability notes the search itself edits each run, which is content, not
 config.
 
+> **Superseded.** It is still a document rather than config, for exactly that
+> reason - but it no longer lives on the machine that runs the search. It is in
+> R2, fetched per run and written back with `If-Match`. What that paragraph got
+> right was *why* it is not config; what it did not anticipate was that "a file"
+> and "a file on one laptop" are separable. See `private-storage-plan.md`.
+
 ## Phase 2 - Server
 
 **`server/src/auth.js`** (new) - all the crypto in one file, no dependencies

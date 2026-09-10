@@ -1,18 +1,18 @@
 ---
 name: job-search-setup
-description: Onboards a person into this job-search tracker (or adds a track to an existing one) - provisions their account, reads their resume(s), asks about desired role tracks/target companies/locations, writes their per-track baseline doc, posts their search config and page config to /api/config, and registers their scheduled tasks. Use when someone wants to set up this repo for themselves, add a second person to an existing deployment, or add/change a tracked search.
+description: Onboards a person into this job-search tracker (or adds a track to an existing one) - provisions their account, reads their resume(s), asks about desired role tracks/target companies/locations, uploads their resume and per-track baseline doc, posts their search config and page config to /api/config, and registers their scheduled tasks. Use when someone wants to set up this repo for themselves, add a second person to an existing deployment, or add/change a tracked search.
 ---
 
 # Job search setup
 
 This repo's tooling (`scripts/`, `server/`, `client/`) is generic - it has no
 opinion on whose job search this is, how many tracks they want, or what
-locations matter to them. Almost all of the personal part lives in the
-tracker API's D1-backed config, keyed by user id (see
-`../../../server/README.md`'s `/api/config` section); what's left on disk is
-resumes, the per-track notes doc the search edits as it runs, and logs (see
-`../../../private.example/README.md`). This skill is what fills those in
-conversationally, instead of hand-authoring JSON.
+locations matter to them. The personal part lives in the deployment, keyed by
+user id: search and page config in D1 (see `../../../server/README.md`'s
+`/api/config` section), resumes and each track's baseline doc in R2 (see
+`/api/documents`). What is left on disk is that person's credential and their
+logs (see `../../../private.example/README.md`). This skill is what fills those
+in conversationally, instead of hand-authoring JSON.
 
 One deployment holds any number of people. Run this the same way for the
 first person, for a second person joining an existing deployment, and for
@@ -52,7 +52,10 @@ user id. So the first question is *whose* search this is.
 
 - Data dir is `$JOB_SEARCH_DATA_DIR` if set, else `private/` next to this
   repo. Inside it, each person has their own folder named by their user id,
-  holding `docs/`, `resumes/`, `reference/`, `logs/` and `tracker.json`.
+  holding `tracker.json` and `logs/` - and nothing else that matters. Their
+  documents (resumes, each track's baseline doc, reference files) live in the
+  tracker and are fetched per run into a throwaway `.run/<key>/`. See
+  `../../../docs/private-storage-plan.md`.
 - **Existing person?** Ask for their name and find their folder (their id is
   in `tracker.json`, or `GET /api/me` with their token returns it). Read
   `GET /api/config` with their token - the tracks it returns are what they
@@ -67,9 +70,9 @@ user id. So the first question is *whose* search this is.
     -d '{"name":"Their Name","password":"<a long random password - see below>"}'
   ```
 
-  It returns their `id`. Create `<data dir>/<id>/` with `docs/`, `resumes/`,
-  `reference/` subfolders, then mint the long-lived token their scheduled
-  searches will use and write it alongside:
+  It returns their `id`. Create `<data dir>/<id>/` - just the folder; the
+  document subfolders are not used any more - then mint the long-lived token
+  their scheduled searches will use and write it alongside:
 
   ```
   curl -s -X POST "$TRACKER_URL/api/login" -H "Content-Type: application/json" \
@@ -110,8 +113,9 @@ user id. So the first question is *whose* search this is.
 
 ### 2. Get the resume(s)
 
-- Ask the installer to place their resume file(s) in `<data dir>/<user id>/resumes/`
-  if they haven't already (any format - `.docx`, `.pdf`, `.txt`).
+- Ask the installer for their resume file(s) - any format (`.docx`, `.pdf`,
+  `.txt`). Anywhere on disk is fine; nothing has to be staged in a particular
+  folder, because these are uploaded rather than left in place.
 - Read it. Plain text/Markdown: read directly. PDF: try the Read tool, but
   don't assume it works - it renders pages via `pdftoppm` (poppler-utils),
   which is missing on plenty of machines, and fails outright when it is.
@@ -120,16 +124,27 @@ user id. So the first question is *whose* search this is.
   text, or ask the installer for a plain-text copy. If nothing readable is
   present, ask the installer to paste their key experience/skills directly in
   chat instead of blocking on a file.
-- **Write a `.txt` copy of any resume that isn't already plain text, into
-  `resumes/` beside the original, and point `resume_line` (step 4) at the
-  `.txt`.** Whether *you* can read the PDF here is not the question: the
-  nightly run is headless on the same machine and gets no interactive
-  fallback, so a resume stored only as `.pdf` or `.docx` is one the search
-  reads *nothing* from, every night, forever. That failure is silent in the
-  worst way - the run still completes, still posts leads, and still reports
-  success, having screened every posting against an empty candidate profile.
-  Keep the `.txt` filename stable (`<Name>_Resume.txt`) so a later resume
-  version is a content swap rather than a config edit.
+- **Upload both the original and a plain-text copy**, and point `resume_line`
+  (step 4) at the `.txt`. Whether *you* can read the PDF here is not the
+  question: the nightly run is headless and gets no interactive fallback, so a
+  resume stored only as `.pdf` or `.docx` is one the search may read *nothing*
+  from. That failure is silent in the worst way - the run still completes,
+  still posts leads, and still reports success, having screened every posting
+  against an empty candidate profile. Keep the `.txt` filename stable
+  (`<Name>_Resume.txt`) so a later resume version is a content swap rather than
+  a config edit.
+
+  ```bash
+  curl -s -X PUT "$TRACKER_URL/api/documents/resumes/Their_Name_Resume.pdf" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/pdf" \
+    --data-binary @"/path/to/resume.pdf"
+  ```
+
+  Or hand the whole job to `scripts/import-documents.ps1`, which walks a
+  folder, picks the content type per extension and refuses anything it cannot
+  name. Filenames must start and end with a letter or digit and must not be a
+  Windows device name - the API refuses the rest, because these get written to
+  a real disk on every run.
 - From it, draft a **candidate profile paragraph** (experience level, most
   recent roles in brief, core skills, location) and a **best-fit roles
   sentence**. Show both to the installer and revise from their feedback
@@ -206,13 +221,22 @@ Once per setup (applies to every track, new and existing):
 There is no prompt file to generate any more. The daily prompt is composed by
 the worker from the track's config in D1 (see
 `../../../server/src/prompt.js`), so this step produces *config*, posted in
-step 6 - plus one real file:
+step 6 - plus one document:
 
-- Fill `templates/tracked-postings.template.md` and write it to
-  `<data dir>/<user id>/docs/tracked_<key>_postings.md`. This one stays a
-  file because the search itself edits it: it accumulates fetch-reliability
-  notes run over run. If it already exists, ask before overwriting - it holds
-  real history, not something to regenerate casually.
+- Fill `templates/tracked-postings.template.md` and `PUT` it to the tracker at
+  `docs/tracked_<key>_postings.md`:
+
+  ```bash
+  curl -s -X PUT "$TRACKER_URL/api/documents/docs/tracked_<key>_postings.md" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: text/markdown" \
+    --data-binary @filled-template.md
+  ```
+
+  This stays a document rather than config because the search itself edits it,
+  accumulating fetch-reliability notes run over run. **Check whether it exists
+  first** (`GET /api/documents`) and ask before overwriting - it holds real
+  history, not something to regenerate casually. An unconditional `PUT` over an
+  established doc destroys weeks of accumulated findings with no error.
 
   Every `{{PLACEHOLDER}}` in it, and what goes there (the template carries no
   comments of its own - anything left in it would be copied into the live doc

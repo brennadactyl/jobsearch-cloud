@@ -98,6 +98,29 @@ account** and compare: leads added, screened added, companies swept, and whether
 the run record and the doc write-back both landed. A shorter prompt that finds
 fewer postings is a regression, not a saving.
 
+## What happened in between
+
+On 2026-09-10 the SWE prompt reached 31,877 characters and a run died on it:
+`run-search.ps1` passed the prompt as a command-line argument, Windows caps that
+near 32k, and the npm shim answered `Program 'claude.exe' failed to run: The
+filename or extension is too long`. Twenty seconds, nothing searched, nothing
+synced, and exit 0 - the *job* completed, so Task Scheduler recorded a success.
+
+Fixed in `034943a`, separately from this: the prompt goes in on stdin, which has
+no ceiling, and the guard that catches an unauthenticated run now catches a
+launcher failure too. **That means this document is an optimisation again, not a
+repair.** Shrinking the prompt would only ever have bought headroom - the next
+paragraph anyone added would have reached the same wall.
+
+The measurements at the top are also stale in one place: `target_companies` grew
+past what is recorded there (SWE 4,631, CPM 2,875) when a fetch table was added
+for boards that had been wrongly written off as blocked. That growth is what
+tipped the prompt over. It is fetch guidance the runs depend on - which endpoint,
+which URL to record, which page shape means "closed" rather than "broken" - so it
+is not something to truncate. Moving it into each track's baseline doc, which is
+fetched as a file and costs nothing in the prompt, would serve this document's
+goal better than deleting it. Not done here, and not this change's call.
+
 ## What landed
 
 All three levers, plus a fourth surface nobody had counted: the per-track

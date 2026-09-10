@@ -1,6 +1,6 @@
 ---
 name: change-search-prompt
-description: Change what a nightly job search does - across the four places its instructions live (scripts/tracker.ps1, server/src/prompt.js, each person's D1 track config, and every private/<user>/docs/tracked_<key>_postings.md on disk) - and reconcile the existing track docs so no track silently keeps following the old convention. Use when editing prompt.js or tracker.ps1, a track's baseline doc, the daily search or application-fill instructions, or any convention a scheduled run follows.
+description: Change what a nightly job search does - across the four places its instructions live (scripts/tracker.ps1, server/src/prompt.js, each person's D1 track config, and each track's baseline doc in the tracker) - and reconcile the existing track docs so no track silently keeps following the old convention. Use when editing prompt.js or tracker.ps1, a track's baseline doc, the daily search or application-fill instructions, or any convention a scheduled run follows.
 ---
 
 # Changing what a nightly run does
@@ -14,7 +14,7 @@ editing anything.
 | `scripts/tracker.ps1` | the mechanics of every API call a run makes - the route, the body, the track key, the date, what a bad row does | every track, every person, on the next run; nothing to deploy |
 | `server/src/prompt.js` | which command each numbered step invokes and what only the run can decide - what counts as verified, what to report | every track, every person, on the next server deploy |
 | D1 track config (`/api/config`) | one track's stored prose - role line, resume line, fit filter, company list, location guidance | that one track, immediately, no deploy |
-| `private/<user-id>/docs/tracked_<key>_postings.md` | knowledge with no DB equivalent - fit reasoning, per-company fetch-reliability notes, scope rules | that one track, on whichever machine holds the folder |
+| `docs/tracked_<key>_postings.md` in the tracker (`/api/documents`) | knowledge with no DB equivalent - fit reasoning, per-company fetch-reliability notes, scope rules | that one track, immediately, everywhere - a run fetches it fresh |
 
 The first two are one decision made twice: **if the change has a single right
 answer, it goes in `tracker.ps1`, not in the prompt.** A rule stated in prose
@@ -126,10 +126,15 @@ in one person's config is the drift problem in a different place.
 
 ## Changing a track doc, and reconciling the rest
 
-The doc is edited by the run itself as it goes - that is why it is a file and
-not config. It holds fit reasoning, the target-company list with why each is
+The doc is edited by the run itself as it goes - that is why it is a document
+and not config. It holds fit reasoning, the target-company list with why each is
 there, the expanded net and what came of each attempt, and the per-company
 fetch-reliability notes.
+
+It lives in the tracker, not on a machine. A run fetches every document into a
+throwaway directory, and writes back the ones it changed with `If-Match` (see
+`scripts/run-search.ps1`). So there is one copy, it is backed up, and editing it
+does not require being at the computer that runs the searches.
 
 When the change is cross-cutting - how leads sync, the fetch-efficiency rule,
 the fit-filter philosophy, the coverage rotation, anything the template's
@@ -138,24 +143,29 @@ numbered list covers:
 1. Make the change in
    `.claude/skills/job-search-setup/templates/tracked-postings.template.md`
    first, so new tracks are born correct.
-2. **Then find every existing doc and bring each into line:**
+2. **Then bring every existing doc into line.** List one account's, with the
+   session token from their `tracker.json`:
 
    ```bash
-   ls "$JOB_SEARCH_DATA_DIR"/*/docs/tracked_*_postings.md
+   curl -s "$TRACKER_URL/api/documents" -H "Authorization: Bearer $TOKEN"
    ```
 
-   (or `private/*/docs/` next to the repo if that variable is not set). Every
-   person, every track - not just the one you were iterating on.
-3. For each, read the corresponding section and update it. Do not paste the
-   template over the file: the parts that are that track's own knowledge -
-   reliability notes, expanded net, target companies - are the reason the file
-   exists, and they are not recoverable.
-4. Say in your report which docs you changed and which you left alone, so the
-   ones you could not see (another machine, another person) are visible as a
-   gap rather than assumed done.
+   Every person, every track - not just the one you were iterating on. Each
+   account has its own token, so this is once per account.
+3. For each, `GET /api/documents/docs/<file>`, edit, and `PUT` it back. Do not
+   paste the template over it: the parts that are that track's own knowledge -
+   reliability notes, expanded net, target companies - are the reason the
+   document exists, and they are not recoverable.
+4. **Send `If-Match` with the etag the GET returned.** A nightly run holds a
+   document for the length of its turn and writes it back at the end; without
+   the precondition, whichever of you finishes last silently erases the other.
+   A 412 means a run landed while you were editing - re-fetch and redo the
+   edit on top.
+5. Say in your report which docs you changed, so any you could not reach are
+   visible as a gap rather than assumed done.
 
-These files hold personal data and live outside the repo. They are never
-committed.
+These documents hold personal data. They are never committed - and since the
+repo is public, never pasted into it either.
 
 ## If a run needs a capability it does not have
 

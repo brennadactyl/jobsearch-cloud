@@ -53,6 +53,17 @@ const DESTRUCTIVE = [
     what: "rolls the whole database back in place, discarding everything written since that point - for every user on the deployment, not just one",
   },
   {
+    re: invoking(String.raw`r2\s+bucket\s+delete\b`),
+    what: "deletes the documents bucket - every resume and every track's baseline doc, which `wrangler d1 export` does not cover and Time Travel does not protect",
+  },
+  {
+    re: invoking(String.raw`r2\s+object\s+delete\b`),
+    what: "deletes a document from the bucket - a resume or a baseline doc holding weeks of accumulated findings, with no undo",
+  },
+  {
+    // `delete` immediately after `wrangler`, so this is the Worker and not the
+    // r2 subcommands above - those have `r2 bucket`/`r2 object` in between and
+    // never reach this row.
     re: invoking(String.raw`delete\b`),
     what: "deletes the deployed Worker, taking the tracker offline",
   },
@@ -82,8 +93,21 @@ const DESTRUCTIVE = [
  * reported nothing and quietly allowed `rm -rf` on the whole folder. A
  * path-anchored rule is only as durable as the layout it was written against,
  * so this one tolerates the repo root moving down a level.
+ *
+ * The drive is matched as `c:` OR `/c`, because the same folder has two
+ * spellings on this machine and only one of them was covered. A Git Bash
+ * command says /c/VibeCoding/...; a PowerShell one says C:/VibeCoding/....
+ * The rule used to require a drive letter followed by a colon, so a bash
+ * `cd /c/VibeCoding/<repo>/private && rm -rf <dir>` matched nothing and was
+ * allowed - which is how the local docs folders were deleted on 2026-09-10
+ * with this guard active and silent. Same failure mode as the note above:
+ * a path-anchored rule that stops matching does not fail, it just permits.
+ *
+ * Note the relative-path hole this does NOT close: a command that cds into
+ * the silo first and then deletes by relative name has no protected string
+ * in it at all. The filesystem is the real control; this is the reminder.
  */
-const PROTECTED = /(?:private[\\/]+backups|[a-z]:[\\/]+vibecoding[\\/]+(?:[\w.-]+[\\/]+)?private(?![\w-])|\.claude[\\/]+hooks)/i;
+const PROTECTED = /(?:private[\\/]+backups|(?:[a-z]:|[\\/][a-z])[\\/]+vibecoding[\\/]+(?:[\w.-]+[\\/]+)?private(?![\w-])|\.claude[\\/]+hooks)/i;
 // No `|` in the boundary set, unlike the wrangler rules: a pipe appears inside
 // regex literals and quoted strings far more often than it precedes a delete,
 // and `|rm ` in someone's regex was enough to refuse an innocent command. A
