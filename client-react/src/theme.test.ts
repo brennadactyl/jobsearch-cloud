@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 //
 // Resolved from the project root, not from `import.meta.url`: under Vitest that
 // is not a file: URL and readFileSync rejects it.
-const css = readFileSync(join(process.cwd(), "src/index.css"), "utf8");
+const css = readFileSync(join(process.cwd(), "src/tracker.css"), "utf8");
 
 /** Custom-property *declarations* inside one block - `--x:` , not `var(--x)`. */
 function declaredTokens(pattern: RegExp): string[] {

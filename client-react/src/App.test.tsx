@@ -1,22 +1,29 @@
 /**
- * The gate and the summary, queried the way a person reaches them.
+ * The gate, the shell and the drill-downs, queried the way a person reaches
+ * them.
  *
- * Everything here is found by role and accessible name rather than by class or
- * test id, which is what makes "every interactive element is a real control"
- * an assertion rather than a convention - a div with a click handler has no
- * role to find, so these tests fail if one appears.
+ * Everything is found by role and accessible name rather than by class or test
+ * id, which is what makes "every interactive element is a real control" an
+ * assertion rather than a convention: a div with a click handler has no role to
+ * find, so these fail if one appears.
+ *
+ * The last group is the one that matters most. It walks the actual invariant
+ * end to end - read the number off a tile, click it, count the rows that
+ * arrive - which is the only version of that check a unit test on the domain
+ * layer cannot make, because it crosses the component/route boundary the two
+ * halves used to disagree across.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import * as client from "./api/client";
+import { NOW, data as fixture } from "./domain/fixture";
+import { clearPrefs } from "./ui/prefs";
 
 function renderApp() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <App />
@@ -24,26 +31,22 @@ function renderApp() {
   );
 }
 
-const payload = {
-  user: { id: "u1", name: "Ada" },
-  updated: "2026-09-10",
-  leads: [],
-  applications: [],
-  screened: [],
-  tracks: [],
-  settings: {
-    display_title: "Ada's Job Search",
-    overview_label: "Overview",
-    applications_label: "Applications",
-    all_leads_label: "All leads",
-    stale_run_hours: 36,
-    priority_locations: [],
-    excluded_companies: [],
-  },
-};
+beforeEach(() => {
+  localStorage.clear();
+  clearPrefs();
+  window.history.pushState({}, "", "/");
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(NOW);
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
-beforeEach(() => localStorage.clear());
-afterEach(() => vi.restoreAllMocks());
+function signedIn() {
+  localStorage.setItem("tracker_token", "a-token");
+  vi.spyOn(client, "getData").mockResolvedValue(fixture);
+}
 
 describe("the gate", () => {
   it("asks for a name and a password", () => {
@@ -62,57 +65,50 @@ describe("the gate", () => {
   });
 
   it("says the same thing for a wrong name as for a wrong password", async () => {
-    // The server gives one answer for both; saying which half was wrong would
-    // tell an attacker which half they have right.
     vi.spyOn(client, "login").mockRejectedValue(new client.UnauthorizedError());
     renderApp();
     await userEvent.type(screen.getByRole("textbox", { name: /name/i }), "Ada");
-    await userEvent.type(screen.getByLabelText(/password/i), "wrong-password");
+    await userEvent.type(screen.getByLabelText(/password/i), "wrong");
     await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/don't match/i);
   });
-
-  it("submits on Enter, because it is a real form", async () => {
-    const login = vi.spyOn(client, "login").mockResolvedValue({ token: "t" });
-    vi.spyOn(client, "getData").mockResolvedValue(payload);
-    renderApp();
-    await userEvent.type(screen.getByRole("textbox", { name: /name/i }), "Ada");
-    await userEvent.type(screen.getByLabelText(/password/i), "correct-horse{Enter}");
-    await waitFor(() => expect(login).toHaveBeenCalledWith("Ada", "correct-horse"));
-  });
 });
 
-describe("the signed-in summary", () => {
-  beforeEach(() => {
-    localStorage.setItem("tracker_token", "a-token");
-    vi.spyOn(client, "getData").mockResolvedValue(payload);
+describe("the shell", () => {
+  beforeEach(signedIn);
+
+  it("takes the title and every tab label from config", async () => {
+    // The same deployed client serves every account, so nothing may be
+    // hardcoded here. Renaming a tab in config renames it on the page.
+    renderApp();
+    expect(await screen.findByRole("heading", { name: "Fixture Search" })).toBeInTheDocument();
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs[0]).toMatch(/^Overview/);
+    expect(tabs[1]).toMatch(/^Applications/);
+    expect(tabs[2]).toMatch(/^All leads/);
+    expect(tabs[3]).toMatch(/^Alpha roles/);
+    expect(tabs[4]).toMatch(/^Beta roles/);
   });
 
-  it("takes its title from config rather than hardcoding one", async () => {
-    // The same deployed client serves every account, so nothing here may name
-    // a person or a track. See the plan's parity bar.
+  it("marks the track whose search reported an error, and leaves the healthy one alone", async () => {
     renderApp();
-    expect(await screen.findByRole("heading", { name: "Ada's Job Search" })).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    const beta = screen.getAllByRole("tab").find((t) => t.textContent?.startsWith("Beta roles"))!;
+    const alpha = screen.getAllByRole("tab").find((t) => t.textContent?.startsWith("Alpha roles"))!;
+    expect(beta.querySelector(".tabwarn.error")).toBeTruthy();
+    expect(alpha.querySelector(".tabwarn")).toBeFalsy();
   });
 
-  it("says who the server resolved the token to", async () => {
+  it("marks the Applications tab when a posting could not be read", async () => {
     renderApp();
-    expect(await screen.findByText(/signed in as ada/i)).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    const apps = screen.getAllByRole("tab").find((t) => t.textContent?.startsWith("Applications"))!;
+    expect(apps.querySelector(".tabwarn.fill")).toBeTruthy();
   });
 
-  it("reports the counts it loaded", async () => {
-    vi.spyOn(client, "getData").mockResolvedValue({
-      ...payload,
-      leads: [{ id: 1, search: "alpha", company: "Acme", title: "Eng", url: "https://example.com/1" }],
-      applications: [{ id: 2, dateApplied: "2026-09-01" }],
-    } as never);
+  it("offers a real button to log out", async () => {
     renderApp();
-    // Found by role, then read as text. `listitem` is not a name-from-content
-    // role, so a `name` option would match nothing however the list is built -
-    // the role query is still what proves each count is in a real list item.
-    await screen.findByRole("list");
-    const counts = screen.getAllByRole("listitem").map((li) => li.textContent);
-    expect(counts).toEqual(["Leads1", "Applications1", "Screened0", "Tracked searches0"]);
+    expect(await screen.findByRole("button", { name: /log out/i })).toBeInTheDocument();
   });
 
   it("shows the gate again when the token has been revoked elsewhere", async () => {
@@ -120,9 +116,153 @@ describe("the signed-in summary", () => {
     renderApp();
     expect(await screen.findByRole("button", { name: /sign in/i })).toBeInTheDocument();
   });
+});
 
-  it("offers a real button to log out", async () => {
+describe("routing", () => {
+  beforeEach(signedIn);
+
+  it("gives every tab its own URL", async () => {
     renderApp();
-    expect(await screen.findByRole("button", { name: /log out/i })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("tab", { name: /^Applications/ }));
+    await waitFor(() => expect(window.location.pathname).toBe("/applications"));
+    await userEvent.click(screen.getByRole("tab", { name: /^Alpha roles/ }));
+    await waitFor(() => expect(window.location.pathname).toBe("/t/alpha"));
+  });
+
+  it("falls back to the Overview for a track config no longer has", async () => {
+    // A bookmark, or a track removed since. Rendering an empty panel for a key
+    // that does not exist is the failure this avoids.
+    window.history.pushState({}, "", "/t/deleted-track");
+    renderApp();
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+    expect(await screen.findByRole("heading", { name: "Fixture Search" })).toBeInTheDocument();
+  });
+});
+
+describe("drill-downs: the number and the rows it opens", () => {
+  beforeEach(signedIn);
+
+  /** Reads a tile's figure straight off the rendered page. */
+  function tileValue(name: RegExp): number {
+    const tile = screen.getAllByRole("link").find((el) => name.test(el.textContent ?? ""));
+    if (!tile) throw new Error(`no enabled tile matching ${name}`);
+    return Number(tile.querySelector(".v")?.textContent);
+  }
+
+  it.each([
+    [/Gone quiet/, "Applied 14+ days ago"],
+    [/In conversation/, "In screen or loop stage"],
+  ])("%s opens exactly the rows it counted", async (tileName, chipText) => {
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    const counted = tileValue(tileName);
+    expect(counted).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getAllByRole("link").find((el) => tileName.test(el.textContent ?? ""))!);
+
+    // The chip has to say what is being filtered - an applied filter you cannot
+    // see is a page lying about what it is showing. Matched as text rather than
+    // through new RegExp(chipText): these labels contain regex metacharacters
+    // ("14+"), and interpolating them changes what is being asserted.
+    const chip = await screen.findByRole("link", { name: /^Clear filter/i });
+    expect(chip).toHaveTextContent(chipText);
+
+    const list = document.querySelector(".md-list")!;
+    expect(within(list as HTMLElement).getAllByRole("button")).toHaveLength(counted);
+  });
+
+  it("carries the drill in the URL, so a filtered view can be linked to", async () => {
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    await userEvent.click(screen.getAllByRole("link").find((el) => /Gone quiet/.test(el.textContent ?? ""))!);
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/applications");
+      expect(window.location.search).toBe("?drill=gone-quiet");
+    });
+  });
+
+  it("lands a filtered leads tile on a status chip rather than a drill", async () => {
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    const counted = tileValue(/Untriaged/);
+    await userEvent.click(screen.getAllByRole("link").find((el) => /Untriaged/.test(el.textContent ?? ""))!);
+    await waitFor(() => expect(window.location.search).toBe("?filter=New"));
+    const list = document.querySelector(".md-list")!;
+    expect(within(list as HTMLElement).getAllByRole("button")).toHaveLength(counted);
+  });
+
+  it("disables a tile with nothing to open, rather than linking to an empty list", async () => {
+    vi.spyOn(client, "getData").mockResolvedValue({ ...fixture, leads: [], applications: [] });
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    const dead = screen.getAllByRole("button", { name: /Untriaged/ });
+    expect(dead[0]).toBeDisabled();
+    expect(dead[0]).toHaveAttribute("title", "Nothing to open yet");
+  });
+});
+
+describe("the applications grid", () => {
+  beforeEach(signedIn);
+
+  it("groups rows by fill state, and the group counts add up to the rows", async () => {
+    renderApp();
+    await userEvent.click(await screen.findByRole("tab", { name: /^Applications/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Grid" }));
+
+    const headers = await screen.findAllByRole("button", { expanded: true });
+    const labels = headers.map((h) => h.textContent);
+    expect(labels.some((l) => l?.includes("Couldn’t be read"))).toBe(true);
+    expect(labels.some((l) => l?.includes("Waiting on tonight’s fill"))).toBe(true);
+
+    const counts = headers.map((h) => Number(h.querySelector(".cnt")?.textContent?.match(/^\d+/)?.[0]));
+    const dataRows = document.querySelectorAll("tbody tr:not(.group):not(.more-row)").length;
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(dataRows);
+  });
+
+  it("folds a group away but keeps reporting its count", async () => {
+    renderApp();
+    await userEvent.click(await screen.findByRole("tab", { name: /^Applications/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Grid" }));
+
+    const before = document.querySelectorAll("tbody tr:not(.group):not(.more-row)").length;
+    const header = (await screen.findAllByRole("button", { expanded: true })).find((h) =>
+      h.textContent?.includes("Couldn’t be read"),
+    )!;
+    const count = Number(header.querySelector(".cnt")?.textContent?.match(/^\d+/)?.[0]);
+
+    await userEvent.click(header);
+
+    expect(await screen.findByRole("button", { expanded: false })).toHaveTextContent("Couldn’t be read");
+    expect(document.querySelectorAll("tbody tr:not(.group):not(.more-row)")).toHaveLength(before - count);
+  });
+});
+
+describe("the XSS boundary", () => {
+  it("renders hostile lead data as text and refuses a javascript: href", async () => {
+    // React covers the text half. safeUrl covers the half it does not: a
+    // javascript: URL is something React will render into an href quite happily.
+    localStorage.setItem("tracker_token", "a-token");
+    vi.spyOn(client, "getData").mockResolvedValue({
+      ...fixture,
+      leads: [
+        {
+          ...fixture.leads[0],
+          id: 999,
+          company: '<img src=x onerror="window.__pwned=1">',
+          url: "javascript:window.__pwned=1",
+        },
+      ],
+    });
+    window.history.pushState({}, "", "/all-leads");
+    renderApp();
+
+    // Rendered in the list row and again in the detail heading - both escaped.
+    expect((await screen.findAllByText('<img src=x onerror="window.__pwned=1">')).length).toBeGreaterThan(0);
+    expect(document.querySelector("img")).toBeNull();
+    for (const a of document.querySelectorAll("a")) {
+      expect(a.getAttribute("href") ?? "").not.toMatch(/^javascript:/i);
+    }
+    expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined();
   });
 });

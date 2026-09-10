@@ -1,0 +1,551 @@
+/* Copied wholesale from client/public/index.html (commit ad7ad6c), because the
+   design is done and good, and re-deriving it would be re-learning CSS rather
+   than learning React. Components emit the class names these rules already
+   target, so this file is not a rewrite and should not become one.
+
+   Kept verbatim on purpose, including the three-block theme system: a colour
+   needs a value in :root, in the prefers-color-scheme block guarded by
+   :not([data-theme="light"]), and in [data-theme="dark"]. src/theme.test.ts
+   asserts all three declare the same token set - a check the single-file page
+   cannot make of itself.
+
+   One thing behaves differently despite the identical rules: #app.pinned
+   reserves a scrollbar gutter through --sbw, which the old page measured inside
+   render() and re-measured on a window resize listener. Here it is a
+   ResizeObserver keyed to the scroll region itself (see usePinnedLayout), which
+   is the direct fix for the stale-measurement bug that layout produced. */
+:root{
+  --ground:#F4F5F9; --surface:#FFFFFF; --surface2:#ECEEF6; --line:#DCDFEB;
+  --ink:#14172A; --ink2:#555B77; --ink3:#868CA6;
+  --accent:#0F766E; --accent-soft:#D8F3F0; --on-accent:#FFFFFF;
+  --good:#226642; --warn:#96600F; --crit:#A93A31;
+  --pri-0:#1D4ED8; --pri-0-soft:#DBEAFE;
+  --pri-1:#BE185D; --pri-1-soft:#FCE7F3;
+  --pri-2:#047857; --pri-2-soft:#D1FAE5;
+  --pri-3:#B45309; --pri-3-soft:#FEF3C7;
+  --pri-4:#6D28D9; --pri-4-soft:#EDE9FE;
+  --shadow:0 1px 2px rgba(20,23,42,.06),0 8px 24px -12px rgba(20,23,42,.18);
+}
+/* Dark palette applies by OS/browser preference (prefers-color-scheme),
+   unless the theme toggle (#themeToggle, see the script at the bottom of
+   the page) has set an explicit choice via the data-theme attribute -
+   :not([data-theme="light"]) lets an explicit dark choice fall through
+   here too, and the [data-theme="dark"] block below covers explicit dark
+   when the OS preference itself is light. */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0E1018; --surface:#161925; --surface2:#1E2230; --line:#2A2F41;
+  --ink:#E9EBF4; --ink2:#A3AAC3; --ink3:#717892;
+  --accent:#2DD4BF; --accent-soft:#0F2E2A; --on-accent:#241B08;
+  --good:#4FBE85; --warn:#DFA63C; --crit:#E8756A;
+  --pri-0:#60A5FA; --pri-0-soft:#14243F;
+  --pri-1:#F472B6; --pri-1-soft:#3A1830;
+  --pri-2:#34D399; --pri-2-soft:#0C2C22;
+  --pri-3:#FBBF24; --pri-3-soft:#332309;
+  --pri-4:#A78BFA; --pri-4-soft:#241C3D;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+}}
+:root[data-theme="dark"]{
+  --ground:#0E1018; --surface:#161925; --surface2:#1E2230; --line:#2A2F41;
+  --ink:#E9EBF4; --ink2:#A3AAC3; --ink3:#717892;
+  --accent:#2DD4BF; --accent-soft:#0F2E2A; --on-accent:#241B08;
+  --good:#4FBE85; --warn:#DFA63C; --crit:#E8756A;
+  --pri-0:#60A5FA; --pri-0-soft:#14243F;
+  --pri-1:#F472B6; --pri-1-soft:#3A1830;
+  --pri-2:#34D399; --pri-2-soft:#0C2C22;
+  --pri-3:#FBBF24; --pri-3-soft:#332309;
+  --pri-4:#A78BFA; --pri-4-soft:#241C3D;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+/* The Overview scrolls inside itself and the other tabs scroll the window,
+   so the window scrollbar would appear and disappear as you switch between
+   them - taking ~15px of page width with it each time. Reserving the gutter
+   on both keeps the column the same width whichever tab you are on. */
+html{scrollbar-gutter:stable}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.5;
+  -webkit-text-size-adjust:100%}
+.wrap{max-width:1360px;margin:0 auto;padding:0 20px 72px}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;letter-spacing:-.02em}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+/* The title block and the tab bar stick as one unit, so which board you are
+   looking at and which tab you are on stay on screen while its rows scroll.
+   Needs its own background: sticky content sits over the page, and without
+   one the rows would show through it. The Overview pins these already (see
+   #app.pinned), where this is a no-op. */
+.topbar{position:sticky;top:0;z-index:20;background:var(--ground)}
+/* A short viewport cannot spare ~110px on a title you have already read -
+   there, only the tab bar stays (.tabs is sticky in its own right). */
+@media (max-height:620px){.topbar{position:static}}
+
+.hdr{display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;justify-content:space-between;padding:30px 0 18px}
+.hdr h1{font-size:clamp(24px,3.6vw,33px);font-weight:700}
+.hdr .sub{color:var(--ink2);font-size:14px;margin-top:5px}
+.hdr-right{display:flex;align-items:center;gap:12px}
+#themeToggle{font-size:15px;line-height:1;padding:6px 9px}
+.stamp{font-size:12px;color:var(--ink3);display:flex;align-items:center;gap:9px}
+.who{appearance:none;border:0;background:none;padding:0;font:inherit;
+  font-size:12px;color:var(--ink3);cursor:pointer;border-radius:4px}
+.who:hover{color:var(--ink2);text-decoration:underline}
+.who:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* Nothing to sign in as, nothing to click - and an empty button still has a
+   focus stop and a hit area without this. */
+.who:empty{display:none}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--good);flex:none}
+.dot.off{background:var(--ink3)}
+.dot.bad{background:var(--crit)}
+
+.tabs{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;
+  border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;
+  background:var(--ground);padding-top:2px}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;appearance:none;border:0;background:none;cursor:pointer;color:var(--ink2);
+  font:inherit;font-weight:500;padding:11px 14px;border-bottom:2px solid transparent;
+  white-space:nowrap;display:flex;align-items:center;gap:7px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab .n{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink3);
+  background:var(--surface2);padding:1px 6px;border-radius:9px}
+.tab[aria-selected="true"] .n{color:var(--accent);background:var(--accent-soft)}
+/* Only shown when a track's scheduled search is stale or errored - see
+   runState()/tabsHtml(). Deliberately a bare dot rather than a count badge:
+   it's a "look here" marker, and the actual explanation lives one click
+   away on the tab itself. */
+.tab .tabwarn{width:6px;height:6px;border-radius:50%;flex:none;margin-left:-2px}
+.tab .tabwarn.stale{background:var(--warn)}
+.tab .tabwarn.error{background:var(--crit)}
+/* A posting the nightly fill couldn't read. Amber like a stale search, and
+   for the same reason: something here is waiting on you, and nothing else
+   is going to do it. */
+.tab .tabwarn.fill{background:var(--warn)}
+.tab:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:16px 0 12px}
+.search{flex:1;min-width:180px;max-width:320px}
+input[type=search],input[type=text],input[type=url],input[type=date],input[type=password],select,textarea{
+  font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
+  border-radius:7px;padding:7px 10px;width:100%}
+textarea{resize:vertical;min-height:34px}
+.btn{appearance:none;font:inherit;font-weight:500;cursor:pointer;border-radius:7px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 13px}
+.btn:hover{border-color:var(--ink3)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+/* Dark-mode accent (#2DD4BF) is bright enough that white button text fails
+   contrast - needs the same OS-preference-or-explicit-toggle guard as the
+   :root custom-property blocks above, not just the bare media query, or
+   toggling to dark while the OS is light leaves this rule un-applied. */
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{border-color:transparent;background:none;color:var(--ink2);padding:6px 9px}
+.btn.ghost:hover{background:var(--surface2);color:var(--ink)}
+
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{appearance:none;font:inherit;font-size:13px;cursor:pointer;border-radius:99px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink2);padding:4px 11px}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+/* The filter a tab was opened with, from an Overview number. Always on when
+   shown, and always removable - a filter you can't see is a page misreporting
+   what it holds. */
+.chip.drill{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.chip.drill .x{margin-left:7px;font-weight:600}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.scroller{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:600;font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink3);padding:11px 12px;border-bottom:1px solid var(--line);white-space:nowrap;
+  background:var(--surface)}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface2)}
+tr.more-row:hover{background:none}
+tr.more-row td{padding:4px 12px 14px}
+.co{font-weight:600;white-space:nowrap}
+.dt{color:var(--ink3);font-size:12.5px;white-space:nowrap}
+.geo{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.03em;
+  padding:2px 8px;border-radius:99px;white-space:nowrap}
+/* One class per priority rank, not per named tier: how many there are is
+   whatever priority_locations has (see geo()). Five are coloured; a sixth
+   still renders, just uncoloured, which beats inventing shades nobody can
+   tell apart. */
+.geo.pri0{background:var(--pri-0-soft);color:var(--pri-0)}
+.geo.pri1{background:var(--pri-1-soft);color:var(--pri-1)}
+.geo.pri2{background:var(--pri-2-soft);color:var(--pri-2)}
+.geo.pri3{background:var(--pri-3-soft);color:var(--pri-3)}
+.geo.pri4{background:var(--pri-4-soft);color:var(--pri-4)}
+.key{display:flex;gap:15px;flex-wrap:wrap;align-items:center;font-size:12.5px;
+  color:var(--ink3);padding:0 0 11px}
+/* Pushes the run stamp to the trailing edge on a wide row, but it's the
+   last flex item either way, so a wrapped narrow layout just drops it onto
+   its own line instead of stranding it mid-row. */
+.key-run{margin-left:auto}
+/* Sort lives in this quiet row (see leadsTab/appsTab), not the primary
+   toolbar - strips the bordered-control look .sortsel has up there down to
+   something that reads as part of the same muted line as the run stamp
+   and geo legend, while staying a real <select> (native arrow, full
+   keyboard/click target) rather than something disguised as plain text. */
+.key .sortwrap{gap:5px}
+.key .sort-label{font-weight:400}
+.key select.sortsel{background:none;border:1px solid transparent;color:var(--ink3);
+  font-size:12.5px;padding:1px 3px;min-width:0}
+.key select.sortsel:hover,.key select.sortsel:focus-visible{border-color:var(--line)}
+
+/* "When did this search last run" - see runStampHtml(). Its whole job is to
+   distinguish a genuine zero-result day from a search that quietly stopped
+   firing, so the stale/error states have to read as warnings, not as more
+   grey metadata. */
+.runstamp{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2)}
+.runstamp .rdot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--good)}
+.runstamp.none{color:var(--ink3)}
+.runstamp.stale{color:var(--warn);font-weight:500}
+.runstamp.stale .rdot{background:var(--warn)}
+.runstamp.error{color:var(--crit);font-weight:500}
+.runstamp.error .rdot{background:var(--crit)}
+.legend-run{margin-left:auto;padding-left:12px}
+.empty-warn{margin-top:10px;color:var(--warn);font-size:13px}
+.key i{display:inline-block;width:3px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-2px}
+
+/* Detail/Grid is "how the data is displayed" - kept separate from and to
+   the right of the data-scoping controls (search/filter/sort), which read
+   left-to-right as one group. It claims the toolbar row's trailing free
+   space itself, so whatever precedes it (with or without a sort control)
+   just flows normally. */
+.viewsw{display:flex;gap:2px;margin-left:auto;background:var(--surface2);padding:3px;border-radius:8px}
+.vbtn{appearance:none;border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;
+  color:var(--ink2);padding:5px 12px;border-radius:6px;cursor:pointer}
+.vbtn[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.vbtn:hover{color:var(--ink)}
+
+/* Sort sits with search/filter - it scopes which rows show and in what
+   order, the same job as those controls, not the view switcher's job of
+   how a row renders once selected. */
+.sortwrap{display:flex;align-items:center;gap:7px}
+.sort-label{font-size:12.5px;font-weight:600;color:var(--ink3)}
+.sortsel{width:auto;min-width:150px}
+
+/* Dense grid: the same records as one wide, fully-editable table -
+   maximum information density, everything visible without a click. */
+.grid-wrap{overflow-x:auto}
+.grid-wrap a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--line)}
+.grid-wrap a:hover{border-bottom-color:var(--accent)}
+.loc{color:var(--ink2);font-size:13px;max-width:200px}
+.loc-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.loc .geo{display:inline-block;margin-top:3px}
+td.rc{max-width:260px}
+td.rc a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.cc{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+/* The posting's host in the applications grid. Capped and clipped: a job
+   board hostname is short, but nothing stops one being long, and this column
+   sits between two the eye needs. */
+td.lk{max-width:150px}
+td.lk a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.lk .lk-none{color:var(--ink3)}
+
+/* The applications grid's fill-state groups (see appsGridHtml). A divider
+   with a label rather than a card or a heading, so the table still reads as
+   one table - and the whole divider is the fold control, because an 11px
+   caret is a poor click target and there is nothing else on that row. */
+tr.group td{background:var(--surface2);border-bottom:1px solid var(--line);padding:0}
+.grp{appearance:none;border:0;background:none;cursor:pointer;font:inherit;color:var(--ink3);
+  display:flex;align-items:center;width:100%;text-align:left;padding:7px 12px;
+  font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.grp:hover{background:var(--line)}
+.grp:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.grp .caret{flex:none;margin-right:9px;font-size:10px;line-height:1;
+  transition:transform .12s ease}
+.grp[aria-expanded="false"] .caret{transform:rotate(-90deg)}
+.grp .cnt{font-family:"IBM Plex Mono",monospace;text-transform:none;letter-spacing:0;
+  font-weight:400;margin-left:8px}
+/* Folded away, the count is the only thing left saying what is in there. */
+.grp[aria-expanded="false"] .cnt{color:var(--ink2)}
+tr.group.stuck .grp,tr.group.stuck .grp .cnt{color:var(--warn)}
+
+/* A row still waiting on tonight's run, and one no run will ever read. */
+tr.waiting input::placeholder,tr.stuck input::placeholder{font-style:italic}
+.eta{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ink2)}
+.eta .pulse{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+tr.stuck td:first-child{border-left-color:var(--warn)}
+.stuck-note{display:inline-flex;align-items:center;gap:6px;color:var(--warn);font-weight:500;
+  max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stuck-note .mark{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
+td:first-child{border-left:3px solid transparent}
+tr.pri0 td:first-child{border-left-color:var(--pri-0)}
+tr.pri1 td:first-child{border-left-color:var(--pri-1)}
+tr.pri2 td:first-child{border-left-color:var(--pri-2)}
+tr.pri3 td:first-child{border-left-color:var(--pri-3)}
+tr.pri4 td:first-child{border-left-color:var(--pri-4)}
+td select{padding:5px 7px;font-size:13px;min-width:112px}
+td input[type=text],td input[type=date]{font-size:13px;min-width:104px}
+td textarea{font-size:13px;min-height:32px;min-width:130px}
+.grid-wrap tbody tr[data-expand]{cursor:pointer}
+.grid-wrap tbody tr.gr-sel{background:var(--accent-soft)}
+.grid-wrap tbody tr.gr-sel:hover{background:var(--accent-soft)}
+.exp-ind{color:var(--ink3);font-size:12.5px;white-space:nowrap}
+
+/* Master-detail: a compact list on the left, the full record on the right -
+   no expand/collapse, every field is one click away. Used by both the
+   per-track leads tabs and Applications. */
+.md{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  background:var(--surface);box-shadow:var(--shadow)}
+.md-list{width:348px;flex:0 0 348px;border-right:1px solid var(--line);
+  overflow-y:auto;overflow-x:hidden;max-height:min(720px,calc(100vh - 260px))}
+.md-row{padding:12px 16px;border-bottom:1px solid var(--line);border-left:3px solid transparent;
+  cursor:pointer}
+.md-row:last-child{border-bottom:0}
+.md-row:hover{background:var(--surface2)}
+.md-row.sel{background:var(--accent-soft)}
+.md-row.sel:hover{background:var(--accent-soft)}
+.md-row.pri0{border-left-color:var(--pri-0)}
+.md-row.pri1{border-left-color:var(--pri-1)}
+.md-row.pri2{border-left-color:var(--pri-2)}
+.md-row.pri3{border-left-color:var(--pri-3)}
+.md-row.pri4{border-left-color:var(--pri-4)}
+.md-row-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.md-row-top .co{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.md-row-top .pill{flex:0 0 auto}
+.md-row-ttl{font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.4}
+/* Which search found this row - shown only in the pooled All-leads list,
+   where the tab no longer says it. */
+.md-row-track{display:inline-block;margin-left:7px;padding:0 6px;border-radius:4px;
+  background:var(--surface2);color:var(--ink3);font-size:11px;white-space:nowrap}
+.md-row-loc{font-size:11.5px;color:var(--ink3);margin-top:7px;display:flex;align-items:baseline}
+.md-row-loc .geo{flex:0 0 auto;margin-left:6px;padding:1px 7px}
+.md-row-place{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.md-row-found{flex:0 0 auto;margin-left:auto;padding-left:10px;white-space:nowrap}
+.md-detail{flex:1;min-width:0;padding:22px 28px;overflow-y:auto;
+  max-height:min(720px,calc(100vh - 260px))}
+.md-empty{padding:70px 20px;text-align:center;color:var(--ink3)}
+.dh-track{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
+/* The track line doubles as the control that moves a lead to another tab,
+   borrowing `.dh-in`'s trick below: it reads as the same label it always was
+   until you hover it. A misfiled posting used to leave only the trash can -
+   the wrong tab and "not a posting at all" got the same answer, and a real
+   lead was the thing thrown away. -7px cancels the padding so the text keeps
+   the left edge the plain label had. */
+select.dh-track-in{width:auto;max-width:100%;font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--ink3);border:1px solid transparent;background:none;
+  padding:2px 7px;margin-left:-7px;cursor:pointer}
+select.dh-track-in:hover,select.dh-track-in:focus{border-color:var(--line);background:var(--surface)}
+.dh-head h1{font-size:21px;margin-top:6px}
+.dh-sub{font-size:14.5px;color:var(--ink2);margin-top:6px}
+.dh-meta{font-size:12.5px;color:var(--ink3);margin-top:10px}
+.dh-meta a{color:var(--accent)}
+.dh-fit{font-size:13px;color:var(--ink2);margin-top:10px;line-height:1.5}
+
+/* The application header (see appDetailHtml) is the lead header's layout
+   built out of inputs, because an application is hand-maintainable in a way
+   a lead isn't. `.dh-in` strips a field back to the text it stands in for
+   and only draws its box on hover or focus, so the header reads as a heading
+   until you go to change it. The negative margin cancels the padding the box
+   needs, keeping the text on the same left edge as `.dh-track` above it.
+   Selectors are `input.dh-*` deliberately: the shared input rule up top is
+   an attribute selector, so a bare class would lose to it. */
+.dh-app-top{display:flex;gap:10px;align-items:flex-start}
+.dh-app-fields{flex:1;min-width:0}
+.dh-app-top .icon-btn{flex:0 0 auto;margin-top:2px}
+/* -8px, not -7px: the text inside sits past the 1px transparent border as
+   well as the 7px padding, and it's the text that has to line up with the
+   track line and the status row below. */
+input.dh-in{width:calc(100% + 8px);border:1px solid transparent;background:none;color:var(--ink);
+  border-radius:7px;padding:3px 7px;margin-left:-8px}
+input.dh-in:hover,input.dh-in:focus{border-color:var(--line);background:var(--surface)}
+input.dh-in::placeholder{color:var(--ink3)}
+input.dh-h1{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+  font-size:21px;font-weight:700;letter-spacing:-.02em;margin-top:4px}
+input.dh-sub-in{font-size:14.5px;color:var(--ink2);margin-top:3px}
+.dh-app-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:7px}
+/* Width comes from the `size` attribute appDetailHtml sets from the value,
+   so the field hugs its text like the lead header's plain location does. */
+input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var(--ink3)}
+.dh-sep{color:var(--ink3)}
+.dh-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:20px}
+.dh-status select{width:auto;min-width:150px}
+.dh-status input[type=date]{width:auto}
+.dh-dates{font-size:12px;color:var(--ink3);display:flex;align-items:center;gap:6px}
+.dh-notes{margin-top:22px}
+.icon-btn{appearance:none;flex:none;border:1px solid transparent;border-radius:8px;
+  background:none;cursor:pointer;padding:9px;display:inline-flex;color:var(--ink3)}
+.icon-btn:hover{background:var(--surface2);color:var(--ink)}
+.icon-btn.danger{color:var(--crit)}
+.icon-btn.danger:hover{background:var(--surface2);border-color:var(--crit)}
+.mf-label{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
+.facts-card{margin-top:22px;padding:18px 20px;background:var(--surface2);border:1px solid var(--line);border-radius:10px}
+.facts-card .more-grid{padding:0}
+@media (max-width:900px){
+  .md{flex-direction:column}
+  .md-list{width:100%;flex:none;border-right:0;border-bottom:1px solid var(--line);max-height:280px}
+  .md-detail{max-height:none}
+}
+
+.pill{display:inline-block;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:99px;
+  border:1px solid transparent;white-space:nowrap}
+.pill.new{background:var(--accent-soft);color:var(--accent)}
+.pill.live{background:var(--surface2);color:var(--ink2)}
+.pill.go{background:var(--surface2);color:var(--good);border-color:var(--good)}
+.pill.no{background:none;color:var(--ink3);border-color:var(--line)}
+.pill.hot{background:var(--surface2);color:var(--warn);border-color:var(--warn)}
+.pill.bad{background:none;color:var(--crit);border-color:var(--crit)}
+
+.tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));margin-bottom:20px}
+
+/* The Overview scrolls inside itself: header, tabs and the tile row hold
+   still while the searches and the funnel scroll past, the same way a track
+   tab's master/detail card scrolls under a toolbar that doesn't. render()
+   adds .pinned for the Overview only - every other tab scrolls as one
+   document. A column that measures itself, rather than the fixed
+   `calc(100vh - 260px)` .md-list uses, so a wrapped header or a second row
+   of tiles can't push the bottom off screen. */
+#app.pinned{height:100vh;height:100dvh;display:flex;flex-direction:column}
+/* width:100% is load-bearing. .wrap centres itself with `margin:0 auto`,
+   and an auto cross-axis margin on a flex item makes it shrink to its
+   content instead of stretching - which narrowed the whole column by
+   ~160px on the Overview and widened it again on every other tab, so
+   switching tabs visibly resized the page. */
+#app.pinned .wrap{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;padding-bottom:0}
+#app.pinned #panel{flex:1;min-height:0;display:flex;flex-direction:column}
+#app.pinned .panel-scroll{flex:1;min-height:0;overflow-y:auto;
+  padding:6px 0 24px;scrollbar-gutter:stable}
+#app.pinned .panel-scroll .sec:first-child{margin-top:0}
+/* Says the region has more above it. Only once something has actually
+   scrolled under it - a hairline over content sitting flush at the top
+   would read as a stray rule. Inset, so it stays on the region's edge
+   instead of scrolling away with the content. */
+#app.pinned .panel-scroll.scrolled{box-shadow:inset 0 1px 0 var(--line)}
+/* The scroll region gives up its scrollbar's width; the pinned tile row
+   above it doesn't, so without this the tiles sit ~15px wider than every
+   card below them. --sbw is measured in render() rather than assumed -
+   it is 0 where the platform draws overlay scrollbars. */
+#app.pinned .tiles{padding-right:var(--sbw,0px)}
+/* Pinning costs vertical room, and a short or narrow viewport has none to
+   spare - below either, the page goes back to being one scrolling document
+   with the tab bar sticky, which is what it is on every other tab. */
+@media (max-height:620px),(max-width:700px){
+  #app.pinned{height:auto;display:block}
+  #app.pinned .wrap{display:block;padding-bottom:72px}
+  #app.pinned #panel{display:block}
+  #app.pinned .panel-scroll{overflow:visible;padding:0}
+  #app.pinned .panel-scroll .sec:first-child{margin-top:26px}
+}
+/* Each tile opens the rows behind its number (see dashboard()'s TILES), so
+   it is a real button - keyboard reachable, and with the chevron showing at
+   rest rather than on hover: an affordance nobody sees until they are
+   already pointing at it doesn't help them decide to point at it. */
+.tile{padding:16px 17px;border-radius:12px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);
+  display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+  transition:border-color .12s ease}
+.tile:hover{border-color:var(--ink3)}
+.tile:hover .go{color:var(--accent)}
+/* Nothing behind the number to open. Driven off the count, so the day it
+   isn't zero the tile comes back on its own. */
+.tile[disabled]{cursor:default;opacity:.72}
+.tile[disabled]:hover{border-color:var(--line)}
+.tile .k{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);font-weight:600;
+  display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tile .go{font-size:15px;line-height:1;color:var(--ink3);flex:none}
+.tile .v{font-family:"Bricolage Grotesque",sans-serif;font-size:31px;font-weight:700;line-height:1.15;margin-top:7px;letter-spacing:-.03em}
+.tile .f{font-size:12.5px;color:var(--ink2);margin-top:3px}
+.tile.hi .v{color:var(--accent)}
+
+.bars{display:flex;flex-direction:column;gap:13px}
+.bar h3{font-size:14px;font-weight:600;display:flex;justify-content:space-between;
+  align-items:baseline;gap:6px 14px;flex-wrap:wrap;margin-bottom:7px}
+.bar h3 span{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink3);font-weight:400}
+/* A bar's name, when there is a tab holding the rows it counts. A button
+   rather than a link because it switches tabs in place - there is no URL
+   behind a tab here to point an href at. */
+.jumplink{appearance:none;border:0;background:none;padding:0;font:inherit;color:inherit;
+  cursor:pointer;border-radius:4px}
+.jumplink:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.jumplink:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* A funnel stage nothing has reached. `.bar h3 span` would otherwise set it
+   in the mono count face, and dimming it says why it isn't a button. */
+.bar h3 .jumpdead{font-family:inherit;font-size:inherit;font-weight:inherit;color:var(--ink3)}
+.meter{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden;display:flex}
+.meter i{display:block;height:100%}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font-size:12.5px;color:var(--ink2)}
+.legend b{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+
+.sec{margin:26px 0 11px;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.sec h2{font-size:17px;font-weight:700}
+.sec p{margin:0;font-size:13px;color:var(--ink3)}
+
+.empty{padding:44px 22px;text-align:center;color:var(--ink3)}
+.empty strong{display:block;color:var(--ink2);font-weight:600;margin-bottom:5px;font-size:15px}
+
+.more-grid{display:grid;gap:14px 18px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.mf label{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px;font-weight:600}
+.mf-labelrow{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.mf-labelrow label{margin-bottom:0}
+.mf-open{font-size:11px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap;margin-bottom:4px}
+.mf-open:hover{text-decoration:underline}
+.note{font-size:12.5px;color:var(--ink3);padding:14px 0 0;line-height:1.6}
+
+/* The only thing the overnight fill ever says on this page: what it couldn't
+   read (see autofillNoteHtml) - either nothing at all, or the rest of a
+   posting it got part of. Everything else about the fill is invisible -
+   waiting isn't worth saying, and a row that filled in completely speaks for
+   itself. These two are the exception because they are the rows with
+   something still to do on them, and nothing else on the page would say so. */
+.af{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-top:12px;
+  padding:9px 12px;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface2);font-size:12.5px;color:var(--ink2);line-height:1.5}
+/* Only a posting that couldn't be read at all is drawn as a problem. A
+   partial read is a good outcome with a footnote - it filled in what the page
+   stated - and colouring it like a failure would train the eye to ignore
+   both. */
+.af.bad{border-color:var(--crit);background:none}
+.af .af-why{color:var(--ink3)}
+
+@media (max-width:900px){
+  .wrap{padding:0 13px 60px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+#gate{position:fixed;inset:0;background:var(--ground);display:flex;align-items:center;justify-content:center;padding:20px}
+#gate .card{padding:26px 30px;display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px}
+#gate h1{font-size:19px}
+#gate p{margin:0;color:var(--ink2);font-size:13px}
+#gate .err{color:var(--crit);font-size:12.5px;min-height:1em}
+.hidden{display:none!important}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(10,11,18,.55);display:flex;
+  align-items:center;justify-content:center;padding:20px;z-index:60}
+.modal-card{padding:22px 24px;display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px}
+.modal-card h3{font-size:16px}
+.modal-card p{margin:0;color:var(--ink2);font-size:13px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:2px}
+.modal-card.wide{max-width:400px}
+.pw-field{display:flex;flex-direction:column;gap:5px}
+.pw-field label{font-size:12.5px;font-weight:600}
+.pw-field input{width:100%;box-sizing:border-box}
+.pw-check{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink2);line-height:1.45}
+.pw-check input{margin:2px 0 0}
+.pw-msg{font-size:12.5px;min-height:1em;line-height:1.45;color:var(--ink2)}
+.pw-msg.bad{color:var(--crit)}
+.pw-msg.good{color:var(--good)}
+
+.stage-hist table{width:100%;border-collapse:collapse}
+.stage-hist tr+tr td,.stage-hist tr+tr th{border-top:1px solid var(--line)}
+.stage-hist th{text-align:left;font-weight:500;color:var(--ink2);font-size:13px;
+  padding:6px 12px 6px 0;white-space:nowrap;width:1%}
+.stage-hist td{padding:4px 0}
+.stage-hist input[type=date]{width:100%}
+
+/* ---------------------------------------------------------------------------
+   Controls that are links here, and were <button> in the page this CSS came
+   from.
+
+   Three of them navigate - a tab, an Overview tile, a track name in the daily
+   searches - and navigation is what an anchor is for: it gives a real href, so
+   the drilled view can be opened in a new tab, copied, and reached with the
+   back button. That is the upgrade; the cost is that every rule above was
+   written against elements with no default text-decoration or link colour.
+
+   Kept as an appended block rather than edited into the rules above, so the
+   copied stylesheet stays diffable against client/public/index.html. */
+.tab, .tile, .jumplink, .chip.drill { text-decoration: none; }
+.tile, .chip.drill { color: inherit; }
+/* The underline is the hover affordance on a jumplink and nowhere else. */
+.jumplink { color: inherit; }
+.jumplink:hover { text-decoration: underline; }
