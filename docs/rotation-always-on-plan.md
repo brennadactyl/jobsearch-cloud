@@ -95,7 +95,8 @@ before that step changes.
 
 **The list.** For `engineering-management` and `product` it is a plain list of
 37 and 43 names, 36 and 42 of which are already rotation rows — a frozen subset
-that discovery has overtaken. Goes to `company_sweeps`.
+that discovery has overtaken. Goes to the company list, which is global — see
+`one-company-list-plan.md`.
 
 **How to reach each company.** Most of `SWE`'s and `CPM`'s ~2,800 characters:
 which ATS endpoint to hit, that Twitch's Greenhouse JSON API works where its
