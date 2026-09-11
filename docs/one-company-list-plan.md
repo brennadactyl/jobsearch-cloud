@@ -27,18 +27,29 @@ The list is global — one list across every person, not one per account.
 
 ### 1. Membership becomes global
 
-A new table holds the list: `company_key` (normalized by `normalize()` from
-`exclude.js`, as `company_fetch` already keys), `display_name`, and `position`.
-One row per company, no `user_id`.
+`company_fetch` is the list. It is already global, already keyed by
+`company_key`, and already carries `display_name`. It gains one column:
 
-`position` moves here from `company_sweeps`. The order is shared, so every
-search's cursor indexes the same log. Assign positions shuffled, per
-`0008_sweep_cursor.sql` — a list is typed in alphabetically or grouped by theme,
-and position decides who is covered first every cycle and who is dropped when a
-run runs short.
+```sql
+ALTER TABLE company_fetch ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+```
 
-`company_fetch` is unchanged and stays facts-only. Membership and website facts
-are separate concerns that happen to share a key.
+A company is on the list when it has a row. `position` moves here from
+`company_sweeps` so every search's cursor indexes the same log. Assign positions
+shuffled, per `0008_sweep_cursor.sql` — a list is typed in alphabetically or
+grouped by theme, and position decides who is covered first every cycle and who
+is dropped when a run runs short.
+
+Two things follow, and both are behaviour changes rather than renames.
+
+`db.upsertCompanyFetch` refuses to write a row unless it carries a fact
+(`board || endpoint || url_shape || dead_signal || note`) — "a typed list is not
+evidence". Registering a company is now exactly that write, so the guard becomes
+membership-first: create the row, facts optional.
+
+`handleGetCoverage` attaches `known` whenever a row exists. With membership rows
+that would hand a run an empty `known` and imply something is known about a
+company nothing has looked at yet. Attach it only when a fact field is populated.
 
 ### 2. What stays per search
 
@@ -92,11 +103,12 @@ schema is worse than no rule.
 
 ## Files
 
-- `server/migrations/00NN_one_company_list.sql` — the list table, `position`
-  moved, `company_sweeps` reduced
+- `server/migrations/00NN_one_company_list.sql` — `position` added to
+  `company_fetch`, `company_sweeps` reduced
 - `server/migrations/0010_company_fetch.sql` — header amended
 - `server/src/db.js` — `getCoverage`, `recordSweeps`, `setSweepCursor`,
-  `countCoverage` against the new shape
+  `countCoverage` against the new shape; `upsertCompanyFetch` writes membership
+  without requiring a fact
 - `server/src/routes/coverage.js` — `COVERAGE_BATCH`, and the response keeps its
   shape
 - `server/README.md` — the coverage contract
