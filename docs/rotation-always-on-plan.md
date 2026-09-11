@@ -108,6 +108,13 @@ each company it hands a run, and `./tracker companies` writes the whole response
 to `companies.json`. Per company, on the night that company comes round, instead
 of a wall of prose every night.
 
+The move is a write, not a pointer. As of 2026-09-11 the table is broad and
+shallow — 63 companies reachable through the rotations, 58 of those rows written
+by last night's runs, and only 5 carrying an `endpoint` at all. The prose holds
+per-company detail that is not in there yet: Twitch's Greenhouse JSON API, Epic's
+and Scopely's board ids, the Workday CXS paths. Transcribe it into
+`company_fetch` rows and confirm it is there before step 3 stops carrying it.
+
 **Which verticals to prioritise, and why.** Gaming before creator platforms
 before the expanded net. This is the person's own strategy, it is small, and it
 stays in `target_companies` — which is what `prompt-size-plan.md` keeps under
