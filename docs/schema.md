@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: ten tables, from
-`0001_schema.sql` through `0012_demo_account.sql` applied in order. This is the
+`0001_schema.sql` through `0013_company_sweeps_by_key.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -29,9 +29,9 @@ record of who looked at a company and when stays with each search.
 **`company_sweeps` reaches `company_fetch` through `company_key`.**
 Both hold `normalize(name)` from `server/src/exclude.js` — lowercased, each run
 of characters outside `a-z0-9` replaced by one space, trimmed — so the join is
-`company_sweeps.company_key = company_fetch.company_key`.
-`company_sweeps.company` holds a name too, but nothing joins on it: comparing
-raw strings misses, and `F5, Networks` is stored under `f5 networks`.
+`company_sweeps.company_key = company_fetch.company_key`. The name itself lives
+only on the list: comparing raw strings misses, and `F5, Networks` keys as
+`f5 networks`.
 
 **Every other relationship is a value match within one user.**
 `leads.search`, `screened.search`, `company_sweeps.search` and
@@ -187,12 +187,9 @@ erDiagram
     company_sweeps {
         TEXT user_id PK, FK
         TEXT search PK, FK
-        TEXT company PK "name as the list holds it"
+        TEXT company_key PK, FK "joins company_fetch"
         TEXT last_swept
-        TEXT board "mirrors the list, unread"
         TEXT note
-        INTEGER position "mirrors the list, unread"
-        TEXT company_key FK "joins company_fetch"
     }
     company_fetch {
         TEXT company_key PK "normalize of the name"
@@ -264,8 +261,8 @@ search of its own.
   `HH:mm`, read by `scripts/setup-scheduler.ps1`.
 - `fed_by` names a sibling track whose search fills this tab. A track with it
   set has no search of its own.
-- `sweep_cursor` is how far this track's search has read through its
-  `company_sweeps` rows, by `position`.
+- `sweep_cursor` is how far this track's search has read through the shared
+  list, compared against `company_fetch.position`.
 
 ### search_runs
 
@@ -333,16 +330,17 @@ A setting with no row falls back to `DEFAULT_SETTINGS` in `server/src/db.js`.
 One search's record of a company on the list: when it last tried it, and what
 it learned there. The list itself is `company_fetch`.
 
-- `company_key` is the `normalize()`d name, and is what readers join on,
-  through an index on `(user_id, search, company_key)`. `company` is the name
-  as the list holds it. One search can hold two spellings of one company;
-  readers take the most recently swept.
+- `company_key` is the `normalize()`d name, and is what readers join on. It
+  completes the primary key, so that key is also the index a rotation reads,
+  and a search has one row per company however a run spelled it
+  (`0013_company_sweeps_by_key.sql`).
 - `last_swept` is the `YYYY-MM-DD` this search last attempted the company, `''`
   for never. It is a record, and does not choose what runs next.
 - `note` is what this search learned about the company, for itself. It never
   travels to `company_fetch`.
-- `board` and `position` mirror `company_fetch`. Read them from
-  `company_fetch`, never from here.
+- The company's name, its board and its place in the rotation are not here at
+  all. They are facts about the company rather than about one search's reading
+  of it, and they live on `company_fetch`.
 
 ### company_fetch
 

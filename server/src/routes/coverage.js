@@ -215,8 +215,8 @@ export async function handleRecordSweeps({ request, db, user }) {
   // every search (upsertCompanyFetch clears a wall when a route is reported);
   // trusting the wall makes a reachable company one every search skips until
   // the wall expires. So the row shares nothing - no wall, board, endpoint or
-  // url_shape, and no board on this search's record either. The sweep is still
-  // recorded, and `withheld` counts these rows.
+  // url_shape. The sweep itself is still recorded, and `withheld` counts these
+  // rows.
   //
   // `url_shape` is not a route: it builds one posting's URL, and a posting can
   // load while its listing is walled, so that row shares as normal.
@@ -228,13 +228,12 @@ export async function handleRecordSweeps({ request, db, user }) {
 
   // Every report lands on the company as the list names it, so two spellings of
   // one company are one row in this search's record.
-  const positioned = allowed.map((i) => {
+  const named = allowed.map((i) => {
     const k = normalize(i.company);
     const listed = onList.get(k) || joining.get(k);
-    const row = { ...i, company: listed.company, position: listed.position };
-    return contradicts(i) ? { ...row, board: "" } : row;
+    return { ...i, company: listed.company };
   });
-  const recorded = await db.recordSweeps(key, positioned, on);
+  const recorded = await db.recordSweeps(key, named, on);
 
   // The same report, pooled: the fields that describe a website. `last_swept`,
   // the cursor and `note` stay in this search's own record.
