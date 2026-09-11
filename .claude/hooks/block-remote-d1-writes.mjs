@@ -4,11 +4,8 @@
  * The tracker's data has exactly one supported write path - its HTTP API,
  * which scopes every statement to the calling user and validates what it is
  * given. A `wrangler d1 execute --remote` that INSERTs or UPDATEs bypasses
- * all of that, and it is what an agent reaches for when an API route turns
- * out not to support the field it wants. That happened on 2026-08-31: a
- * headless backfill found `/api/update` couldn't set `fit`, and wrote 131
- * UPDATE statements straight to production instead of stopping to report it.
- * The result was fine; the habit is not.
+ * all of that. When a route can't set a field, report the missing route
+ * (.claude/skills/add-d1-migration/SKILL.md).
  *
  * Deliberately still allowed:
  *   - anything with --local (a throwaway database)
@@ -36,10 +33,9 @@ const WRITE = /\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|TRUNCATE|VACUUM
  * None of these should ever be an agent's idea. A human can still run them in
  * their own terminal; this only binds tool calls.
  */
-// Match an actual wrangler *invocation* - start of the command, or after a
-// shell operator - not the words appearing somewhere in an argument. Without
-// this the hook refuses a `git commit` whose message merely discusses these
-// commands, which it did on the first attempt.
+// Match a wrangler *invocation* - start of the command, or after a shell
+// operator - not the words inside an argument, such as a commit message that
+// discusses these commands.
 const INVOKE = String.raw`(?:^|[;&|(\n]\s*)(?:npx\s+(?:--[\w-]+\s+)*)?wrangler\s+`;
 const invoking = (tail) => new RegExp(INVOKE + tail, "i");
 
@@ -80,28 +76,16 @@ const DESTRUCTIVE = [
  * exports protects nothing.
  *
  * The hook directory is here too, so the guard can't be removed by the thing
- * it guards against. That is a speed bump, not a wall - see the honesty note
- * at the bottom of this file.
+ * it guards against. That is a speed bump, not a wall - see the relative-path
+ * note below.
  *
  * Verbs are matched at an invocation boundary, same as the wrangler rules, so
  * a command that merely mentions a path isn't refused.
  *
- * The optional segment before `private` is what survives a reorganisation. The
- * silo used to sit at C:/VibeCoding/private; when the personal repo was moved
- * down into C:/VibeCoding/job-search-tracker/ the silo went with it, and a rule
- * anchored on the old absolute path stopped matching without failing - it
- * reported nothing and quietly allowed `rm -rf` on the whole folder. A
- * path-anchored rule is only as durable as the layout it was written against,
- * so this one tolerates the repo root moving down a level.
- *
- * The drive is matched as `c:` OR `/c`, because the same folder has two
- * spellings on this machine and only one of them was covered. A Git Bash
- * command says /c/VibeCoding/...; a PowerShell one says C:/VibeCoding/....
- * The rule used to require a drive letter followed by a colon, so a bash
- * `cd /c/VibeCoding/<repo>/private && rm -rf <dir>` matched nothing and was
- * allowed - which is how the local docs folders were deleted on 2026-09-10
- * with this guard active and silent. Same failure mode as the note above:
- * a path-anchored rule that stops matching does not fail, it just permits.
+ * The path rule tolerates one extra directory level before `private`, and both
+ * drive spellings: `C:/VibeCoding/...` (PowerShell) and `/c/VibeCoding/...`
+ * (Git Bash). A path rule that stops matching does not fail, it silently
+ * permits - so test both spellings when changing it.
  *
  * Note the relative-path hole this does NOT close: a command that cds into
  * the silo first and then deletes by relative name has no protected string
@@ -109,9 +93,8 @@ const DESTRUCTIVE = [
  */
 const PROTECTED = /(?:private[\\/]+backups|(?:[a-z]:|[\\/][a-z])[\\/]+vibecoding[\\/]+(?:[\w.-]+[\\/]+)?private(?![\w-])|\.claude[\\/]+hooks)/i;
 // No `|` in the boundary set, unlike the wrangler rules: a pipe appears inside
-// regex literals and quoted strings far more often than it precedes a delete,
-// and `|rm ` in someone's regex was enough to refuse an innocent command. A
-// piped `... | xargs rm` slips through as a result - accepted, because the
+// regex literals and quoted strings far more often than it precedes a delete.
+// A piped `... | xargs rm` slips through as a result - accepted, because the
 // filesystem permissions are the real control and this is the reminder.
 const DELETE_VERB =
   /(?:^|[;&(\n]\s*)(?:sudo\s+)?(?:rm|rmdir|unlink|del|erase|rd|remove-item|ri|clear-content|move-item|mv)\b/i;

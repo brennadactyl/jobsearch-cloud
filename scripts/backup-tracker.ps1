@@ -4,43 +4,19 @@
   every document from R2 beside it, and copies both to an off-machine mirror.
 
 .DESCRIPTION
-  Generic script - contains no personal data. Runs `wrangler d1 export` against
-  the deployed database and writes one dated file per run, then fetches the
-  documents (resumes, each track's baseline doc) that live in R2 and which that
-  export does not contain.
+  A copy outside Cloudflare is the only one that survives `wrangler d1 delete`
+  or losing the account; Time Travel recovers from neither. See README.md,
+  "Backups".
 
-  This is the whole of the off-account recovery story. Cloudflare's own
-  protection for D1 is Time Travel, which is point-in-time recovery *inside*
-  the account - it restores a database that still exists. It cannot help with
-  `wrangler d1 delete`, which takes the database and its Time Travel history in
-  one step, and it cannot help if the account itself goes away. A file on this
-  machine is the only copy that survives either.
+  The export is staged in a temp file and validated before it lands, because
+  wrangler can exit 0 with an empty export and the archive is append-only (see
+  protect-backups.ps1), so a bad file could not be removed from it. Backups are
+  never deleted automatically; pruning is a deliberate, elevated act.
 
-  Three deliberate details:
-
-  - **Staged, then copied in.** The export goes to a temp file first and is
-    validated before it lands in the backup folder. A half-written or empty
-    export that reached the archive would sit there looking like a backup; the
-    archive is append-only by design (see protect-backups.ps1), so a bad file
-    could not be removed afterwards.
-
-  - **Validated, not just written.** `wrangler d1 export` can exit 0 having
-    produced something useless. The checks below are for the failure mode that
-    actually matters: a backup that exists, is the right shape, and is empty.
-
-  - **Nothing is ever deleted.** No retention pruning, on purpose. At roughly
-    half a megabyte a day this costs well under a gigabyte a year, which is not
-    worth the risk of a script that deletes backups on a schedule. Pruning old
-    files is a human decision, made with elevation - see protect-backups.ps1.
-
-  Exit codes: 0 wrote and validated; 1 the export itself failed, nothing
-  written; 2 wrote the file but a validity check failed - look at the log.
-  Task Scheduler surfaces the code as "Last Run Result", which is the only
-  signal anyone sees without opening the log.
-
-  A document problem is a 2, never a 1: by the time that pass runs the .sql has
-  already landed, and reporting "nothing was written" over a failed resume
-  download would be a lie about the artifact that matters most.
+  Exit codes: 0 wrote and validated; 1 the export failed, nothing written; 2
+  wrote the file but a check failed - read the log. Task Scheduler shows the
+  code as "Last Run Result". A document problem is always 2, because the .sql
+  has already landed by then.
 
 .PARAMETER RepoDir
   The repository root - used to find server\wrangler.toml (for the database
@@ -51,27 +27,23 @@
   Documents land beside them under <BackupDir>\documents\<timestamp>\<user-id>\.
 
 .PARAMETER DataDir
-  The private data folder, used only to find each person's tracker.json - the
-  credential the document download authenticates with. Same default as the other
-  scripts: JOB_SEARCH_DATA_DIR, else <RepoDir>\private.
+  Used only to find each person's tracker.json, whose token authenticates the
+  document download. Defaults to JOB_SEARCH_DATA_DIR, else <RepoDir>\private.
 
 .PARAMETER NoDocuments
   Skip the R2 document download. The .sql export still happens.
 
 .PARAMETER MirrorDir
-  A second copy, meant to be somewhere this machine's filesystem isn't the last
-  word - a synced folder, an external drive. Defaults to the
-  JOB_SEARCH_BACKUP_MIRROR environment variable, then to a folder in OneDrive.
-  A mirror that can't be written is a warning, not a failure: the local copy
-  still happened.
+  A second copy off this machine's disk, such as a synced folder or an external
+  drive. Defaults to JOB_SEARCH_BACKUP_MIRROR, then a folder in OneDrive. A
+  failed mirror copy is a warning, not a failure, since the local copy landed.
 
 .PARAMETER NoMirror
   Skip the off-machine copy entirely.
 
 .PARAMETER MinBytes
-  Refuse to call an export healthy below this size. Defaults to 10 KB - large
-  enough to catch an empty or truncated file, small enough not to trip on a
-  brand-new install with almost no rows.
+  Refuse to call an export healthy below this size. Defaults to 10 KB: catches
+  an empty or truncated file without tripping on a new install with few rows.
 
 .EXAMPLE
   .\backup-tracker.ps1
@@ -111,8 +83,8 @@ function Log($msg) {
 
 Log "===== backup-tracker starting ====="
 
-# The database name lives in wrangler.toml, not here - one definition, and a
-# renamed database doesn't silently start backing up nothing.
+# Read from wrangler.toml so a renamed database can't leave this exporting the
+# old name.
 $wranglerToml = Join-Path $RepoDir "server\wrangler.toml"
 if (-not (Test-Path $wranglerToml)) {
     Log "ERROR: no server\wrangler.toml under $RepoDir - can't tell which database to export."
@@ -149,10 +121,8 @@ function Invoke-Export {
     return $p.ExitCode
 }
 
-# The export endpoint is genuinely flaky - it returned "A request to the
-# Cloudflare API failed" once and succeeded on the next call seconds later, with
-# nothing changed. One retry, because an unattended nightly job that gives up on
-# a transient 500 is a backup that quietly stops existing.
+# One retry: the export endpoint fails transiently ("A request to the Cloudflare
+# API failed"), and an unattended job that gives up leaves no backup.
 Log "exporting to staging: $staging"
 $code = Invoke-Export $staging
 if ($code -ne 0 -or -not (Test-Path $staging)) {
@@ -174,26 +144,16 @@ $size    = (Get-Item $staging).Length
 $text    = Get-Content $staging -Raw
 $tables  = ([regex]::Matches($text, '(?im)^\s*CREATE TABLE')).Count
 $inserts = ([regex]::Matches($text, '(?im)^\s*INSERT INTO')).Count
-# One INSERT per row in a d1 export, so this is a straight count of accounts.
-# Used further down to tell whether the document pass covered everybody.
+# A d1 export writes one INSERT per row, so this counts accounts, for the
+# document completeness check below.
 $userCount = ([regex]::Matches($text, '(?im)^\s*INSERT INTO\s+"?users"?\s')).Count
 Log ("staged: {0:N0} bytes, {1} CREATE TABLE, {2} INSERT INTO, {3} account(s)" -f $size, $tables, $inserts, $userCount)
 
-# Accounts that are *expected* to have no folder on this machine, discounted
-# from the completeness check further down so it only speaks when something is
-# genuinely missing.
-#
-# The demo account is the standing case: seed-demo-user.ps1 creates it through
-# the API with invented data, and it never gets a private folder or a nightly
-# run. Counted as a person it produces a NOTE on every single run, for a
-# condition that is permanent and fine - and a warning that is always there is
-# the one nobody reads on the night it finally means something.
-#
-# Matching on the name alone would be the exact mistake seed-demo-user.ps1
-# warns about, since "Demo" can be handed to a real person. So this reuses that
-# script's own test, the one standing between -Force and somebody's real
-# application history: every posting on the account is an example.com URL. One
-# row from a real job board and it counts as a person again.
+# The demo account (seed-demo-user.ps1) never has a private folder, so it is
+# discounted from the completeness check below, which would otherwise warn on
+# every run and stop being read. A name match alone isn't enough, since "Demo"
+# can belong to a real person: like seed-demo-user.ps1, it also requires every
+# posting on the account to be an example.com URL.
 $exportLines = $text -split "`n"
 $demoIds = @()
 foreach ($m in [regex]::Matches($text, '(?im)^\s*INSERT INTO\s+"?users"?\s[^\r\n]*')) {
@@ -221,8 +181,7 @@ if ($size -lt $MinBytes) { $problems += "only $size bytes (under the $MinBytes f
 if ($tables -lt 1)       { $problems += "no CREATE TABLE statements" }
 if ($inserts -lt 1)      { $problems += "no INSERT statements - the schema came back but no data" }
 
-# An export that succeeds but returns far less than last time is the quiet
-# failure this is really watching for: a partial dump reads as a valid file.
+# A partial dump still reads as a valid file, so compare with the last backup.
 $previous = Get-ChildItem $BackupDir -Filter "*.sql" -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($previous -and $size -lt ($previous.Length * 0.5)) {
@@ -231,7 +190,7 @@ if ($previous -and $size -lt ($previous.Length * 0.5)) {
 
 foreach ($p in $problems) { Log "WARNING: $p" }
 
-# ---- Land it. The local copy first; the mirror is best-effort. -------------
+# ---- Land it ---------------------------------------------------------------
 $final = Join-Path $BackupDir $name
 Copy-Item $staging $final -Force
 Log ("wrote {0} ({1:N0} bytes)" -f $final, (Get-Item $final).Length)
@@ -253,23 +212,10 @@ Remove-Item $staging -Force -ErrorAction SilentlyContinue
 
 # ---- Documents (R2), which the .sql above does not contain. ----------------
 #
-# `wrangler d1 export` covers D1 and nothing else, so resumes and each track's
-# baseline doc - the things that used to live in this folder and now live in the
-# DOCS bucket - have no backup at all without this pass. That is a worse hole
-# than the one this script was written for: a lead can be found again, a resume
-# and eight weeks of accumulated fetch-reliability notes cannot.
-#
-# Fetched through the tracker API rather than from R2 directly, because
-# `wrangler r2` has get/put/delete but no way to *list* a bucket - it can fetch
-# an object whose key you already know, and nothing here knows the keys. The API
-# does: GET /api/documents is the listing, and every session already scopes
-# itself to one person.
-#
-# The consequence is that this backs up the accounts whose credentials are on
-# this machine, which is not necessarily every account in the database. That
-# gap is checked rather than assumed - see the count against $userCount below -
-# because a backup that silently covers two people out of three is the failure
-# mode this whole script exists to refuse.
+# Fetched through the tracker API because `wrangler r2` cannot list a bucket and
+# GET /api/documents can. A session sees only its own account, so this covers
+# the accounts whose tracker.json is on this machine; the completeness check
+# below reports any shortfall.
 if (-not $NoDocuments) {
     $docRoot = Join-Path $BackupDir "documents\$stamp"
     $accounts = @()
@@ -283,8 +229,8 @@ if (-not $NoDocuments) {
         Log "         Set -DataDir or JOB_SEARCH_DATA_DIR. See private.example/README.md."
         $problems += "no accounts found for the document backup"
     } else {
-        # Invoke-WebRequest renders a progress bar per call in PS 5.1 and it is
-        # slow enough to dominate the runtime of a many-file pass.
+        # PS 5.1 draws a progress bar per web request, slow enough to dominate
+        # a many-file pass.
         $oldProgress = $ProgressPreference
         $ProgressPreference = "SilentlyContinue"
         $docTotal = 0; $docBytes = 0; $covered = 0
@@ -295,9 +241,8 @@ if (-not $NoDocuments) {
             try {
                 $index = Invoke-RestMethod -Uri "$($cfg.url)/api/documents" -Headers $headers -ErrorAction Stop
             } catch {
-                # 503 is this deployment saying documents are switched off (no
-                # DOCS binding), which is a supported configuration and not a
-                # backup failure. Anything else is.
+                # 503 means no DOCS binding: documents are switched off, which
+                # is supported and not a backup failure.
                 $status = $null
                 if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
                 if ($status -eq 503) {
@@ -311,11 +256,8 @@ if (-not $NoDocuments) {
 
             $covered++
             foreach ($doc in $index.documents) {
-                # The API's own path rule is <folder>/<filename>, one deep, with
-                # no traversal (server/src/validate.js) - so joining it onto a
-                # local directory is safe. Re-checked here anyway: this writes to
-                # a real filesystem, and a backup script is a bad place to learn
-                # that the server's validator regressed.
+                # server/src/validate.js enforces this shape too; re-checked
+                # because the path is joined onto a local directory and written.
                 if ($doc.path -notmatch '^(docs|resumes|reference)/[\w][\w .-]*$') {
                     Log "WARNING: skipping unexpected document path for $($acct.Name): $($doc.path)"
                     $problems += "unexpected document path from the API"
@@ -323,12 +265,8 @@ if (-not $NoDocuments) {
                 }
                 $dest = Join-Path $docRoot (Join-Path $acct.Name ($doc.path -replace '/', '\'))
 
-                # MAX_PATH, checked here so it reports itself. This layout adds
-                # ~90 characters to -BackupDir (a timestamp, a 36-character user
-                # id, a folder and a filename), and Windows still caps a path at
-                # 260 unless LongPathsEnabled is set. Left to fail on its own it
-                # surfaces as "Could not find a part of the path", which reads as
-                # a missing directory and sends you looking in the wrong place.
+                # Past MAX_PATH (260, without LongPathsEnabled) the write fails as
+                # "Could not find a part of the path", which reads as a missing folder.
                 if ($dest.Length -ge 260) {
                     Log ("WARNING: path too long for Windows ({0} chars, limit 260): {1}" -f $dest.Length, $dest)
                     Log "         Use a shorter -BackupDir, or enable long paths (LongPathsEnabled)."
@@ -339,21 +277,12 @@ if (-not $NoDocuments) {
                 $destDir = Split-Path $dest -Parent
                 if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
                 try {
-                    # -UseBasicParsing is not optional in a scheduled task.
-                    # Without it, PS 5.1's Invoke-WebRequest hands a successful
-                    # response to the Internet Explorer engine to parse, and on
-                    # a machine where that engine has never been configured it
-                    # tries to prompt - which under -NonInteractive throws
-                    # "Read and Prompt functionality is not available" with no
-                    # HTTP status attached. The request succeeded; only the
-                    # client-side parse failed, which makes it read like a
-                    # network fault. -OutFile alone happens to avoid the parse,
-                    # so this is belt and braces on the call that matters most.
+                    # -UseBasicParsing: PS 5.1 otherwise parses with the IE engine, which prompts and throws under -NonInteractive.
                     Invoke-WebRequest -Uri "$($cfg.url)/api/documents/$($doc.path)" `
                         -Headers $headers -OutFile $dest -UseBasicParsing -ErrorAction Stop
                     $got = (Get-Item $dest).Length
-                    # The index reports the size R2 holds. A short file here means
-                    # a truncated download, which on disk looks like a real backup.
+                    # A truncated download looks like a real backup on disk, so
+                    # compare with the size R2 reports.
                     if ($doc.bytes -and $got -ne $doc.bytes) {
                         Log ("WARNING: {0}\{1} came back {2:N0} bytes, expected {3:N0}" -f $acct.Name, $doc.path, $got, $doc.bytes)
                         $problems += "short download: $($acct.Name)\$($doc.path)"
@@ -367,23 +296,16 @@ if (-not $NoDocuments) {
         }
         $ProgressPreference = $oldProgress
 
-        # Logged even when the count is zero. An empty bucket and a pass that
-        # never ran look identical in a log that only reports files, and this
-        # script's whole purpose is refusing to let "no backup" resemble
-        # "nothing to back up".
+        # Logged even at zero, so an empty bucket can't be mistaken for a pass
+        # that never ran.
         if ($docTotal -gt 0) {
             Log ("documents: {0} file(s), {1:N0} bytes, from {2} account(s) -> {3}" -f $docTotal, $docBytes, $covered, $docRoot)
         } else {
             Log "documents: none - listed $covered account(s) and every one is empty."
         }
 
-        # The completeness check. $expectedAccounts is every account in the
-        # database that ought to have a folder on some machine - that is, all of
-        # them less the demo, which is identified above rather than assumed.
-        # $covered is the ones this machine held a credential for. A shortfall is
-        # still not an error, since a second machine may hold the rest, but it
-        # has to be said out loud, because the alternative is a backup folder
-        # that looks complete and isn't.
+        # A shortfall is a NOTE, not a warning, because another machine may
+        # hold the missing accounts' tracker.json.
         if ($expectedAccounts -gt 0 -and $covered -lt $expectedAccounts) {
             Log "NOTE: backed up documents for $covered of the $expectedAccounts account(s) that should have one."
             Log "      The rest have no tracker.json under $DataDir. If their documents matter,"

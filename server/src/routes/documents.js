@@ -2,45 +2,28 @@
  * This person's documents: their resumes, and the per-track baseline doc the
  * nightly search reads at step 1 and edits at step 8b.
  *
- * Until these moved here they lived only in a gitignored folder on whichever
- * Windows machine ran the searches - copied between machines by hand, covered
- * by no backup, and read by the run straight off disk. The baseline doc is the
- * one artifact a run *writes*, which is what tied the run to that one PC. See
- * ../../../docs/private-storage-plan.md.
+ * Two conventions bend here, and only here. A document body is raw bytes in
+ * both directions, so these handlers skip readJson() on the way in and
+ * json()/text() on the way out; every error still goes through json(), so it
+ * carries CORS headers and the usual error shape.
  *
- * ---- Two conventions bend here, both on purpose and only here.
+ * The path capture in ./index.js is `(.+)` rather than `[^/]+`, because a
+ * document path contains a slash (`docs/x.md`) - the path tracks.doc_file and
+ * tracks.resume_line name. ../validate.js's isDocumentPath limits it to one
+ * known folder and one plain filename.
  *
- * A document body is not JSON. Upload is the raw request body and download
- * streams the object back, so these are the only handlers in the worker that
- * don't call readJson() on the way in or json()/text() on the way out. Wrapping
- * a .docx in base64 inside a JSON envelope would buy consistency and cost a
- * third of the payload plus an encode and decode at both ends, for a body that
- * is already exactly what both sides want. Every *error* still goes through
- * json(), so CORS headers and the error shape are unchanged.
- *
- * And the path capture is `(.+)`, not the `[^/]+` every other RegExp route in
- * ./index.js uses. A document path contains a slash - `docs/x.md` - because it
- * is the relative path the file occupies in the person's folder, which is what
- * lets tracks.doc_file and tracks.resume_line go on naming the paths they
- * always named. ./validate.js's isDocumentPath is what keeps that from meaning
- * "any depth": one known folder, one plain filename.
+ * Every handler answers 503 when the DOCS bucket isn't bound (missingBucket)
+ * and 400 for a path isDocumentPath refuses.
  */
 
 import { json, CORS_HEADERS } from "../http.js";
 import { badDocumentPath, isDocumentPath } from "../validate.js";
 
 /**
- * The largest document this API will store.
- *
- * R2 would take five terabytes and never complain, which is the problem: every
- * object here is downloaded in full by *every* nightly run that materializes it
- * (scripts/run-search.ps1) and again by every backup (scripts/backup-tracker.ps1).
- * An unbounded upload is not primarily a storage bill, it is a cost paid twice a
- * day forever on a machine nobody is watching.
- *
- * 8 MB against a real corpus whose largest member is a 250 KB PDF - thirty
- * times the biggest thing anyone has actually stored, which leaves room for a
- * scanned resume without leaving room for a video.
+ * The largest document this API will store. Every object is downloaded in full
+ * by every nightly run that uses it (scripts/run-search.ps1) and again by every
+ * backup (scripts/backup-tracker.ps1), so its size is paid on every run, not
+ * once at upload. 8 MB leaves room for a scanned resume, not for a video.
  */
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 
@@ -56,20 +39,11 @@ function tooLarge(bytes) {
 }
 
 /**
- * The refusal for a deployment that has this code but no `DOCS` bucket.
- *
- * Reachable exactly one way: a worker deployed from a wrangler.toml without the
- * [[r2_buckets]] block, or against an account where R2 was never enabled. Every
- * other route keeps working in that state - `Docs` is constructed per request
- * but touches the binding only when a method is called - so the failure is
- * narrow, and it is worth failing narrowly on purpose.
- *
- * Without this the first call reads `.list` off undefined and the worker's
- * uncaught TypeError becomes a 500 carrying a raw stack trace: no JSON error
- * shape, and no CORS headers, which reaches a browser as an opaque network
- * failure with no status to read (the case ../http.js exists to prevent). 503
- * rather than 500 because nothing is wrong with the request - the deployment is
- * incomplete, and the fix is a config change rather than a retry.
+ * The refusal for a deployment with no `DOCS` bucket bound (wrangler.toml's
+ * [[r2_buckets]] block). Without it the first call reads `.list` off undefined,
+ * and the uncaught TypeError becomes a 500 with no CORS headers, which a
+ * browser sees as an opaque network failure. 503 because the request is fine
+ * and the fix is a config change, not a retry.
  *
  * @param {import("../r2.js").Docs|null} docs
  * @returns {Response|null} the refusal, or null when the bucket is there
@@ -89,11 +63,9 @@ function missingBucket(docs) {
 /**
  * GET /api/documents - requires a Bearer token -> `{ documents: [...] }`.
  *
- * The index: path, kind, content type, size, etag and upload time for each,
- * with no bodies. The nightly runner fetches this first and then pulls each
- * path it needs, which is also why the bodies aren't inlined - the docs alone
- * are ~380KB across the accounts on one machine, and a listing that carried
- * them would make "what do I have?" the most expensive call in the API.
+ * Path, kind, content type, size, etag and upload time for each, with no
+ * bodies, so the listing stays cheap: the nightly runner fetches this first and
+ * then only the paths it needs.
  */
 export async function handleListDocuments({ docs }) {
   const unconfigured = missingBucket(docs);
@@ -112,11 +84,11 @@ export async function handleListDocuments({ docs }) {
 }
 
 /**
- * GET /api/documents/<path> - requires a Bearer token -> the object's bytes.
+ * GET /api/documents/<path> - requires a Bearer token -> the object's bytes,
+ * or 404.
  *
- * Served with the content type it was stored with and its etag, so a caller can
- * hand that etag straight back as `If-Match` on the way in. That round trip is
- * the whole concurrency story for the baseline doc.
+ * Served with its stored content type and its etag, which a caller hands back
+ * as `If-Match` on the PUT.
  */
 export async function handleGetDocument({ docs, params }) {
   const unconfigured = missingBucket(docs);
@@ -126,9 +98,8 @@ export async function handleGetDocument({ docs, params }) {
   if (!isDocumentPath(path)) return badDocumentPath(path);
 
   const obj = await docs.get(path);
-  // Another person's path lands here too, and says the same thing: `Docs` can
-  // only address keys under this caller's own prefix, so "not theirs" and "not
-  // there" are the same answer, arrived at without a check.
+  // `Docs` only addresses keys under this caller's own prefix, so another
+  // person's path is simply not there.
   if (!obj) return json({ error: `no document at "${path}"` }, 404);
 
   return new Response(obj.body, {
@@ -142,22 +113,15 @@ export async function handleGetDocument({ docs, params }) {
 
 /**
  * PUT /api/documents/<path> - requires a Bearer token. Raw body, optional
- * `If-Match`. -> `{ path, etag, bytes }`.
+ * `If-Match` -> `{ path, etag, bytes }`; 412 for a stale `If-Match`, 413 over
+ * MAX_DOCUMENT_BYTES.
  *
- * PUT rather than POST: the caller names the URI and writing the same bytes
- * twice is the same as writing them once, which is what makes the import script
- * re-runnable.
- *
- * With `If-Match`, a stale etag is 412 and nothing is written. That matters
- * because of how long a nightly run holds a document: it reads the baseline doc
- * at the start of a turn that lasts many minutes and hands back an edited copy
- * at the end. Anything written in between would be silently erased by a copy
- * made before it existed. The 412 leaves the run holding its version, and
- * scripts/run-search.ps1 saves it rather than dropping it.
- *
- * Without `If-Match` the write is unconditional, which is what the import
- * script and the setup skill want - they are establishing a document, not
- * revising one they read.
+ * With `If-Match`, a stale etag writes nothing. A nightly run reads the
+ * baseline doc at the start of a long turn and writes its edited copy at the
+ * end, so an unconditional write would erase anything saved in between;
+ * scripts/run-search.ps1 keeps the run's copy when it gets the 412. Without
+ * `If-Match` the write is unconditional, for callers establishing a document
+ * rather than revising one they read.
  */
 export async function handlePutDocument({ request, docs, params }) {
   const unconfigured = missingBucket(docs);
@@ -169,16 +133,9 @@ export async function handlePutDocument({ request, docs, params }) {
   const contentType = request.headers.get("content-type") || "application/octet-stream";
   const ifMatch = request.headers.get("if-match") || "";
 
-  // Two size checks, and both earn their place. The header is a claim, so it is
-  // refused before anything is read - that is what stops a huge upload being
-  // pulled across the wire at all. The buffered length is the fact, and it is
-  // what a caller sending chunked (no content-length) or simply lying is
-  // measured against.
-  //
-  // Buffering rather than streaming to R2: at 8 MB it is comfortably inside a
-  // Worker's memory, and it is the only way to know the real size before the
-  // object exists rather than after. A streamed put would have to delete what
-  // it had already written, which is a worse thing to get wrong.
+  // The declared length refuses an oversized upload before reading it; the
+  // buffered length catches a chunked or understated one. Buffering before the
+  // put is what keeps an oversized object from ever being written.
   const declared = Number(request.headers.get("content-length") || 0);
   if (declared > MAX_DOCUMENT_BYTES) return tooLarge(declared);
 
@@ -200,12 +157,11 @@ export async function handlePutDocument({ request, docs, params }) {
 }
 
 /**
- * DELETE /api/documents/<path> - requires a Bearer token -> `{ path, deleted }`.
+ * DELETE /api/documents/<path> - requires a Bearer token -> `{ path, deleted }`,
+ * or 404.
  *
- * 404s a path this person doesn't have. R2's delete is happy to remove a key
- * that was never there, and reporting success for that would tell a caller its
- * cleanup worked when it may have been aiming at a path it had already got
- * wrong.
+ * R2 deletes a missing key without complaint; the 404 tells a caller its path
+ * was wrong instead of reporting a cleanup that did nothing.
  */
 export async function handleDeleteDocument({ docs, params }) {
   const unconfigured = missingBucket(docs);

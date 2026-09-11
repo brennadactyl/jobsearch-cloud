@@ -9,52 +9,26 @@ import { isoDate, unknownTrack } from "../validate.js";
 
 /**
  * POST /api/runs - requires a Bearer token. Body
- * `{ search, status?, note?, at?, on? }` -> `{ ok, run, also }`.
+ * `{ search, status?, note?, at?, on? }` -> `{ ok, run, also }`; 400 for a
+ * missing search, 404 for an unknown one.
  *
- * Called unconditionally at the end of every run, including runs that found
- * nothing, since "found nothing" is exactly the case the tab can't otherwise
- * distinguish from "didn't run".
+ * Called at the end of every run, including runs that found nothing: "found
+ * nothing" is the case a tab can't otherwise tell apart from "didn't run".
  *
- * Rejects a `search` with no matching track instead of upserting it: an
- * unknown key here means the run's track key and the configured tracks have
- * drifted apart (a typo in a scheduled-task prompt, or a track renamed in
- * config without updating the prompt), and that lead-losing misconfiguration
- * is worth surfacing loudly in the run's own output. Silently accepting it
- * would create an orphan row that no tab ever displays - the failure mode
- * this whole table exists to prevent.
+ * 404 rather than upserting an unknown key: it means the run's key and the
+ * configured tracks have drifted apart, and an upserted row would be one no
+ * tab displays.
  *
- * ---- What the caller is trusted for, and what it isn't. `search`, `status`,
- * `note` and `on` are things only the run knows. The three counts are not:
- * they are arithmetic over rows this database already holds, so they are done
- * here (db.countRunActivity) and the caller's own tally is ignored.
+ * The caller supplies only what the run alone knows. The counts are derived
+ * from each tab's own rows (db.countRunActivity), and one call writes a record
+ * for the posted track and for every track it feeds.
  *
- * The evidence, 2026-09-01: the `SWE` run claimed `leads_added: 97` against a
- * tab holding 89 leads, 97 being the combined figure across all four tabs it
- * fills - while the three tabs `fed_by` "SWE" had *empty* run records that
- * morning, which is the client's "never recorded" state, on a morning one of
- * them took 133 leads. The single-tab `CPM` run got all three numbers right.
- * Only the multi-tab case failed, because its rule was the longest and
- * fiddliest block of prose in the prompt.
+ * Count fields in the body are accepted and ignored, never refused: a refused
+ * call loses the run record, and a missing record reads as a search that
+ * stopped firing.
  *
- * Hence the fan-out too: a run record is per track, and asking the run for
- * four correctly-split records is precisely what didn't work. One POST in, one
- * row per tab out, each counted from its own rows.
- *
- * The retired count fields are accepted and ignored - and that is the settled
- * behaviour, not a migration shim left over from the change. (It began as one:
- * a run mid-flight on a prompt fetched before this deployed still had to
- * record correctly. That window was one run long and closed the same day.)
- *
- * Keep it. The prompt tells runs not to send counts, but the thing to protect
- * against is a run that sends them anyway, and rejecting the call over an
- * extra key would drop the run record entirely - which is the exact state
- * this table exists to make impossible, since a missing record reads as a
- * search that stopped firing rather than a quiet day. A wrong count would be
- * cosmetic; no record at all is not. So: never read them, never refuse them.
- *
- * One honest caveat: counting by date means a lead the *user* adds by hand
- * today lands in today's run count for that tab. Rare, and still truer than a
- * tally computed across four tabs and attributed to one.
+ * Counting by date means a lead the person adds by hand today counts toward
+ * today's run for that tab.
  */
 export async function handleRecordRun({ request, db }) {
   const body = await readJson(request);
@@ -80,30 +54,21 @@ export async function handleRecordRun({ request, db }) {
   const status = body.status === "error" ? "error" : "ok";
   const note = typeof body.note === "string" ? body.note.slice(0, 500) : "";
 
-  // Every tab this one run fills: the posted track, then the tracks whose
-  // `fed_by` names it. Read through getTracksAndSettings rather than a
-  // purpose-built query because that is exactly how handleGetPrompt decides
-  // which tabs to write the prompt for - the run and its record should be
-  // agreeing about the same set from the same source, not from two lookups
-  // that could one day disagree about what feeds what.
+  // Every tab this run fills: the posted track, then the tracks whose `fed_by`
+  // names it. Read through getTracksAndSettings because handleGetPrompt decides
+  // which tabs the prompt covers the same way, so the two can't disagree.
   const config = await db.getTracksAndSettings();
   const keys = [key, ...config.tracks.filter((t) => t.fed_by === key).map((t) => t.key)];
 
-  // Count every tab first, then write them all in one transaction. Both
-  // halves matter. The counts are per key and never shared - that is the bug
-  // being fixed, so each tab gets its own count of its own rows - and the
-  // writes are all-or-nothing, because a fan-out that can half-succeed
-  // re-creates the very state this is here to prevent: a tab that was
-  // searched last night reading as never having run, with the run that could
-  // have retried already over.
+  // Each tab is counted from its own rows, then every record is written in one
+  // transaction: a half-written fan-out would leave a searched tab reading as
+  // never run, after the run that could have retried is over.
   const counted = await Promise.all(
     keys.map(async (k) => ({ key: k, at, on, status, note, ...(await db.countRunActivity(k, on)) }))
   );
   const runs = await db.recordRuns(counted);
 
-  // `run` stays the posted track's record so existing callers read the same
-  // field they always have; `also` is the fed tabs' records, there so a run's
-  // own report can say what got written on its behalf rather than having to
-  // trust that something did.
+  // `run` is the posted track's record; `also` holds the fed tabs' records, so
+  // a run's own report can say what was written on its behalf.
   return json({ ok: true, run: runs[0], also: runs.slice(1) });
 }

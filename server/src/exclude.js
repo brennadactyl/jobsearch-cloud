@@ -1,64 +1,47 @@
 /**
- * Whether a company is one this person has said they will not work for.
+ * Whether a company is one this person has said they will not work for -
+ * enforced in code, because a list rendered into a prompt is only a request.
  *
- * `settings.excluded_companies` has always been a list, but until this file
- * existed the only thing acting on it was a sentence in the nightly prompt.
- * A list rendered into prose is a request, and the request leaked in both
- * directions at once on the live board: one excluded company was filed as a
- * normal lead, and another had two `screened` rows written for it despite the
- * same sentence saying to drop it *without* recording one. So the rule moves
- * here, where a caller asks a function instead of hoping.
+ * Pure (no D1, no env), so it can be replayed offline over the live corpus.
  *
- * Pure, like url.js - no D1, no env, no import from db.js - so it can be
- * replayed offline over the whole live corpus, which is the only way to tell
- * whether a change to it over-matches.
- *
- * ---- The rules, in full.
+ * ---- The rules.
  * An entry is written by a person, not typed as a key, so "/" and parentheses
  * are treated as "or": "Quillwork / Quill Industries" and
  * "Quill Industries (Quillwork)" are the same company written two ways, and
  * either spelling has to match either way round. Each alternative is matched as
  * a run of whole words, so "Vela" does not take out "Velabyte".
  *
- * The one rule worth more than the rest: an alternative of 2 characters or
- * fewer must equal the entire company name. A list entry like
+ * An alternative of 2 characters or fewer must equal the entire company name.
  * "Q (formerly Quantex)" yields the alternative "q", and as a loose match "q"
- * takes out every Torque, Bosque and Marquee on the board. This is deliberately
- * asymmetric - it accepts a false negative to rule out a false positive -
- * because a missed exclusion is one row a human sees and deletes, while an
- * over-match is a board that quietly stops containing jobs and looks fine.
+ * takes out every Torque, Bosque and Marquee on the board. This accepts a false
+ * negative to rule out a false positive: a missed exclusion is one row a human
+ * sees and deletes, while an over-match is a board that quietly stops
+ * containing jobs.
  *
- * Everything else is left alone on purpose, and each omission has the same
- * justification: the fix is to edit the list, not to make this cleverer.
+ * Nothing cleverer than that - fix a miss by editing the list:
  *   - No qualifier stripping. "Q (formerly Quantex)" yields "q" and the dead
- *     alternative "formerly quantex", which matches nothing. So a posting filed
- *     under the old name is not caught - add the old name to the list.
+ *     alternative "formerly quantex", which matches nothing, so a posting under
+ *     the old name needs the old name added to the list.
  *   - No article or suffix rewriting. "The Ridgeline Company" will not match
  *     "Ridgeline Company".
  *   - A catch-all entry ("any other company Dana Whitlock owns or leads") is an
- *     instruction to a language model, not a name, and matches nothing here.
- *     That is correct: judging who owns what is the part the model is for.
+ *     instruction to a language model, not a name, and matches nothing here:
+ *     judging who owns what is the model's job.
  *
- * The examples above are invented. The real list is one person's private "I
- * will not work here" and belongs in their settings row, not in a public repo.
+ * The examples are invented; the real list is private to a person's settings
+ * row and does not belong in this repo.
  *
- * ---- Before changing any of this, replay it.
- * Checked against the whole live corpus - 432 leads, 899 screened rows, 95
- * distinct company names, against the real list: flags exactly the three known
- * rows and nothing else. An over-matching exclusion rule does not announce
- * itself; it just returns a smaller board.
+ * Replay any rule change over the full live corpus before shipping it:
+ * over-matching is silent, it just returns a smaller board.
  */
 
-/** Below this length an alternative has to be the entire company name. */
+/** At or below this length an alternative has to be the entire company name. */
 const WHOLE_NAME_MAX = 2;
 
 /**
- * Lowercased, punctuation collapsed to single spaces, trimmed.
- *
- * Exported because company_fetch keys its rows on this (see
- * migrations/0010_company_fetch.sql). Two matchers for company names would
- * drift, and the drift would be invisible: an exclusion that matches and a
- * shared-intel lookup that doesn't, for the same string.
+ * Exported because company_fetch keys its rows on this
+ * (migrations/0010_company_fetch.sql). Keep one normalizer: a second would let
+ * an exclusion and a shared-intel lookup silently disagree on the same name.
  */
 export function normalize(name) {
   return String(name == null ? "" : name)
@@ -68,13 +51,11 @@ export function normalize(name) {
 }
 
 /**
- * Build the predicate for one exclusion list. Built once per request and called
- * per row: the list is JSON in settings, and re-parsing it for each of several
- * hundred candidates is work with one answer.
+ * Built once per request, then called per row.
  *
  * Total by design, like canonicalUrl - a missing or malformed list yields a
- * predicate that excludes nothing rather than throwing. A run that cannot read
- * settings should file its findings and be corrected, not lose the batch.
+ * predicate that excludes nothing rather than throwing, so a bad settings value
+ * never costs a run its batch.
  *
  * @param {string[]|null|undefined} excludedCompanies settings.excluded_companies
  * @returns {(companyName: string) => boolean}
@@ -84,7 +65,6 @@ export function excludedCompanyMatcher(excludedCompanies) {
   const phrases = new Set();
 
   for (const entry of Array.isArray(excludedCompanies) ? excludedCompanies : []) {
-    // "/" and parentheses both mean "also known as", so both just delimit.
     for (const piece of String(entry == null ? "" : entry).split(/[/()]/)) {
       const alt = normalize(piece);
       if (!alt) continue;

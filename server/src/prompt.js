@@ -2,72 +2,30 @@
  * Composes one track's daily search prompt from its D1 config, served by
  * GET /api/prompt/:key and run by scripts/run-search.ps1.
  *
- * This replaces the per-track prompt files that used to live in each
- * installer's private data folder (and the skill template that generated
- * them). Two reasons it moved here:
+ * Steps that call the tracker name a `./tracker` command (scripts/tracker.ps1).
+ * The helper owns the track key, the local date and each payload's shape, so
+ * the text says only what the run alone knows: which postings are new, which
+ * it confirmed dead, which companies it managed to read.
  *
- * 1. Steps 1b/8/9/9b/9c are this API's own calling convention. They were
- *    byte-identical across every hand-maintained copy, and a copy that
- *    silently lacked 9c was a real, documented failure mode - the run record
- *    is the only thing that distinguishes "searched, found nothing" from
- *    "stopped running weeks ago". They now have exactly one definition, in
- *    the same repo as the routes they call.
- * 2. A search is now defined by (user_id, track key) in the database, not by
- *    a file on one particular machine, which is what lets one machine run
- *    several people's searches - and what lets a search be reconfigured
- *    without touching that machine at all.
+ * A rule's rationale goes in a comment beside it, not in the emitted text. The
+ * exception is step 4's verification requirement, stated in full because the
+ * whole system rests on it.
  *
- * ---- Why those steps now name a command instead of describing a call.
- * The calling convention having one definition did not stop it being expensive
- * to state: the six HTTP calls a run makes came to about 15,000 characters,
- * half of the composed prompt, paid by four scheduled runs a night to describe
- * something that never changes. Worse, most of it was prose asking for what
- * only code can guarantee - "`search` must be this run's own key", "`on` is
- * today's *local* date", "report by url, never by id", "omit the key rather
- * than sending an empty string". Each has exactly one right answer, and each
- * was restated nightly in the hope the model applied it.
- *
- * scripts/tracker.ps1 decides all of them now, from the run's own environment,
- * and run-search.ps1 materializes it into the working directory beside the
- * documents. So the steps below name a command (`./tracker leads leads.json`)
- * and say only what the run alone knows: which postings are new, which it
- * confirmed dead, which companies it managed to read. See
- * docs/prompt-size-plan.md.
- *
- * ---- Why the rationale for a rule lives here and not in the text.
- * A lot of what used to be emitted explained why a rule exists: what went
- * wrong on a particular date, what an earlier approach got wrong, what the
- * failure looked like on the page. That is maintenance context for whoever
- * edits this file, and it is kept - in the comments around each piece below,
- * where it is read by the person who might undo the rule. What reaches the
- * model is the operative sentence. The exception is step 4's verification
- * requirement, which is stated at whatever length it takes: it is the premise
- * the whole system rests on, and it is the first thing a shortened prompt is
- * tempted to soften.
- *
- * ---- Why so much of this is stored prose rather than structured fields.
- * The live prompts had drifted from the template that generated them, and the
- * drift was load-bearing: a resume line naming a text fallback the machine
- * genuinely depends on (it can't read .docx), a sentence widening a company
- * list beyond its apparent industry, doc filenames predating the current
- * naming convention, worked examples of what counts as out-of-scope. Store a
- * keyword and regenerate the sentence, and all of that is silently gone. So
- * only the fields the *app* reads are structured (key, label, sort_order,
- * schedule_time, target_companies); everything only the model reads is kept
- * verbatim and interpolated as-is. See docs/multi-user-plan.md's appendix.
+ * Only fields the app reads are structured (key, label, sort_order,
+ * schedule_time, target_companies); everything only the model reads is stored
+ * prose, interpolated verbatim - see server/README.md, "Config fields are
+ * mostly prose, on purpose".
  */
 
-// Subject pronoun for the sentences that refer to the person whose search this
-// is. Defaults to they/them for anyone who hasn't set one - which is also the
-// right answer for a name the server has no other information about.
+// Unset falls back to they/them: the server knows nothing about a name beyond
+// the name.
 const PRONOUNS = {
   "she/her": { subj: "she", obj: "her", poss: "her" },
   "he/him": { subj: "he", obj: "him", poss: "his" },
   "they/them": { subj: "they", obj: "them", poss: "their" },
 };
 
-// "a, b, and c" - the phrasing the live step 7 uses at both three and four
-// items, which is why this isn't a plain join.
+// "a, b, and c" - the serial comma a plain join can't produce.
 function joinAnd(parts) {
   const p = parts.filter(Boolean);
   if (p.length <= 1) return p[0] || "";
@@ -100,38 +58,27 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
   const pn = PRONOUNS[settings.pronouns] || PRONOUNS["they/them"];
   const key = track.key;
 
-  // The other tabs this one run fills. A branched search - one set of
-  // companies, one resume, results split by level rather than by search - is
-  // the case this exists for: running it twice would re-fetch the same job
-  // boards to sort the same postings differently. Empty for an ordinary
-  // single-tab track, and every branch below collapses back to the text it had
-  // before this existed when it is.
+  // A branched search splits one set of companies across several tabs, so one
+  // run fills them all rather than each re-fetching the same boards.
   const fed = (Array.isArray(feeds) ? feeds : []).filter((t) => t && t.key && t.key !== key);
   const multi = fed.length > 0;
   const allKeys = [key, ...fed.map((t) => t.key)];
-  // What belongs in each tab, for the filing step. That's what a tab's
-  // subtitle already is, so it does double duty rather than earning a field of
-  // its own - which also means the two can't drift apart.
+  // Step 7b describes each tab with its page subtitle, so the two can't drift.
   const branchOf = (t) => t.full_description || t.label;
 
   const doc = track.doc_file || `docs/tracked_${key}_postings.md`;
   const docSummary =
     track.doc_summary ||
     "candidate profile, target companies, verification requirement, and per-company fetch-reliability notes";
-  // Runs straight into "Do the following:" as one paragraph, the way the
-  // hand-written prompts did - a track's "this is not the sibling searches,
-  // don't merge them" note reads as preamble, not as a heading.
+  // Runs into "Do the following:" as one paragraph: a track's note reads as
+  // preamble, not as a heading.
   const intro = track.intro_note ? `${track.intro_note} ` : "";
-  // An extra clause on step 9's "search must be X" sentence, for a track where
-  // one of the optional lead fields isn't optional (CPM's `fit`, which is the
-  // whole question for a pivot search).
+  // Extends step 9's `"search"` sentence for a track where an optional lead
+  // field is required (e.g. `fit` on a career-pivot search).
   const leadsNote = track.leads_note ? `, and ${track.leads_note}` : "";
 
-  // A track can insert a whole screening step of its own before the capture
-  // step - which pushes the capture step from 6b to 6c. The number has to be
-  // computed rather than written down, because step 9 refers back to it by
-  // name ("the step-6b fields"), and a cross-reference that says 6b while the
-  // step is numbered 6c is worse than no cross-reference at all.
+  // A track's own screening step pushes the capture step from 6b to 6c. The
+  // number is computed because step 9 refers back to it ("the step-6b fields").
   const fitFilterStep = track.fit_filter_step ? `6b. ${track.fit_filter_step}\n` : "";
   const captureNum = track.fit_filter_step ? "6c" : "6b";
 
@@ -149,27 +96,19 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
     const parsed = JSON.parse(track.target_companies || "[]");
     companies = Array.isArray(parsed) ? parsed.join(", ") : String(track.target_companies || "");
   } catch {
-    // Stored by hand as a plain string rather than JSON - use it as written
-    // rather than losing the whole company list to a parse error.
+    // Stored by hand as a plain string: use it as written rather than lose the
+    // list to a parse error.
     companies = String(track.target_companies || "");
   }
   const searchNote = track.search_note ? ` ${track.search_note}` : "";
 
-  // Companies this person won't work for, rendered from a list rather than
-  // written into each track's prose. The prose version drifted immediately:
-  // one exclusion ended up inside target_companies and the next inside
-  // search_note, so answering "is this company excluded?" meant grepping two
-  // free-text fields and knowing which one to look in. A list is a lookup, and
-  // adding one is an append. Entries can be a plain name or a catch-all phrase
-  // ("any other company X owns or leads"), so the sentence reads either way.
+  // A settings list rather than track prose, so "is this company excluded?" is
+  // one lookup. Entries may be a name or a catch-all phrase ("any other company
+  // X owns"), so the sentence reads either way. The tracker also drops them on
+  // the way in (exclude.js); this clause only saves the fetch.
   const excluded = Array.isArray(settings.excluded_companies)
     ? settings.excluded_companies.filter((c) => typeof c === "string" && c.trim())
     : [];
-  //
-  // The last sentence used to say the tracker drops these on the way in
-  // regardless, so this is here to save the fetch rather than to be the thing
-  // enforcing it. True, and the reason the clause can stay this short - but it
-  // is a fact about the server, which is where it now lives (see exclude.js).
   const exclusionNote = excluded.length
     ? ` Don't spend the run's time on ${joinAnd(excluded)} - permanently excluded, including via broader discovery. Skip a hit there rather than verifying it, and don't screen it either: an exclusion isn't a candidate that was considered and ruled out, so it earns no row.`
     : "";
@@ -177,9 +116,8 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
   const resumeLine = track.resume_line || "Read the resume.";
   const roleLine = track.role_search_line || "roles matching the resume";
 
-  // What makes a candidate a finding, and the mirror list of what disqualifies
-  // one. Both are assembled from parts so a track with no fit filter and no
-  // geographic scope reads naturally instead of leaving empty clauses behind.
+  // Built from optional parts so a track with no fit filter or geographic scope
+  // leaves no empty clauses.
   const findingIs = joinAnd([
     "genuinely new",
     "verified live",
@@ -199,121 +137,56 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
   const geoStep = settings.geo_scope_line
     ? settings.geo_scope_line
     : "No geographic restriction is configured for this search - don't exclude a posting on location alone.";
-  // Unlike the others, this one can't be emptied into nothing: it's a whole
-  // numbered step, and the generic version still earns its place even with no
-  // priority locations set, because the tracker derives a lead's priority from
-  // the location text either way.
+  // Never empty: it is a numbered step, and the tracker derives priority from
+  // location text whether or not priority locations are set.
   const locationGuidance = settings.location_guidance || DEFAULT_LOCATION_GUIDANCE;
   const screenedExamples = track.screened_examples || DEFAULT_SCREENED_EXAMPLES;
   const report = track.report_line || DEFAULT_REPORT_LINE;
   const footer = settings.footer_note ? ` ${settings.footer_note}` : "";
 
-  // ---- The multi-tab pieces. Every one of them is the empty string when this
-  // run fills a single tab, so an ordinary track's prompt is unchanged.
+  // ---- Multi-tab pieces: empty for a single-tab run unless noted.
   const alsoFills = multi
     ? `\n# Also fills: ${fed.map((t) => `${t.key} (${t.label})`).join(", ")} - one search, ${allKeys.length} tabs`
     : "";
-  // Which keys to fetch is no longer said here: `./tracker dedup` asks the
-  // config which tracks this one feeds and merges them itself. What the run
-  // still has to be told is how to read the merged result - that a posting
-  // tracked under any of these tabs is not new, whichever tab tonight would
-  // have filed it under.
+  // `./tracker dedup` fetches and merges every fed tab itself; the run only
+  // needs telling how to read the merged result.
   const dedupNote = multi
     ? ` It covers all ${allKeys.length} tabs this run fills (${allKeys.join(", ")}) and merges them: a posting already tracked under any of them is not new, whichever tab tonight's run would file it under.`
     : "";
-  // Slots in after the sorting step, because it only applies to what sorting
-  // has already decided is a finding - a screened-out posting needs no tab.
-  //
-  // The tie-break used to be "file it under `key`", the feeding track. That
-  // reads as a reasonable default right up until you notice `key` is whichever
-  // tab happens to own the scheduled search, not a general-purpose one - here
-  // it's the narrowest tab on the board. A run filed a Senior SWE role at an
-  // insurance company under Eng - Gaming and said so in its own note: it read
-  // as swe-tech-or-swe-industry, and the rule turned a tab it had already
-  // ruled out into the answer. Breaking the tie *among the tabs it does read
-  // as* keeps everything the rule was for - one deterministic answer, no
-  // second verification pass - and drops the part that put an insurer in the
-  // games tab. First-in-the-list is the deterministic part: `[track, ...fed]`
-  // is sort_order, which is the tab order on the page.
+  // After step 7, because only findings need a tab. A tie goes to the first
+  // listed tab among those the posting reads as, never to `key` by default:
+  // `key` is just the tab that owns the scheduled search, which may be the
+  // narrowest one.
   const filingStep = multi
     ? `7b. FILE EACH FINDING UNDER THE RIGHT TAB. This one search fills ${allKeys.length} tabs, and every finding from step 7 belongs to exactly one of them:\n${[track, ...fed]
         .map((t) => `   - \`${t.key}\` (${t.label}): ${branchOf(t)}`)
         .join("\n")}\n   Decide from what the posting and the company actually are, reading the tab descriptions above as written - not from a job title alone, which means different things at different companies. \`${doc}\` is where any finer rule for this split lives; follow it. If a posting genuinely reads more than one way after checking, file it under whichever of *those* tabs comes first in the list above, and name those ones in your report. The tie is only ever between the tabs it actually reads as: a tab you have already ruled out is never the answer, and that includes \`${key}\` - the tab that happens to own this search, which is not a reason for a posting to show up in it. Don't spend a second verification pass on the question: the posting is already verified, this only decides which tab shows it. The answer is the \`"search"\` value in step 9.\n`
     : "";
-  // Single-tab: nothing to say. tracker.ps1 stamps `search` from
-  // TRACKER_SEARCH, so a run cannot file a posting under the wrong key or
-  // forget the field, and the sentence that used to ask for it is gone.
+  // Not empty for a single tab: tracker.ps1 stamps `search` from TRACKER_SEARCH,
+  // so there is no key to choose.
   const searchValueRule = multi
     ? `is the key step 7b filed that posting under - ${allKeys
         .map((k) => `\`"${k}"\``)
         .join(" or ")}; one file can carry rows for several tabs`
     : `is stamped by the helper`;
-  // Step 8's two reports took one "search" each, and for a multi-tab run that
-  // raised the obvious question of which tab a dead posting from a fed tab got
-  // reported under. The answer is "this run's own key, always" - the tracker
-  // matches a reported url against every lead this person has, whatever tab
-  // holds it (see db.getLeadsForUrlMatch) - and it had to be said out loud,
-  // because the alternative a run would otherwise invent (one call per tab,
-  // splitting the urls by which dedup response they came from) is exactly the
-  // id-and-tab bookkeeping taking urls was meant to stop.
-  //
-  // tracker.ps1 sends the key itself, from TRACKER_SEARCH, so there is no
-  // longer a question to answer and the note is gone. The rule it encoded is
-  // in the helper's `verified`/`delist` branch.
+  // The tracker matches a url against every lead the person has, whatever tab
+  // holds it (db.getLeadsForUrlMatch). Unsaid, a multi-tab run invents one
+  // call per tab.
   const delistTabNote = multi
     ? ` One file each covers all ${allKeys.length} tabs: the tracker matches a url against every lead ${name} has, whatever tab holds it.`
     : "";
-  // There used to be a sentence here telling a multi-tab run to file every
-  // screened row under the feeding track regardless of which tab the posting
-  // would have gone in. The server does that itself now - handleAddScreened
-  // rewrites `search` to the track that owns the search - so the sentence was
-  // asking the model to reproduce a rule it cannot get wrong any more, which
-  // is the kind of prose this whole change is about deleting.
-  // Steps 1c, 9d and 9e go to every search, unconditionally. They used to wait
-  // for the company list to have something on it, which could never happen
-  // for a deployment that started empty: 9d is the only step that adds a
-  // company. An empty list is not an error - step 1c gets no companies back,
-  // step 3 falls back to the track's own target_companies, and 9d starts the
-  // list from what the run covered.
-  // The cursor mechanics ("a fixed list with a cursor, you get the next batch
-  // from cursor, it wraps") are why re-fetching in 9e is safe and why nothing
-  // has to be filtered by date. That belongs in coverage.js, which implements
-  // it; what the run needs is the consequence, which 9e states in one line.
+  // Steps 1c, 9d and 9e go to every search, even with an empty company list:
+  // 9d is the only step that adds a company. Cursor mechanics live in
+  // routes/coverage.js; 9e states only their consequence.
   const coverageStep = `1c. Get this run's companies: \`./tracker companies\`. It writes \`companies.json\` - \`{companies: [{company, last_swept, board, note}], total, batch, cursor}\` - and lists them. The server picks them, capped at what one run can actually verify. **Cover exactly these, all of them**, and don't reach past them into the rest of the list in step 3: that list is longer than one run can do properly, and the failure mode isn't a company going uncovered for a day, it's every company being skimmed. They come back round - everything is reached once per cycle before anything is reached twice. \`board\` is a JSON endpoint already confirmed for that company (\`greenhouse\`, \`ashby\`, \`workday cxs\`, ...); it makes a company cheap to cover, not privileged - use it where it's there. The cap is about *this* list: "don't reach past them" means don't help yourself to the rest of the rotation early, and step 3b sends you outside it on purpose.
 `;
-  // ---- Why 9d asks for endpoint/url_shape but not dead_signal.
+  // 9d omits dead_signal until the warning migrations/0010 asks writers to read
+  // exists: the field turns one run's pattern-match into a delisting rule every
+  // search trusts.
   //
-  // PR #1 gave /api/coverage three shared fields - endpoint, url_shape,
-  // dead_signal - and for three days no run could reach any of them: this step
-  // named `{company, board, note}` and tracker.ps1 whitelisted the same two,
-  // so the API accepted fields nothing could send. 58 of the shared table's 63
-  // rows had a board kind and no endpoint as a result. That is fixed above for
-  // the two fields that are pure fetch mechanics.
-  //
-  // dead_signal stays out on purpose. migrations/0010 says to "read the
-  // warning in the run prompt before writing this field", and that warning
-  // does not exist yet - because writing it is not a sentence, it is the
-  // careful version of what went wrong on 2026-09-08: a run compared pages it
-  // could not read, found two strings they had in common, decided those meant
-  // "closed", and delisted ten live postings on the strength of it. The
-  // strings were boilerplate every response from that host carried. A field
-  // that turns one run's pattern-match into a delisting rule every search
-  // trusts needs that warning written properly first, and it is worth nothing
-  // until then: endpoint and url_shape are where the value is.
-  //
-  // Two things dropped from 9e's emitted text and kept here, because both are
-  // arguments against changes someone would otherwise make to this file:
-  //
-  // - Why the re-fetch is a second call rather than something 9d hands back.
-  //   Reading the list changes nothing and can be repeated safely; recording a
-  //   sweep is the only thing that marks work as done. Apart, a run that dies
-  //   at any point has either recorded what it actually did or recorded
-  //   nothing, and never sits holding companies the rotation believes are
-  //   covered.
-  // - Why "record first, then fetch" is an order and not a preference. The
-  //   cursor only moves when a sweep is recorded, so fetching first hands back
-  //   the same companies - and a run that died in between would have taken
-  //   work nothing says it attempted.
+  // 9e re-fetches with a separate call after 9d, because only a recorded sweep
+  // moves the cursor. Reading is safe to repeat and recording marks work done,
+  // so a run that dies mid-way has recorded what it did or nothing.
   const sweepStep = `9d. RECORD WHAT YOU COVERED. Write every company this run actually
    attempted to \`swept.json\` - a JSON array of
    \`{company, board, endpoint, url_shape, wall, note}\` - and run
@@ -386,51 +259,18 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
    it leaves the wall standing.
 `;
 
-  // Step 9c used to carry the largest and most error-prone block of text in
-  // this whole prompt: a per-branch explanation of how to split the run's own
-  // counts across the tabs it fills, and a rule that a multi-tab run must post
-  // one record per tab. It was not followed. On 2026-09-01 the live `SWE` run
-  // reported a combined 97 leads against a tab that holds 89 in total, and the
-  // three tabs it feeds recorded nothing at all on a morning one of them took
-  // 133 leads - reading, on the page, as searches that had never run.
-  //
-  // Both jobs now belong to the server: POST /api/runs derives all three
-  // counts from the rows that actually landed and writes a record for each fed
-  // tab itself (see routes/runs.js's handleRecordRun). What's left in 9c is
-  // only what the run alone knows - which track it is, whether it worked, its
-  // local date, and a sentence for the page. The route still accepts
-  // leadsAdded/screenedAdded/delisted and ignores them, so a run that fetched
-  // this prompt before the change and is still going records correctly too.
+  // 9c sends no counts: POST /api/runs derives them from the rows that landed
+  // and writes each fed tab's record too (routes/runs.js).
   const runFanoutNote = multi
     ? ` One call covers every tab this run fills: the tracker writes a record for ${fed
         .map((t) => `\`${t.key}\``)
         .join(", ")} too, counted from the rows that landed in each. Don't run it once per tab.`
     : "";
 
-  // Two post-mortems that used to be in the emitted text, kept because each is
-  // the argument against deleting the step it belongs to:
-  //
-  // - Step 3b (broader discovery). This search ran for eight days with a
-  //   broader-discovery step in its doc, added nothing to its rotation, and by
-  //   day six was finding nothing at all, because everything its original
-  //   companies had open was already tracked or screened. That is why 3b names
-  //   step 9d rather than telling a run to write the name down somewhere.
-  // - Step 9 and 9b's "`on` is today's **local** date". Left out, the server
-  //   falls back to its own UTC date, which for an evening run is already
-  //   tomorrow: the rows land fine and the run then records having found
-  //   nothing. tracker.ps1 sends the local date and no step asks for one.
-  // - Step 4's truncated-vs-blocked rule. The company it was written for is
-  //   Google Careers, whose job pages are ~1.3MB of mostly navigation and
-  //   served the location and the pay range in plain HTML the whole time it
-  //   was being recorded as a wall. The rule stays in the text at length -
-  //   step 4 is the premise of the whole system - but the case history is
-  //   here, where someone deciding whether the paragraph still earns its
-  //   place will read it.
-  //
-  // The helper paragraph below is the collapsed form of what used to be
-  // repeated in five steps: how to check a response, that the environment
-  // variables are already set, and when to skip a call because there is
-  // nothing to send.
+  // Step 3b sends discoveries to 9d because a company written into the doc
+  // never reaches the rotation, and a search left with only its original
+  // companies runs dry. Step 4's truncated-vs-blocked rule stays because a
+  // large page cut off before the description is a size problem, not a wall.
   return `# Scheduled task: ${track.label} - ${track.full_description}
 # Schedule: ${track.schedule_time || "unscheduled"} local (headless, via Windows Task Scheduler + scripts\\run-search.ps1)
 # Track key in the tracker data: ${key}${alsoFills}
@@ -516,52 +356,15 @@ Never add an unverified link to any output.${footer}
 }
 
 /**
- * The nightly fill for applications added as nothing but a URL.
- *
- * A second prompt in this file rather than a step bolted onto a track's
- * search, because it is not a search: it has no companies, no fit rule, no
- * geographic scope, and nothing it does depends on which track a person is
- * running. Folding it into the track prompts would also mean every track
- * running it - one queue, several runs racing to read the same postings.
+ * The nightly fill for applications added as nothing but a URL. It is not a
+ * search - no companies, fit rule or scope - so it is a separate prompt.
  *
  * Served as the reserved key `_applications` under GET /api/prompt (see
- * routes/index.js) and run by scripts/run-fill.ps1 as a single nightly task
- * for the whole machine.
+ * routes/index.js) and run once per machine by scripts/run-fill.ps1, which
+ * hands the model one bearer token per account. So it takes no user.
  *
- * ---- Why this one prompt covers everybody.
- * It is one job, not one job per person: the work is "read the postings behind
- * the applications that still have a gap", and whose they are changes nothing
- * about how it is done. A task per account would mean N headless CLI runs a
- * night, nearly all of them starting up only to find an empty queue.
- *
- * ---- Why the reading fans out to subagents.
- * Pulling the rows is one cheap query per account; reading the postings behind
- * them is the slow part, and every posting is independent of every other. So
- * the run gathers the whole list first and then dispatches a subagent per
- * posting, in batches, rather than walking the list serially. The split is also
- * a boundary worth having: a subagent gets one URL and no token, no account and
- * no row id, so it cannot write anywhere or confuse one person's row with
- * another's. Every write stays in the main turn, with the right account's
- * token.
- *
- * The database is still only ever read one account at a time, and that is not
- * a compromise - it is what lets this exist without a cross-user route. Every
- * route stays session-scoped exactly as it is for the search runs (see
- * db.js's constructor), and the runner hands the model one bearer token per
- * account in the environment. So this text is written for "each account you
- * were given" and takes no user: it is identical for everyone, and the wrapper
- * scripts/run-fill.ps1 puts in front of it is what says how many accounts
- * there are tonight and which variable holds each one's token.
- *
- * ---- Why there is no run record for this one.
- * Every search records itself to /api/runs because a search that finds nothing
- * writes nothing, so a search that quietly stopped firing looks identical to a
- * quiet night. The stakes here are lower by design: this fills in fields the
- * person can always type themselves, on rows that are already in front of them
- * on the Applications tab, and it is deliberately invisible while it works. A
- * run record would be a status readout for a thing with no status - the
- * evidence that it stopped is a row that stayed blank, and the fix for that
- * row is the same either way.
+ * Subagents get a URL only, so every write stays in the main turn under the
+ * right account's token. No run record, by design (see server/README.md).
  *
  * @returns {string} the full prompt text - the same for every caller
  */

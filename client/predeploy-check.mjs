@@ -1,24 +1,7 @@
 /**
- * Refuses a deploy that would take `local-config.js` off the live site.
- *
- * `[assets]` publishes exactly what's in `public/` - so a deploy is a
- * *replacement*, not a merge. Anything on the live site that isn't on disk
- * here comes down. `local-config.js` is gitignored (see README.md, "How it
- * finds its API"), which makes it the one required file a checkout can be
- * missing while looking completely healthy: git status is clean, the page
- * renders locally off whatever config that checkout has, and the deploy
- * reports success while the live gate degrades to "This deployment has no
- * API URL configured" for everyone.
- *
- * A git worktree is the case that actually bites, because worktrees never
- * carry gitignored files - a fresh one is missing this the moment it's
- * created. That's the "never deploy from a worktree" rule in README.md, and
- * this is that rule enforced rather than written down: it went unnoticed
- * once and cost a few hours of an unusable sign-in page.
- *
- * Runs automatically before `npm run deploy` (npm's `pre` hook). It does not
- * run for a bare `wrangler deploy`, which is why README.md now points at the
- * npm script instead.
+ * Refuses the deploy when public/local-config.js is missing: an [assets] deploy
+ * replaces the live file set, so it would delete the live copy. Runs only as
+ * npm's `predeploy` hook, not for a bare `wrangler deploy`. See client/README.md.
  */
 import { existsSync } from "node:fs";
 

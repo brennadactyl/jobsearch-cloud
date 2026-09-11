@@ -1,31 +1,17 @@
 /**
  * The two reports a nightly run makes about the postings it already tracks:
- * which are still live (/api/verified), and which have come down (/api/delist).
- * Plus the rule for what "come down" means, which /api/update's by-id path
- * (see ./update.js) shares rather than restates.
+ * which are still live (/api/verified) and which have come down (/api/delist),
+ * plus the delisting rule itself, which /api/update's `delistedOn` also uses.
+ * The run reports what it saw; the server decides what that means.
  *
- * Both routes let a run report a *set of URLs* and have the server do the
- * lookup, which is the same trade the rest of this codebase keeps making: the
- * run reports what it saw, the server decides what that means.
+ * URLs are matched by posting identity (canonicalUrl, ../url.js), never by raw
+ * string: a run reaches a posting by whatever link its search gave it, and a
+ * `?gh_jid=`, a slug or a tracking param would make a raw match miss and leave
+ * a dead posting on the board.
  *
- * Matching is by posting identity (canonicalUrl - see ../url.js), never by raw
- * string. That is the entire reason these take URLs at all: a run arrives at a
- * posting by whatever link its search handed it, and `?gh_jid=`, a slug, or a
- * tracking param make that a different string from the one the lead was filed
- * under. String-matched, a run's report of a dead posting would land on nothing
- * and the posting would sit on the board looking live.
- *
- * Several tracked leads can share one canonical key. That isn't hypothetical -
- * it is the state url.js was written to describe: one night's run added 8
- * duplicate leads before the rule existed, and those rows are still in the
- * database. They are the same posting, so a report about it is a report about
- * all of them, and every match is returned rather than just the first.
- *
- * The reported list is deduped by key for the opposite reason: two spellings of
- * one posting in one payload are one report, not two. The run record's counts
- * no longer come from here - the tracker derives them from the rows - but
- * `removed` and `stamped` are what the run states in its own summary to the
- * person reading it, and a posting counted twice there is just as wrong.
+ * Several leads can share one canonical key. They are the same posting, so
+ * every match is returned. The reported list is deduped by key, so two
+ * spellings of one posting in a payload count once in `removed` and `stamped`.
  */
 
 import { DELISTED_REASON } from "../db.js";
@@ -33,23 +19,14 @@ import { json, readJson } from "../http.js";
 import { canonicalUrl } from "../url.js";
 import { isoDate, today, unknownTrack } from "../validate.js";
 
-// ---- These are the first lookups in this codebase keyed by URL rather than by
-// row id, and that matters for who can touch what. Every other cross-user
-// protection here is a consequence of an id not resolving for the wrong person;
-// a URL has no such property, because two people tracking the same posting is a
-// supported, deliberate state - UNIQUE is on (user_id, search, url), and
-// db.addLeads says so in as many words. So the candidate set this searches is
-// db.getLeadsForUrlMatch's, which is `WHERE user_id = ?` like everything else
-// in db.js: a URL can only ever resolve to the caller's own rows, and the ids
-// that reach db.markVerified and db.deleteLeadAndScreen came from that set (and
-// are re-checked against `user_id` by those statements anyway). This function
-// never sees another person's leads, so it cannot match one.
+// Two people can track the same posting (UNIQUE is on user_id, search, url), so
+// a URL, unlike a row id, says nothing about whose lead it is. The candidate set
+// is db.getLeadsForUrlMatch's, scoped to the caller like every Db read, so a URL
+// can only resolve to the caller's own rows.
 //
-// An unmatched URL is deliberately reported rather than ignored. It means the
-// run believes it is tracking something the tracker has no row for - a lead
-// someone deleted by hand, a tab that got reconfigured, or a run working from
-// stale dedup data - and that disagreement is worth a line in the run's report.
-// The raw URL comes back, not just a count, because a count can't be acted on.
+// An unmatched URL is reported, raw, rather than ignored: the run believes it
+// tracks something the tracker has no row for, and a count alone can't be
+// acted on.
 /**
  * @param {Array<{id: number, url: string}>} leads every lead this user tracks
  * @param {string[]} urls the URLs the run reported
@@ -79,14 +56,12 @@ function matchLeadsByUrl(leads, urls) {
   return { matched, unmatched };
 }
 
-// Parses the { search, urls } half both URL-set routes share. Returns a
-// Response to hand straight back on any refusal, or the cleaned values.
+// Parses the { search, urls } both URL-set routes take: `{ error }` holding a
+// Response to hand straight back, or `{ body, key, urls }`.
 //
-// The unknown-track check is here for the same reason /api/runs has it: a key
-// with no configured track means the run's idea of this search and the
-// tracker's have drifted apart, and that is worth failing loudly over even
-// though neither route below reads the key for anything else (see
-// db.getLeadsForUrlMatch on why the match itself spans every tab).
+// Neither route uses the key beyond this check (the match spans every tab - see
+// db.getLeadsForUrlMatch), but an unknown key means the run and the tracker
+// disagree about the search, which is worth failing loudly over.
 async function parseUrlReport(request, db) {
   const body = await readJson(request);
   if (body instanceof Response) return { error: body };
@@ -104,20 +79,16 @@ async function parseUrlReport(request, db) {
 
 /**
  * POST /api/verified - requires a Bearer token. Body `{ search, on?,
- * urls: [...] }` -> `{ stamped, unmatched, unmatchedUrls, on }`.
+ * urls: [...] }` -> `{ stamped, unmatched, unmatchedUrls, on }`; 400 for a
+ * missing search or urls, 404 for an unknown search.
  *
- * Records that a run re-checked the postings it tracks and found these ones
- * still live. `verified` has meant "date last verified live" in the schema
- * since day one and has never once been written after a lead was created - see
- * db.markVerified for the count. This is the call that makes the column true.
- * Since delisting deletes (migrations/0004), a lead still in a tab is presumed
- * live, and this is the only signal of how stale that presumption is.
+ * Stamps `verified` on the leads a run re-checked and found still live. A lead
+ * still in a tab is presumed live, and this date is the only measure of how
+ * stale that presumption is.
  *
- * `on` falls back to the worker's UTC date if it isn't a YYYY-MM-DD, rather
- * than refusing the whole report the way /api/delist does. The asymmetry is
- * deliberate and follows the consequences: a wrong date here means a posting
- * gets re-checked a day early or late, while a wrong date there permanently
- * deletes a real opening. A freshness stamp is not worth failing a run over.
+ * An `on` that isn't YYYY-MM-DD falls back to the worker's UTC date rather than
+ * refusing the report, unlike /api/delist: a wrong date here only moves a
+ * re-check, while there it permanently deletes a posting.
  */
 export async function handleMarkVerified({ request, db }) {
   const parsed = await parseUrlReport(request, db);
@@ -127,58 +98,32 @@ export async function handleMarkVerified({ request, db }) {
 
   const { matched, unmatched } = matchLeadsByUrl(await db.getLeadsForUrlMatch(), parsed.urls);
   const stamped = await db.markVerified(matched.map((l) => l.id), on);
-  // The tracker page prints this column as "Confirmed live <date>" on every
-  // lead, so a stamp is a change a viewer sees and the "last updated" banner
-  // should say so. Only when something actually moved: a report that matched
-  // nothing changed nothing.
+  // The page shows this date on every lead, so a stamp is a visible change and
+  // bumps "last updated".
   if (stamped > 0) await db.touchUpdated();
 
   return json({ stamped, unmatched: unmatched.length, unmatchedUrls: unmatched, on });
 }
 
 /**
- * What the tracker does when a search reports that a posting it tracks has
- * been taken down. The rule, in one place, in code:
+ * What the tracker does when a run reports that a posting it tracks has been
+ * taken down:
  *
- *   - a lead an application row points at is kept, untouched;
- *   - any other lead is deleted, and its URL recorded as screened.
+ *   - a lead with status "Applied", or with an application row pointing at it,
+ *     is kept, untouched;
+ *   - any other lead is deleted and its URL recorded as screened, in one
+ *     transaction (db.deleteLeadAndScreen).
  *
- * Deleting is the point: a dead posting is nothing anyone can act on, and a
- * lead's whole reason to sit in a search tab is that it can be applied to.
- * Recording the URL as screened is what keeps that from undoing itself -
- * without it tomorrow's run rediscovers the URL, finds nothing tracking it,
- * and adds it straight back as a new lead. Both happen in one transaction
- * (see db.js's deleteLeadAndScreen).
+ * A dead posting can't be applied to, so its lead goes; the screened row stops
+ * tomorrow's run rediscovering the URL and adding it straight back. An
+ * applied-to lead stays because what's tracked from then on is the
+ * application. The application row counts as well as the status because a
+ * lead can carry one in any status, and deleting it would strand that row.
  *
- * The applied-to exception is the one case where the posting's fate stops
- * mattering: an application row points at that lead's id, and from the moment
- * it exists what's being tracked is the application, not whether the listing
- * outlived it. That lead is kept and the report is simply absorbed - there's
- * no "delisted" state left to write it into, and nothing on the page would
- * show one. The test for it is the application row itself rather than the
- * lead's status: "Applied" is how one normally gets there, but a lead can
- * carry an application while sitting in another status - nothing deletes the
- * application when a lead moves back out of "Applied", and handleUpdate
- * writes `status` without validating it - and deleting that lead would strand
- * the row pointing at its id.
- *
- * Deliberately not the caller's decision. The caller is a nightly LLM run
- * following a prompt, and a policy written into a prompt is a policy that
- * drifts, can't be tested, and has to be re-deployed by re-wording English.
- * The run's job is to report what it saw; this is where what that means gets
- * decided, and it changes for every existing search the moment it's deployed.
- *
- * ---- Why this takes a lead rather than an id, and returns a verdict rather
- * than a Response. There are two ways in now: one lead by id (the client's
- * /api/update `delistedOn` field, and any in-flight run still using it) and a
- * whole set of URLs at once (/api/delist). Both have to apply the same rule,
- * and the way that goes wrong is not that someone rewrites the rule wholesale -
- * it's that one entry point gets a fix the other doesn't and the two quietly
- * disagree about, say, whether a lead carrying an application is safe. So the
- * rule lives here, once, and the entry points are reduced to fetching leads
- * and shaping JSON. Duplicating it is the exact failure this whole line of
- * work exists to prevent - which is also why this module holds the by-id entry
- * point below rather than ./update.js holding a copy of the policy.
+ * The rule lives in code, not in the run's prompt, so it can be tested and
+ * applies to every search once deployed. Both entry points (removeDelistedLead
+ * by id, handleDelistUrls by URL) call this and only fetch leads and shape
+ * JSON; keep the rule here rather than copying it into either.
  *
  * @param {import("../db.js").Db} db
  * @param {Object} lead - the already-fetched lead row, so this doesn't re-read it
@@ -191,26 +136,19 @@ async function delistLead(db, lead, on) {
     return { kept: true, removed: false };
   }
 
-  // `on` is the run's own local date, not the worker's UTC one - same
-  // reasoning as /api/runs' `on`, and here it's the only surviving record of
-  // when the posting died, since the lead row itself is about to be gone.
+  // `on` is the run's local date (see /api/runs), and once the lead is gone the
+  // screened row is the only record of when the posting died.
   //
-  // `removed` is what the DELETE actually matched, not what was intended: two
-  // runs reporting the same lead at once both get past the read above, and the
-  // second one deletes nothing. Saying so keeps a caller's own summary honest.
-  // It no longer feeds the tracker's `delisted` count - countRunActivity
-  // derives that from the screened rows a delisting leaves behind, precisely so
-  // it doesn't depend on a caller adding these up correctly.
+  // `removed` is what the DELETE actually matched: two concurrent reports of
+  // one lead both pass the check above, and the second deletes nothing.
   const removed = await db.deleteLeadAndScreen(lead, DELISTED_REASON, on, "run");
   return { kept: false, removed };
 }
 
 /**
- * The by-id entry point: POST /api/update with a `delistedOn` date, called
- * from ./update.js. Kept because a nightly run may still be part-way through a
- * night on a prompt fetched before /api/delist existed, so it keeps working and
- * keeps its exact response shape. Nothing in the client calls it - the tracker
- * page has no delisting control, it only ever reads the consequences.
+ * The by-id entry point: POST /api/update's `delistedOn`, called from
+ * ./update.js -> `{ ok, removed, id, screened }`, or `{ ok, lead, removed:
+ * false, reason }` when kept; 404 for an unknown lead.
  */
 export async function removeDelistedLead(db, id, on) {
   const lead = await db.getLead(id);
@@ -225,26 +163,19 @@ export async function removeDelistedLead(db, id, on) {
 
 /**
  * POST /api/delist - requires a Bearer token. Body `{ search, on, urls: [...] }`
- * -> `{ removed, kept, unmatched, unmatchedUrls, on }`.
+ * -> `{ removed, kept, unmatched, unmatchedUrls, on }`; 400 for a missing
+ * search or urls or an `on` that isn't YYYY-MM-DD, 404 for an unknown search.
  *
- * The by-URL entry point: one call reporting every posting a run confirmed dead
- * tonight. It replaces a run carrying lead ids from step 1b all the way to step
- * 8, issuing one curl per dead lead, and tallying `removed:true` against
- * `removed:false` itself - bookkeeping the server can do exactly and a model
- * can only do approximately.
+ * The by-URL entry point: every posting a run confirmed dead tonight in one
+ * call, so the server does the lookup and the tally, which a model only
+ * approximates.
  *
- * `on` must be a real YYYY-MM-DD or the whole call is refused, same as the
- * by-id path and for the same reason: what this triggers is a permanent delete,
- * the caller is an LLM, and "unknown" or "today" is not a report of anything.
- * Refused for the batch as a whole rather than per URL, because a date that
- * isn't a date says the run doesn't know what day it is, which is not a thing
- * to act on partially.
+ * `on` is required because this deletes permanently and the caller is an LLM.
+ * A date that isn't a date means the run doesn't know what day it is, so the
+ * whole batch is refused rather than applied in part.
  *
- * The leads are delisted one at a time rather than in parallel: each one is
- * already a two-statement transaction (db.deleteLeadAndScreen), and a night
- * where a hundred postings came down should not turn into a hundred concurrent
- * transactions against the same table to save a few hundred milliseconds on a
- * scheduled job nobody is waiting on.
+ * Leads are delisted one at a time, not in parallel: each is already a
+ * transaction, and nobody is waiting on this scheduled call.
  */
 export async function handleDelistUrls({ request, db }) {
   const parsed = await parseUrlReport(request, db);
@@ -261,10 +192,8 @@ export async function handleDelistUrls({ request, db }) {
     const verdict = await delistLead(db, lead, on);
     if (verdict.kept) kept++;
     else if (verdict.removed) removed++;
-    // Neither, when the DELETE matched nothing - the concurrent-report race
-    // delistLead describes. Counted as neither on purpose: the lead is gone,
-    // but this call is not what removed it, and `removed` is what the run
-    // reports as its `delisted` count.
+    // Neither when the DELETE matched nothing (the concurrent-report race in
+    // delistLead): the lead is gone, but this call didn't remove it.
   }
   if (removed > 0) await db.touchUpdated();
 

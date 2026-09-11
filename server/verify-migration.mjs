@@ -1,16 +1,14 @@
 /**
- * Checks the migrations that reshape existing rows against a database that
- * already has data: 0002_multi_user.sql and 0011_one_company_list.sql.
+ * Checks the migrations that reshape existing rows - 0002_multi_user.sql,
+ * 0011_one_company_list.sql and 0012_demo_account.sql - against a database
+ * that already has data.
  *
  *   node verify-migration.mjs
  *
- * A migration runs exactly once, against real data, and cannot be re-run or
- * undone - `0002` drops and recreates five tables to change constraints SQLite
- * won't alter in place, and `0011` merges every search's rotation into one
- * list and reshuffles it. `verify-local.mjs` exercises
- * the API but always against a database the migration built from empty, so it
- * would not notice the migration losing a column, dropping rows, resetting
- * AUTOINCREMENT, or leaving data owned by a user that doesn't exist.
+ * A migration runs once, against real data, and cannot be undone.
+ * `verify-local.mjs` always starts from an empty database, so it cannot see a
+ * migration lose a column, drop rows, reset AUTOINCREMENT, or leave data owned
+ * by a user that doesn't exist.
  *
  * Runs entirely in-process against a throwaway `node:sqlite` database - no
  * wrangler, no dev worker, nothing to clean up, and it never touches D1.
@@ -80,10 +78,8 @@ console.log("\n== against a database with data ==");
     lead.status === "Applied" && lead.notes === "my note" && lead.referral === "a referral"
     && lead.comp === "$1" && lead.team === "Platform" && lead.fit === "strong",
     JSON.stringify(lead));
-  // leads.delistedOn is dropped later, by 0004 - this file only ever applies
-  // 0001 and 0002 (see migrated()), and what it checks is that 0002's table
-  // rebuild didn't lose a column that existed at the time. Still a valid
-  // check on 0002; just don't expect the column on a current database.
+  // 0004 drops leads.delistedOn. migrated() applies only 0001 and 0002, so
+  // this checks that 0002's table rebuild kept a column that existed then.
   check("delistedOn survived", one("SELECT delistedOn d FROM leads WHERE id = 42").d === "2026-08-29");
   check("application stage dates survived",
     one("SELECT dateRecruiterScreen d FROM applications WHERE id = 3").d === "2026-08-20");
@@ -140,9 +136,8 @@ console.log("\n== against an empty database ==");
 
 console.log("\n== against a database holding only screened rows ==");
 {
-  // The backfill is conditional on there being data; an early version checked
-  // only four of the six tables, so a database in an unusual state migrated
-  // its rows to an owner that was never created.
+  // The owner backfill is conditional on there being data, so a database whose
+  // only rows are in one of the less common tables must still get an owner.
   const db = migrated("INSERT INTO screened (search, url, date) VALUES ('SWE', 'https://example.com/x', '2026-08-29');");
   check("an owner is still created for it",
     db.prepare("SELECT COUNT(*) c FROM users").get().c === 1);
@@ -242,8 +237,8 @@ INSERT INTO company_fetch (company_key, display_name, board, endpoint, verified_
   check("the new wall columns exist and are empty on every row",
     fetchRows.every((r) => r.wall === "" && r.wall_first_on === "" && r.wall_last_on === "" && r.wall_dates === 0));
 
-  // The previous worker's own read, verbatim from db.getCoverage before this
-  // change. A deploy that has to be rolled back lands on this schema.
+  // The pre-0011 worker's rotation read (db.getCoverage), verbatim. Rolling a
+  // deploy back puts that worker on this schema.
   const previous = all(
     `SELECT company, last_swept, board, note, position FROM company_sweeps
       WHERE user_id = ? AND search = ? ORDER BY position`, U1, "SWE");

@@ -4,78 +4,37 @@
   fabricated job-search data.
 
 .DESCRIPTION
-  A third kind of account, alongside the real people this deployment serves: a
-  demo one, whose entire contents are invented. It exists so the tracker can be
-  shown to someone - a screen share, a screenshot, a README - without opening a
-  real person's job search, which is a document about their employment, their
-  rejections and their salary expectations.
+  Writes the invented data in demo-user.json through the public API only, so the
+  account can only be in a state the API could have produced. It creates no
+  private folder, so setup-scheduler.ps1 never schedules a search for it.
 
-  Everything it writes goes through the public HTTP API, the same routes a real
-  search and the webpage use. Nothing here touches D1 directly, so a demo
-  account cannot end up in a state the API itself could not have produced - and
-  seeding it is a live test that those routes still work end to end.
+  Dates are stored as day offsets; re-run to move them to today. Re-seeding an
+  account that holds data needs -Force, which deletes its application rows (the
+  one thing nothing dedups) only after checking that every lead is an
+  example.com URL.
 
-  ---- What makes this account safe to show, and safe to keep.
-
-  The data is invented rather than anonymised. Companies like "Northwind
-  Systems" and "Kestrel Analytics" do not exist, and every posting URL sits
-  under example.com, which IANA reserves for documentation and which can never
-  resolve to a real job posting. So no row here can be read as a record of a
-  real company's hiring, and no link can be followed to something it misdescribes.
-  See demo-user.json, which holds all of it.
-
-  It gets no `private\<user id>\` folder and no scheduled tasks, and that is the
-  whole mechanism rather than an omission: setup-scheduler.ps1 discovers people
-  by scanning for `<data dir>\*\tracker.json`, so an account with no folder is
-  invisible to it and can never acquire a nightly run. The demo's data changes
-  only when this script is re-run.
-
-  Its tracks therefore carry no `schedule_time` - there is nothing to schedule -
-  and `stale_run_hours` is set to a year, because the staleness warning reports
-  a search that has stopped firing and this account has no search to stop. Left
-  at the default 36, every tab would show a warning about a run that was never
-  going to happen.
-
-  ---- Re-running it. Safe, and the way to refresh the dates: the postings are
-  stored as day offsets, so a re-seed moves the whole search forward to today.
-  Leads and screened rows dedup on the server, config is an upsert,
-  and run records are overwritten. Application rows are the exception - nothing
-  dedups them - so a re-seed needs -Force, which deletes this account's existing
-  applications before recreating them.
-
-  -Force will not delete anything this script did not create. Before removing a
-  single row it checks that every lead on the account is an example.com URL; one
-  posting from a real job board and it refuses outright. That is what stands
-  between a data file whose `user.name` has been edited to a real person's - or
-  a deployment where "Demo" was later handed to one - and their application
-  history.
+  See README.md, "The demo account".
 
 .PARAMETER AdminToken
-  The deployment's ADMIN_TOKEN worker secret - the operator credential that
-  creates accounts (see server/README.md). Defaults to the TRACKER_ADMIN_TOKEN
-  environment variable. This is not a login and not a session token; no search
-  or browser ever holds it.
+  The deployment's ADMIN_TOKEN worker secret, which creates accounts (see
+  server/README.md). Defaults to the TRACKER_ADMIN_TOKEN environment variable.
+  Not a session token; no search or browser holds it.
 
 .PARAMETER TrackerUrl
   The API worker's base URL, e.g. https://job-search-tracker.<subdomain>.workers.dev.
   Defaults to the TRACKER_URL environment variable.
 
 .PARAMETER Password
-  The demo account's password, for signing in on the tracker page. Minimum 12
-  characters (the API's rule). Omit it and one is generated and printed at the
-  end; pass one to set something memorable you can hand out with the demo.
-
-  Re-running with the same password changes no credential - the script signs in
-  with it and provisions nothing. Re-running with a different one (which is what
-  omitting it does, since a fresh password is generated each time) resets the
-  account's password, the same as any account here.
+  The demo account's password, 12+ characters. Omitted, one is generated and
+  printed at the end. A password that already signs in changes no credential;
+  any other, including a generated one, resets the account's password.
 
 .PARAMETER DataFile
-  The fabricated data to load. Defaults to demo-user.json next to this script.
+  The invented data to load. Defaults to demo-user.json next to this script.
 
 .PARAMETER Force
-  Required to re-seed an account that already has data. Deletes this account's
-  application rows before recreating them - see the safety check above.
+  Required to re-seed an account that already has data. Deletes its application
+  rows before recreating them, after the example.com check above.
 
 .EXAMPLE
   .\seed-demo-user.ps1 -AdminToken $env:TRACKER_ADMIN_TOKEN
@@ -122,9 +81,7 @@ if ($Password) {
         exit 1
     }
 } else {
-    # Long rather than clever, matching the API's own rule. Printed at the end -
-    # this script is the only thing that ever sees it, and it is never written
-    # to disk.
+    # No look-alike characters (0/O, 1/l/I): the password is read off the screen.
     $alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789".ToCharArray()
     $bytes = New-Object byte[] 24
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
@@ -135,10 +92,8 @@ $demoName = $data.user.name
 
 # ------------------------------------------------------------------ helpers --
 
-# One place that turns a failed call into something readable. Invoke-RestMethod
-# throws away the response body on a non-2xx, which is where this API puts the
-# only useful part of the error - "unknown track X", "password must be at least
-# 12 characters" - so it gets read back off the stream explicitly.
+# Invoke-RestMethod discards the body of a non-2xx response, and that body holds
+# the API's error message, so it is read back off the stream.
 function Invoke-Api {
     param(
         [Parameter(Mandatory = $true)][string]$Method,
@@ -146,10 +101,8 @@ function Invoke-Api {
         [string]$Token,
         $Body,
         [string]$What,
-        # Return $null on a non-2xx instead of stopping the script. Used for the
-        # one call whose failure is information rather than an error - the
-        # speculative sign-in below, where a 401 is how the script learns that
-        # the account doesn't exist yet.
+        # For the speculative sign-in, where a 401 means the account doesn't
+        # exist yet.
         [switch]$AllowFailure
     )
 
@@ -162,9 +115,8 @@ function Invoke-Api {
         Headers = $headers
     }
     if ($null -ne $Body) {
-        # Encoded to UTF-8 bytes rather than handed over as a string: PowerShell
-        # 5.1 would otherwise send it in the console's codepage, which mangles
-        # any non-ASCII character in a note or a config setting on the way out.
+        # Sent as UTF-8 bytes: PowerShell 5.1 would encode a string body in the
+        # console's codepage and mangle non-ASCII characters.
         $json = $Body | ConvertTo-Json -Depth 20 -Compress
         $req["Body"] = [System.Text.Encoding]::UTF8.GetBytes($json)
         $req["ContentType"] = "application/json; charset=utf-8"
@@ -191,10 +143,8 @@ function Invoke-Api {
     }
 }
 
-# The dataset stores offsets, not dates, so a demo seeded today reads as a
-# search that has been running for three weeks - and one seeded next year does
-# too. Local date, deliberately: every `on`/`found`/`date` field in this API is
-# the caller's own day, not the worker's UTC one.
+# Local date, not UTC: every `on`/`found`/`date` field in this API is the
+# caller's own day.
 function DaysAgo([int]$n) { (Get-Date).AddDays(-$n).ToString("yyyy-MM-dd") }
 function DaysAhead([int]$n) { (Get-Date).AddDays($n).ToString("yyyy-MM-dd") }
 
@@ -207,19 +157,9 @@ Say "Account:   $demoName"
 Say "Data file: $DataFile"
 Say ""
 
-# Sign in before provisioning, not after. POST /api/users is create-*or-reset*
-# (it is how a forgotten password gets fixed - see server/src/routes/accounts.js), so
-# calling it unconditionally would reset the password of whatever account
-# happens to bear this name, including one that turns out not to be the demo
-# and that the safeguards below would then refuse to touch. By then the reset
-# has already happened, and it is not undoable without knowing what the
-# password used to be.
-#
-# So: try the password first. If it works the account already exists in the
-# state this run wants, and no provisioning call is made at all - which is the
-# ordinary re-run, and it now changes no credential. Provisioning happens only
-# when the sign-in fails, which is the case where a password is being set
-# either way.
+# Sign in first and provision only if that fails: POST /api/users is
+# create-or-reset, so calling it unconditionally would reset the password of any
+# existing account with this name, including a real person's.
 $loginBody = @{ name = $demoName; password = $Password; label = "demo-seed" }
 $session = Invoke-Api -Method POST -Path "/api/login" -Body $loginBody -AllowFailure
 $passwordWasReset = $false
@@ -236,9 +176,8 @@ if ($session) {
     if ($account.created) {
         Say "Created account $demoName ($userId)."
     } else {
-        # The name was taken and the password didn't match, so this call was a
-        # reset. Flagged rather than glossed over: if the safeguards below then
-        # refuse the account, this is the one change that already landed.
+        # The name existed and the password didn't match, so this was a reset:
+        # the one change already made if the safeguards below refuse the account.
         $passwordWasReset = $true
         Say "Account $demoName ($userId) already existed - its password has been reset to the one below."
     }
@@ -264,11 +203,8 @@ dedups, so they are deleted and recreated rather than doubled.
 }
 
 if ($Force -and $existingApps.Count -gt 0) {
-    # The check that makes -Force safe to hand to anyone. This script only ever
-    # writes example.com postings, so a lead on any other host means the token
-    # in hand belongs to somebody's real job search - a mistyped account name,
-    # or a demo name that a real person was later given. Refuse the whole run
-    # rather than delete one row of it.
+    # This script only writes example.com postings, so a lead on any other host
+    # means a real person's account. Refuse before deleting a single row.
     $real = @($existingLeads | Where-Object { $_.url -notmatch '(^|\.)example\.com/' })
     if ($real.Count -gt 0) {
         $resetWarning = ""
@@ -300,14 +236,10 @@ application records. No rows have been changed.$resetWarning
 
 # ------------------------------------------------------------- demo marker --
 
-# Marked only here, once the safeguards above have run - never on the
-# create-or-reset call further up, which can land on a real person who happens
-# to be called Demo. And only when every lead already on the account is one this
-# script could have written, by the same test -Force uses. The mark is what
-# keeps the account off the company list every account shares
-# (server/migrations/0012_demo_account.sql). The password is the one this run
-# just signed in with, so resetting to it changes nothing else, and sessions
-# survive it.
+# The demo mark keeps this account off the company list every account shares.
+# It is set only after the example.com check, never on the create-or-reset call
+# above, which can land on a real person named Demo. Resending the password this
+# run signed in with changes no credential and keeps sessions.
 $notOurs = @($existingLeads | Where-Object { $_.url -notmatch '(^|\.)example\.com/' })
 if ($notOurs.Count -gt 0) {
     Write-Warning "Not marking $demoName as a demo account: it holds $($notOurs.Count) lead(s) on hosts other than example.com, so it may be a person's."
@@ -322,9 +254,8 @@ if ($notOurs.Count -gt 0) {
 
 # ------------------------------------------------------------------- config --
 
-# One post carries the whole track list and every setting. `tracks` replaces the
-# list wholesale (see server/README.md), which is exactly what's wanted here -
-# the file is the complete definition of this account, not a patch on it.
+# `tracks` replaces the whole list (server/README.md), which suits a data file
+# that is the account's complete definition.
 $configBody = @{ tracks = @($data.tracks) }
 foreach ($prop in $data.settings.PSObject.Properties) {
     $configBody[$prop.Name] = $prop.Value
@@ -334,17 +265,12 @@ Say "Configured $(@($data.tracks).Count) tracks and the page settings."
 
 # --------------------------------------------------------------- coverage --
 
-# Deliberately nothing. The company list is one list every account's searches
-# draw from, so a demo's invented companies on it are companies real nightly
-# runs go looking for - which is what happened once 0011 merged every account's
-# rotation into it (server/migrations/0012_demo_account.sql). The server now
-# refuses a demo account's POST /api/coverage in any case, and the demo's
-# rotation tab shows the real list.
+# Deliberately nothing: every account's searches draw from one company list, so
+# invented companies on it would send real nightly runs looking for them. The
+# server refuses a demo account's POST /api/coverage in any case.
 
 # ------------------------------------------------------------------- leads --
 
-# Each lead carries its own found/verified date, so the tab reads as three
-# weeks of accumulated searching rather than everything arriving at once.
 $leadPayload = @()
 foreach ($lead in $data.leads) {
     $row = @{
@@ -384,9 +310,8 @@ Say "Screened: $($screenedResult.added) added, $($screenedResult.duplicates) alr
 
 # ------------------------------------------------- lead notes and statuses --
 
-# /api/leads inserts every lead as "New" with empty notes - the search has no
-# opinion about either - so the statuses and notes that make the demo look
-# lived-in are a second pass, through the same routes the webpage uses.
+# /api/leads inserts every lead as "New" with empty notes, so statuses and notes
+# are a second pass through the routes the webpage uses.
 $current = Invoke-Api -Method GET -Path "/api/data" -Token $token -What "Reading back the seeded leads"
 $leadIdByUrl = @{}
 foreach ($lead in $current.leads) { $leadIdByUrl[$lead.url] = $lead.id }
@@ -400,8 +325,7 @@ foreach ($lead in $data.leads) {
     }
 
     # Notes first: moving a lead to "Applied" copies them onto the application
-    # row it creates, so writing them afterwards would leave the application
-    # with a blank note.
+    # row it creates.
     $notes = ""
     if ($lead.PSObject.Properties["notes"]) { $notes = $lead.notes }
     if ($notes) {
@@ -415,8 +339,8 @@ foreach ($lead in $data.leads) {
     if ($lead.status -eq "New") { continue }
 
     if ($lead.status -eq "Applied") {
-        # The purpose-built route, not a plain field write: it is what creates
-        # the application row alongside the status change, in one transaction.
+        # Not /api/update: only this route creates the application row with the
+        # status change.
         Invoke-Api -Method POST -Path "/api/leads/$id/status" -Token $token -What "Marking lead $id applied" -Body @{ status = $lead.status } | Out-Null
     } else {
         Invoke-Api -Method POST -Path "/api/update" -Token $token -What "Setting status on lead $id" -Body @{
@@ -431,8 +355,7 @@ Say "Set the status on $statusCount leads."
 
 # ------------------------------------------------------------ applications --
 
-# Re-read: the "Applied" statuses above created application rows, and their ids
-# are what the pipeline walk below needs.
+# Re-read for the ids of the application rows the "Applied" statuses created.
 $current = Invoke-Api -Method GET -Path "/api/data" -Token $token -What "Reading back the created applications"
 $appByLeadId = @{}
 foreach ($app in $current.applications) {
@@ -453,8 +376,6 @@ foreach ($spec in $data.applications) {
             continue
         }
     } else {
-        # An application with no lead behind it: added by hand, the way a
-        # referral or a posting found outside the search would be.
         $created = Invoke-Api -Method POST -Path "/api/update" -Token $token -What "Adding the $($spec.company) application" -Body @{
             type    = "application"
             company = $spec.company
@@ -463,10 +384,8 @@ foreach ($spec in $data.applications) {
         $appId = $created.application.id
     }
 
-    # Everything the row carries besides its stage history, in one patch.
-    # dateApplied is set here rather than left to the status walk below: the
-    # stage stamp only fires on a blank column, and the row was created with
-    # today's date, so the walk alone could never backdate it.
+    # dateApplied is set here because the status walk below stamps only a blank
+    # column, and the row was created with today's date.
     $patch = @{ type = "application"; id = $appId }
     foreach ($f in @("company", "title", "link", "source", "referral", "comp", "notes")) {
         if ($spec.PSObject.Properties[$f]) { $patch[$f] = $spec.$f }
@@ -479,10 +398,8 @@ foreach ($spec in $data.applications) {
     if ($appliedStage.Count -gt 0) { $patch["dateApplied"] = DaysAgo $appliedStage[0].daysAgo }
     Invoke-Api -Method POST -Path "/api/update" -Token $token -What "Filling in application $appId" -Body $patch | Out-Null
 
-    # Walk the pipeline in order. Each call stamps that stage's date column and
-    # leaves the row sitting at the last stage in the list - the same sequence
-    # of clicks a person would make on the page over several weeks, which is
-    # why the stage history comes out populated rather than hand-written.
+    # One status call per stage, in order: each call stamps that stage's date
+    # column, so the history comes from the same route the page uses.
     foreach ($stage in $spec.stages) {
         $body = @{ status = $stage.status }
         if ($stage.PSObject.Properties["daysAgo"]) { $body["date"] = DaysAgo $stage.daysAgo }
@@ -494,10 +411,8 @@ Say "Built $appCount applications with their stage histories."
 
 # -------------------------------------------------------------- run records --
 
-# Without these every tab reads "No run recorded yet", which is the state a
-# brand-new install shows - accurate for this account, and the least
-# interesting thing to demonstrate. One post per searching track; the server
-# fans it out to the tabs that track feeds, and counts the rows itself.
+# Without a run record every tab reads "No run recorded yet". One post per
+# searching track; the server fans it out to the tabs that track feeds.
 foreach ($run in $data.runs) {
     $result = Invoke-Api -Method POST -Path "/api/runs" -Token $token -What "Recording a run for $($run.search)" -Body @{
         search = $run.search
