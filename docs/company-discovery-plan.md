@@ -13,13 +13,13 @@ This changes the company list described in [schema.md](schema.md)
 Every search runs step 3b, "look outside that list", and adds what it finds
 through step 9d: `POST /api/coverage` creates a list row for any company it has
 not seen. The list is shared by every search and every account, but each search
-picks its verticals and candidates alone, with no record of what any search
+picks its industries and candidates alone, with no record of what any search
 tried before.
 
 On 2026-09-11 the four searches checked DraftKings three times, the Seattle
 Kraken three times, and Albertsons and the Mariners twice each. SWE and product
 both hit Sportradar's Cloudflare block. Each track's baseline doc also carries
-its own numbered "broader discovery" step and a prose log of verticals tried.
+its own numbered "broader discovery" step and a prose log of industries tried.
 
 ## The approach
 
@@ -35,7 +35,7 @@ describes a company, never a search.
 |---|---|
 | `company_key` | PK, `normalize()` of the name |
 | `display_name` | |
-| `vertical` | the vertical it was found under; `''` for a suggestion or a manual add |
+| `industry` | the industry it was found under; `''` for a suggestion or a manual add |
 | `outcome` | `suggested`, `added`, `no_match`, `unreadable`, `not_found` |
 | `source` | `job`, `search`, `person` |
 | `evidence_url` | for `added`: the live posting that qualified it |
@@ -77,15 +77,15 @@ The runner prepares, before the model starts:
 The model:
 
 1. Runs `./tracker discovery`, which writes `discovery.json`: tonight's
-   verticals, pending suggestions, every company on the list, every company
+   industries, pending suggestions, every company on the list, every company
    inside its retry window, and tonight's remaining add cap.
-2. Evaluates the suggestions, then searches tonight's verticals for employers
+2. Evaluates the suggestions, then searches tonight's industries for employers
    hiring any role in `searches.json` in that account's locations. It skips
    companies on the list, inside a retry window, or excluded by any account.
 3. For each candidate, finds the listings route and verifies at least one
    current posting to the search prompt's step-4 standard. One verified posting
    matching one search's role and locations qualifies the company.
-4. Writes `discovered.json` - `{company, vertical, outcome, board, endpoint,
+4. Writes `discovered.json` - `{company, industry, outcome, board, endpoint,
    url_shape, wall, evidence_url, note}` per candidate - and runs
    `./tracker discovered discovered.json`.
 5. Reports counts by outcome and names the companies added.
@@ -100,9 +100,9 @@ the routes, not in the prompt.
 
 `GET /api/discovery` returns:
 
-- `verticals` - the `DISCOVERY_VERTICALS_PER_RUN` (2) verticals whose most
-  recent `last_on` is oldest; never-tried verticals first, ties in list order.
-  The list is `DISCOVERY_VERTICALS`, today's step-3b verticals.
+- `industries` - the `DISCOVERY_INDUSTRIES_PER_RUN` (2) industries whose most
+  recent `last_on` is oldest; never-tried industries first, ties in list order.
+  The list is `DISCOVERY_INDUSTRIES`, today's step-3b industries.
 - `suggestions`, `list`, `recent` (rows inside their retry window), and
   `remaining` - `DISCOVERY_ADD_CAP` (6) minus today's `added` rows with
   `source = 'job'`.
@@ -139,7 +139,7 @@ A search covers the companies it is served and reports what it covered.
   discovery". Step 3 keeps web search as a backup for the served companies.
 - `tracker.ps1 swept` prints `suggested=` where it printed `added=`.
 - Every track baseline doc with its own "broader discovery" process step loses
-  that step; its prose log of verticals already tried stays. Reconciled per the
+  that step; its prose log of industries already tried stays. Reconciled per the
   `change-search-prompt` skill, in the same release.
 
 ### 5. Adding a company by hand
@@ -166,7 +166,7 @@ prompt together.
 ## Files
 
 - `server/migrations/0013_company_discovery.sql`
-- `server/src/discovery.js` - verticals, cap, retry windows, vertical selection
+- `server/src/discovery.js` - industries, cap, retry windows, industry selection
 - `server/src/routes/discovery.js`, `server/src/routes/index.js`,
   `server/src/routes/prompt.js`, `server/src/routes/coverage.js`,
   `server/src/db.js`
@@ -190,7 +190,7 @@ prompt together.
   same company is accepted.
 - The seventh job `added` on one date is `over_cap`; a `person` add is not.
 - A demo account gets 403 on `POST /api/discovery`.
-- `GET /api/discovery` serves the two least-recently-tried verticals, and the
+- `GET /api/discovery` serves the two least-recently-tried industries, and the
   same two until a row is logged against one.
 - No search prompt contains step 3b, and `/api/prompt/_discovery` returns 200.
 
