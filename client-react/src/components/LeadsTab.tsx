@@ -9,18 +9,20 @@
  * Every control here writes: status through its own endpoint, every other
  * field on blur. See ./writes.tsx.
  */
+import { Fragment, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Lead, TrackerData } from "../api/schema";
-import { ALL_LEADS, LEAD_STATUS, ROLE_FIELDS } from "../domain/constants";
+import { useDeleteLead, useMoveLead } from "../api/mutations";
+import { ALL_LEADS, LEAD_STATUS } from "../domain/constants";
 import { drillKeeps, leadRows } from "../domain/drills";
 import { safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { leadComparator } from "../domain/rows";
 import { runState } from "../domain/runs";
 import { buildTracks, pathForTab, trackCountLine } from "../domain/tabs";
-import { setPrefs, usePrefs } from "../ui/prefs";
-import { useDeleteLead, useMoveLead } from "../api/mutations";
-import { DrillChip, FactsCards, GeoBadge, GeoKey, Pill, RunStamp, SortSelect, ViewSwitch } from "./bits";
+import { selectRow, setPrefs, usePrefs } from "../ui/prefs";
+import { DrillChip, GeoBadge, GeoKey, Pill, RunStamp, SortSelect, TrashIcon, ViewSwitch } from "./bits";
+import { LeadFactsCard, NotesBlock } from "./facts";
 import { EditableField, LeadStatusSelect } from "./writes";
 
 export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackKey: string }) {
@@ -34,7 +36,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   const isAll = trackKey === ALL_LEADS;
   const tracks = buildTracks(data.tracks);
   const track = tracks[trackKey];
-  const scopeLabel = isAll ? settings.all_leads_label || "All leads" : track?.label ?? trackKey;
+  const scopeLabel = isAll ? settings.all_leads_label || "All leads" : (track?.label ?? trackKey);
 
   // `tracked` keeps the unfiltered set only so the empty state below can tell a
   // search that has never found anything from one whose finds have all been
@@ -121,7 +123,10 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
     // turned up nothing from one whose finds have all been applied to; the run
     // record separates a real zero from a search that hasn't run in a week.
     const st = runState(track?.last_run, settings);
-    const warn = st === "stale" || st === "error" && (
+    // Both states earn the warning. Parenthesised because `a || b && x` binds as
+    // `a || (b && x)`, which rendered the boolean `true` - nothing at all - for a
+    // stale search, the very case the warning exists for.
+    const warn = (st === "stale" || st === "error") && (
       <div className="empty-warn">
         But this search hasn’t reported a clean run recently — check the scheduled task before reading this as a genuine
         zero.
@@ -170,7 +175,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
         <LeadsGrid rows={rows} trackKey={trackKey} isAll={isAll} data={data} trackLabel={trackLabel} />
         <div className="note">
           Quick-scan columns only — referral, notes, team, setup, and the rest are in Detail view (click a row to open
-          them). {rows.length} of {all.length} shown.
+          them). Edits save when you click away. {rows.length} of {all.length} shown.
         </div>
       </>
     );
@@ -193,11 +198,11 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
                 role="button"
                 tabIndex={0}
                 aria-pressed={l.id === sel.id}
-                onClick={() => setPrefs({ selected: { ...prefs.selected, [trackKey]: String(l.id) } })}
+                onClick={() => selectRow(trackKey, String(l.id))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setPrefs({ selected: { ...prefs.selected, [trackKey]: String(l.id) } });
+                    selectRow(trackKey, String(l.id));
                   }
                 }}
               >
@@ -207,6 +212,8 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
                 </div>
                 <div className="md-row-ttl">
                   {l.title}
+                  {/* In the pooled list, which search found a posting is the one
+                      thing a row no longer says by virtue of which tab you are on. */}
                   {isAll && <span className="md-row-track">{trackLabel(l)}</span>}
                 </div>
                 <div className="md-row-loc">
@@ -225,7 +232,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
         </div>
       </div>
       <div className="note">
-        {rows.length} of {all.length} shown. Editing arrives in Phase 4 — this view is read-only for now.
+        Status, notes, and details save when you click away from the field. {rows.length} of {all.length} shown.
       </div>
     </>
   );
@@ -239,7 +246,18 @@ function clearDrillTo(trackKey: string, params: URLSearchParams): string {
   return pathForTab(trackKey) + (q ? `?${q}` : "");
 }
 
+/**
+ * The grid is for a fast scan without scrolling, so it shows a deliberately
+ * short list of columns - Detail view has the rest. Comp earns the one extra
+ * because it is the field most likely to change whether a posting is worth a
+ * second look.
+ */
 const LEAD_GRID_FIELDS: readonly (readonly [string, string])[] = [["comp", "Comp range"]];
+
+/** A click on a row toggles it - except a click on an actual control, which does its own thing. */
+function isControl(e: MouseEvent) {
+  return !!(e.target as HTMLElement).closest("input,select,textarea,a,button");
+}
 
 function LeadsGrid({
   rows,
@@ -282,20 +300,29 @@ function LeadsGrid({
             const cls = [g ? g.p : "", String(prefs.selected[trackKey]) === String(l.id) ? "gr-sel" : ""]
               .filter(Boolean)
               .join(" ");
+            // Opening or closing a row is what "highlights" it: it is the row
+            // Detail view lands on when you switch there.
             const toggle = () =>
               setPrefs({
                 expanded: { ...prefs.expanded, [l.id]: !open },
                 selected: { ...prefs.selected, [trackKey]: String(l.id) },
               });
+            const url = safeUrl(l.url);
             return (
-              <>
-                <tr key={l.id} className={cls || undefined}>
+              <Fragment key={l.id}>
+                <tr
+                  data-expand={l.id}
+                  className={cls || undefined}
+                  onClick={(e) => {
+                    if (!isControl(e)) toggle();
+                  }}
+                >
                   <td className="co cc" title={l.company}>
                     {l.company}
                   </td>
                   <td className="rc">
-                    {safeUrl(l.url) ? (
-                      <a href={safeUrl(l.url)} target="_blank" rel="noopener noreferrer" title={l.title}>
+                    {url ? (
+                      <a href={url} target="_blank" rel="noopener noreferrer" title={l.title}>
                         {l.title}
                       </a>
                     ) : (
@@ -324,21 +351,19 @@ function LeadsGrid({
                   )}
                   <td className="dt mono">{l.found}</td>
                   <td className="exp-ind">
-                    <button type="button" className="linkish" onClick={toggle}>
+                    <button type="button" aria-expanded={open} onClick={toggle}>
                       {open ? "Hide" : "Details"}
                     </button>
                   </td>
                 </tr>
                 {open && (
-                  <tr className="more-row" key={`${l.id}-more`}>
+                  <tr className="more-row">
                     <td colSpan={cols}>
-                      <div className="facts-card" style={{ marginTop: 0 }}>
-                        <FactsCards item={l} kind="lead" fields={ROLE_FIELDS} />
-                      </div>
+                      <LeadFactsCard lead={l} compact />
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
@@ -383,9 +408,8 @@ function LeadDetail({ lead, data }: { lead: Lead; data: TrackerData }) {
         </span>
         <RemoveLead lead={lead} />
       </div>
-      <div className="facts-card">
-        <FactsCards item={lead} kind="lead" fields={ROLE_FIELDS} />
-      </div>
+      <LeadFactsCard lead={lead} />
+      <NotesBlock row={lead} kind="lead" placeholder="Add a note" />
     </>
   );
 }
@@ -444,22 +468,7 @@ function RemoveLead({ lead }: { lead: Lead }) {
         if (why?.trim()) del.mutate({ id: lead.id, reason: why.trim() });
       }}
     >
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M3 4.5h10" />
-        <path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" />
-        <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" />
-        <path d="M6.7 7v4M9.3 7v4" />
-      </svg>
+      <TrashIcon />
     </button>
   );
 }

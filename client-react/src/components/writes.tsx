@@ -36,6 +36,7 @@ export function EditableField({
   placeholder,
   ariaLabel,
   className,
+  size,
 }: {
   row: Lead | Application;
   kind: "lead" | "application";
@@ -44,6 +45,8 @@ export function EditableField({
   placeholder?: string;
   ariaLabel?: string;
   className?: string;
+  /** Width in characters - the application header's location input sizes itself to its value. */
+  size?: number;
 }) {
   const update = useUpdateField();
   const serverValue = ((row as unknown as Record<string, string>)[field] ?? "");
@@ -54,6 +57,7 @@ export function EditableField({
     <input
       type={type}
       className={className}
+      size={size}
       value={value}
       placeholder={placeholder}
       aria-label={ariaLabel ?? field}
@@ -88,7 +92,15 @@ export function EditableField({
 }
 
 /** The notes box. Same commit-on-blur contract as EditableField, and the same reason for reading the event. */
-export function EditableNotes({ row, kind }: { row: Lead | Application; kind: "lead" | "application" }) {
+export function EditableNotes({
+  row,
+  kind,
+  placeholder,
+}: {
+  row: Lead | Application;
+  kind: "lead" | "application";
+  placeholder?: string;
+}) {
   const update = useUpdateField();
   const serverValue = row.notes ?? "";
   const [draft, setDraft] = useState<string | null>(null);
@@ -96,7 +108,7 @@ export function EditableNotes({ row, kind }: { row: Lead | Application; kind: "l
   return (
     <textarea
       rows={3}
-      placeholder="Add a note"
+      placeholder={placeholder}
       aria-label="Notes"
       value={draft ?? serverValue}
       onChange={(e) => setDraft(e.target.value)}

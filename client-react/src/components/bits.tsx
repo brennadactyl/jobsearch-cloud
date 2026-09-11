@@ -3,14 +3,13 @@
  * src/tracker.css already targets - none of this is new design.
  */
 import { Link } from "react-router-dom";
-import type { Application, Lead, Settings, Track } from "../api/schema";
+import type { Settings, Track } from "../api/schema";
 import { APP_SORTS, LEAD_SORTS, pillFor } from "../domain/constants";
 import { drillLabel } from "../domain/drills";
 import { relWhen, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { runState, runSummary } from "../domain/runs";
 import { setPrefs, usePrefs } from "../ui/prefs";
-import { EditableField, EditableNotes } from "./writes";
 
 /** Status as a coloured pill. */
 export function Pill({ status }: { status: string }) {
@@ -152,34 +151,27 @@ export function PostingLink({ url, children }: { url: string; children: React.Re
 }
 
 /**
- * The facts cards under a row's header. Every field commits on blur.
+ * The remove glyph, drawn from primitive shapes rather than one hand-authored
+ * path so it reads as a bin at a glance. stroke is currentColor, so the button's
+ * own colour (.icon-btn.danger) is what colours it.
  */
-export function FactsCards({
-  item,
-  kind,
-  fields,
-}: {
-  item: Lead | Application;
-  kind: "lead" | "application";
-  fields: readonly (readonly [field: string, label: string])[];
-}) {
+export function TrashIcon() {
   return (
-    <div className="facts">
-      <div className="fcard">
-        <h4>Role details</h4>
-        <div className="fgrid">
-          {fields.map(([field, label]) => (
-            <label key={field} className="f">
-              <span>{label}</span>
-              <EditableField row={item} kind={kind} field={field} placeholder={label} ariaLabel={label} />
-            </label>
-          ))}
-        </div>
-      </div>
-      <div className="fcard">
-        <h4>Notes</h4>
-        <EditableNotes row={item} kind={kind} />
-      </div>
-    </div>
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 4.5h10" />
+      <path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" />
+      <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" />
+      <path d="M6.7 7v4M9.3 7v4" />
+    </svg>
   );
 }

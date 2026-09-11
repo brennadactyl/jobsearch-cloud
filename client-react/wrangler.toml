@@ -19,3 +19,10 @@ compatibility_date = "2025-01-01"
 # ../.claude/skills/verify-and-deploy/SKILL.md.
 [assets]
 directory = "./dist"
+# Every tab is a real URL - /applications, /all-leads, /t/<track> - and none of
+# them is a file in dist/. Without this, a static-assets Worker answers each of
+# them 404 the moment it is reloaded, bookmarked or opened from a link; only /
+# works. vite dev and vite preview fall back to index.html on their own, so no
+# local run can show the problem. It shipped that way and was found by loading
+# /applications on the deployed site. src/deploy-config.test.ts pins it.
+not_found_handling = "single-page-application"

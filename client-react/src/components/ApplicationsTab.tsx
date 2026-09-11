@@ -10,18 +10,19 @@
  * Every control here writes. Moving into a stage that has not happened yet asks
  * when it did - see StageDateModal.
  */
-import { useState } from "react";
+import { Fragment, useState, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Application, TrackerData } from "../api/schema";
-import { APP_ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "../domain/constants";
+import { useAddApplication, useDeleteApplication } from "../api/mutations";
 import { appRows, drillKeeps } from "../domain/drills";
 import { daysSince, hostOf, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { appComparator, fillState, type FillState } from "../domain/rows";
-import { pathForTab } from "../domain/tabs";
-import { setPrefs, usePrefs } from "../ui/prefs";
-import { useAddApplication, useDeleteApplication } from "../api/mutations";
-import { DrillChip, FactsCards, GeoBadge, GeoKey, Pill, SortSelect, ViewSwitch } from "./bits";
+import { buildTracks, pathForTab } from "../domain/tabs";
+import { saved } from "../ui/saved";
+import { selectRow, setPrefs, usePrefs } from "../ui/prefs";
+import { DrillChip, GeoBadge, GeoKey, Pill, SortSelect, TrashIcon, ViewSwitch } from "./bits";
+import { AppFactsCards, AutofillNote, NotesBlock } from "./facts";
 import { AppStatusSelect, EditableField, StageDateModal, type PendingStage } from "./writes";
 
 export default function ApplicationsTab({ data }: { data: TrackerData }) {
@@ -33,9 +34,36 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
   const [link, setLink] = useState("");
   const [pending, setPending] = useState<PendingStage | null>(null);
   const addApp = useAddApplication();
+
+  // Adding an application: a pasted URL, or nothing at all.
+  //
+  // With a URL, the row is created with the link and no other content, and that
+  // is the entire handoff - the row is a candidate for the overnight fill
+  // because of what is in it, not because anything here said so.
+  //
+  // The duplicate check is exact-match and deliberately shallow: it catches
+  // pasting the same URL twice, which is the mistake a one-box form invites, and
+  // does not try to be the canonical-URL matching the server does for leads.
   const add = () => {
-    addApp.mutate({ link: link.trim() });
+    const url = link.trim();
     setLink("");
+    if (url) {
+      const same = data.applications.find((a) => String(a.link || "").trim().toLowerCase() === url.toLowerCase());
+      if (same) {
+        selectRow("applications", String(same.id));
+        saved.note("Already in your applications");
+        return;
+      }
+    }
+    addApp.mutate(
+      { link: url },
+      {
+        onSuccess: (app) => {
+          selectRow("applications", String(app.id));
+          saved.note(url ? "Added — it fills in overnight" : "Saved");
+        },
+      },
+    );
   };
 
   const all = appRows(data.applications).sort(appComparator(prefs.appSort));
@@ -96,6 +124,8 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
     </>
   );
 
+  const modal = <StageDateModal pending={pending} onClose={() => setPending(null)} />;
+
   if (!all.length) {
     return (
       <>
@@ -105,7 +135,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
           When you apply to something, add it here to track the conversation. Days-since and the follow-up list update
           themselves.
         </div>
-        <StageDateModal pending={pending} onClose={() => setPending(null)} />
+        {modal}
       </>
     );
   }
@@ -118,7 +148,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
           <strong>Nothing matches</strong>
           No application matches this filter. Clear it above to see all {all.length}.
         </div>
-        <StageDateModal pending={pending} onClose={() => setPending(null)} />
+        {modal}
       </>
     );
   }
@@ -131,7 +161,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
         <div className="note">
           Quick-scan columns only — referral, notes and the rest are in Detail view. {rows.length} of {all.length} shown.
         </div>
-        <StageDateModal pending={pending} onClose={() => setPending(null)} />
+        {modal}
       </>
     );
   }
@@ -146,6 +176,8 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
           {rows.map((a) => {
             const g = geo(a.location, settings.priority_locations);
             const d = daysSince(a.dateApplied);
+            // The host stands in for the company on a row that is still nothing
+            // but a URL - a list of rows all reading "Untitled" can't be told apart.
             const label = a.company || hostOf(a.link) || "Untitled";
             return (
               <div
@@ -154,11 +186,11 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
                 role="button"
                 tabIndex={0}
                 aria-pressed={a.id === sel.id}
-                onClick={() => setPrefs({ selected: { ...prefs.selected, applications: String(a.id) } })}
+                onClick={() => selectRow("applications", String(a.id))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setPrefs({ selected: { ...prefs.selected, applications: String(a.id) } });
+                    selectRow("applications", String(a.id));
                   }
                 }}
               >
@@ -188,28 +220,44 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
       <div className="note">
         {rows.length} of {all.length} shown.
       </div>
-      <StageDateModal pending={pending} onClose={() => setPending(null)} />
+      {modal}
     </>
   );
 }
 
-/** Removing an application just confirms - unlike a lead, nothing has to stop a search rediscovering it. */
-function RemoveApp({ app }: { app: Application }) {
+/**
+ * Removing an application just confirms - unlike a lead, nothing has to stop a
+ * search rediscovering it. The detail header draws it as the bin icon and the
+ * grid as a plain ×, as the original does.
+ */
+function RemoveApp({ app, icon }: { app: Application; icon?: boolean }) {
   const del = useDeleteApplication();
   const name = `${app.company} ${app.title}`.trim() || "this row";
-  return (
+  const onClick = () => {
+    if (window.confirm(`Remove ${name} from Applications?`)) del.mutate({ id: app.id });
+  };
+  return icon ? (
     <button
-      className="btn ghost"
+      className="icon-btn danger"
       type="button"
-      title="Remove"
+      title="Remove application"
       aria-label={`Remove ${name}`}
-      onClick={() => {
-        if (window.confirm(`Remove ${name} from Applications?`)) del.mutate({ id: app.id });
-      }}
+      onClick={onClick}
     >
+      <TrashIcon />
+    </button>
+  ) : (
+    <button className="btn ghost" type="button" title="Remove" aria-label={`Remove ${name}`} onClick={onClick}>
       ×
     </button>
   );
+}
+
+/** The track an application came from, when it came from a lead - the one thing the tab no longer says by itself. */
+function appTrackLabel(app: Application, data: TrackerData): string {
+  if (!app.leadId) return "";
+  const lead = data.leads.find((l) => String(l.id) === String(app.leadId));
+  return lead ? (buildTracks(data.tracks)[lead.search]?.label ?? "") : "";
 }
 
 /** Order is what needs you first. The middle group takes the tab's own name from config. */
@@ -222,6 +270,11 @@ function groupsFor(rows: Application[], applicationsLabel: string) {
   return specs
     .map((g) => ({ ...g, rows: rows.filter((a) => fillState(a) === g.key) }))
     .filter((g) => g.rows.length);
+}
+
+/** A click on a row toggles it - except a click on an actual control, which does its own thing. */
+function isControl(e: MouseEvent) {
+  return !!(e.target as HTMLElement).closest("input,select,textarea,a,button");
 }
 
 function AppsGrid({
@@ -261,9 +314,9 @@ function AppsGrid({
           {groups.map((grp) => {
             const shut = grouped && !!prefs.collapsed[grp.key];
             return (
-              <>
+              <Fragment key={`g-${grp.key}`}>
                 {grouped && (
-                  <tr className={`group${grp.key ? ` ${grp.key}` : ""}`} key={`h-${grp.key}`}>
+                  <tr className={`group${grp.key ? ` ${grp.key}` : ""}`}>
                     <td colSpan={COLS}>
                       {/* The whole divider is the control - an 11px caret is a
                           poor click target and there is nothing else on the row. */}
@@ -301,17 +354,42 @@ function AppsGrid({
                       .filter(Boolean)
                       .join(" ");
                     const ph = grp.key === "waiting" ? "Reads overnight" : grp.key === "stuck" ? "Type it in" : "";
+                    // Opening or closing a row is what "highlights" it: it is the
+                    // row Detail view lands on when you switch there.
+                    const toggle = () =>
+                      setPrefs({
+                        expanded: { ...prefs.expanded, [a.id]: !open },
+                        selected: { ...prefs.selected, applications: String(a.id) },
+                      });
                     return (
-                      <>
-                        <tr key={a.id} className={cls || undefined}>
+                      <Fragment key={a.id}>
+                        <tr
+                          data-expand={a.id}
+                          className={cls || undefined}
+                          onClick={(e) => {
+                            if (!isControl(e)) toggle();
+                          }}
+                        >
                           <td>
-                            <EditableField row={a} kind="application" field="company" placeholder={ph || "Company"} ariaLabel="Company" />
+                            <EditableField
+                              row={a}
+                              kind="application"
+                              field="company"
+                              placeholder={ph || "Company"}
+                              ariaLabel="Company"
+                            />
                           </td>
                           <td>
                             <EditableField row={a} kind="application" field="title" placeholder={ph || "Role"} ariaLabel="Role" />
                           </td>
                           <td className="loc">
-                            <EditableField row={a} kind="application" field="location" placeholder={ph || "Location"} ariaLabel="Location" />
+                            <EditableField
+                              row={a}
+                              kind="application"
+                              field="location"
+                              placeholder={ph || "Location"}
+                              ariaLabel="Location"
+                            />
                           </td>
                           <td className="lk">
                             {link ? (
@@ -349,16 +427,7 @@ function AppsGrid({
                             )}
                           </td>
                           <td className="exp-ind">
-                            <button
-                              type="button"
-                              className="linkish"
-                              onClick={() =>
-                                setPrefs({
-                                  expanded: { ...prefs.expanded, [a.id]: !open },
-                                  selected: { ...prefs.selected, applications: String(a.id) },
-                                })
-                              }
-                            >
+                            <button type="button" aria-expanded={open} onClick={toggle}>
                               {open ? "Hide" : "Details"}
                             </button>
                           </td>
@@ -367,18 +436,17 @@ function AppsGrid({
                           </td>
                         </tr>
                         {open && (
-                          <tr className="more-row" key={`${a.id}-more`}>
+                          <tr className="more-row">
                             <td colSpan={COLS}>
-                              <div className="facts-card" style={{ marginTop: 0 }}>
-                                <FactsCards item={a} kind="application" fields={APP_ROLE_FIELDS} />
-                              </div>
+                              <AutofillNote app={a} />
+                              <AppFactsCards app={a} compact />
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
@@ -387,6 +455,11 @@ function AppsGrid({
   );
 }
 
+/**
+ * An application's detail pane. The header fields are inputs, not text: for a
+ * row added as nothing but a URL this is the place to type the company, role and
+ * location in, and correcting them is as common as reading them.
+ */
 function AppDetail({
   app,
   data,
@@ -397,71 +470,70 @@ function AppDetail({
   onNeedsDate: (p: PendingStage) => void;
 }) {
   const { settings } = data;
+  const d = daysSince(app.dateApplied);
   const g = geo(app.location, settings.priority_locations);
-  const link = safeUrl(app.link);
-  const label = app.company || hostOf(app.link) || "Untitled";
-  const history = STAGE_HISTORY_FIELDS.filter(([field]) => (app as unknown as Record<string, string>)[field]);
-  const state = fillState(app);
+  const track = appTrackLabel(app, data);
+  const safe = safeUrl(app.link);
 
   return (
     <>
-      <div className="dh-head">
-        <h1 title={label}>{label}</h1>
-        <div className="dh-sub">{app.title}</div>
-        <div className="dh-meta">
-          {app.location}
-          {g && (
-            <>
-              {" · "}
-              <span className={`geo ${g.p}`}>{g.label}</span>
-            </>
-          )}
-          {link && (
-            <>
-              {" · "}
-              <a href={link} target="_blank" rel="noopener noreferrer">
-                View posting ↗
-              </a>
-            </>
-          )}
+      <div className="dh-app-top">
+        <div className="dh-app-fields">
+          {track && <div className="dh-track">{track}</div>}
+          <EditableField
+            row={app}
+            kind="application"
+            field="company"
+            className="dh-in dh-h1"
+            placeholder="Company"
+            ariaLabel="Company"
+          />
+          <EditableField
+            row={app}
+            kind="application"
+            field="title"
+            className="dh-in dh-sub-in"
+            placeholder="Role"
+            ariaLabel="Role"
+          />
+          <div className="dh-meta dh-app-meta">
+            {/* Sized to its own text so it hugs the value the way a lead
+                header's plain location does, instead of a full-width box
+                shoving the tier and the link off to the far edge. */}
+            <EditableField
+              row={app}
+              kind="application"
+              field="location"
+              className="dh-in dh-loc-in"
+              size={Math.max(14, Math.min(38, (app.location || "").length + 1))}
+              placeholder="Location"
+              ariaLabel="Location"
+            />
+            {g && <span className={`geo ${g.p}`}>{g.label}</span>}
+            {safe && (
+              <>
+                <span className="dh-sep">·</span>
+                <a href={safe} target="_blank" rel="noopener noreferrer">
+                  View posting ↗
+                </a>
+              </>
+            )}
+          </div>
         </div>
+        <RemoveApp app={app} icon />
       </div>
-
-      {/* The only thing the overnight fill says on this page, and it says it
-          only when there is something to do about it. */}
-      {state === "stuck" && (
-        <div className="dh-fit">
-          Couldn’t read this posting{app.autofill_note ? `: ${app.autofill_note}` : ""}. No later run will try again —
-          type in what you know.
-        </div>
-      )}
-      {state === "waiting" && <div className="dh-fit">Tonight’s run will read this posting and fill in what it states.</div>}
 
       <div className="dh-status">
         <AppStatusSelect app={app} onNeedsDate={onNeedsDate} />
-        {app.dateApplied && <span className="dh-dates">Applied {app.dateApplied}</span>}
-        <RemoveApp app={app} />
+        <span className="dh-dates">
+          Applied <EditableField row={app} kind="application" field="dateApplied" type="date" ariaLabel="Date applied" />
+          {d !== null && ` · ${d} days`}
+        </span>
       </div>
 
-      {history.length > 1 && (
-        <div className="facts-card">
-          <h4>Stage history</h4>
-          <table className="stage-history">
-            <tbody>
-              {history.map(([field, label]) => (
-                <tr key={field}>
-                  <td>{label}</td>
-                  <td className="mono">{(app as unknown as Record<string, string>)[field]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <div className="facts-card">
-        <FactsCards item={app} kind="application" fields={APP_ROLE_FIELDS} />
-      </div>
+      <AutofillNote app={app} />
+      <AppFactsCards app={app} />
+      <NotesBlock row={app} kind="application" />
     </>
   );
 }

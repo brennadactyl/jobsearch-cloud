@@ -5,7 +5,8 @@ Two kinds of document live here, and the filename says which.
 ## Reference
 
 The system as it exists today. When a change makes one of these wrong, it
-updates the doc in the same commit.
+updates the doc in the same commit. CI checks `schema.md` against the
+migrations (`server/verify-schema-doc.mjs`).
 
 - [`schema.md`](schema.md) — every D1 table, its columns, and how they relate
 - [`architecture.svg`](architecture.svg) and

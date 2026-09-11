@@ -242,7 +242,27 @@ export function setApplicationStatus(id: number, status: string, date?: string):
 export function addApplication(link: string): Promise<Application> {
   return request("/api/update", updateAppSchema, {
     method: "POST",
-    body: { type: "application", link, dateApplied: "" },
+    // The same body the old client sends, field for field. A row created here
+    // and a row created there have to be indistinguishable, or the cutover
+    // quietly changes what "Applied" and "days since" mean for new rows.
+    // Today is the UTC date, as domain/format's today() is - inlined so the
+    // API layer imports nothing from the UI's domain code.
+    body: {
+      type: "application",
+      company: "",
+      title: "",
+      location: "",
+      dateApplied: new Date().toISOString().slice(0, 10),
+      status: "Applied",
+      notes: "",
+      team: "",
+      setup: "",
+      source: "",
+      link,
+      resume: "",
+      referral: "",
+      comp: "",
+    },
   }).then((r) => r.application);
 }
 

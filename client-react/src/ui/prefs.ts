@@ -124,3 +124,12 @@ export function usePref<K extends keyof Prefs>(key: K): [Prefs[K], (v: Prefs[K])
   const set = useCallback((v: Prefs[K]) => setPrefs({ [key]: v } as Partial<Prefs>), [key]);
   return [prefs[key], set];
 }
+
+/**
+ * Selects a row in one scope without disturbing the others' selections. Reads
+ * the store rather than a render's copy of it, because it is also called from a
+ * mutation's onSuccess - by which point that copy can be a render or two old.
+ */
+export function selectRow(scope: string, id: string): void {
+  setPrefs({ selected: { ...current.selected, [scope]: id } });
+}

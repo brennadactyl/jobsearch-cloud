@@ -51,9 +51,13 @@ Practical constraints:
   an early version of `0002`'s backfill checked only four of six tables, and a
   database in an unusual state migrated its rows to an owner that was never
   created.
-- **Per-user, not global.** Anything you compute across rows partitions by
-  `user_id` (and usually `search` too), so one person's data never orders or
-  seeds another's.
+- **Per-user, unless the table is the shared one.** Anything you compute
+  across rows partitions by `user_id` (and usually `search` too), so one
+  person's data never orders or seeds another's. The exception is
+  `company_fetch`, which holds the one company list every search indexes into
+  (`0011_one_company_list.sql`): its `position` is one shuffle across the whole
+  list, deliberately. Nothing else crosses users. If a new column seems to need
+  to, that is a design decision to raise, not a migration to write.
 
 ## 2. Update `server/src/db.js`
 
@@ -72,7 +76,9 @@ migration can ever have written.
 
 Update `docs/schema.md` in the same change - the column in the diagram, and a
 line under its table if the name doesn't say what it holds. That doc describes
-what the migrations produce, not what a plan proposes.
+what the migrations produce, not what a plan proposes. `node
+verify-schema-doc.mjs` checks the two agree, and CI runs it on every push to
+main.
 
 ## 3. Verify
 

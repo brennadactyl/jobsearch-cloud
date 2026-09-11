@@ -233,7 +233,9 @@ describe("the applications grid", () => {
 
     await userEvent.click(header);
 
-    expect(await screen.findByRole("button", { expanded: false })).toHaveTextContent("Couldn’t be read");
+    // By name as well as state: the grid's Details buttons are disclosure
+    // toggles too, and carry aria-expanded="false" while their rows are shut.
+    expect(await screen.findByRole("button", { name: /Couldn’t be read/, expanded: false })).toBeInTheDocument();
     expect(document.querySelectorAll("tbody tr:not(.group):not(.more-row)")).toHaveLength(before - count);
   });
 });
@@ -349,5 +351,28 @@ describe("every input is reachable by the stylesheet", () => {
     await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
     await screen.findByRole("dialog");
     assertAllTyped();
+  });
+});
+
+describe("the browser tab", () => {
+  beforeEach(signedIn);
+
+  it("takes its title from config once signed in, as the heading does", async () => {
+    // The old client set document.title from display_title on sign-in. The port
+    // didn't, and the tab read "Job Search Tracker" over a page headed with the
+    // account's own search - found by reading the title on the deployed site.
+    document.title = "Job Search Tracker";
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    await waitFor(() => expect(document.title).toBe("Fixture Search"));
+  });
+
+  it("gives the title back when the tracker goes away, so a shared browser doesn't keep it", async () => {
+    document.title = "Job Search Tracker";
+    const { unmount } = renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    await waitFor(() => expect(document.title).toBe("Fixture Search"));
+    unmount();
+    expect(document.title).toBe("Job Search Tracker");
   });
 });

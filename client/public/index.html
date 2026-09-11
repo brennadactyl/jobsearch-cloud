@@ -118,6 +118,10 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 
 .toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:16px 0 12px}
 .search{flex:1;min-width:180px;max-width:320px}
+/* The sentence beside the add button that says what pressing it will do. It
+   was an inline font-size:13px;color:var(--ink3) until it became class="hint",
+   and the rule never came with it - so it rendered as full-size body text. */
+.hint{font-size:13px;color:var(--ink3)}
 input[type=search],input[type=text],input[type=url],input[type=date],input[type=password],select,textarea{
   font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
   border-radius:7px;padding:7px 10px;width:100%}

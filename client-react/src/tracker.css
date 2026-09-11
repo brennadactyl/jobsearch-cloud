@@ -124,6 +124,10 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 
 .toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:16px 0 12px}
 .search{flex:1;min-width:180px;max-width:320px}
+/* The sentence beside the add button that says what pressing it will do. It
+   was an inline font-size:13px;color:var(--ink3) until it became class="hint",
+   and the rule never came with it - so it rendered as full-size body text. */
+.hint{font-size:13px;color:var(--ink3)}
 input[type=search],input[type=text],input[type=url],input[type=date],input[type=password],select,textarea{
   font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
   border-radius:7px;padding:7px 10px;width:100%}
@@ -563,3 +567,11 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 /* The underline is the hover affordance on a jumplink and nowhere else. */
 .jumplink { color: inherit; }
 .jumplink:hover { text-decoration: underline; }
+
+/* Grid rows expand on a click anywhere on the row, as in the original, which
+   put the plain word "Details" in this cell. It is a real button here as well,
+   so the same toggle is reachable by keyboard - the original's was not - and it
+   is drawn as that plain word rather than as a control. */
+tr[data-expand]{cursor:pointer}
+.exp-ind button{appearance:none;border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer}
+.exp-ind button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

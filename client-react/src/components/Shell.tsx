@@ -7,7 +7,7 @@
  * track no longer in config falls back to the first tab, the same way the old
  * page's restored-from-localStorage tab did.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS } from "../domain/constants";
@@ -46,6 +46,18 @@ export default function Shell({
   const [pwOpen, setPwOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const pinned = usePinnedLayout(isOverview);
+
+  // The browser tab carries the account's own title, the same as the heading.
+  // The old client set it from config on sign-in; without this the tab read
+  // "Job Search Tracker" over a page headed with someone's search. Given back
+  // on sign-out, so the next person on a shared browser doesn't inherit it.
+  useEffect(() => {
+    const previous = document.title;
+    document.title = settings.display_title;
+    return () => {
+      document.title = previous;
+    };
+  }, [settings.display_title]);
 
   const n = data.tracks.length;
   const sub = n
