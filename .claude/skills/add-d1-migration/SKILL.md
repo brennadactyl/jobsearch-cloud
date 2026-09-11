@@ -72,7 +72,9 @@ migration can ever have written.
 
 Update `docs/schema.md` in the same change - the column in the diagram, and a
 line under its table if the name doesn't say what it holds. That doc describes
-what the migrations produce, not what a plan proposes.
+what the migrations produce, not what a plan proposes. `node
+verify-schema-doc.mjs` checks the two agree, and CI runs it on every push to
+main.
 
 ## 3. Verify
 

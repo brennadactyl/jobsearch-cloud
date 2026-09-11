@@ -11,8 +11,10 @@ separately: **deploy only the half you changed.** A client UI change never
 needs a server deploy, and vice versa. Deploying the other half "to be safe"
 is not free here - see the two rules below about what a deploy replaces.
 
-There is no CI and no test suite. What stands in for one is
-`server/verify-local.mjs`, and it only runs if someone runs it.
+CI (`.github/workflows/checks.yml`) covers `client-react/` and checks
+`docs/schema.md` against the migrations; it deploys nothing. The server has no
+test suite. What stands in for one is `server/verify-local.mjs`, and it only
+runs if someone runs it.
 
 ## Before anything: where you are deploying from
 
@@ -160,6 +162,13 @@ wrangler, nothing to clean up:
 
 ```bash
 cd server && node verify-migration.mjs
+```
+
+Then check `docs/schema.md` still matches what the migrations build. CI runs
+this too, but only once the push has landed:
+
+```bash
+cd server && node verify-schema-doc.mjs
 ```
 
 See the `add-d1-migration` skill for the rest of what a schema change needs.
