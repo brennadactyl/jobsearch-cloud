@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: ten tables, from
-`0001_schema.sql` through `0010_company_fetch.sql` applied in order. This is the
+`0001_schema.sql` through `0011_one_company_list.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -18,18 +18,20 @@ is why most of `server/verify-local.mjs` is checks that one user's rows cannot
 reach another's.
 
 **Apart from `users` itself, `company_fetch` is the only table with no
-`user_id`.** It holds facts about a company's public careers site, shared by
-every account. What may and may not be stored in it is set out at the top of
-`server/migrations/0010_company_fetch.sql`: a row describes a website, never a
-search.
+`user_id`.** It is the one company list every search indexes into, and it holds
+facts about each company's public careers site, shared by every account. What
+may be stored in it is set out at the top of
+`server/migrations/0010_company_fetch.sql` — a row describes a website, never a
+search — and amended by `0011_one_company_list.sql`, which put the list itself
+here: membership is visible across the deployment, while the record of who
+looked at a company and when stays with each search.
 
-**`company_sweeps` reaches `company_fetch` through `normalize()`.**
-`company_fetch.company_key` is `normalize(name)` from `server/src/exclude.js` —
-lowercased, each run of characters outside `a-z0-9` replaced by one space,
-trimmed. `company_sweeps.company` holds the name as written, so the match is
-`normalize(company_sweeps.company) = company_fetch.company_key`, computed in
-JavaScript. Comparing the raw strings misses: `F5, Networks` is stored under
-`f5 networks`.
+**`company_sweeps` reaches `company_fetch` through `company_key`.**
+Both hold `normalize(name)` from `server/src/exclude.js` — lowercased, each run
+of characters outside `a-z0-9` replaced by one space, trimmed — so the join is
+`company_sweeps.company_key = company_fetch.company_key`.
+`company_sweeps.company` still holds a name, but nothing joins on it: comparing
+raw strings misses, and `F5, Networks` is stored under `f5 networks`.
 
 **Every other relationship is a value match within one user.**
 `leads.search`, `screened.search`, `company_sweeps.search` and
@@ -60,7 +62,7 @@ erDiagram
     tracks         ||--o{ screened       : "filed under"
     tracks         ||--o{ company_sweeps : "rotation of"
     leads          |o--o{ applications   : "applied to"
-    company_fetch  |o--o{ company_sweeps : "normalize(company)"
+    company_fetch  ||--o{ company_sweeps : "company_key"
 
     users {
         TEXT id PK
@@ -184,11 +186,12 @@ erDiagram
     company_sweeps {
         TEXT user_id PK, FK
         TEXT search PK, FK
-        TEXT company PK "name as written"
+        TEXT company PK "name as the list holds it"
         TEXT last_swept
-        TEXT board
+        TEXT board "mirrors the list, unread"
         TEXT note
-        INTEGER position
+        INTEGER position "mirrors the list, unread"
+        TEXT company_key FK "joins company_fetch"
     }
     company_fetch {
         TEXT company_key PK "normalize of the name"
@@ -201,6 +204,11 @@ erDiagram
         TEXT verified_on
         TEXT retracted_on
         TEXT retracted_note
+        INTEGER position "the company's place in the list"
+        TEXT wall
+        TEXT wall_first_on
+        TEXT wall_last_on
+        INTEGER wall_dates
     }
 ```
 
@@ -320,29 +328,46 @@ A setting with no row falls back to `DEFAULT_SETTINGS` in `server/src/db.js`.
 
 ### company_sweeps
 
-One row per company in one track's rotation.
+One search's record of a company on the list: when it last tried it, and what
+it learned there. The list itself is `company_fetch`.
 
-- `company` is the name as written; it reaches `company_fetch` through
-  `normalize()`, above.
-- `position` is the company's fixed place in this track's log, shuffled once
-  (`0008_sweep_cursor.sql`). `tracks.sweep_cursor` is how far the search has
-  read.
-- `last_swept` is the `YYYY-MM-DD` the company was last attempted, `''` for
-  never. It is a record, and does not choose what runs next.
-- `board` is the JSON job-board kind once confirmed (`greenhouse`, `ashby`,
-  `workday cxs`, …), `''` if none is known.
-- `note` is what this search learned about the company.
+- `company_key` is the `normalize()`d name, and is what readers join on,
+  through an index on `(user_id, search, company_key)`. `company` is the name
+  as the list holds it. Rows written before `0011_one_company_list.sql` can
+  hold two spellings of one company for one search; readers take the most
+  recently swept.
+- `last_swept` is the `YYYY-MM-DD` this search last attempted the company, `''`
+  for never. It is a record, and does not choose what runs next.
+- `note` is what this search learned about the company, for itself. It never
+  travels to `company_fetch`.
+- `board` and `position` mirror `company_fetch` and are no longer read. They are
+  kept so the worker from before `0011` still runs against this table, until it
+  is rebuilt on `company_key`.
 
 ### company_fetch
 
-One row per company careers site, shared by every account. `company_key` is the
-`normalize()`d name; `display_name` is the name as written.
+The company list, shared by every account and every search, and what is known
+about reaching each company's careers site. A company is on the list when it
+has a row here. `company_key` is the `normalize()`d name; `display_name` is the
+name as written when the company joined.
 
-- `board` uses the same vocabulary as `company_sweeps.board`. `endpoint` is the
-  slug, host or URL template that reaches the board; `url_shape` is the shape of
-  one posting's URL, where the endpoint does not imply it.
+- `position` is the company's fixed place in the list, shuffled once and
+  appended to as companies join. Every search's `tracks.sweep_cursor` reads
+  along it.
+- `board` is the JSON job-board kind once confirmed (`greenhouse`, `ashby`,
+  `workday cxs`, …). `endpoint` is the slug, host or URL template that reaches
+  the board; `url_shape` is the shape of one posting's URL, where the endpoint
+  does not imply it.
+- `wall` is what stops a fetch at this company. `wall_dates` counts the separate
+  dates it was recorded on, from `wall_first_on` to `wall_last_on`. It is served
+  only once `wall_dates` reaches 2, and only within seven days of
+  `wall_last_on`. A reported `board` or `endpoint` clears it.
 - `dead_signal` is what a stated dead posting looks like on this site, `''` for
-  no known signal.
-- `verified_on` is the `YYYY-MM-DD` a run last confirmed the row worked.
+  no known signal. `scripts/tracker.ps1` does not send it.
+- `verified_on` is the `YYYY-MM-DD` a run last confirmed a positive fact about
+  the row. Meeting a wall does not move it.
+- A row with no facts is membership only, and is not attached to a company as
+  `known` when a run is handed its slice.
 - A wrong row is retracted, not deleted: `retracted_on` and `retracted_note` are
   set, reads return only the retraction, and runs can no longer update the row.
+  A retracted company stays on the list.

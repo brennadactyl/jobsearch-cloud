@@ -1,11 +1,13 @@
 /**
- * Checks 0002_multi_user.sql against a database that already has data.
+ * Checks the migrations that reshape existing rows against a database that
+ * already has data: 0002_multi_user.sql and 0011_one_company_list.sql.
  *
  *   node verify-migration.mjs
  *
- * This is the one file in the repo that runs exactly once, against real data,
- * and cannot be re-run or undone - `0002` drops and recreates five tables to
- * change constraints SQLite won't alter in place. `verify-local.mjs` exercises
+ * A migration runs exactly once, against real data, and cannot be re-run or
+ * undone - `0002` drops and recreates five tables to change constraints SQLite
+ * won't alter in place, and `0011` merges every search's rotation into one
+ * list and reshuffles it. `verify-local.mjs` exercises
  * the API but always against a database the migration built from empty, so it
  * would not notice the migration losing a column, dropping rows, resetting
  * AUTOINCREMENT, or leaving data owned by a user that doesn't exist.
@@ -144,6 +146,148 @@ console.log("\n== against a database holding only screened rows ==");
   const db = migrated("INSERT INTO screened (search, url, date) VALUES ('SWE', 'https://example.com/x', '2026-08-29');");
   check("an owner is still created for it",
     db.prepare("SELECT COUNT(*) c FROM users").get().c === 1);
+  db.close();
+}
+
+// ---- 0011_one_company_list.sql -------------------------------------------
+//
+// 0011 merges every rotation into one list held in company_fetch, keys
+// company_sweeps by normalize(), and reshuffles positions over the merged list.
+// Three things only a database that already has rows can show: that the SQL
+// spelling of normalize() agrees with the JavaScript one, that a merge keeps
+// every fact and every row it should, and that the previous worker still reads
+// the schema this leaves behind.
+const { readdirSync } = await import("node:fs");
+const { normalize } = await import("./src/exclude.js");
+const MIGRATIONS = readdirSync(new URL("./migrations/", import.meta.url))
+  .filter((f) => f.endsWith(".sql")).sort();
+
+// Every migration before `stop`, then the seed, then `stop` itself. The seed is
+// SQL text or a function given the open database, for rows a literal cannot
+// hold (control characters).
+function migratedThrough(stop, seed) {
+  const db = new DatabaseSync(":memory:");
+  for (const f of MIGRATIONS.filter((f) => f < stop)) db.exec(sql(f));
+  if (typeof seed === "function") seed(db);
+  else if (seed) db.exec(seed);
+  db.exec(sql(stop));
+  return db;
+}
+const STOP = MIGRATIONS.find((f) => f.startsWith("0011_"));
+
+console.log("\n== 0011 against a database with rotations ==");
+{
+  const U1 = "user-one", U2 = "user-two";
+  const db = migratedThrough(STOP, `
+INSERT INTO users (id, name) VALUES ('${U1}', 'One'), ('${U2}', 'Two');
+INSERT INTO tracks (user_id, key, label, sweep_cursor) VALUES
+  ('${U1}', 'SWE', 'SWE', 7), ('${U1}', 'CPM', 'CPM', 3), ('${U2}', 'product', 'Product', 5);
+INSERT INTO company_sweeps (user_id, search, company, last_swept, board, note, position) VALUES
+  ('${U1}', 'SWE', 'Cursor (Anysphere)', '2026-09-01', 'ashby', 'the older spelling', 4),
+  ('${U1}', 'SWE', 'Cursor Anysphere',   '2026-09-05', '',      'the newer spelling', 9),
+  ('${U1}', 'SWE', 'Acme',               '2026-09-02', 'greenhouse', 'swe acme', 0),
+  ('${U1}', 'SWE', 'C.H. Robinson',      '',           'workday cxs', '', 1),
+  ('${U1}', 'CPM', 'Acme',               '2026-09-03', '', 'cpm acme', 2),
+  ('${U1}', 'CPM', 'Rocket Companies (formerly Redfin)', '2026-09-04', '', '', 0),
+  ('${U2}', 'product', 'acme',           '2026-09-06', '', 'two acme', 1),
+  ('${U2}', 'product', 'T-Mobile',       '',           '', '', 0),
+  ('${U2}', 'product', 'Retracted Co',   '',           'lever', '', 2);
+INSERT INTO company_fetch (company_key, display_name, board, endpoint, verified_on, retracted_on, retracted_note) VALUES
+  ('acme', 'Acme', 'lever', 'jobs.lever.co/acme', '2026-09-08', '', ''),
+  ('retracted co', 'Retracted Co', 'withdrawn-board', '', '2026-09-01', '2026-09-09', 'was wrong');
+`);
+  const all = (q, ...a) => db.prepare(q).all(...a);
+  const one = (q, ...a) => db.prepare(q).get(...a);
+
+  const sweeps = all("SELECT * FROM company_sweeps");
+  check("no rotation row is lost", sweeps.length === 9, String(sweeps.length));
+  check("every rotation row is keyed by normalize(company)",
+    sweeps.every((r) => r.company_key === normalize(r.company)),
+    JSON.stringify(sweeps.filter((r) => r.company_key !== normalize(r.company)).map((r) => [r.company, r.company_key])));
+  check("last_swept and note survive untouched on every row",
+    one("SELECT last_swept l, note n FROM company_sweeps WHERE user_id=? AND search='SWE' AND company='Cursor Anysphere'", U1).n === "the newer spelling"
+    && one("SELECT last_swept l FROM company_sweeps WHERE user_id=? AND search='product' AND company='acme'", U2).l === "2026-09-06");
+
+  const fetchRows = all("SELECT * FROM company_fetch ORDER BY company_key");
+  const keys = fetchRows.map((r) => r.company_key);
+  check("every company in any rotation is on the one list, exactly once",
+    JSON.stringify(keys) === JSON.stringify(["acme", "c h robinson", "cursor anysphere", "retracted co", "rocket companies formerly redfin", "t mobile"]),
+    JSON.stringify(keys));
+  const row = (k) => fetchRows.find((r) => r.company_key === k);
+  check("two spellings of one company merge into one row",
+    row("cursor anysphere") && row("cursor anysphere").display_name === "Cursor (Anysphere)",
+    JSON.stringify(row("cursor anysphere")));
+  check("a board a run swept with is carried onto the list",
+    row("cursor anysphere").board === "ashby", JSON.stringify(row("cursor anysphere")));
+  check("but a board on a company nobody has swept is not - a typed list is not evidence",
+    row("c h robinson").board === "", JSON.stringify(row("c h robinson")));
+  check("a board already on the list is never overwritten by a rotation's",
+    row("acme").board === "lever", row("acme").board);
+  check("the facts already on the list survive the merge",
+    row("acme").endpoint === "jobs.lever.co/acme" && row("acme").verified_on === "2026-09-08");
+  check("a retracted row is left exactly as it was",
+    row("retracted co").board === "withdrawn-board" && row("retracted co").retracted_on === "2026-09-09",
+    JSON.stringify(row("retracted co")));
+
+  const positions = fetchRows.map((r) => r.position).sort((a, b) => a - b);
+  check("positions over the merged list are a dense permutation - no two companies share a place",
+    JSON.stringify(positions) === JSON.stringify(positions.map((_, i) => i)),
+    JSON.stringify(positions));
+  check("the scratch table used for the shuffle is gone",
+    !one("SELECT name FROM sqlite_master WHERE type='table' AND name='company_fetch_shuffle'"));
+  check("every search's cursor restarts at the front of the new log",
+    all("SELECT sweep_cursor c FROM tracks").every((t) => t.c === 0));
+  check("company_sweeps.position mirrors the list's, so the previous worker orders by it",
+    sweeps.every((r) => r.position === row(r.company_key).position));
+  check("the new wall columns exist and are empty on every row",
+    fetchRows.every((r) => r.wall === "" && r.wall_first_on === "" && r.wall_last_on === "" && r.wall_dates === 0));
+
+  // The previous worker's own read, verbatim from db.getCoverage before this
+  // change. A deploy that has to be rolled back lands on this schema.
+  const previous = all(
+    `SELECT company, last_swept, board, note, position FROM company_sweeps
+      WHERE user_id = ? AND search = ? ORDER BY position`, U1, "SWE");
+  check("the previous worker's rotation read still works against this schema",
+    previous.length === 4 && previous.every((r) => typeof r.company === "string"),
+    JSON.stringify(previous));
+  db.close();
+}
+
+console.log("\n== 0011: normalize() in SQL agrees with the JavaScript function ==");
+{
+  // Every ASCII character the SQL spells out, in every position that matters:
+  // between letters, leading, trailing, repeated into a run, beside capitals.
+  const names = [];
+  for (let c = 1; c < 128; c++) {
+    const ch = String.fromCharCode(c);
+    if (/[a-zA-Z0-9 ]/.test(ch)) continue;
+    names.push(`x${ch}y${c}`, `${ch}lead${c}`, `trail${c}${ch}`, `mid${ch}${ch}${ch}run${c}`, `MiXeD${ch}CaSe${c}`);
+  }
+  names.push("a" + "!@#$%^&*()".repeat(6) + "b", "!!!", "  padded  ", "Rocket Companies (formerly Redfin)");
+  const db = migratedThrough(STOP, (d) => {
+    const ins = d.prepare("INSERT INTO company_sweeps (user_id, search, company) VALUES ('u', 's', ?)");
+    for (const n of names) ins.run(n);
+  });
+  const rows = db.prepare("SELECT company, company_key FROM company_sweeps").all();
+  const wrong = rows.filter((r) => r.company_key !== normalize(r.company));
+  check(`all ${names.length} names get the key normalize() would give them`,
+    rows.length === names.length && wrong.length === 0,
+    JSON.stringify(wrong.slice(0, 5).map((r) => ({ name: [...r.company].map((c) => c.charCodeAt(0)), sql: r.company_key, js: normalize(r.company) }))));
+  check("a name that normalizes to nothing does not join the list",
+    !db.prepare("SELECT 1 FROM company_fetch WHERE company_key = ''").get());
+  db.close();
+}
+
+console.log("\n== 0011 against an empty database ==");
+{
+  const db = migratedThrough(STOP, null);
+  check("the list is empty, and nothing is invented for it",
+    db.prepare("SELECT COUNT(*) c FROM company_fetch").get().c === 0);
+  check("the new columns exist",
+    db.prepare("SELECT COUNT(*) c FROM pragma_table_info('company_fetch') WHERE name IN ('position','wall','wall_first_on','wall_last_on','wall_dates')").get().c === 5
+    && db.prepare("SELECT COUNT(*) c FROM pragma_table_info('company_sweeps') WHERE name = 'company_key'").get().c === 1);
+  check("no scratch table is left behind",
+    !db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='company_fetch_shuffle'").get());
   db.close();
 }
 
