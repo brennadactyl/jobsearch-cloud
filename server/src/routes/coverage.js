@@ -1,10 +1,11 @@
 /**
- * The company rotation: which companies a search tracks, when each was last
- * attempted, and the slice a given run is told to cover tonight.
+ * The company rotation: the one company list every search reads from, when
+ * each search last attempted each company, and the slice a given run is told
+ * to cover tonight.
  *
  * The rotation's whole job is to stop a run starting at the top of the list
  * every night - a list too long to verify in one go gets covered a batch at a
- * time, least-recently-swept first.
+ * time, read forward from this search's cursor.
  */
 
 import { normalize } from "../exclude.js";
@@ -38,14 +39,15 @@ function sliceAt(eligible, cursor) {
 }
 
 /**
- * GET /api/coverage/:key[?on=YYYY-MM-DD] - requires a Bearer token ->
- * `{ companies: [{company, last_swept, board, note}], total, batch }`.
+ * GET /api/coverage/:key[?all=1] - requires a Bearer token ->
+ * `{ companies: [{company, position, last_swept, board, note, known?}], total,
+ * batch, cursor }`.
  *
- * Which companies this run covers, chosen by the server. Least-recently-swept
- * first, capped - the run is told what to sweep rather than how to choose,
- * because a cap in prose is a cap a run can talk itself out of on a night when
- * the list looks short. `?all=1` returns the whole table instead, for seeding
- * and for looking at it.
+ * Which companies this run covers, chosen by the server: the next
+ * COVERAGE_BATCH along the shared list from this search's cursor. The run is
+ * told what to sweep rather than how to choose, because a cap in prose is a
+ * cap a run can talk itself out of on a night when the list looks short.
+ * `?all=1` returns the whole list instead, for seeding and for looking at it.
  *
  * Same 404-on-unknown-track reasoning as the dedup route (see ./screened.js):
  * an empty list from a mistyped key would read as "nothing to sweep", and a
@@ -142,13 +144,14 @@ export async function handleGetCoverage({ db, params, url }) {
 
 /**
  * POST /api/coverage - requires a Bearer token. Body
- * `{ search, on?, swept: [{company, board?, note?}] }`.
+ * `{ search, on?, swept: [{company, board?, endpoint?, url_shape?, wall?,
+ * note?}] }` -> `{ recorded, added, excluded, on, cursor, shared, withheld }`.
  *
  * Records what a run actually attempted. Attempted, not found: a company whose
  * board was blocked today still gets stamped, or the rotation retries it every
- * run forever and the rest of the list starves. Creates rows it hasn't seen,
- * so a company broader discovery turned up joins the rotation by being swept
- * once.
+ * run forever and the rest of the list starves. A company not yet on the shared
+ * list joins it, so one that broader discovery turned up is in every search's
+ * rotation from then on.
  */
 export async function handleRecordSweeps({ request, db }) {
   const body = await readJson(request);

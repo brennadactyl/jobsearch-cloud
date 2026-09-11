@@ -402,21 +402,6 @@ export class Db {
   // ---------------------------------------------------- company sweeps --
 
   /**
-   * The companies a run should cover, least-recently-swept first - '' (never
-   * swept) sorts before any date, so a freshly seeded list is worked through
-   * before anything is re-covered.
-   *
-   * The cap is applied here rather than described to the run, because a cap a
-   * model is asked to respect is not a cap. There is no privileged tier on top
-   * of it either: a cheap JSON board is a reason a company is quick to cover,
-   * not a reason to cover it every single night while the rest of the list
-   * waits.
-   *
-   * `limit` of 0 returns everything, for seeding and for looking at the table.
-   * @param {string} search @param {number} [limit]
-   * @returns {Promise<{company: string, last_swept: string, board: string, note: string}[]>}
-   */
-  /**
    * Shared facts for a set of company names, keyed by normalize().
    *
    * Not user-scoped, and that is the point - see

@@ -104,11 +104,11 @@ export const SESSION_ROUTES = [
   ["POST", /^\/api\/leads\/(\d+)\/status$/, handleSetLeadStatus],
   ["POST", /^\/api\/applications\/(\d+)\/status$/, handleSetApplicationStatus],
   // The overnight fill of an application added as nothing but a URL: which
-  // postings tonight's run should read, and what it read off them. Two routes
-  // and no third - nothing re-queues a row, because a row is read once (see
-  // ../../migrations/0009_application_autofill.sql). `pending` can't collide
-  // with the numeric-id route above - an id is \d+ - so this needs no
-  // ordering care, unlike the prompt pair below.
+  // postings tonight's run should read, and what it read off them. A row is
+  // read once (see ../../migrations/0009_application_autofill.sql), so nothing
+  // a run calls puts one back in the queue - requeue, below, is a person's
+  // tool. `pending` can't collide with the numeric-id route above - an id is
+  // \d+ - so this needs no ordering care, unlike the prompt pair below.
   ["GET", "/api/applications/pending", handleGetAutofillQueue],
   ["POST", "/api/applications/autofill", handleReportAutofill],
   // Not a retry - see the handler. Nothing on the page or on a schedule calls
