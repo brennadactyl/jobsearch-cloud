@@ -52,8 +52,11 @@ GitHub shows source for `.html` files rather than rendering them).
 .claude/skills/
   job-search-setup/           AI-assisted onboarding - see Setup below
 docs/
+  README.md                   which docs describe the system today and which are plans
+  schema.md                   every D1 table as the migrations leave it
   architecture.svg           the diagram above
   architecture.html           full architecture write-up (open in a browser)
+  *-plan.md                   plans - changes intended or made, not a description of today
 scripts/
   run-search.ps1              runs one track for one person (fetches its prompt AND documents from the API)
   tracker.ps1                  every API call a run makes, as a command - copied into the run directory

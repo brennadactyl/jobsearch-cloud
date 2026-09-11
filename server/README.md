@@ -59,9 +59,12 @@ tracks, leads, applications, page titles and location rules.
   URL, which takes no arguments because it is the same text for everybody.
 - `verify-local.mjs` - the cross-user isolation checks, run against a local
   `wrangler dev`. `verify-migration.mjs` - what `0002` does to a database that
-  already has data. See [Verifying](#verifying-a-change) below.
+  already has data. `verify-schema-doc.mjs` - that `../docs/schema.md` matches
+  what the migrations build; CI runs it. See [Verifying](#verifying-a-change)
+  below.
 - `migrations/` - `0001_schema.sql` creates every table; `0002_multi_user.sql`
-  adds accounts and gives every table an owner. See below.
+  adds accounts and gives every table an owner. See below. The tables all of
+  them add up to are described in [`../docs/schema.md`](../docs/schema.md).
 
 ## One-time setup
 
@@ -424,6 +427,7 @@ the same way as step 4 above:
 ```bat
 wrangler d1 migrations apply job-search-tracker-db --remote
 ```
+Update [`../docs/schema.md`](../docs/schema.md) in the same change.
 
 **Do not add a column by editing `0001_schema.sql`.** Against any database
 that has already run it, an edit there does nothing at all: Wrangler skips
@@ -591,6 +595,15 @@ out the other side. No wrangler, no dev worker, nothing to clean up:
 ```bash
 cd server
 node verify-migration.mjs
+```
+
+`docs/schema.md` has a check of its own, which CI also runs on every push to
+`main`. It applies every migration to an in-process SQLite database and
+compares the result with the doc:
+
+```bash
+cd server
+node verify-schema-doc.mjs
 ```
 
 ## Security notes
