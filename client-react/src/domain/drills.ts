@@ -1,19 +1,10 @@
 /**
- * Drill-downs, and the one rule this module exists to enforce: **a number and
- * the rows it opens come from one predicate.**
+ * Drill-downs. **A number and the rows it opens come from one predicate:**
+ * every Overview figure that is not simply a tab's worth of rows names an entry
+ * here, the tab filters by the same `test`, and the count is the length of the
+ * list the rule produces (see `drillRows`), never a second copy of the rule.
  *
- * Every Overview figure that is not simply "a tab's worth of rows" names an
- * entry here, and the tab it opens filters by the same `test`. The count is not
- * computed alongside the rule - it is the length of the list the rule produces
- * (see `drillRows`). That is deliberate and it is load-bearing: in the page this
- * is ported from, four of six tiles and every funnel row held a *second* copy of
- * their predicate, and they agreed only by coincidence. Changing "gone quiet"
- * from 14 days to 21 in one place moved the rows without moving the number
- * above them. Fixed there in 0083ae9; kept structural here.
- *
- * The scope union is what makes that safe in this version rather than merely
- * conventional: a leads drill cannot be handed an application, because the two
- * arms carry different row types.
+ * The scope union keeps a leads drill from being handed an application.
  */
 import type { Application, Lead, Settings } from "../api/schema";
 import { ACTIVE, ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
@@ -97,13 +88,9 @@ export function drillKeeps(id: string | null, scope: DrillScope, row: Lead | App
 }
 
 /**
- * The rows a leads tab shows before any filter, drill or search box: one
- * track's, or every track's for the pooled tab.
- *
- * Applied leads are left out here because they have moved to the Applications
- * tab and this tab genuinely cannot show them - so any *count* of leads has to
- * leave them out too, and taking it from here is what keeps that true without
- * anyone remembering to.
+ * The rows a leads tab shows before any filter, drill or search. Applied leads
+ * have moved to the Applications tab, so every lead count starts from here to
+ * leave them out too.
  */
 export function leadRows(leads: readonly Lead[], key: string): Lead[] {
   const isAll = key === ALL_LEADS;
@@ -111,10 +98,9 @@ export function leadRows(leads: readonly Lead[], key: string): Lead[] {
 }
 
 /**
- * The Applications tab's equivalent, and deliberately not the mirror image of
- * it: that tab shows every application, "To Apply" rows included. Named anyway,
- * so a count of applications and the list it opens start from the same place a
- * count of leads does.
+ * Every application, "To Apply" included. Named anyway, so application counts
+ * start from the same place their lists do; a copy, so a caller's sort can't
+ * reorder the query cache.
  */
 export function appRows(applications: readonly Application[]): Application[] {
   return applications.slice();
@@ -135,11 +121,7 @@ export interface RowSource {
   settings: Settings;
 }
 
-/**
- * The rows a target actually opens. Its **count is the length of this** - that
- * is the whole point, and why nothing else in this app computes an Overview
- * figure directly.
- */
+/** The rows a target opens. Nothing computes an Overview figure any other way. */
 export function drillRows(t: DrillTarget, src: RowSource): (Lead | Application)[] {
   const isApps = t.tab === "applications";
   let rows: (Lead | Application)[] = isApps ? appRows(src.applications) : leadRows(src.leads, t.tab);
@@ -151,7 +133,6 @@ export function drillRows(t: DrillTarget, src: RowSource): (Lead | Application)[
   return rows;
 }
 
-/** Count for a target. Sugar over `drillRows`, so the two can never diverge. */
 export function drillCount(t: DrillTarget, src: RowSource): number {
   return drillRows(t, src).length;
 }

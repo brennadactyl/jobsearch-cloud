@@ -1,15 +1,9 @@
 /**
- * Location ranking.
+ * `priority_locations` is an ordered list of rules and **the index is the
+ * rank** - first match wins, so any number of tiers works. A stored `tier` name
+ * is accepted and ignored.
  *
- * `priority_locations` is an ordered list of matching rules and **the index is
- * the rank** - first match wins. That is what lets someone define two tiers or
- * five: the list is already ordered, so ordering it again by a `tier` name was
- * both redundant and capped at the names the CSS happened to know. `tier` is
- * still accepted in stored config and still ignored here.
- *
- * Settings are passed in rather than read off a module global, which is the one
- * structural difference from client/public/index.html's version - there `geo()`
- * closes over `state`, so it cannot be tested without standing up the page.
+ * Settings are passed in rather than read from a global, so these are testable.
  */
 import type { Lead, PriorityLocation, Settings } from "../api/schema";
 
@@ -42,7 +36,6 @@ export function rank(l: Pick<Lead, "location">, rules: readonly PriorityLocation
   return g ? g.i : 999;
 }
 
-/** Convenience for the common case of having the whole settings object to hand. */
 export function geoOf(location: string | null | undefined, settings: Settings): GeoMatch | null {
   return geo(location, settings.priority_locations);
 }

@@ -1,17 +1,9 @@
-# The repo's first CI. It runs checks, not builds-for-deploy: deploys stay
-# manual, from a main checkout, through each package's own npm script (see
-# .claude/skills/verify-and-deploy/SKILL.md).
+# Checks only. Deploys stay manual, from a main checkout, through each
+# package's own npm script (.claude/skills/verify-and-deploy/SKILL.md).
 #
-# client-react/ is covered in full. client/ and server/ deliberately carry no
-# unit tests - client/ is a single no-build file that may yet be retired
-# (docs/react-adoption-plan.md), and server/'s checks are verify-local.mjs,
-# which needs a running `wrangler dev --local` with D1 migrations applied.
-# Adding that as a job is worth doing and is independent of these; it would
-# need its wrangler version pinned here, since this repo commits no lockfile
-# for server/.
-#
-# The one server/ check that does run here is verify-schema-doc.mjs, which
-# needs no wrangler and no running worker - see the schema-doc job.
+# client-react/ is covered in full. Of server/, only verify-schema-doc.mjs runs
+# here: verify-local.mjs needs a running `wrangler dev --local`, and server/
+# commits no lockfile to pin wrangler with.
 name: checks
 
 on:
@@ -38,14 +30,11 @@ jobs:
           cache: npm
           cache-dependency-path: client-react/package-lock.json
 
-      # `ci` rather than `install`: it installs exactly the lockfile and fails
-      # if package.json has drifted from it, which is the whole reason that
-      # lockfile is committed (see .gitignore).
+      # `ci`: install exactly the committed lockfile, and fail if package.json
+      # has drifted from it.
       #
-      # --ignore-scripts because nothing here needs a postinstall: esbuild and
-      # workerd ship their platform binaries as optional dependencies, and npm
-      # 11 gates their install scripts anyway. Verified locally - the build and
-      # wrangler both work without them.
+      # --ignore-scripts: esbuild and workerd ship their platform binaries as
+      # optional dependencies, so nothing here needs a postinstall.
       - run: npm ci --ignore-scripts
 
       - name: Typecheck

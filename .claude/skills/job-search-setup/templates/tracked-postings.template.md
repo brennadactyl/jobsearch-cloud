@@ -1,32 +1,32 @@
 # Tracked Job Postings — Daily Search Baseline ({{TRACK_TITLE}})
 
-This doc is the running knowledge base for the daily "{{SEARCH_GOAL_SENTENCE}}" search - candidate profile, target companies, scope rules, and per-company fetch-reliability notes.{{SIBLING_DOCS_NOTE}}
+This doc is the running knowledge base for the daily "{{SEARCH_GOAL_SENTENCE}}" search - candidate profile, scope rules, and why a company is worth searching.{{SIBLING_DOCS_NOTE}}
 
 **Posting data lives in the tracker DB, not this doc.** The "found" list (what's already tracked) and the "screened" list (what's been looked at and rejected) are both fetched from the tracker each run - see step 1b of the daily prompt (composed by the tracker - `GET /api/prompt/{{TRACK_KEY}}`). This doc holds only the knowledge that has no DB equivalent.
 
 Each run should:
 1. Fetch the tracker's current leads AND screened data (step 1b of the daily prompt: `./tracker dedup`, which writes `dedup.json` with `leads[]` and `screened[]`) to see what is already found or already ruled out (compare by URL).
-2. Re-search the target companies below for {{ROLE_SEARCH_LINE}} matching the Candidate Profile below.
-3. **Also run a broader discovery search beyond the fixed target list**: search generally for other companies currently hiring for these roles, plus targeted searches on companies with a strong fit not on the core list (see "Expanded net" below for ones tried so far; add more each run). Apply the same mandatory verification - a new company is not exempt.
+2. Re-search the companies step 1c hands this run (\`./tracker companies\`) for {{ROLE_SEARCH_LINE}} matching the Candidate Profile below.
+3. **Also run a broader discovery search beyond that slice**: search generally for other companies currently hiring for these roles, plus targeted searches on companies with a strong fit that are not on the shared list at all (see "Companies tried" below for ones this track has already looked at; add more each run). Apply the same mandatory verification - a new company is not exempt.
 
    **This explicitly includes companies outside tech**: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities, manufacturing and sports (leagues and the larger franchises, plus the data, streaming and betting companies built around them) all run large engineering orgs, and they are the easiest thing to miss when the named list reads as big tech. Rotate through a couple of those verticals per run rather than all of them.
 
    **A company discovery turns up joins the rotation, or the run that found it is the last one that ever sees it.** When a new company yields a verified posting - tracked or screened, either counts as evidence it is worth watching - record it with the same `./tracker swept` call step 9d makes. The route creates a row for any company it is handed and appends it after the last position, so it gets swept on a later cycle without jumping the queue.
 
-   Writing the name only into "Expanded net" below does *nothing* for future runs: the rotation is what the next run reads, and a company that exists only in this doc's prose is one no run will ever draw. This is not hypothetical - a track ran for eight days with this step in its doc, found nothing outside its seed list, and finished with an empty expanded net and a rotation still exactly the size it was seeded at. Keep the expanded-net list for *why* a company was tried and what came of it; the rotation decides *whether it is ever looked at again*.
+   Writing the name only into "Companies tried" below does *nothing* for future runs: the shared list is what the next run reads, and a company that exists only in this doc's prose is one no run will ever draw. Keep the notes below for *why* a company was tried and what came of it; the shared list decides *whether it is ever looked at again*.
 4. **MANDATORY: fetch every candidate URL directly and confirm it renders an actual job description (title, responsibilities, etc.) before including it anywhere** - in the tracker or the summary to the user. A URL surfaced only by a search-engine snippet is a lead, not a finding, until opened and confirmed. Many "found" links turn out closed/expired/wrong even when freshly searched - check every single one, every run, including previously-tracked ones (they close later). Watch for search snippets that resolve to a listing/index page instead of the individual posting - that does not count as verified, even if the title text matches.
 5. Identify postings that are genuinely new - URL not already in `leads[]` or `screened[]` from step 1 - and verified live. Match on the posting, not the string: the same job often turns up under a URL that differs by a `?gh_jid=` suffix, a slug, or a tracking param. The tracker collapses those itself on the way in, so a duplicate you miss is dropped rather than stored, and the response tells you how many it collapsed.
 6. **Sync new verified postings to the tracker** via `./tracker leads leads.json` (step 9 of the daily prompt). The tracker DB is the durable source of truth for postings; this doc doesn't keep its own copy.
 6b. **Record rejected candidates too.** For any URL checked this run that's genuinely new but does NOT qualify (dead-on-arrival, out of scope, wrong level, duplicate), record it with `./tracker screened screened.json`, each row carrying a one-line `reason` (step 9b of the daily prompt), instead of writing a doc bullet. That's what lets tomorrow's run skip re-verifying it.
-7. **Update the live tracker** (a self-hosted Cloudflare Worker API + D1, see `../../server/README.md`, plus a separate Pages client - see `../../client/README.md`). Every call a run makes goes through the `./tracker` helper that `run-search.ps1` materializes into the run directory - it builds the request, stamps the track key and the local date, and reports what the tracker accepted. The daily prompt (`GET /api/prompt/{{TRACK_KEY}}`) names the command for each step; see that for the exact procedure.
-8. If a previously-tracked lead is confirmed dead on a later check, **never delete or move it yourself** - report it and let the tracker decide. Report by URL, not by id, in one file listing every posting confirmed dead (`./tracker delist dead.json`; procedure is step 8 of the daily prompt), whatever `status` each lead is in. Report the ones you re-checked and found **still live** in the same step (`./tracker verified live.json`) - that is the only thing that writes a lead's "confirmed live" date, and it matters because a dead posting is now removed from the board rather than flagged, so a lead still showing is presumed live. Only report a posting dead when you actually confirmed it: a timeout, a blocked domain, a 403/429, truncated content or a JS shell that renders nothing all mean *unknown*, and an unknown belongs in neither list - leave the lead alone and note the tooling problem. The delist report cannot be undone.
+7. **Update the live tracker** (a self-hosted Cloudflare Worker API + D1, see `server/README.md` in the tracker repo, plus a static client served by its own Cloudflare Worker - see `client/README.md`). Every call a run makes goes through the `./tracker` helper that `run-search.ps1` materializes into the run directory - it builds the request, stamps the track key and the local date, and reports what the tracker accepted. The daily prompt (`GET /api/prompt/{{TRACK_KEY}}`) names the command for each step; see that for the exact procedure.
+8. If a previously-tracked lead is confirmed dead on a later check, **never delete or move it yourself** - report it and let the tracker decide. Report by URL, not by id, in one file listing every posting confirmed dead (`./tracker delist dead.json`; procedure is step 8 of the daily prompt), whatever `status` each lead is in. Report the ones you re-checked and found **still live** in the same step (`./tracker verified live.json`) - that is the only thing that writes a lead's "confirmed live" date, and it matters because a dead posting is removed from the board, so a lead still showing is presumed live. Only report a posting dead when you actually confirmed it: a timeout, a blocked domain, a 403/429, truncated content or a JS shell that renders nothing all mean *unknown*, and an unknown belongs in neither list - leave the lead alone and note the tooling problem. The delist report cannot be undone.
 
 
 ## Fetch efficiency (apply on every run)
 
 Don't re-spend a full verification attempt rediscovering a **domain-wide fetch block** that's already confirmed - that's different from a specific posting closing, which is real signal and always worth checking. The distinction: if *every* URL tried at a domain fails the *same way* regardless of which posting (robots.txt block, blanket 403/429, a JS-rendered shell with no static content ever, metadata-only, or systematic truncation), that's a tooling wall, not news. If specific postings turn out closed/404 while others at the same domain verify fine, that's normal churn - keep checking those in full.
 
-Walls are recorded in the tracker, not here. When no route to a company's listings works - including the fallbacks, a different subdomain or an ATS mirror - record a `wall` for it in step 9d. Once the same wall has been recorded on two separate dates, `./tracker companies` serves it, and a served wall means skip that company's listing for the run; the tracker stops serving it after seven days, and that is the re-test. A served wall never stops a specific posting URL - a concrete new lead there still earns its verification attempt. If any route works, report it as `board` or `endpoint` instead of a wall. Any company note below that calls a domain blocked or skippable on cadence is history from before walls were shared: it records what a past run found, and it no longer decides whether to skip.
+Walls are recorded in the tracker, not here. When no route to a company's listings works - including the fallbacks, a different subdomain or an ATS mirror - record a `wall` for it in step 9d. Once the same wall has been recorded on two separate dates, `./tracker companies` serves it, and a served wall means skip that company's listing for the run; the tracker stops serving it after seven days, and that is the re-test. A served wall never stops a specific posting URL - a concrete new lead there still earns its verification attempt. If any route works, report it as `board` or `endpoint` instead of a wall. A company note below that calls a domain blocked or skippable on cadence records what a past run found; it does not decide whether to skip.
 
 ## Company coverage (apply on every run)
 
@@ -49,11 +49,11 @@ rather than skipping it.
 does. `./tracker companies` writes out the slice with each company's
 last-attempted date and the cursor; `./tracker swept` stamps what a run
 attempted and advances the cursor. Don't keep a parallel
-table here: what belongs in this doc is which companies are worth searching
-(Target Companies below). How to reach a company is not a doc edit any more - a
+table here: what belongs in this doc is *why* a company is worth searching
+(Company notes below). How to reach a company is not a doc edit - a
 board, an endpoint, a URL shape that works, and a wall when nothing does all go
-in step 9d, where every search reads them. The fetch notes above stay as
-reference, since they are where each way in was first written down.
+in step 9d, where every search reads them. The per-company fetch notes in this
+doc stay as reference.
 
 ## Scope rules (apply on every run)
 
@@ -75,9 +75,10 @@ Best-fit roles: {{BEST_FIT_SENTENCE}}
 
 **Fit philosophy (apply when filtering):** it's fine - expected, even - for a posting to state a qualification not literally met on paper. Treat a stated requirement as a signal to weigh against the demonstrated background above, not an automatic bar: if there's a credible substitute case for what the role actually needs, it's a finding, not a screen-out. This applies as much to a *category of role* as to a specific requirement line - don't let "my resume doesn't document this" quietly become "exclude this whole role type," even if that exclusion started out written down somewhere as a caveat. A resume is written for a specific audience and routinely omits adjacent experience that would make a real stretch case; a gap on paper is not the same claim as a gap in ability. Reserve exclusion for an actual, verifiable mismatch - a skill, language, location, or level the posting requires and the candidate genuinely doesn't have - not a role category the resume happens not to emphasize. When in doubt, list it and let the person searching decide, rather than pre-filtering it out of view.
 
-## Target Companies
-**Core:** {{TARGET_COMPANIES_CORE}}.
-**Expanded net (tried so far):** *(none yet - grows as broader-discovery searches turn up repeat hits)*
+## Company notes
 
-Reliability notes per company (will drift - always re-verify):
-*(none yet - notes accumulate here as runs discover which sites fetch reliably)*
+The companies to search come from the shared list, not from here. What this
+section holds is what the list has no field for: why a company is worth
+watching, and what came of trying it.
+
+**Companies tried (and what came of it):** *(none yet - grows as broader-discovery searches turn one up)*

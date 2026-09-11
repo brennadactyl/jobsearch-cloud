@@ -1,22 +1,16 @@
 /**
- * The three-way theme contract, asserted rather than eyeballed.
- *
  * A colour needs a value in `:root`, in the `prefers-color-scheme` block guarded
- * by `:not([data-theme="light"])`, and in `[data-theme="dark"]`. Miss one and
- * the colour is right in one theme and invisible in the other - a failure that
- * shows up only if someone happens to look at the other theme, which is exactly
- * why it wants a test rather than a convention.
- *
- * This is one of the checks named in docs/react-adoption-plan.md's parity bar,
- * and it is one the existing single-file page cannot make of itself.
+ * by `:not([data-theme="light"])`, and in `[data-theme="dark"]`. Miss one and it
+ * is right in one theme and invisible in the other, which shows only if someone
+ * looks at that theme.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // Read off disk rather than imported. Vitest stubs CSS imports by default
-// (`test.css` is false), which makes even `./index.css?raw` resolve to an empty
-// string - a stub that would have made every check below pass vacuously.
+// (`test.css` is false), which makes even `./tracker.css?raw` resolve to an
+// empty string - a stub that would make every check below pass vacuously.
 //
 // Resolved from the project root, not from `import.meta.url`: under Vitest that
 // is not a file: URL and readFileSync rejects it.

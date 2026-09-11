@@ -1,6 +1,3 @@
-/**
- * The rest of the ported rules: URLs, tiers, sorting, run state, tab building.
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_LEADS } from "./constants";
 import { NOW, applications, leads, settings, tracks as trackList } from "./fixture";
@@ -27,9 +24,6 @@ describe("safeUrl", () => {
   });
 
   it("refuses anything that is not a link, rather than building an href from it", () => {
-    // React escapes text and attributes but will render a javascript: href
-    // quite happily, so this is the half of the boundary the framework does not
-    // cover. Lead data comes from job postings read off the internet.
     for (const hostile of [
       "javascript:alert(1)",
       "JaVaScRiPt:alert(1)",
@@ -123,9 +117,6 @@ describe("fillState", () => {
   });
 
   it("does not call a complete row waiting, because no run would fetch it", () => {
-    // Mirrors getAutofillQueue in server/src/db.js: a row whose company, role
-    // and location are filled is not in the queue, so promising a fill would be
-    // promising something that is never coming.
     expect(fillState(applications.find((a) => a.id === 11)!)).toBe("");
   });
 
@@ -136,7 +127,6 @@ describe("fillState", () => {
 
 describe("runState", () => {
   it("treats a track that has never run as honest, not broken", () => {
-    // Flagging it would mean every new install opens covered in warnings.
     const never = { at: "", on: "", status: "", leads_added: 0, screened_added: 0, delisted: 0, note: "" };
     expect(runState(never, settings)).toBe("never");
     expect(trackWarn(never, settings)).toBeNull();

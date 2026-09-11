@@ -1,21 +1,14 @@
 /**
- * The shape of `GET /api/data`, as a schema rather than a set of hand-written
- * interfaces.
+ * The shape of `GET /api/data`. Every type in this client is inferred from here,
+ * so the types and the parser can't disagree.
  *
- * Every type in this client is inferred from here, so there is one description
- * of the payload rather than a type declaration and a parser that can disagree.
- * The old client has no equivalent: it reads `data.leads[i].dateRecruiterScreen`
- * and finds out at render time whether that field exists.
+ * Zod strips unknown keys rather than rejecting them: the server gains fields
+ * more often than it changes existing ones, and an added column must not stop
+ * the page loading.
  *
- * Zod objects strip unknown keys rather than rejecting them, which is the
- * behaviour we want at this boundary. The server gains fields (see
- * `server/migrations/`) more often than it changes the ones already here, and a
- * client that refused to load because a column was added would be worse than
- * one that ignores it.
- *
- * Authority for these shapes: `server/migrations/0001_schema.sql` for the
- * columns, `server/src/db.js`'s `getTracksAndSettings` for how tracks and
- * settings are assembled, and `server/src/routes/data.js` for the envelope.
+ * Authority for these shapes: `server/migrations/` for the columns,
+ * `server/src/db.js`'s `getTracksAndSettings` for tracks and settings, and
+ * `server/src/routes/data.js` for the envelope.
  */
 import { z } from "zod";
 
@@ -121,10 +114,9 @@ export const trackSchema = z.object({
   full_description: text,
   sort_order: z.number().default(0),
   last_run: lastRunSchema,
-  // TRACK_CONFIG_FIELDS are on the payload too (they are what prompt.js
-  // composes a search from). The page renders none of them, so they are not
-  // described here and Zod drops them - listing fields this client does not
-  // use would be a second place to maintain the server's config vocabulary.
+  // TRACK_CONFIG_FIELDS are on the payload too, but the page renders none of
+  // them; listing them here would be a second copy of the server's config
+  // vocabulary.
 });
 
 /**
@@ -157,7 +149,6 @@ export const userSchema = z.object({
   name: text,
 });
 
-/** The whole of what the page loads, in one request. */
 export const dataSchema = z.object({
   user: userSchema,
   updated: text,

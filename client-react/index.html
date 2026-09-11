@@ -4,22 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/favicon.svg" />
-    <!-- The exact request client/public/index.html makes, copied rather than
-         rewritten. Headings are Bricolage Grotesque and writing this by hand
-         once already dropped it, which fails silently: the CSS still names the
-         family, the browser falls back to the next in the stack, and every
-         heading on the page is quietly the wrong face. src/fonts.test.ts now
-         asserts every family the stylesheet names is actually requested. -->
+    <!-- src/fonts.test.ts checks this requests every family tracker.css names. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <!-- Set before first paint so a stored theme choice does not flash the OS
-         default. Deliberately a plain script and not a component: it has to run
-         before React mounts, which is not something a component can do. Absent
-         or invalid values fall through to prefers-color-scheme. -->
+    <!-- A plain script, so a stored theme applies before first paint - before
+         React mounts. Absent or invalid values fall through to
+         prefers-color-scheme. -->
     <script>
       try {
         var t = localStorage.getItem("bjs.theme");

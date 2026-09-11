@@ -4,43 +4,22 @@
   set up on this machine.
 
 .DESCRIPTION
-  Generic setup script - contains no personal data. Discovers people by
-  scanning <DataDir>\*\tracker.json (one folder per user id - see
-  run-search.ps1 and private.example/README.md), asks each one's tracker
-  account what tracks it has via GET /api/config, and registers one daily task
-  per track at that track's configured time. Not tied to any fixed number or
-  names of tracks, or to one person: add a track in the tracker, or add a
-  person's folder, and the next run of this script picks it up.
+  For each person with a
+  <DataDir>\<user-id>\tracker.json (see private.example/README.md), reads their
+  tracks from GET /api/config and registers one daily task per track at its
+  configured time. Also registers one machine-wide task,
+  "JobSearch-Applications", that runs run-fill.ps1 for every account.
 
-  The one track that gets no task is one with `fed_by` set - a tab filled by a
-  sibling track's search rather than by a search of its own (see
-  server/migrations/0003_branched_tracks.sql). Giving it a task would run a
-  second, near-identical search of the same job boards, which is the thing the
-  arrangement exists to avoid.
+  A track with `fed_by` set gets no task: its tab is filled by that sibling
+  track's search (see server/migrations/0003_branched_tracks.sql).
 
-  One further task is registered that isn't a search and isn't per person:
-  "JobSearch-Applications", the nightly fill for applications logged as nothing
-  but a URL. It runs run-fill.ps1 once for the whole machine - every account
-  under DataDir in a single CLI turn, fanning the posting-reading out to
-  subagents - so adding an application is a paste rather than nine fields typed
-  out by hand. Registered whether or not anyone has used it yet; a run with
-  nothing to read costs one API call per account. It runs at 06:30 daily - a
-  fixed slot rather than part of the searches' stagger, since it competes with
-  them for nothing - and logs to <DataDir>\logs\applications.log, one file for
-  the machine rather than one per person. Its name carries no user id
-  because it belongs to no one person, which also keeps it clear of the
-  per-person cleanup below.
+  Safe to re-run: tasks for existing tracks are replaced in place, and tasks
+  for removed tracks are unregistered. Cleanup is scoped to the people this run
+  processed, so setting up one person never unregisters another's schedule.
 
-  Safe to re-run: existing tasks for a still-present track are replaced in
-  place; tasks left over from a track that no longer exists are unregistered.
-  **Cleanup is scoped to the people this run actually processed** - a machine
-  with two users must not have setting up the second one silently unregister
-  the first one's schedule, which is what a blanket "remove every JobSearch-*
-  task not in my list" would do.
-
-  A single-user machine that predates per-user folders (no <DataDir>\*\tracker.json,
-  credentials in TRACKER_URL/TRACKER_API_TOKEN) is still supported: it's
-  treated as one unnamed user whose work dir is <DataDir> itself.
+  A single-user machine (no <DataDir>\*\tracker.json, credentials in
+  TRACKER_URL/TRACKER_API_TOKEN) is treated as one unnamed user whose work dir
+  is <DataDir> itself.
 
   Prerequisites checked/warned about, not auto-fixed:
     - Node.js + the claude CLI (npm install -g @anthropic-ai/claude-code)
@@ -72,9 +51,8 @@ $ErrorActionPreference = "Stop"
 $runScript = Join-Path $PSScriptRoot "run-search.ps1"
 $fillScript = Join-Path $PSScriptRoot "run-fill.ps1"
 
-# Turns a track key like "technical-pm" into a Windows Task Scheduler name
-# suffix like "TechnicalPm" - not meant to reproduce any particular past
-# naming exactly, just to keep generated task names readable.
+# "technical-pm" -> "TechnicalPm". Never emits a hyphen; stale-task cleanup
+# below relies on that.
 function ConvertTo-TaskSuffix([string]$key) {
     ($key -split "[-_ ]" | Where-Object { $_ } | ForEach-Object {
         $_.Substring(0, 1).ToUpper() + $_.Substring(1)
@@ -82,17 +60,8 @@ function ConvertTo-TaskSuffix([string]$key) {
 }
 
 # Registers one daily task and applies the power settings that decide whether
-# it runs overnight at all. Two callers - a track's search, and the nightly
-# application fill - and the second one is why this is a function: the
-# settings block below is the difference between a task that runs while the
-# machine sleeps and one that silently doesn't, and a copy of it is a copy
-# that can be missed off.
-#
-# Takes the script and its arguments rather than building them, because the two
-# callers run different scripts with different parameters - a search is per
-# track and per person, the fill is neither.
-#
-# Returns $true if the task was registered, $false if it wasn't.
+# it runs overnight at all. Shared by the search tasks and the fill task so
+# neither can miss those settings. Returns $true if the task was registered.
 function Register-JobSearchTask([string]$Name, [string]$Script, [string]$Arguments, [string]$Time) {
     $action = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$Script`" $Arguments"
     # /TR has a 261-character limit and native exes don't trip
@@ -105,23 +74,12 @@ function Register-JobSearchTask([string]$Name, [string]$Script, [string]$Argumen
         return $false
     }
 
-    # schtasks creates the task but cannot say how it behaves around power:
-    # it has no flag for waking the machine or for catching up a missed run,
-    # and it defaults "don't start if on batteries" to ON. A task registered
-    # by it alone therefore does nothing at all on any night the machine is
-    # asleep - and says nothing about it afterwards.
+    # schtasks has no flag for waking the machine or catching up a missed run,
+    # and it defaults "don't start if on batteries" to ON, so a task it
+    # registers alone silently skips any night the machine is asleep.
     #
-    # That is not hypothetical. On 2026-09-07 all three searches silently
-    # missed their 01:00, 02:00 and 02:30 slots: the machine slept from
-    # 23:16 to 03:14, nothing woke it, and nothing re-ran them once it did.
-    # The backup task, registered through the cmdlets with exactly the
-    # settings below, woke the machine at 03:14:36 for its own 03:15 slot
-    # and ran normally - same machine, same user, same night. The settings
-    # were the only difference.
-    #
-    # Applied after creation rather than by switching to Register-ScheduledTask
-    # wholesale, so the /TR length check above keeps working - the cmdlets
-    # have no equivalent limit to check for.
+    # Applied after /Create rather than by switching to Register-ScheduledTask
+    # wholesale, which would lose the /TR length check above.
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun `
         -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
@@ -143,16 +101,10 @@ if (-not $claude) {
     Write-Host "claude CLI found: $($claude.Source)"
 }
 
-# What matters is whether the *scheduled task* will see the token, and it runs
-# in a fresh process as this user - so the persisted User (or Machine) value is
-# the one that counts, not this shell's copy.
-#
-# Checking only $env: gets both directions wrong. It reports a correctly
-# configured machine as broken whenever the shell predates the `setx` (or simply
-# didn't inherit it, which is how this read as unset on 2026-09-07 while the
-# scheduled runs had been authenticating fine for a week). And it passes a token
-# that was only ever set inline in one shell, never persisted - which looks
-# right here and then fails every overnight run.
+# The scheduled task runs in a fresh process as this user, so the persisted
+# User (or Machine) value is what it sees. This shell's $env: copy can be
+# missing after a `setx` the shell predates, or present from an inline set that
+# was never persisted.
 $tokenUser    = [Environment]::GetEnvironmentVariable("CLAUDE_CODE_OAUTH_TOKEN", "User")
 $tokenMachine = [Environment]::GetEnvironmentVariable("CLAUDE_CODE_OAUTH_TOKEN", "Machine")
 if ($tokenUser -or $tokenMachine) {
@@ -184,9 +136,9 @@ foreach ($dir in (Get-ChildItem $DataDir -Directory | Sort-Object Name)) {
     $people += [pscustomobject]@{ Id = $dir.Name; Url = $tracker.url.TrimEnd("/"); Token = $tracker.token }
 }
 
-# The pre-multi-user layout: no per-user folders, credentials in the
-# environment. Treated as one person with no id, whose tasks keep their
-# original "JobSearch-<Track>" names so an existing machine isn't churned.
+# A single-user machine: no per-user folders, credentials in the environment.
+# Treated as one person with no id, whose tasks use unprefixed
+# "JobSearch-<Track>" names.
 if ($people.Count -eq 0 -and -not $User -and $env:TRACKER_URL -and $env:TRACKER_API_TOKEN) {
     Write-Host "No per-user folders found - using TRACKER_URL/TRACKER_API_TOKEN for a single-user machine."
     $people += [pscustomobject]@{ Id = ""; Url = $env:TRACKER_URL.TrimEnd("/"); Token = $env:TRACKER_API_TOKEN }
@@ -210,9 +162,9 @@ $registered = @()
 # both landing on 08:00 is the collision this is here to avoid.
 $auto = [datetime]"08:00"
 
-# When each person's application fill runs. Early enough that a URL pasted
-# yesterday is filled in before they next look at the tracker, and deliberately
-# off the stagger the searches use so it doesn't drift as tracks are added.
+# When the machine-wide application fill runs. Early enough that a URL pasted
+# yesterday is filled in before anyone next looks at the tracker, and off the
+# searches' stagger so it doesn't drift as tracks are added.
 $FILL_TIME = "06:30"
 
 foreach ($person in $people) {
@@ -229,18 +181,16 @@ foreach ($person in $people) {
         continue
     }
 
-    # Task names are prefixed per person so two people's tracks can share a
-    # key ("SWE") without colliding, and so cleanup can tell whose is whose.
-    # Substring guarded: a data-dir folder someone named by hand rather than
-    # by GUID could be shorter than 8 characters, and an unguarded Substring
-    # would throw and abort the whole run under ErrorActionPreference=Stop.
+    # Prefixed per person so two people's tracks can share a key ("SWE") and
+    # cleanup can tell whose is whose. Substring is guarded because a
+    # hand-named folder can be shorter than 8 characters, and the throw would
+    # abort the whole run under ErrorActionPreference=Stop.
     $prefix = if ($person.Id) {
         $short = if ($person.Id.Length -ge 8) { $person.Id.Substring(0, 8) } else { $person.Id }
         "JobSearch-$short-"
     } else { "JobSearch-" }
     $ownedPrefixes += $prefix
 
-    # Auto-stagger anything without a configured time, 30 minutes apart.
     foreach ($track in ($config.tracks | Sort-Object sort_order, key)) {
         # A tab, not a search: the track named in fed_by finds its postings and
         # files them here too. GET /api/prompt refuses to compose a prompt for
@@ -272,26 +222,13 @@ foreach ($person in $people) {
 
 }
 
-# One task for the whole machine, outside the per-person loop, and not a
-# search: the nightly fill for applications logged as nothing but a URL. It
-# runs run-fill.ps1, which covers every account found under DataDir in a single
-# CLI turn (see that script for why one run rather than one per person, and how
-# it stays scoped to one account's rows at a time regardless).
+# The fill task (see run-fill.ps1). Registered whether or not anyone has pasted
+# a URL yet: there is nothing to detect in advance, and a run with nothing to
+# read costs one API call per account.
 #
-# Registered whether or not anyone has used the paste-a-URL box, because there
-# is nothing to detect in advance and a run with nothing to read costs one API
-# call per account. Registering it lazily would mean the day someone first
-# pasted a URL is the day nothing happened overnight.
-#
-# $FILL_TIME rather than a slot from the stagger: it is not a search, it does
-# not compete with the searches for job boards, and a fixed early-morning time
-# is what makes "filled in overnight" true for anything pasted the day before.
-#
-# The name carries no user id because the task belongs to no one person. That
-# also keeps it clear of every "JobSearch-<id>-" prefix, so one person's setup
-# run can neither claim it nor sweep it away - but it does mean it has to be
-# added to $registered by hand below, since a legacy single-user machine owns
-# the bare "JobSearch-" prefix and would otherwise see it as stale.
+# Its name carries no user id, which keeps it clear of every "JobSearch-<id>-"
+# prefix. It still goes into $registered, because a single-user machine owns the
+# bare "JobSearch-" prefix and would otherwise remove it as stale.
 if ($people.Count -gt 0) {
     Write-Host "`n== Registering the application fill (one task, all accounts) ==" -ForegroundColor Cyan
     $fillName = "JobSearch-Applications"
@@ -306,19 +243,13 @@ if ($ownedPrefixes.Count -gt 0) {
         $taskName = $_.TaskName
         $mine = $false
         foreach ($p in $ownedPrefixes) {
-            # The legacy single-user prefix is a bare "JobSearch-", which is
-            # also a prefix of every per-user name ("JobSearch-ab266b6c-Swe").
-            # Matching on it alone would claim - and then delete - every other
-            # person's tasks, which is precisely what this scoping exists to
-            # prevent. Reachable whenever the legacy branch fires on a machine
-            # that also has per-user folders: a -DataDir pointing elsewhere, a
-            # tracker.json mid-write, or a half-migrated machine that still
-            # has the old environment variables set.
-            # Matched on the second hyphen rather than on a GUID shape: the
-            # prefix is built from a folder name, which this script elsewhere
-            # allows not to be a GUID, and ConvertTo-TaskSuffix can never emit
-            # a hyphen - so a second one always means "this is somebody's
-            # per-user task", whatever their folder is called.
+            # The single-user prefix, a bare "JobSearch-", is also a prefix of
+            # every per-user name ("JobSearch-ab266b6c-Swe"), so on its own it
+            # would claim and delete other people's tasks - possible whenever
+            # the single-user branch fires beside per-user folders (a -DataDir
+            # pointing elsewhere, a tracker.json mid-write).
+            # A second hyphen marks a per-user task: ConvertTo-TaskSuffix never
+            # emits one, and the id segment need not be a GUID.
             if ($p -eq "JobSearch-" -and $taskName -match '^JobSearch-.+-') { continue }
             if ($taskName.StartsWith($p)) { $mine = $true }
         }
@@ -333,11 +264,9 @@ if ($ownedPrefixes.Count -gt 0) {
     }
 }
 
-# Read the settings back rather than trusting that applying them worked. This
-# is the check that was missing: the tasks were mis-registered on 2026-09-01 and
-# nothing noticed for six days, because a task that cannot wake the machine
-# looks completely normal in every listing until the night it doesn't run - and
-# a search that never fired is indistinguishable from one that found nothing.
+# Read the settings back rather than trusting that applying them worked: a task
+# that cannot wake the machine looks normal in every listing, and a search that
+# never fired looks like one that found nothing.
 if ($registered.Count -gt 0) {
     $broken = @()
     foreach ($n in $registered) {

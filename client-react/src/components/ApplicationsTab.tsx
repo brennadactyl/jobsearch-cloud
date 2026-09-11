@@ -1,15 +1,3 @@
-/**
- * Applications: the record of what was actually applied to.
- *
- * Grid view groups rows by the overnight fill's three states, ordered by what
- * needs you first - a posting no run will ever read, then everything in normal
- * shape, then the rows that need nothing from you until tonight. Headers appear
- * only when there is more than one state to separate, so on a day when
- * everything read cleanly the tab is the plain list it has always been.
- *
- * Every control here writes. Moving into a stage that has not happened yet asks
- * when it did - see StageDateModal.
- */
 import { Fragment, useState, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Application, TrackerData } from "../api/schema";
@@ -36,18 +24,9 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
   const [pending, setPending] = useState<PendingStage | null>(null);
   const addApp = useAddApplication();
 
-  // Adding an application: a pasted URL, or nothing at all.
-  //
-  // With a URL, the row is created with the link and no other content, and that
-  // is the entire handoff - the row is a candidate for the overnight fill
-  // because of what is in it, not because anything here said so.
-  //
-  // The duplicate check is exact-match and deliberately shallow: it catches
-  // pasting the same URL twice, which is the mistake a one-box form invites, and
-  // does not try to be the canonical-URL matching the server does for leads.
-  //
-  // The box empties once there is a row to show for it, not on the click: if
-  // the save fails, the link is still there to try again.
+  // The duplicate check is exact-match only: it catches pasting the same URL
+  // twice. The box empties once there is a row for it, so a failed save leaves
+  // the link there to retry.
   const add = () => {
     const url = link.trim();
     if (url) {
@@ -97,14 +76,11 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
             value={link}
             onChange={(e) => setLink(e.target.value)}
             onKeyDown={(e) => {
-              // Paste, Enter, done - the point of the box is that adding an
-              // application takes one gesture.
               if (e.key === "Enter") add();
             }}
           />
         </div>
-        {/* Two jobs, and the field decides which. Never disabled: adding a row
-            with no posting behind it is a real thing this button does. */}
+        {/* Never disabled: with the box empty it adds a blank row. */}
         <button className={link.trim() ? "btn primary" : "btn"} id="addapp" type="button" onClick={add}>
           {link.trim() ? "Add from link" : "Add empty row"}
         </button>
@@ -137,8 +113,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
         {toolbar}
         <div className="card empty">
           <strong>No applications logged</strong>
-          When you apply to something, add it here to track the conversation. Days-since and the follow-up list update
-          themselves.
+          When you apply to something, add it here to track the conversation. Days-since updates itself.
         </div>
         {modal}
       </>
@@ -182,8 +157,6 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
           {rows.map((a) => {
             const g = geo(a.location, settings.priority_locations);
             const d = daysSince(a.dateApplied);
-            // The host stands in for the company on a row that is still nothing
-            // but a URL - a list of rows all reading "Untitled" can't be told apart.
             const label = a.company || hostOf(a.link) || "Untitled";
             return (
               <div
@@ -204,16 +177,12 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
                   <span className="co">{label}</span>
                   <Pill status={a.status} />
                 </div>
-                {/* A row that is still nothing but a link has no role yet; the
-                    placeholder says whether a run tried to read one and failed. */}
                 <div className="md-row-ttl">
                   {a.title || (a.autofill === "failed" ? "Couldn’t read the posting" : "—")}
                 </div>
                 <div className="md-row-loc">
                   <span className="md-row-place">{a.location}</span>
                   <GeoBadge location={a.location} settings={settings} />
-                  {/* A "To Apply" row has no applied date to count from, so it
-                      says so rather than leave the slot blank. */}
                   {a.status === "To Apply" ? (
                     <span className="md-row-found">Not applied yet</span>
                   ) : (
@@ -239,11 +208,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
   );
 }
 
-/**
- * Removing an application just confirms - unlike a lead, nothing has to stop a
- * search rediscovering it. The detail header draws it as the bin icon and the
- * grid as a plain ×, as the original does.
- */
+/** Just confirms: unlike a lead, nothing has to stop a search rediscovering it. */
 function RemoveApp({ app, icon }: { app: Application; icon?: boolean }) {
   const del = useDeleteApplication();
   const name = `${app.company} ${app.title}`.trim() || "this row";
@@ -309,7 +274,6 @@ function AppsGrid({
   // On a day when every posting read cleanly there is one group, and a lone
   // divider across the whole table says nothing anyone needs.
   const grouped = groups.length > 1;
-  // The row Detail shows is the row highlighted here, by the same rule.
   const shownId = shownRow(rows, prefs.selected.applications).id;
 
   return (
@@ -517,9 +481,8 @@ function AppDetail({
             ariaLabel="Role"
           />
           <div className="dh-meta dh-app-meta">
-            {/* Sized to its own text so it hugs the value the way a lead
-                header's plain location does, instead of a full-width box
-                shoving the tier and the link off to the far edge. */}
+            {/* Sized to its text, so a full-width box doesn't push the tier and
+                link to the far edge. */}
             <EditableField
               row={app}
               kind="application"

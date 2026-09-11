@@ -20,12 +20,9 @@
   --pri-4:#6D28D9; --pri-4-soft:#EDE9FE;
   --shadow:0 1px 2px rgba(20,23,42,.06),0 8px 24px -12px rgba(20,23,42,.18);
 }
-/* Dark palette applies by OS/browser preference (prefers-color-scheme),
-   unless the theme toggle (#themeToggle, see the script at the bottom of
-   the page) has set an explicit choice via the data-theme attribute -
-   :not([data-theme="light"]) lets an explicit dark choice fall through
-   here too, and the [data-theme="dark"] block below covers explicit dark
-   when the OS preference itself is light. */
+/* Dark tokens follow the OS preference unless #themeToggle has set
+   data-theme. Every dark override needs both this guarded query and a
+   [data-theme="dark"] rule, or an explicit choice loses to the OS setting. */
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --ground:#0E1018; --surface:#161925; --surface2:#1E2230; --line:#2A2F41;
   --ink:#E9EBF4; --ink2:#A3AAC3; --ink3:#717892;
@@ -51,10 +48,8 @@
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
-/* The Overview scrolls inside itself and the other tabs scroll the window,
-   so the window scrollbar would appear and disappear as you switch between
-   them - taking ~15px of page width with it each time. Reserving the gutter
-   on both keeps the column the same width whichever tab you are on. */
+/* The Overview scrolls inside itself while other tabs scroll the window;
+   a stable gutter keeps the column width the same on every tab. */
 html{scrollbar-gutter:stable}
 body{margin:0;background:var(--ground);color:var(--ink);
   font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.5;
@@ -63,11 +58,8 @@ body{margin:0;background:var(--ground);color:var(--ink);
 h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;letter-spacing:-.02em}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 
-/* The title block and the tab bar stick as one unit, so which board you are
-   looking at and which tab you are on stay on screen while its rows scroll.
-   Needs its own background: sticky content sits over the page, and without
-   one the rows would show through it. The Overview pins these already (see
-   #app.pinned), where this is a no-op. */
+/* Title and tab bar stick as one unit so the board and tab stay on screen.
+   Needs its own background or the rows show through it. */
 .topbar{position:sticky;top:0;z-index:20;background:var(--ground)}
 /* A short viewport cannot spare ~110px on a title you have already read -
    there, only the tab bar stays (.tabs is sticky in its own right). */
@@ -83,8 +75,7 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
   font-size:12px;color:var(--ink3);cursor:pointer;border-radius:4px}
 .who:hover{color:var(--ink2);text-decoration:underline}
 .who:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-/* Nothing to sign in as, nothing to click - and an empty button still has a
-   focus stop and a hit area without this. */
+/* An empty button still takes a focus stop and a hit area. */
 .who:empty{display:none}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--good);flex:none}
 .dot.off{background:var(--ink3)}
@@ -102,36 +93,25 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 .tab .n{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink3);
   background:var(--surface2);padding:1px 6px;border-radius:9px}
 .tab[aria-selected="true"] .n{color:var(--accent);background:var(--accent-soft)}
-/* Only shown when a track's scheduled search is stale or errored - see
-   runState()/tabsHtml(). Deliberately a bare dot rather than a count badge:
-   it's a "look here" marker, and the actual explanation lives one click
-   away on the tab itself. */
+/* A bare dot, not a count: a "look here" marker, explained one click away on
+   the tab itself (see trackWarn). */
 .tab .tabwarn{width:6px;height:6px;border-radius:50%;flex:none;margin-left:-2px}
 .tab .tabwarn.stale{background:var(--warn)}
 .tab .tabwarn.error{background:var(--crit)}
-/* A posting the nightly fill couldn't read. Amber like a stale search, and
-   for the same reason: something here is waiting on you, and nothing else
-   is going to do it. */
+/* Amber like .stale: both are waiting on you. */
 .tab .tabwarn.fill{background:var(--warn)}
 .tab:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 
 .toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:16px 0 12px}
 .search{flex:1;min-width:180px;max-width:320px}
-/* The sentence beside the add button that says what pressing it will do. It
-   was an inline font-size:13px;color:var(--ink3) until it became class="hint",
-   and the rule never came with it - so it rendered as full-size body text. */
 .hint{font-size:13px;color:var(--ink3)}
 input[type=search],input[type=text],input[type=url],input[type=date],input[type=password],select,textarea{
   font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
   border-radius:7px;padding:7px 10px;width:100%}
-/* A field the browser filled in for you keeps the page's own colours.
-   Chrome paints autofilled inputs with its own near-white background and dark
-   text, both !important, which on this palette is a glaring white box in the
-   middle of a dark card - and it lands on the sign-in name field, which is the
-   first thing anyone sees. background-color cannot win against it; an inset
-   shadow can, because it paints over the top. text-fill-color is the matching
-   override for the text. */
+/* Chrome paints autofilled inputs with its own !important colours - a white
+   box on the dark palette. background-color can't beat that; an inset shadow
+   painted over the top can, and text-fill-color does the same for the text. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
@@ -144,10 +124,8 @@ textarea{resize:vertical;min-height:34px}
   border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 13px}
 .btn:hover{border-color:var(--ink3)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-/* Dark-mode accent (#2DD4BF) is bright enough that white button text fails
-   contrast - needs the same OS-preference-or-explicit-toggle guard as the
-   :root custom-property blocks above, not just the bare media query, or
-   toggling to dark while the OS is light leaves this rule un-applied. */
+/* White text fails contrast on the dark accent. Guarded like the :root token
+   blocks above. */
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{color:#241B08}}
 :root[data-theme="dark"] .btn.primary{color:#241B08}
 .btn.primary:hover{filter:brightness(1.07)}
@@ -158,9 +136,6 @@ textarea{resize:vertical;min-height:34px}
 .chip{appearance:none;font:inherit;font-size:13px;cursor:pointer;border-radius:99px;
   border:1px solid var(--line);background:var(--surface);color:var(--ink2);padding:4px 11px}
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--ground)}
-/* The filter a tab was opened with, from an Overview number. Always on when
-   shown, and always removable - a filter you can't see is a page misreporting
-   what it holds. */
 .chip.drill{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .chip.drill .x{margin-left:7px;font-weight:600}
 
@@ -179,10 +154,8 @@ tr.more-row td{padding:4px 12px 14px}
 .dt{color:var(--ink3);font-size:12.5px;white-space:nowrap}
 .geo{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.03em;
   padding:2px 8px;border-radius:99px;white-space:nowrap}
-/* One class per priority rank, not per named tier: how many there are is
-   whatever priority_locations has (see geo()). Five are coloured; a sixth
-   still renders, just uncoloured, which beats inventing shades nobody can
-   tell apart. */
+/* One class per priority_locations rank (see priClass). Five are coloured;
+   a sixth renders uncoloured rather than in shades nobody can tell apart. */
 .geo.pri0{background:var(--pri-0-soft);color:var(--pri-0)}
 .geo.pri1{background:var(--pri-1-soft);color:var(--pri-1)}
 .geo.pri2{background:var(--pri-2-soft);color:var(--pri-2)}
@@ -190,25 +163,18 @@ tr.more-row td{padding:4px 12px 14px}
 .geo.pri4{background:var(--pri-4-soft);color:var(--pri-4)}
 .key{display:flex;gap:15px;flex-wrap:wrap;align-items:center;font-size:12.5px;
   color:var(--ink3);padding:0 0 11px}
-/* Pushes the run stamp to the trailing edge on a wide row, but it's the
-   last flex item either way, so a wrapped narrow layout just drops it onto
-   its own line instead of stranding it mid-row. */
+/* The last flex item, so a wrapped row drops it onto its own line instead
+   of stranding it mid-row. */
 .key-run{margin-left:auto}
-/* Sort lives in this quiet row (see leadsTab/appsTab), not the primary
-   toolbar - strips the bordered-control look .sortsel has up there down to
-   something that reads as part of the same muted line as the run stamp
-   and geo legend, while staying a real <select> (native arrow, full
-   keyboard/click target) rather than something disguised as plain text. */
+/* Sort lives in this muted row, not the toolbar: a setting you glance at, not
+   one you touch per visit. Still a real <select>, styled down to match. */
 .key .sortwrap{gap:5px}
 .key .sort-label{font-weight:400}
 .key select.sortsel{background:none;border:1px solid transparent;color:var(--ink3);
   font-size:12.5px;padding:1px 3px;min-width:0}
 .key select.sortsel:hover,.key select.sortsel:focus-visible{border-color:var(--line)}
 
-/* "When did this search last run" - see runStampHtml(). Its whole job is to
-   distinguish a genuine zero-result day from a search that quietly stopped
-   firing, so the stale/error states have to read as warnings, not as more
-   grey metadata. */
+/* Stale and error must read as warnings, not grey metadata (see runState). */
 .runstamp{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2)}
 .runstamp .rdot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--good)}
 .runstamp.none{color:var(--ink3)}
@@ -220,26 +186,16 @@ tr.more-row td{padding:4px 12px 14px}
 .empty-warn{margin-top:10px;color:var(--warn);font-size:13px}
 .key i{display:inline-block;width:3px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-2px}
 
-/* Detail/Grid is "how the data is displayed" - kept separate from and to
-   the right of the data-scoping controls (search/filter/sort), which read
-   left-to-right as one group. It claims the toolbar row's trailing free
-   space itself, so whatever precedes it (with or without a sort control)
-   just flows normally. */
 .viewsw{display:flex;gap:2px;margin-left:auto;background:var(--surface2);padding:3px;border-radius:8px}
 .vbtn{appearance:none;border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;
   color:var(--ink2);padding:5px 12px;border-radius:6px;cursor:pointer}
 .vbtn[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .vbtn:hover{color:var(--ink)}
 
-/* Sort sits with search/filter - it scopes which rows show and in what
-   order, the same job as those controls, not the view switcher's job of
-   how a row renders once selected. */
 .sortwrap{display:flex;align-items:center;gap:7px}
 .sort-label{font-size:12.5px;font-weight:600;color:var(--ink3)}
 .sortsel{width:auto;min-width:150px}
 
-/* Dense grid: the same records as one wide, fully-editable table -
-   maximum information density, everything visible without a click. */
 .grid-wrap{overflow-x:auto}
 .grid-wrap a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--line)}
 .grid-wrap a:hover{border-bottom-color:var(--accent)}
@@ -249,17 +205,14 @@ tr.more-row td{padding:4px 12px 14px}
 td.rc{max-width:260px}
 td.rc a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.cc{max-width:170px;overflow:hidden;text-overflow:ellipsis}
-/* The posting's host in the applications grid. Capped and clipped: a job
-   board hostname is short, but nothing stops one being long, and this column
-   sits between two the eye needs. */
+/* Capped: hostnames are usually short, but nothing guarantees it. */
 td.lk{max-width:150px}
 td.lk a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.lk .lk-none{color:var(--ink3)}
 
-/* The applications grid's fill-state groups (see appsGridHtml). A divider
-   with a label rather than a card or a heading, so the table still reads as
-   one table - and the whole divider is the fold control, because an 11px
-   caret is a poor click target and there is nothing else on that row. */
+/* The applications grid's fill-state groups (see appsGridHtml). A labelled
+   divider keeps it reading as one table, and the whole divider is the fold
+   control because the caret alone is too small a target. */
 tr.group td{background:var(--surface2);border-bottom:1px solid var(--line);padding:0}
 .grp{appearance:none;border:0;background:none;cursor:pointer;font:inherit;color:var(--ink3);
   display:flex;align-items:center;width:100%;text-align:left;padding:7px 12px;
@@ -275,7 +228,6 @@ tr.group td{background:var(--surface2);border-bottom:1px solid var(--line);paddi
 .grp[aria-expanded="false"] .cnt{color:var(--ink2)}
 tr.group.stuck .grp,tr.group.stuck .grp .cnt{color:var(--warn)}
 
-/* A row still waiting on tonight's run, and one no run will ever read. */
 tr.waiting input::placeholder,tr.stuck input::placeholder{font-style:italic}
 .eta{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ink2)}
 .eta .pulse{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
@@ -297,9 +249,6 @@ td textarea{font-size:13px;min-height:32px;min-width:130px}
 .grid-wrap tbody tr.gr-sel:hover{background:var(--accent-soft)}
 .exp-ind{color:var(--ink3);font-size:12.5px;white-space:nowrap}
 
-/* Master-detail: a compact list on the left, the full record on the right -
-   no expand/collapse, every field is one click away. Used by both the
-   per-track leads tabs and Applications. */
 .md{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;
   background:var(--surface);box-shadow:var(--shadow)}
 .md-list{width:348px;flex:0 0 348px;border-right:1px solid var(--line);
@@ -319,8 +268,6 @@ td textarea{font-size:13px;min-height:32px;min-width:130px}
 .md-row-top .co{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .md-row-top .pill{flex:0 0 auto}
 .md-row-ttl{font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.4}
-/* Which search found this row - shown only in the pooled All-leads list,
-   where the tab no longer says it. */
 .md-row-track{display:inline-block;margin-left:7px;padding:0 6px;border-radius:4px;
   background:var(--surface2);color:var(--ink3);font-size:11px;white-space:nowrap}
 .md-row-loc{font-size:11.5px;color:var(--ink3);margin-top:7px;display:flex;align-items:baseline}
@@ -331,12 +278,8 @@ td textarea{font-size:13px;min-height:32px;min-width:130px}
   max-height:min(720px,calc(100vh - 260px))}
 .md-empty{padding:70px 20px;text-align:center;color:var(--ink3)}
 .dh-track{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
-/* The track line doubles as the control that moves a lead to another tab,
-   borrowing `.dh-in`'s trick below: it reads as the same label it always was
-   until you hover it. A misfiled posting used to leave only the trash can -
-   the wrong tab and "not a posting at all" got the same answer, and a real
-   lead was the thing thrown away. -7px cancels the padding so the text keeps
-   the left edge the plain label had. */
+/* Reads as the plain track label until hovered, like .dh-in. -7px cancels
+   the padding so the text keeps the label's left edge. */
 select.dh-track-in{width:auto;max-width:100%;font-size:10px;font-weight:700;text-transform:uppercase;
   letter-spacing:.06em;color:var(--ink3);border:1px solid transparent;background:none;
   padding:2px 7px;margin-left:-7px;cursor:pointer}
@@ -347,20 +290,14 @@ select.dh-track-in:hover,select.dh-track-in:focus{border-color:var(--line);backg
 .dh-meta a{color:var(--accent)}
 .dh-fit{font-size:13px;color:var(--ink2);margin-top:10px;line-height:1.5}
 
-/* The application header (see appDetailHtml) is the lead header's layout
-   built out of inputs, because an application is hand-maintainable in a way
-   a lead isn't. `.dh-in` strips a field back to the text it stands in for
-   and only draws its box on hover or focus, so the header reads as a heading
-   until you go to change it. The negative margin cancels the padding the box
-   needs, keeping the text on the same left edge as `.dh-track` above it.
-   Selectors are `input.dh-*` deliberately: the shared input rule up top is
-   an attribute selector, so a bare class would lose to it. */
+/* Application header fields (see appDetailHtml) draw their box only on hover
+   or focus, so the header reads as a heading. Selectors are `input.dh-*`
+   because a bare class loses to the shared input rule's attribute selector. */
 .dh-app-top{display:flex;gap:10px;align-items:flex-start}
 .dh-app-fields{flex:1;min-width:0}
 .dh-app-top .icon-btn{flex:0 0 auto;margin-top:2px}
-/* -8px, not -7px: the text inside sits past the 1px transparent border as
-   well as the 7px padding, and it's the text that has to line up with the
-   track line and the status row below. */
+/* -8px: the text sits past the 1px border as well as the 7px padding, and it
+   must line up with the track line and status row. */
 input.dh-in{width:calc(100% + 8px);border:1px solid transparent;background:none;color:var(--ink);
   border-radius:7px;padding:3px 7px;margin-left:-8px}
 input.dh-in:hover,input.dh-in:focus{border-color:var(--line);background:var(--surface)}
@@ -369,8 +306,8 @@ input.dh-h1{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
   font-size:21px;font-weight:700;letter-spacing:-.02em;margin-top:4px}
 input.dh-sub-in{font-size:14.5px;color:var(--ink2);margin-top:3px}
 .dh-app-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:7px}
-/* Width comes from the `size` attribute appDetailHtml sets from the value,
-   so the field hugs its text like the lead header's plain location does. */
+/* Width comes from the `size` appDetailHtml sets from the value, so the
+   field hugs its text instead of pushing the tier and link to the far edge. */
 input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var(--ink3)}
 .dh-sep{color:var(--ink3)}
 .dh-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:20px}
@@ -403,37 +340,26 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 
 .tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));margin-bottom:20px}
 
-/* The Overview scrolls inside itself: header, tabs and the tile row hold
-   still while the searches and the funnel scroll past, the same way a track
-   tab's master/detail card scrolls under a toolbar that doesn't. render()
-   adds .pinned for the Overview only - every other tab scrolls as one
-   document. A column that measures itself, rather than the fixed
-   `calc(100vh - 260px)` .md-list uses, so a wrapped header or a second row
-   of tiles can't push the bottom off screen. */
+/* Overview only (render() adds .pinned): header, tabs and tiles hold still
+   while .panel-scroll scrolls. The column measures itself rather than using
+   .md-list's fixed calc(100vh - 260px), so a wrapped header or a second tile
+   row can't push the bottom off screen. */
 #app.pinned{height:100vh;height:100dvh;display:flex;flex-direction:column}
-/* width:100% is load-bearing. .wrap centres itself with `margin:0 auto`,
-   and an auto cross-axis margin on a flex item makes it shrink to its
-   content instead of stretching - which narrowed the whole column by
-   ~160px on the Overview and widened it again on every other tab, so
-   switching tabs visibly resized the page. */
+/* width:100% is load-bearing: an auto cross-axis margin (.wrap's margin:0
+   auto) shrinks a flex item to its content, so without it the column width
+   changes between the Overview and every other tab. */
 #app.pinned .wrap{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;padding-bottom:0}
 #app.pinned #panel{flex:1;min-height:0;display:flex;flex-direction:column}
 #app.pinned .panel-scroll{flex:1;min-height:0;overflow-y:auto;
   padding:6px 0 24px;scrollbar-gutter:stable}
 #app.pinned .panel-scroll .sec:first-child{margin-top:0}
-/* Says the region has more above it. Only once something has actually
-   scrolled under it - a hairline over content sitting flush at the top
-   would read as a stray rule. Inset, so it stays on the region's edge
-   instead of scrolling away with the content. */
+/* Hairline only once content has scrolled under the top edge. Inset, so it
+   stays on the region's edge instead of scrolling away. */
 #app.pinned .panel-scroll.scrolled{box-shadow:inset 0 1px 0 var(--line)}
-/* The scroll region gives up its scrollbar's width; the pinned tile row
-   above it doesn't, so without this the tiles sit ~15px wider than every
-   card below them. --sbw is measured in render() rather than assumed -
-   it is 0 where the platform draws overlay scrollbars. */
+/* --sbw: see syncScrollGutter. */
 #app.pinned .tiles{padding-right:var(--sbw,0px)}
-/* Pinning costs vertical room, and a short or narrow viewport has none to
-   spare - below either, the page goes back to being one scrolling document
-   with the tab bar sticky, which is what it is on every other tab. */
+/* Short or narrow viewports can't spare the room pinning costs; there the
+   Overview scrolls as one document like every other tab. */
 @media (max-height:620px),(max-width:700px){
   #app.pinned{height:auto;display:block}
   #app.pinned .wrap{display:block;padding-bottom:72px}
@@ -441,17 +367,13 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
   #app.pinned .panel-scroll{overflow:visible;padding:0}
   #app.pinned .panel-scroll .sec:first-child{margin-top:26px}
 }
-/* Each tile opens the rows behind its number (see dashboard()'s TILES), so
-   it is a real button - keyboard reachable, and with the chevron showing at
-   rest rather than on hover: an affordance nobody sees until they are
-   already pointing at it doesn't help them decide to point at it. */
+/* A real button (it opens the rows behind its number), with the chevron shown
+   at rest: an affordance only visible on hover doesn't invite the hover. */
 .tile{padding:16px 17px;border-radius:12px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);
   display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
   transition:border-color .12s ease}
 .tile:hover{border-color:var(--ink3)}
 .tile:hover .go{color:var(--accent)}
-/* Nothing behind the number to open. Driven off the count, so the day it
-   isn't zero the tile comes back on its own. */
 .tile[disabled]{cursor:default;opacity:.72}
 .tile[disabled]:hover{border-color:var(--line)}
 .tile .k{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);font-weight:600;
@@ -465,15 +387,13 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .bar h3{font-size:14px;font-weight:600;display:flex;justify-content:space-between;
   align-items:baseline;gap:6px 14px;flex-wrap:wrap;margin-bottom:7px}
 .bar h3 span{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink3);font-weight:400}
-/* A bar's name, when there is a tab holding the rows it counts. A button
-   rather than a link because it switches tabs in place - there is no URL
-   behind a tab here to point an href at. */
+/* A button, not a link: it switches tabs in place, and a tab has no URL. */
 .jumplink{appearance:none;border:0;background:none;padding:0;font:inherit;color:inherit;
   cursor:pointer;border-radius:4px}
 .jumplink:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 .jumplink:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-/* A funnel stage nothing has reached. `.bar h3 span` would otherwise set it
-   in the mono count face, and dimming it says why it isn't a button. */
+/* A funnel stage nothing has reached: undoes `.bar h3 span`'s mono count
+   face. */
 .bar h3 .jumpdead{font-family:inherit;font-size:inherit;font-weight:inherit;color:var(--ink3)}
 .meter{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden;display:flex}
 .meter i{display:block;height:100%}
@@ -495,19 +415,12 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .mf-open:hover{text-decoration:underline}
 .note{font-size:12.5px;color:var(--ink3);padding:14px 0 0;line-height:1.6}
 
-/* The only thing the overnight fill ever says on this page: what it couldn't
-   read (see autofillNoteHtml) - either nothing at all, or the rest of a
-   posting it got part of. Everything else about the fill is invisible -
-   waiting isn't worth saying, and a row that filled in completely speaks for
-   itself. These two are the exception because they are the rows with
-   something still to do on them, and nothing else on the page would say so. */
 .af{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-top:12px;
   padding:9px 12px;border:1px solid var(--line);border-radius:8px;
   background:var(--surface2);font-size:12.5px;color:var(--ink2);line-height:1.5}
-/* Only a posting that couldn't be read at all is drawn as a problem. A
-   partial read is a good outcome with a footnote - it filled in what the page
-   stated - and colouring it like a failure would train the eye to ignore
-   both. */
+/* Only an unreadable posting is drawn as a problem. A partial read is a good
+   outcome with a footnote, and colouring it as a failure would train the eye
+   to ignore both. */
 .af.bad{border-color:var(--crit);background:none}
 .af .af-why{color:var(--ink3)}
 
@@ -547,9 +460,8 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .stage-hist input[type=date]{width:100%}
 </style>
 <script>
-// Applied before body paint so a stored theme choice (see #themeToggle's
-// click handler in the main script) doesn't flash the OS-default theme
-// first. Absent/invalid values fall through to prefers-color-scheme.
+// Runs before body paint so a stored theme choice doesn't flash the OS
+// default first.
 try{
   var t0=localStorage.getItem("bjs.theme");
   if(t0==="light"||t0==="dark")document.documentElement.setAttribute("data-theme",t0);
@@ -571,8 +483,6 @@ try{
 
 <div id="app" class="hidden">
   <div class="wrap">
-    <!-- Title block and tab bar travel together, so both stay put while a
-         tab's rows scroll under them. -->
     <div class="topbar">
     <div class="hdr">
       <div>
@@ -592,14 +502,6 @@ try{
   </div>
 </div>
 
-<!--
-  Asks for the date a status change actually happened (or is scheduled
-  for) instead of silently stamping today - see the change listener's
-  stage-date interception and openStageDateModal()/confirmStageDate() in
-  the script below. Only ever opened for an application's status select,
-  moving into a stage whose history column is still blank. The title text
-  is set from JS, not here - it depends on which stage, see STAGE_SCHEDULED.
--->
 <div id="pwModal" class="modal-overlay hidden">
   <div class="card modal-card wide">
     <h3>Change your password</h3>
@@ -627,6 +529,7 @@ try{
   </div>
 </div>
 
+<!-- Title and subtitle are set by openStageDateModal(). -->
 <div id="stageDateModal" class="modal-overlay hidden">
   <div class="card modal-card">
     <h3 id="stageDateTitle">When did this happen?</h3>
@@ -639,23 +542,12 @@ try{
   </div>
 </div>
 
-<!--
-  local-config.js is gitignored - never committed, same as private/ data
-  elsewhere in this repo. It's how *this* deployment's own API URL gets in
-  without hardcoding a personal URL into the tracked template that other
-  installers fork. Doesn't exist? The browser just 404s this one request
-  and moves on - see local-config.example.js for the file to create.
--->
+<!-- Gitignored deploy-time API URL: see client/README.md, "How it finds its API". -->
 <script src="local-config.js"></script>
 <script>
 (function(){
 "use strict";
 
-// Theme toggle: an explicit choice persists in localStorage ("bjs.theme")
-// and is applied early by the small script in <head> (before this one
-// runs) so there's no flash of the OS-default theme on load. No stored
-// choice falls back to prefers-color-scheme; clicking the toggle always
-// sets an explicit choice from then on, in either direction.
 function effectiveTheme(){
   var explicit=document.documentElement.getAttribute("data-theme");
   if(explicit==="light"||explicit==="dark")return explicit;
@@ -678,54 +570,36 @@ function toggleTheme(){
 paintThemeToggle();
 
 var LEAD_STATUS=["New","Reviewing","Applied","Not a fit"];
-// "To Apply" is a posting parked in this tab before applying to it - worth
-// tracking (notes, comp, link, next action) but not sent yet, so it has no
-// applied date until it moves to "Applied". Switching a row to it clears
-// dateApplied server-side, and switching to "Applied" stamps it - see
-// api.js's handleSetApplicationStatus.
+// LEAD_STATUS (above) and APP_STATUS mirror server/src/routes/leads.js and
+// applications.js - no build step shares code. "To Apply" is logged but not
+// yet sent, so it has no applied date: handleSetApplicationStatus clears
+// dateApplied on a move to it and stamps it, if blank, on a move to "Applied".
 var APP_STATUS=["To Apply","Applied","Recruiter Screen","Tech Screen","Onsite / Loop","Offer","Rejected","Withdrawn"];
 var ACTIVE=["Recruiter Screen","Tech Screen","Onsite / Loop"];
-// Primitive shapes rather than one hand-authored path - easier to eyeball
-// as an actual trash can. stroke="currentColor" so .icon-btn's CSS color
-// (see .icon-btn.danger) is what colors it, not a value baked in here.
 var TRASH_ICON='<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" '+
   'stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
   '<path d="M3 4.5h10"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/>'+
   '<path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5"/>'+
   '<path d="M6.7 7v4M9.3 7v4"/></svg>';
-// Populated from state.tracks on boot (see buildTracks/applyConfig below) -
-// not baked in, so this same deployed code serves any installer's tracks.
+// Filled from /api/data by applyConfig(), never hardcoded, so one deploy
+// serves any installer's tracks.
 var TRACKS={};
 
-// Guarded because reading localStorage *throws* where storage is disabled
-// (a data: URL, a browser set to block site data) rather than returning null,
-// and an exception here would take the whole script down before the gate ever
-// rendered. Signing in still works in that state; it just won't be remembered.
+// localStorage throws, rather than returning null, where storage is blocked;
+// unguarded, that would stop the gate rendering. Sign-in still works, it just
+// isn't remembered.
 var TOKEN="",NAME="";
 try{
   TOKEN=localStorage.getItem("tracker_token")||"";
-  // Display only, and remembered across sign-outs so the gate can prefill it.
-  // The server decides whose data this actually is, from the token alone - the
-  // header shows the name /api/data reports back, not this one.
+  // Display only, kept across sign-outs to prefill the gate. The server decides
+  // whose data this is from the token alone.
   NAME=localStorage.getItem("tracker_name")||"";
 }catch(e){}
-// The API worker's origin (e.g. "https://job-search-tracker.you.workers.dev")
-// - no trailing slash. This client is a separate deployable from the API
-// (see ../server/), served from its own origin, so it has no same-origin
-// API to fall back on.
-//
-// API_BASE comes from local-config.js (gitignored - see the <script> tag
-// above), a deploy-time setting, never something a visitor types in - one
-// deployed client always talks to one server. That file is never committed,
-// so a fresh fork of this repo gets "" here until its deployer creates
-// public/local-config.js (see local-config.example.js) with their
-// ../server/ deploy's URL and redeploys - see the gate-init check below for
-// what a visitor sees in the meantime.
+// The API worker's origin, no trailing slash, from local-config.js - see
+// client/README.md, "How it finds its API".
 var API_BASE=(typeof LOCAL_API_BASE!=="undefined"?LOCAL_API_BASE:"");
-// Mirrors DEFAULT_SETTINGS in ../../server/src/api.js - the same
-// intentional duplication as LEAD_STATUS/APP_STATUS above (no build step
-// ties client and server together). Only used when the API omits a key;
-// a configured deployment overwrites all of these.
+// Mirrors the display keys of DEFAULT_SETTINGS in server/src/db.js. Only
+// fills keys the API omits.
 function defaultSettings(){
   return {display_title:"Job Search Tracker",overview_label:"Overview",
     applications_label:"Applications",all_leads_label:"All leads",
@@ -733,9 +607,6 @@ function defaultSettings(){
 }
 var state={updated:null,leads:[],applications:[],tracks:[],settings:defaultSettings()};
 
-// Turns the API's tracks[] (rows: key/label/full_description/sort_order,
-// plus the nested last_run from search_runs) into the {key:{...}} shape the
-// rest of the page indexes by, in display order.
 function buildTracks(list){
   var t={};
   (list||[]).slice().sort(function(a,b){
@@ -746,49 +617,33 @@ function buildTracks(list){
   return t;
 }
 
-// The whole tab bar as data, in render order: the two built-in tabs (which
-// aren't tracks - nothing runs on a schedule to fill them) followed by one
-// per configured track. Everything the tab bar and render() need is on
-// these rows, so neither has to special-case a tab by hardcoded id: `kind`
-// says which panel to draw, `label` comes from config either way. Adding a
-// track to the DB adds a tab; renaming one renames it.
+// The tab bar as data: `kind` picks the panel and labels come from config, so
+// nothing special-cases a tab by id and a track added to the database is a tab.
 function buildTabs(){
   var s=state.settings||{};
   var tabs=[
     {id:"dashboard",kind:"overview",label:s.overview_label||"Overview",n:null},
     {id:"applications",kind:"applications",label:s.applications_label||"Applications",
      n:state.applications.length,
-     // A posting the nightly fill couldn't read is the one thing on this tab
-     // that waits on you rather than on a company: nothing will fill that row
-     // in but you, and no later run will try again. Marked the way a track
-     // whose search stopped reporting is - see the `warn` field below.
+     // An unreadable posting waits on you: no later run retries it.
      warn:state.applications.some(function(a){return a.autofill==="failed";})
        ? {cls:"fill",title:"A posting couldn’t be read — a row here needs filling in by hand"}
        : null},
-    // Every track's leads in one list. It exists because the Overview's
-    // tiles count across tracks - "116 untriaged" spans five tabs - and a
-    // number you can't open is a number you stop trusting. Its badge counts
-    // New the way a track tab's does, so it reads as the sum of them.
+    // Every track's leads in one list, because the Overview's tiles count
+    // across tracks and a number you can't open is one you stop trusting. Its
+    // badge counts New like a track tab's, so it reads as their sum.
     {id:ALL_LEADS,kind:"allleads",label:s.all_leads_label||"All leads",
      n:state.leads.filter(function(l){return l.status==="New";}).length},
   ];
   Object.keys(TRACKS).forEach(function(k){
     tabs.push({id:k,kind:"track",label:TRACKS[k].label,
-      // The tab badge is a "what hasn't been triaged yet" count, so it only
-      // counts New leads - not the whole track (Reviewing/Not a fit are
-      // things you've already looked at, and Applied leads have moved to
-      // the Applications tab entirely, see setLeadStatus()).
+      // Counts only New: the badge is what hasn't been triaged yet.
       n:state.leads.filter(function(l){return l.search===k&&l.status==="New";}).length,
-      // Only stale/error earn a mark - see runState() on why "never ran"
-      // stays quiet.
       warn:trackWarn(k)});
   });
   return tabs;
 }
 
-// The mark a track tab carries when its scheduled search has stopped
-// reporting cleanly, in the shape buildTabs puts on every tab: a class and
-// the sentence that explains it. Returns null when there is nothing to say.
 function trackWarn(k){
   var st=runState(TRACKS[k]&&TRACKS[k].run);
   if(st==="error")return {cls:"error",title:"The last scheduled run reported an error"};
@@ -796,8 +651,6 @@ function trackWarn(k){
   return null;
 }
 
-// Applies state.tracks/state.settings (from /api/data) to TRACKS and the
-// header, replacing the "Brenna's Job Search" / fixed-track defaults.
 function applyConfig(){
   TRACKS=buildTracks(state.tracks);
   var title=(state.settings&&state.settings.display_title)||"Job Search Tracker";
@@ -814,34 +667,16 @@ function applyConfig(){
 }
 var ui={tab:"dashboard",q:"",filter:"All",selected:{},expanded:{},view:"detail",leadSort:"priority",appSort:"applied-desc",drill:null,collapsed:{}};
 
-// The id of the cross-track leads tab. A tab id, not a track key: the same
-// shape as "dashboard" and "applications", which are also ids no track can
-// usefully be called.
+// A tab id like "dashboard" and "applications", not a track key.
 var ALL_LEADS="allleads";
 
 
-// Fields shown in leads' and applications' facts cards. Facts about the
-// opportunity itself (stable once entered - comp doesn't change because
-// you looked at it again yesterday) and is all a lead shows. "link" is
-// omitted from ROLE_FIELDS for leads - a lead already has its own url
-// (the header link points at it), so a second link input here would just
-// duplicate it; applications get it via APP_ROLE_FIELDS instead, since a
-// manually-added application has no posting URL to fall back on. The
-// application header links this field too (see appDetailHtml), but the input
-// has to stay: it's the only place the URL can be typed, and Grid view's
-// expanded row shows these cards with no header above them.
-//
-// There used to be a third field group here - lastContact/nextAction/
-// nextActionDate, a manually-typed reminder shown in its own "Follow-up"
-// facts card and surfaced on the Overview as "What's next". Removed: once
-// the stage-date modal (see openStageDateModal) asks "when is this
-// scheduled?" at the moment a status actually changes, a hand-typed
-// reminder about the same upcoming stage is a second, easily-stale copy
-// of the same fact - the screenshot that prompted this showed exactly
-// that drift (a stale "Recruiter screen · 9/3" row after the application
-// had already moved on to Tech Screen). The DB columns still exist
-// (nothing reads or writes them now) rather than being dropped - no
-// upside to a migration for columns nothing points at.
+// Facts-card fields. Leads omit "link" because their header already links
+// l.url. Applications keep it as an input: a hand-added row has no other URL,
+// and Grid view's expanded row shows these cards with no header above them.
+// The lastContact/nextAction/nextActionDate columns are unused - don't revive
+// them: the stage-date modal already records upcoming stages, and a hand-typed
+// reminder would be a second copy that goes stale.
 var ROLE_FIELDS=[
   ["referral","Referral"],
   ["comp","Comp range"],
@@ -850,13 +685,9 @@ var ROLE_FIELDS=[
 ];
 var APP_ROLE_FIELDS=ROLE_FIELDS.concat([["link","Link"]]);
 
-// One date per APP_STATUS pipeline stage an application has reached (see
-// migrations/0001_schema.sql) - "Applied" isn't here,
-// it already has dateApplied. commit() auto-stamps the matching entry with
-// today's date the first time status moves to it (only if not already
-// set), but every field here stays a normal editable date input - same
-// pattern as any other field - so a wrong or skipped-stage date can always
-// be fixed or backfilled by hand.
+// One history date per pipeline stage after "Applied" (which has
+// dateApplied). The server stamps it the first time status moves there; the
+// inputs stay editable so a wrong or skipped date can be fixed by hand.
 var STAGE_DATE_FIELDS=[
   ["Recruiter Screen","dateRecruiterScreen"],
   ["Tech Screen","dateTechScreen"],
@@ -866,15 +697,10 @@ var STAGE_DATE_FIELDS=[
   ["Withdrawn","dateWithdrawn"]
 ];
 
-// Drill-downs. Every Overview number that isn't just "a tab's worth of rows"
-// names one of these, and the tab it opens filters by the same predicate the
-// tile counted with - one definition, so the number you clicked and the rows
-// you land on can't drift apart. `scope` says which tab shows it; `label` is
-// what the dismissible chip reads; `test` is the rule.
+// Overview drill-downs, named by tiles and funnel rows and resolved through
+// drillRows(). `scope` is the kind of tab that shows one, `label` its chip.
 var DRILLS={
-  // Matches the Overview's priority-location tile: the first configured
-  // ranking, still worth looking at. Applied leads aren't in the leads tab
-  // at all (see setLeadStatus), so only "Not a fit" needs excluding here.
+  // leadRows() already drops Applied leads, so only "Not a fit" is excluded.
   "top-geo-open":{scope:"leads",
     label:function(){
       var r=(state.settings.priority_locations||[])[0];
@@ -886,16 +712,12 @@ var DRILLS={
   "gone-quiet":{scope:"apps",label:"Applied 14+ days ago, no reply",
     test:function(a){var d=daysSince(a.dateApplied);
       return a.status==="Applied"&&d!==null&&d>14;}},
-  // The funnel's first row. "To Apply" rows sit in this tab without having
-  // been applied to, which is exactly what the Overview splits them out of.
   "applied":{scope:"apps",label:"Applied",
     test:function(a){return a.status!=="To Apply";}}
 };
-// One per pipeline stage, built from the same list the funnel is built from,
-// so a stage added there arrives here too. These test the stage *date*, not
-// the current status: the date is stamped once and never cleared, so an
-// application rejected after a tech screen still counts as having reached
-// one - which is what the funnel row it opens from counted.
+// These test the stage date, not the current status: a status change never
+// clears it, so an application rejected after a tech screen still counts as
+// having reached one.
 STAGE_DATE_FIELDS.forEach(function(s){
   DRILLS["reached-"+s[1]]={scope:"apps",label:"Reached "+s[0],
     test:function(a){return a.status!=="To Apply"&&!!a[s[1]];}};
@@ -905,17 +727,13 @@ function drillLabel(id){
   var d=DRILLS[id]; if(!d)return "";
   return typeof d.label==="function"?d.label():d.label;
 }
-// True when a row survives the active drill-down. No drill, or one belonging
-// to the other kind of tab, filters nothing.
 function drillKeeps(scope,row){
   var d=DRILLS[ui.drill];
   if(!d||d.scope!==scope)return true;
   return d.test(row);
 }
-// The chip that says a drill-down is on and takes it off again. Rendered
-// only in the tab that owns it - the Overview sends you here with a filter
-// applied, and an applied filter you can't see is a page lying about what
-// it's showing.
+// Only in the tab the drill belongs to: a filter you can't see is a page
+// misreporting what it shows.
 function drillChipHtml(scope){
   var d=DRILLS[ui.drill];
   if(!d||d.scope!==scope)return "";
@@ -924,34 +742,23 @@ function drillChipHtml(scope){
     '<span class="x" aria-hidden="true">×</span></button>';
 }
 
-// The rows a leads tab shows before any filter, drill-down or search box:
-// one track's, or every track's for the pooled tab. Applied leads are left
-// out here because they have moved to the Applications tab (see
-// setLeadStatus()) and this tab genuinely cannot show them - so any count of
-// leads has to leave them out too, and taking it from here is what keeps
-// that true without anyone remembering to.
+// Every lead count and list starts here, so none of them can include Applied
+// leads, which have moved to the Applications tab (see setLeadStatus).
 function leadRows(key){
   var isAll=(key===ALL_LEADS);
   return state.leads.filter(function(l){
     return (isAll||l.search===key)&&l.status!=="Applied";
   });
 }
-// The Applications tab's equivalent, and deliberately not the mirror image
-// of it: this tab shows every application, "To Apply" rows included. Named
-// anyway, so that a count of applications and the list it opens start from
-// the same place a count of leads does. Returns a copy - callers sort it.
+// Unlike leadRows(), keeps every row, "To Apply" included. Returns a copy:
+// callers sort it.
 function appRows(){
   return state.applications.slice();
 }
-// The rows a tile or funnel row actually opens, given the tab it links to
-// and whichever of the two narrowings it carries. Its *count* is the length
-// of this, which is the whole point: the number on an Overview tile and the
-// list clicking it lands on are one expression, not two that agree.
-//
-// `filter` is a plain status chip; `drill` names an entry in DRILLS, which
-// owns the rule. The scope test is the one drillKeeps() applies, so a tile
-// whose tab and drill disagreed would produce a count matching the equally
-// unfiltered list it opens, rather than a number the tab cannot reproduce.
+// The rows a tile or funnel row opens. Its count is this list's length, so
+// the number and the rows it lands on are one expression. `filter` is a status
+// chip; `drill` is a DRILLS key, applied only when its scope matches the tab,
+// as drillKeeps() does.
 function drillRows(t){
   var isApps=(t.tab==="applications");
   var rows=isApps?appRows():leadRows(t.tab);
@@ -961,22 +768,16 @@ function drillRows(t){
   return rows;
 }
 
-// [column,label] form, "Applied" first - the order the Stage history table
-// (see stageHistoryHtml) renders in, and the source list for it.
 var STAGE_HISTORY_FIELDS=[["dateApplied","Applied"]].concat(
   STAGE_DATE_FIELDS.map(function(s){return [s[1],s[0]];}));
-// status -> its history column, mirrors server/src/api.js's STAGE_DATE_MAP -
-// same intentional client/server duplication as APP_STATUS itself. Used to
-// decide whether picking a status from the dropdown needs to ask for a date
-// first (see the change listener's stage-date interception below).
+// Mirrors STAGE_DATE_MAP in server/src/routes/applications.js. A status whose
+// column is still blank asks for a date first (see the change listener).
 var APP_STAGE_DATE_MAP={"Applied":"dateApplied"};
 STAGE_DATE_FIELDS.forEach(function(s){APP_STAGE_DATE_MAP[s[0]]=s[1];});
 
-// A hand-typed link field is still just text, so only http(s) becomes a
-// real anchor. A bare "acme.com/jobs/1" is common enough to be worth
-// accepting (https:// assumed); anything else - javascript:, data:, a note
-// to self - gets no link rather than an href built from whatever was typed.
-// Returns "" when there is nothing safe to open.
+// Only http(s) becomes an anchor; a bare "acme.com/jobs/1" gets https://
+// assumed. Anything else (javascript:, data:, a note) returns "" rather than
+// an href built from typed text.
 function safeUrl(v){
   var t=String(v==null?"":v).trim();
   if(!t)return "";
@@ -985,42 +786,20 @@ function safeUrl(v){
   return "";
 }
 
-// The host a link points at ("boards.greenhouse.io"), or "" if there isn't
-// one. Stands in for the company on an application that is still nothing but
-// a URL - between pasting one in and the overnight fill reading the posting,
-// it is the only thing about the row that is known, and a list of rows all
-// reading "Untitled" can't be told apart. Displayed, never stored: a host is
-// a good enough label to find a row by and nowhere near good enough to write
-// into the company field as fact.
+// Stands in for the company on an application that is still only a URL, so a
+// list of such rows can be told apart. Displayed, never stored: a host is good
+// enough to find a row by, not to record as the company.
 function hostOf(v){
   var u=safeUrl(v);
   if(!u)return "";
   try{return new URL(u).hostname.replace(/^www\./,"");}catch(e){return "";}
 }
 
-// The only thing the overnight fill says on this page, and it says it only
-// when there is something the person has to do about it.
-//
-// Two cases, both driven by the run having left a note (autofill_note):
-//
-//   failed  it established nothing, so the row is blank and staying blank
-//   filled + note   it got some of the posting and not the rest - the ordinary
-//                   outcome on a board that renders its description
-//                   client-side but ships the role and employer in its
-//                   metadata, or on a closed listing that still names the role
-//
-// A plain filled row - everything the posting stated, nothing left over -
-// says nothing at all, which is most of them. Nor does a row still waiting
-// to be read: there is nothing to do about that but wait.
-//
-// The note is shown as the run wrote it, and that is what makes this
-// actionable rather than just discouraging: "the posting has been taken down"
-// and "the domain blocks automated fetches" call for different things from
-// the reader - the first means the details are gone, the second means the
-// page is right there and only the machine couldn't have it. There is no Try
-// again: a row is read once by design (see
-// server/migrations/0009_application_autofill.sql), and the answer either way
-// is to fill in what's missing, which the Link field above is already open at.
+// Says something only when there is something to do: a failed read, or a
+// partial one that left a note. The note is shown verbatim because causes ask
+// different things of the reader (a taken-down posting vs a site that blocks
+// fetches). No retry: each row is read once
+// (server/migrations/0009_application_autofill.sql).
 function autofillNoteHtml(a){
   var note=a.autofill_note||"";
   if(!note)return "";
@@ -1041,9 +820,8 @@ function factsGridHtml(item,fields,isApp){
     var input=type==="date"
       ?'<input type="date" data-id="'+item.id+'" data-field="'+key+'"'+appAttr+' value="'+esc(val)+'">'
       :'<input type="text" data-id="'+item.id+'" data-field="'+key+'"'+appAttr+' value="'+esc(val)+'" placeholder="'+esc(label)+'">';
-    // The link field stays an editable input - that is how a posting URL
-    // gets entered or corrected - so the way to open it is an anchor beside
-    // the label rather than turning the field itself into a link.
+    // The link stays an editable input, so opening it is an anchor beside the
+    // label.
     var href=key==="link"?safeUrl(val):"";
     var lab='<label>'+esc(label)+'</label>';
     if(href)lab='<div class="mf-labelrow">'+lab+
@@ -1052,12 +830,8 @@ function factsGridHtml(item,fields,isApp){
   }).join("")+'</div>';
 }
 
-// A row per pipeline stage (Applied first, then STAGE_HISTORY_FIELDS' own
-// order) instead of factsGridHtml's grid of same-size boxes - a history is
-// a sequence, and a list read top-to-bottom says so more directly than a
-// wrapping grid does. Editing works the same way as any other field
-// (commit() via the change/focusout listeners); this only changes the
-// layout, not what the inputs do.
+// A table rather than factsGridHtml's grid: a history is a sequence and reads
+// top to bottom.
 function stageHistoryHtml(item){
   return '<div class="stage-hist"><table><tbody>'+
     STAGE_HISTORY_FIELDS.map(function(f){
@@ -1068,11 +842,8 @@ function stageHistoryHtml(item){
   '</tbody></table></div>';
 }
 
-// Renders the facts boxes (role details, then - for an application - stage
-// history) for either a lead or an application. `compact` drops the first
-// box's default top margin - used in Grid view's expanded row, which is
-// already padded by its containing cell and doesn't want the extra gap
-// Detail view does.
+// `compact` drops the top margin inside Grid view's already-padded expanded
+// row.
 function factsCardsHtml(item,isApp,compact){
   var roleFields=isApp?APP_ROLE_FIELDS:ROLE_FIELDS;
   var h='<div class="facts-card"'+(compact?' style="margin-top:0"':'')+'><div class="mf-label">Role details</div>'+
@@ -1093,16 +864,9 @@ function viewSwitchHtml(){
   '</div>';
 }
 
-// Sort controls: one <select> drives both Grid and Detail, since both
-// render from the same sorted array (see leadsTab/appsTab) - there's no
-// separate "grid order" and "detail order" to keep in sync.
-//
-// "priority" is the longstanding leads default - not-a-fit sinks to the
-// bottom regardless of location tier (it's been screened out, so it
-// shouldn't compete with active leads for the top-of-list spots the geo
-// ranking is trying to surface), then geo tier, then newest found as the
-// tiebreak. The flat options exist for when you're hunting for something
-// specific by name/place/date rather than triaging what's new.
+// "priority" sinks "Not a fit" below everything - it's screened out and
+// shouldn't compete for the spots the location ranking surfaces - then orders
+// by rank, newest found first. The flat sorts are for hunting a specific row.
 var LEAD_SORTS=[
   ["priority","Priority"],
   ["found-desc","Newest found"],
@@ -1123,11 +887,8 @@ function leadComparator(sortKey){
   };
 }
 
-// Applications have no location or "found" date to sort by - just when you
-// applied and who to. The API returns them oldest-first (ORDER BY id, no
-// explicit sort was ever applied client-side), so defaulting this control to
-// "Newest applied" is a small deliberate change, not a no-op - it's the more
-// useful default for a tab you open to see what's freshest.
+// Defaults to newest applied: the API returns applications oldest-first
+// (ORDER BY id), and the freshest are what this tab is opened for.
 var APP_SORTS=[
   ["applied-desc","Newest applied"],
   ["applied-asc","Oldest applied"],
@@ -1137,11 +898,8 @@ var APP_SORTS=[
 function appComparator(sortKey){
   if(sortKey==="company-asc")return function(a,b){return String(a.company).localeCompare(String(b.company));};
   if(sortKey==="location-asc")return function(a,b){
-    // Unlike a lead, an application can have no location at all - one added
-    // by hand starts blank. An empty string sorts first, which would put the
-    // rows saying nothing about where they are at the top of the sort that
-    // asks exactly that, so they sink instead (same shape as the "To Apply"
-    // float below).
+    // A hand-added application can have no location; blanks sink rather than
+    // top the sort that asks where rows are.
     var ea=a.location?0:1, eb=b.location?0:1;
     if(ea!==eb)return ea-eb;
     return String(a.location).localeCompare(String(b.location));
@@ -1149,12 +907,9 @@ function appComparator(sortKey){
   var byDate=sortKey==="applied-asc"
     ?function(a,b){return String(a.dateApplied).localeCompare(String(b.dateApplied));}
     :function(a,b){return String(b.dateApplied).localeCompare(String(a.dateApplied));};
-  // "To Apply" rows have no applied date to sort by, so either date sort
-  // would clump them at one end on an empty string - last, under the
-  // default, which is the wrong place for the only rows still owing an
-  // application. Float them to the top instead (same shape as the leads
-  // comparator sinking "Not a fit"). Company A-Z above is left alone: an
-  // explicit alphabetical sort should be exactly alphabetical.
+  // "To Apply" rows have no applied date, so a date sort would strand the only
+  // rows still owing an application at one end; float them to the top.
+  // Company A-Z above stays strictly alphabetical.
   return function(a,b){
     var ta=a.status==="To Apply"?0:1, tb=b.status==="To Apply"?0:1;
     if(ta!==tb)return ta-tb;
@@ -1181,17 +936,14 @@ function hoursSince(d){if(!d)return null;var t=Date.parse(d);if(isNaN(t))return 
 
 function today(){return new Date().toISOString().slice(0,10);}
 
-// ---- Scheduled-run status (see server migrations/0001_schema.sql)
+// ---- Scheduled-run status (search_runs, server/migrations/0001_schema.sql)
 //
-// Each track carries the last run its scheduled search recorded. This is the
-// only thing on the page that can tell "the search ran and genuinely found
-// nothing" apart from "the search stopped running" - every other signal
-// (lead counts, the tabs, meta.updated) looks identical in both cases.
+// The last recorded run is the only signal that tells "ran and found nothing"
+// from "stopped running"; lead counts and tabs look identical in both cases.
 
-// "ok" | "stale" | "error" | "never". "never" is deliberately not treated as
-// a problem: it's the honest state of a freshly configured track that hasn't
-// hit its first scheduled run yet, and flagging that would mean every new
-// install opens covered in warnings.
+// "ok" | "stale" | "error" | "never". "never" isn't a problem: it's a new
+// track before its first run, and flagging it would cover every new install
+// in warnings.
 function runState(run){
   if(!run||!run.at)return "never";
   if(run.status==="error")return "error";
@@ -1211,26 +963,21 @@ function relWhen(iso){
   return d===1?"yesterday":d+"d ago";
 }
 
-// What the run did, in one clause. Counts come from the run record itself
-// rather than being recomputed from leads[], so a day that added nothing
-// still reads as a real result ("found nothing new") instead of a blank.
+// Counts come from the run record, not leads[], so a day that added nothing
+// still reads as a result.
 function runSummary(run){
   if(!run||!run.at)return "";
   if(run.status==="error")return run.note||"the run reported an error";
   var bits=[];
   if(run.leads_added)bits.push(run.leads_added+" new");
   if(run.screened_added)bits.push(run.screened_added+" screened out");
-  // The run record still counts these ("2 postings came down today") even
-  // though nothing on a lead marks it - the rows themselves were deleted.
+  // Counted on the run; the taken-down leads themselves are deleted.
   if(run.delisted)bits.push(run.delisted+" taken down");
   return bits.length?bits.join(", "):"found nothing new";
 }
 
-// The one-line "when did this search last run" stamp shown above a track's
-// list and in the Overview panel.
-// The ranking legend for the location tiers, shared by every tab that
-// colours a row by one. Numbered so the ranking reads as a ranking - with
-// more than two tiers, colour alone stops saying which outranks which.
+// Numbered so the ranking reads as a ranking: past two tiers, colour alone
+// doesn't say which outranks which.
 function geoKeyHtml(){
   return (state.settings.priority_locations||[]).map(function(r,i){
     var dot=i<5?"var(--pri-"+i+")":"var(--ink3)";
@@ -1244,6 +991,7 @@ function trackCountLine(){
   return n+" tracked search"+(n===1?"":"es")+" feed this list";
 }
 
+// "When did this search last run", above a track's list and in the Overview.
 function runStampHtml(key){
   var tr=TRACKS[key]; if(!tr)return "";
   var run=tr.run, st=runState(run);
@@ -1259,12 +1007,7 @@ function runStampHtml(key){
     ' &middot; '+esc(runSummary(run))+'</span>';
 }
 
-// Evaluates state.settings.priority_locations (see the server's
-// migrations/0001_schema.sql) - an ordered list of {tier, label, anyOf,
-// allOf} rules, first match wins. Was a hard-coded Seattle/Portland lookup;
-// now it's whatever an installer's config says, with the search-substring
-// semantics unchanged (anyOf: at least one substring present; allOf,
-// optional: every substring present).
+// Rule shape: priority_locations in server/migrations/0001_schema.sql.
 function geo(location){
   var loc=String(location||"").toLowerCase();
   var rules=(state.settings&&state.settings.priority_locations)||[];
@@ -1276,11 +1019,8 @@ function geo(location){
   }
   return null;
 }
-// Priority is the position of the matching rule in priority_locations, not
-// its `tier` string. That is what lets someone define two rankings or five:
-// the list is already ordered, so ordering it again by tier name was both
-// redundant and capped at the two names the CSS happened to know. `tier` is
-// still accepted in stored config and still ignored here.
+// Priority is the rule's position in priority_locations, not its `tier`
+// string, so any number of rankings works. `tier` is ignored.
 function priClass(i){return i<5?"pri"+i:"";}
 function rank(l){var g=geo(l.location);return g?g.i:999;}
 
@@ -1290,10 +1030,8 @@ function setSaved(msg,ok){
   t.textContent=msg;
 }
 
-// Exchanges name+password for a session token, which is what every later
-// request carries - the password is sent once and never stored. The name is
-// remembered (it isn't a secret) so returning to a signed-out browser only
-// means typing the password.
+// The password is sent once for a session token and never stored. The name
+// is remembered, since it isn't a secret.
 function submitToken(){
   if(!API_BASE){
     document.getElementById("gateError").textContent="This deployment has no API URL configured - see public/local-config.example.js.";
@@ -1331,11 +1069,8 @@ function submitToken(){
 // ---------------------------------------------------------------------------
 // Changing your own password.
 //
-// The fields are never pre-filled and are always cleared on the way out, in
-// both directions - cancel included. A password left sitting in a detached
-// DOM node is a small thing, but this is the one value in the page that is
-// worth being fussy about, and "cleared only on success" is how it ends up
-// still there after a mistyped attempt.
+// The fields are cleared on every exit, cancel included, so a mistyped
+// attempt doesn't leave a password sitting in the DOM.
 function openPwModal(){
   ["pwCurrent","pwNew","pwConfirm"].forEach(function(id){document.getElementById(id).value="";});
   document.getElementById("pwSignOut").checked=true;
@@ -1376,9 +1111,8 @@ function submitPwChange(){
   })}).then(function(r){
     save.disabled=false;
     if(r&&r.error){setPwMsg(r.error,"bad");return;}
-    // Said out loud rather than just closing. A password change is a thing
-    // people want confirmed, and the count is the only evidence the checkbox
-    // did anything.
+    // Confirmed out loud: the count is the only evidence the checkbox did
+    // anything.
     var note="Password changed.";
     if(signOut){
       note+=r.signedOut===1?" One other browser was signed out."
@@ -1388,7 +1122,6 @@ function submitPwChange(){
     setPwMsg(note,"good");
     ["pwCurrent","pwNew","pwConfirm"].forEach(function(id){document.getElementById(id).value="";});
     setTimeout(function(){
-      // Only if they haven't reopened it in the meantime.
       if(!document.getElementById("pwModal").classList.contains("hidden"))closePwModal();
     },2200);
   }).catch(function(err){
@@ -1400,10 +1133,8 @@ function submitPwChange(){
   });
 }
 
-// Drops this browser's credential and everything remembered about whose page
-// this was. The view preferences go too: they're per-person choices (which
-// track tab, which sort), and leaving them behind would drop the next person
-// to sign in on a tab that isn't theirs.
+// View preferences go too: they're per-person, and leaving them would land
+// the next person on a tab that isn't theirs.
 function forgetSession(message){
   TOKEN="";
   try{
@@ -1413,10 +1144,8 @@ function forgetSession(message){
     localStorage.removeItem("bjs.leadSort");
     localStorage.removeItem("bjs.appSort");
   }catch(e){}
-  // The in-memory copy too, not just the stored one: signing in as someone
-  // else doesn't reload the page, so without this the next person lands on
-  // whatever tab and sort the last one left behind - and it gets re-saved
-  // under their session, which is how a cleared preference comes back.
+  // The in-memory copy too: signing in as someone else doesn't reload the
+  // page, and the old values would be re-saved under the new session.
   ui.tab="dashboard";ui.q="";ui.filter="All";ui.selected={};ui.expanded={};
   ui.view="detail";ui.leadSort="priority";ui.appSort="applied-desc";ui.drill=null;
   document.getElementById("gate").classList.remove("hidden");
@@ -1426,17 +1155,15 @@ function forgetSession(message){
   if(pw){pw.value="";pw.focus();}
 }
 
-// Revokes the token server-side as well, so signing out of a shared or
-// borrowed browser actually invalidates it rather than just forgetting it
-// here. The other sessions this person holds - notably the scheduled
-// search's - are untouched.
+// Revokes the token server-side too, so signing out of a shared browser
+// invalidates it. This person's other sessions, like the scheduled search's,
+// are untouched.
 function logout(){
   var token=TOKEN;
   forgetSession("");
   if(!token||!API_BASE)return;
-  // Say so if the revoke didn't land. This browser has already forgotten the
-  // token either way - that part must not depend on the network - but the
-  // token is still live on the server, which matters on a shared machine.
+  // Forgetting locally must not depend on the network, but an unrevoked token
+  // matters on a shared machine, so say so.
   fetch(API_BASE+"/api/logout",{method:"POST",headers:{"Authorization":"Bearer "+token}}).then(function(res){
     if(!res.ok)throw new Error("status "+res.status);
   }).catch(function(){
@@ -1453,8 +1180,7 @@ function api(path,opts){
   merged.headers=headers;
   return fetch(API_BASE+path,merged).then(function(res){
     if(res.status===401){
-      // The token was revoked (logged out elsewhere) or never valid. Same
-      // handling either way: forget it and ask for the password again.
+      // Revoked elsewhere or never valid; either way, sign in again.
       forgetSession("Your session has expired - sign in again.");
       throw new Error("unauthorized");
     }
@@ -1490,9 +1216,7 @@ function boot(){
 
 function tabsHtml(){
   return buildTabs().map(function(x){
-    // Whether a tab has something wrong behind it is decided in buildTabs,
-    // with the rest of what a tab is - this only draws it, so a new kind of
-    // tab with a new reason to be marked needs nothing here.
+    // buildTabs decides whether a tab is marked; this only draws it.
     var warn=x.warn
       ? '<i class="tabwarn '+esc(x.warn.cls)+'" title="'+esc(x.warn.title)+'"></i>'
       : "";
@@ -1518,35 +1242,17 @@ function selectHtml(opts,val,attrs){
 
 function dashboard(){
   var A=state.applications;
-  // Everything applied to, which is both a tile's number and the population
-  // the whole pipeline below is measured against. Taken from drillRows() so
-  // it is the same set the tile opens rather than a second reading of the
-  // same rule - see DRILLS and drillRows().
   var appliedRows=drillRows({tab:"applications",drill:"applied"});
   var appliedCount=appliedRows.length;
   var active=drillRows({tab:"applications",drill:"in-conversation"}).length;
-  // "To Apply" rows sit in the Applications tab without having been applied
-  // to, so they'd inflate an "Applied" count - split them out and show them
-  // as their own line under the tile instead. The complement of the count
-  // above, so the two cannot disagree about which rows are which.
+  // "To Apply" rows aren't applied to yet, so they get their own line under
+  // the Applied tile instead of inflating it.
   var toApply=A.length-appliedCount;
-  // The first rule is the top ranking by definition now, so this counts and
-  // labels the same thing - it used to count every p-high rule but label only
-  // the first, so with two of them the number and the heading disagreed.
   var topRule=(state.settings.priority_locations||[])[0];
   var topLabel=topRule?topRule.label:"Top locations";
   var trackCount=state.tracks.length;
 
-  // Every tile opens the rows behind its own number, and takes the number
-  // from them: a tile says which tab it lands on and how that tab arrives
-  // narrowed, and drillRows() turns exactly that into the list. The count is
-  // its length, so what you clicked and what you land in cannot be two
-  // different sets - there is only one expression. `drill` names an entry in
-  // DRILLS, which owns the rule; `filter` is a plain status chip where one
-  // already says it; a tile with neither opens the whole tab.
-  //
-  // A tile counting zero has nothing to open and says so by being disabled -
-  // derived from the count, so it comes back on its own.
+  // Each tile's number is drillRows(t).length - the rows clicking it opens.
   var TILES=[
     {k:"Untriaged",f:"leads marked New",hi:true,tab:ALL_LEADS,filter:"New"},
     {k:topLabel,f:"still open",color:"var(--pri-0)",tab:ALL_LEADS,drill:"top-geo-open"},
@@ -1573,16 +1279,8 @@ function dashboard(){
       '<div class="f">'+esc(t.f)+'</div></button>';
   }).join("")+'</div>';
 
-  // Everything below the tiles scrolls inside itself, so the tabs and the
-  // numbers stay put while you read the searches - the same shape a track
-  // tab has, where the master/detail card scrolls and the toolbar doesn't.
-  // #app.pinned (set in render()) is what turns this div into that region;
-  // on a short or narrow viewport the CSS drops it back to one document.
   h+='<div class="panel-scroll">';
 
-  // Whether every scheduled search is still firing is the one thing the
-  // lead counts above genuinely cannot show - a search that stopped running
-  // and a search that found nothing produce the same unchanged numbers.
   var keys=Object.keys(TRACKS);
   var bad=keys.filter(function(k){var s=runState(TRACKS[k].run);return s==="stale"||s==="error";});
   var never=keys.filter(function(k){return runState(TRACKS[k].run)==="never";});
@@ -1593,9 +1291,8 @@ function dashboard(){
   else subline="All "+keys.length+" reporting on schedule";
   h+='<div class="sec"><h2>Daily searches</h2><p>'+esc(subline)+'</p></div>';
 
-  // With no tracks there are no bars to draw, and the card would render as an
-  // empty slab - which on a fresh install (where this is the expected state,
-  // not an error) looks like something failed to load.
+  // On a fresh install no tracks is the expected state; an empty card would
+  // look like a failed load.
   if(!keys.length){
     h+='<div class="card empty"><strong>No searches set up yet</strong>'+
       'Run the job-search-setup skill to add a tracked search. Once one exists, '+
@@ -1610,9 +1307,8 @@ function dashboard(){
     var tot=rows.length||1;
     var cols={"New":"var(--accent)","Reviewing":"var(--warn)","Applied":"var(--good)",
               "Not a fit":"var(--line)"};
-    // The name opens that track's tab. Only the name, not the whole header
-    // row: the row also carries the description and the run stamp, and a
-    // click target that wide would swallow selecting either.
+    // Only the name opens the tab: a wider target would swallow selecting the
+    // description or run stamp.
     h+='<div class="bar"><h3><button type="button" class="jumplink" data-tab="'+esc(k)+'" '+
       'title="Open this tab">'+esc(TRACKS[k].label)+'</button>'+
       ' <span>'+esc(TRACKS[k].full)+' &middot; '+rows.length+'</span></h3>'+
@@ -1626,12 +1322,6 @@ function dashboard(){
   h+='</div></div>';
   }
 
-  // Application pipeline: how far things get once you've actually applied,
-  // not just where each one sits today. STAGE_DATE_FIELDS stamps a date the
-  // first time an application reaches a stage and never clears it, so it
-  // survives a later status change (an app rejected after Tech Screen still
-  // shows it reached Tech Screen) - current `status` alone can't tell that
-  // story, only where something landed.
   h+='<div class="sec"><h2>Application pipeline</h2><p>'+
     (appliedCount?appliedCount+' applied &middot; '+active+' in active conversation':'Nothing applied yet')+
     '</p></div>';
@@ -1642,12 +1332,7 @@ function dashboard(){
         : 'Move a lead to Applied, or add one directly from the Applications tab, and its progress shows up here.')+
       '</div>';
   }else{
-    // [label, count, drill id]. Each row is named by the drill-down that
-    // reproduces it - "applied" for the first, and the per-stage entries
-    // DRILLS builds from this very list for the rest - and its count comes
-    // from that drill through drillRows(), the same way a tile's does. So
-    // the bar, the number beside it and the rows its header opens are all
-    // one set.
+    // [label, count, drill id]; counts come from drillRows(), like the tiles'.
     var FUNNEL=[["Applied","applied"]].concat(STAGE_DATE_FIELDS.slice(0,4).map(function(s){
       return [s[0],"reached-"+s[1]];
     })).map(function(r){
@@ -1657,8 +1342,7 @@ function dashboard(){
       FUNNEL.map(function(r,i){
         var pct=Math.round(r[1]/appliedCount*100);
         var color=i===0?"var(--ink3)":(i===FUNNEL.length-1?"var(--good)":"var(--accent)");
-        // A stage nothing has reached has no rows to open, so it stays
-        // plain text rather than a link that lands on an empty list.
+        // Nothing to open, so plain text rather than a link to an empty list.
         var head=r[1]
           ? '<button type="button" class="jumplink" data-tab="applications" data-drill="'+esc(r[2])+'" '+
             'title="Open these in Applications">'+esc(r[0])+'</button>'
@@ -1667,10 +1351,9 @@ function dashboard(){
           '<div class="meter"><i style="width:'+pct+'%;background:'+color+'"></i></div></div>';
       }).join("")+'</div>';
 
-    // "Responded" counts a rejection as a response (it is one - just not a
-    // forward one), so it's deliberately a different, larger number than
-    // the funnel's own forward-progress stages. Withdrawn is excluded from
-    // both halves of that count: it's Brenna's action, not the company's.
+    // "Responded" counts a rejection (a response, just not a forward one), so
+    // it's larger than the funnel's stages. Withdrawn is excluded: it's your
+    // action, not the company's.
     var RESPONSE_FIELDS=["dateRecruiterScreen","dateTechScreen","dateOnsite","dateOffer","dateRejected"];
     var responded=appliedRows.filter(function(a){
       return RESPONSE_FIELDS.some(function(f){return a[f];});
@@ -1710,22 +1393,10 @@ function dashboard(){
 }
 
 function leadsTab(key){
-  // The rows themselves come from leadRows(), which is also where every
-  // count of them comes from - see the note there on why a lead marked
-  // "Applied" is not one of them. A lead whose posting has been taken down
-  // isn't filtered out here because it isn't in state.leads at all - the
-  // server deletes it when a search reports it dead (see routes/delisting.js's
-  // removeDelistedLead), so there's no dead-posting state left for this
-  // function to know about.
-  // `tracked` keeps the unfiltered set only so the empty state below can tell
-  // a search that has never found anything from one whose finds have all been
-  // applied to.
-  //
-  // The same function draws the cross-track tab (key===ALL_LEADS): one list
-  // over every track instead of one, which is the only difference that
-  // reaches the rows. Everything a single track has and a pooled list can't
-  // - its description, its run stamp, the empty state that explains why a
-  // search found nothing - is skipped rather than faked.
+  // Also draws the pooled tab (key===ALL_LEADS), skipping what only a single
+  // track has: its description, run stamp and empty-state explanations.
+  // `tracked` keeps Applied leads so the empty state can tell "never found
+  // anything" from "everything was applied to".
   var isAll=(key===ALL_LEADS);
   var scopeLabel=isAll
     ? ((state.settings&&state.settings.all_leads_label)||"All leads")
@@ -1745,15 +1416,9 @@ function leadsTab(key){
       return '<button class="chip" data-filter="'+esc(f)+'" aria-pressed="'+(ui.filter===f)+'">'+esc(f)+'</button>';
     }).join("")+drillChipHtml("leads")+'</div>'+
     viewSwitchHtml()+'</div>'+
-    // The controls people touch constantly (search, status, view mode)
-    // stay full-weight above. Sort and this row's other contents are all
-    // settings/context you glance at, not fiddle with per-visit, so they
-    // share one quieter line instead of competing for the same attention.
     '<div class="key"><div class="sortwrap"><label class="sort-label" for="leadSort">Sort</label>'+sortSelectHtml("leads","leadSort")+'</div>'+
       geoKeyHtml()+
-      // Only true under the default sort - a flat sort by found/location/
-      // company means proximity no longer decides the order, so the legend
-      // shouldn't claim it does.
+      // Only the default sort orders by proximity.
       (ui.leadSort==="priority"?'<span>Closest roles sorted first</span>':'')+
       // A pooled list has no single run behind it, so it says how many
       // searches feed it instead of which one last reported.
@@ -1767,14 +1432,10 @@ function leadsTab(key){
       'applied to or ruled out. New postings land here as the daily runs find them.</div>';
   }
   if(!all.length){
-    // An empty track has more than one story behind it, and they read very
-    // differently. Whether anything is still tracked separates a search that
-    // has turned up nothing from one whose finds have all been applied to;
-    // the run record separates a real zero (the search ran this morning and
-    // there was nothing) from a search that hasn't run in a week, which isn't
-    // a result at all. A track whose postings have all been taken down reads
-    // as the first of those - the rows were deleted, so nothing here can know
-    // they ever existed.
+    // `tracked` separates "found nothing" from "all applied to"; the run
+    // record separates a real zero from a search that stopped running. A track
+    // whose postings were all taken down reads as "found nothing" - the server
+    // deletes delisted leads (removeDelistedLead in server/src/routes/delisting.js).
     var st0=runState(TRACKS[key].run);
     var warn0=(st0==="stale"||st0==="error")
       ? '<div class="empty-warn">But this search hasn&rsquo;t reported a clean run recently &mdash; check the scheduled task before reading this as a genuine zero.</div>'
@@ -1789,8 +1450,7 @@ function leadsTab(key){
       warn0+'</div>';
   }
   if(!rows.length) return h+'<div class="card empty"><strong>Nothing matches</strong>Try a different filter.</div>';
-  // In the pooled list, which search found a posting is the one thing a row
-  // no longer says by virtue of which tab you are on.
+  // The pooled list's tab doesn't say which search found a row, so tag each one.
   function trackTagHtml(l){
     if(!isAll)return "";
     var tr=TRACKS[l.search];
@@ -1824,18 +1484,13 @@ function leadsTab(key){
   return h;
 }
 
-// The grid is for a fast scan without scrolling, so it shows a deliberately
-// short list of columns - not the full field set (that's what Detail view
-// is for, along with referral/notes/everything else cut from here to keep
-// it scroll-free). Comp earns the one extra column because it's the field
-// most likely to change whether a posting is worth a second look.
+// Grid view is a scroll-free scan, so it shows few columns; Detail view has
+// the rest. Comp earns one because it most often decides a second look.
 var LEAD_GRID_FIELDS=[
   ["comp","Comp range"]
 ];
 
 function leadsGridHtml(rows,trackKey,isAll){
-  // One more column in the pooled list: which search found the row, the
-  // thing the tab itself says everywhere else.
   var COLS=6+LEAD_GRID_FIELDS.length+(isAll?1:0); // company/role/location/status + extras + found + details indicator
   var h='<div class="card grid-wrap"><table><thead><tr>'+
     '<th>Company</th><th>Role</th><th>Location</th><th>Status</th>'+
@@ -1845,19 +1500,12 @@ function leadsGridHtml(rows,trackKey,isAll){
   '</tr></thead><tbody>'+rows.map(function(l){
     var g=geo(l.location);
     var open=!!ui.expanded[l.id];
-    // The row itself is the click target for expand/select (see the
-    // document click handler's data-expand case) - clicking anywhere on
-    // it except an actual form control opens its Details and highlights
-    // it, rather than requiring a precise click on a button.
     var cls=(g?[g.p]:[]).concat(String(ui.selected[trackKey])===String(l.id)?["gr-sel"]:[]).join(" ");
     var row='<tr data-expand="'+l.id+'" data-scope="'+trackKey+'"'+(cls?' class="'+cls+'"':'')+'>'+
       '<td class="co cc" title="'+esc(l.company)+'">'+esc(l.company)+'</td>'+
       '<td class="rc"><a href="'+esc(l.url)+'" target="_blank" rel="noopener" title="'+esc(l.title)+'">'+esc(l.title)+'</a></td>'+
-      // The tier is the stripe down the row's left edge (tr.pri0-4 above),
-      // not a badge here. A grid is scanned down a column, and the same
-      // ranking said twice on one row - once in colour, once in words
-      // repeating the location beside it - is one more thing to read past.
-      // Detail view keeps the badge, where a row is read rather than scanned.
+      // The tier is the row's left stripe, not a badge: a grid is scanned down
+      // a column, and the ranking said twice is one more thing to read past.
       '<td class="loc" title="'+esc(l.location)+'"><div class="loc-txt">'+esc(l.location)+'</div></td>'+
       '<td>'+selectHtml(LEAD_STATUS,l.status,'data-id="'+l.id+'" data-field="status"')+'</td>'+
       LEAD_GRID_FIELDS.map(function(f){
@@ -1877,11 +1525,8 @@ function leadsGridHtml(rows,trackKey,isAll){
   return h;
 }
 
-// The track line of a lead's header. A board with one track has nowhere to
-// move a lead to, so it stays the plain label it always was; with more, it's
-// a picker over every configured tab. Options carry the track key as their
-// value rather than the label, so two tabs sharing a label still move
-// correctly and a rename doesn't break the control.
+// Options carry track keys, not labels, so shared labels and renames still
+// move correctly. With one track there is nowhere to move to, so it's a label.
 function leadTrackHtml(l,key){
   var keys=Object.keys(TRACKS);
   if(keys.length<2)return '<div class="dh-track">'+esc(TRACKS[key].label)+'</div>';
@@ -1911,29 +1556,11 @@ function leadDetailHtml(l,key){
 
 function appsTab(){
   var ALL_APPS=appRows().sort(appComparator(ui.appSort));
-  // `ALL_APPS` stays around so the two empty states below can tell "you
-  // haven't logged anything" from "the filter you arrived with matches
-  // nothing" - which are different problems with different answers.
+  // ALL_APPS lets the empty states tell "nothing logged" from "the drill-down
+  // matches nothing".
   var A=ALL_APPS.filter(function(a){return drillKeeps("apps",a);});
-  // The URL box is the whole of adding an application now: paste the posting
-  // you applied to, and a nightly run reads the company, role and location off
-  // it. Leaving it empty still adds the blank row this button always added -
-  // the way to log something with no posting behind it, or to type it all in
-  // now rather than wait.
-  //
-  // That run is deliberately invisible: there is no per-row "waiting" or
-  // "couldn't read this" state anywhere on this tab, because there is nothing
-  // for anyone to do about either. A row either has its company and role in it
-  // or it doesn't, and typing them in is the answer to "it didn't fill in"
-  // whatever the reason was. The one sentence below is the whole of what the
-  // page says about it, and it is here to explain why pasting a bare URL is a
-  // reasonable thing to do - not to report a status.
-  //
-  // It used to read "the scheduled searches never touch this tab", which
-  // stopped being true the moment a scheduled run started filling these in. It
-  // still says the part that matters: nothing arrives here that wasn't put
-  // here on purpose, which is what makes this tab the record of what was
-  // actually applied to.
+  // Adding takes a pasted posting URL; the nightly fill reads company, role and
+  // location off it. An empty box adds a blank row to fill in by hand.
   var h='<div class="toolbar">'+
     '<div class="search"><input type="url" id="appurl"'+
       ' placeholder="Paste a link straight to the job posting"'+
@@ -1941,31 +1568,18 @@ function appsTab(){
       // "Straight to" is the constraint: the run opens exactly this URL, so a
       // search page or a careers index produces a row nothing can fill.
       ' title="The posting&rsquo;s own page, not a search or a careers index &mdash; that page is what tonight&rsquo;s run opens and reads. Greenhouse, Lever, Workday and company careers pages all work."></div>'+
-    // The button has two jobs and the field decides which. It is never
-    // disabled: adding a row with no posting behind it is a real thing this
-    // button does. It says which one it is about to do instead, and takes
-    // the primary weight only for the path the field has been filled in for
-    // - see syncAddControl(), which keeps this in step as you type.
+    // Never disabled: a row with no posting is a real use. syncAddControl()
+    // relabels it, and gives it primary weight, once the field has a URL.
     '<button class="btn" id="addapp">Add empty row</button>'+
-    // Says what pressing the button will do, which is the question anyone
-    // standing here actually has. It used to say where these rows come from
-    // ("nothing is added here except by you") - true, and answering a
-    // question nobody asks at this moment; the note at the foot of the tab
-    // still makes that point.
     '<span class="hint" id="addhint">Adds a row for you to fill in yourself.</span>'+
     viewSwitchHtml()+'</div>'+
-    // Same tiering as leadsTab: Add/search-equivalent controls stay
-    // full-weight above, Sort (the one setting this tab has) drops to its
-    // own quiet line rather than crowding the primary row.
     '<div class="key"><div class="sortwrap"><label class="sort-label" for="appSort">Sort</label>'+sortSelectHtml("applications","appSort")+'</div>'+
-      // Rows here carry the same tier stripe the leads grids do, and a
-      // colour down the edge of a row says nothing without the ranking it
-      // belongs to.
+      // Rows here carry the tier stripe, which means nothing without the legend.
       geoKeyHtml()+
       (drillChipHtml("apps")?'<div class="chips">'+drillChipHtml("apps")+'</div>':'')+'</div>';
   if(!ALL_APPS.length){
     return h+'<div class="card empty"><strong>No applications logged</strong>'+
-      'When you apply to something, add it here to track the conversation. Days-since and the follow-up list update themselves.</div>';
+      'When you apply to something, add it here to track the conversation. Days-since updates itself.</div>';
   }
   if(!A.length){
     return h+'<div class="card empty"><strong>Nothing matches</strong>'+
@@ -1988,18 +1602,12 @@ function appsTab(){
     return '<div class="'+cls+'" data-select="'+a.id+'" data-scope="applications">'+
       '<div class="md-row-top"><span class="co">'+esc(a.company||hostOf(a.link)||"Untitled")+'</span>'+
         '<span class="pill '+pillFor(a.status)+'">'+esc(a.status)+'</span></div>'+
-      // The dash is markup, so it can't go through esc() with the title -
-      // that turned the fallback into a literal "&mdash;" on screen. A row
-      // whose posting couldn't be read says so here rather than showing the
-      // same bare dash as a row nobody has filled in yet: those two look
-      // identical in a list, and only one of them is waiting for anything.
+      // The dash is markup, so it stays outside esc(). An unreadable posting
+      // says so rather than showing the same dash as a row not filled in yet.
       '<div class="md-row-ttl">'+(a.title?esc(a.title)
         :(a.autofill==="failed"?'Couldn&rsquo;t read the posting':"&mdash;"))+'</div>'+
-      // The same three-part line a lead row has (place, geo tier, date
-      // stamp), so the two lists scan alike - and so the Location sort has
-      // something visible to have sorted by. A "To Apply" row has no applied
-      // date to count from (see APP_STATUS), so it says that rather than
-      // render a bare "Applied" with nothing after it.
+      // The same place/tier/date line a lead row has, so the lists scan alike
+      // and the Location sort has something visible to sort by.
       '<div class="md-row-loc"><span class="md-row-place">'+esc(a.location)+'</span>'+
         (g?'<span class="geo '+g.p+'">'+esc(g.label)+'</span>':'')+
         '<span class="md-row-found">'+(a.status==="To Apply"?'Not applied yet'
@@ -2012,16 +1620,9 @@ function appsTab(){
   return h;
 }
 
-// Which of the overnight fill's three states a row is in.
-//
-// The 'waiting' arm mirrors getAutofillQueue() in ../../server/src/db.js -
-// link, unread flag, and a gap the posting could fill - the same deliberate
-// duplication as LEAD_STATUS/DEFAULT_SETTINGS above, and with the same
-// obligation to stay in step: a row this called waiting that no run would
-// ever fetch would sit there promising a fill that is never coming. The
-// blank-field condition is the easy one to drop and the one that matters -
-// a row with a link whose company, role and location are already filled is
-// not in the queue, because there is nothing left for a posting to supply.
+// 'waiting' must match getAutofillQueue() in server/src/db.js - a link, an
+// unread flag and a blank company, role or location - or a row promises a
+// fill no run will do. The blank-field condition is the easy one to drop.
 function fillState(a){
   if((a.autofill||"")==="failed")return "stuck";
   if((a.autofill||"")===""&&safeUrl(a.link)&&
@@ -2032,25 +1633,15 @@ function fillState(a){
 function appsGridHtml(A){
   var COLS=9; // company/role/location/link/status/applied/days/details/remove
   var h='<div class="card grid-wrap"><table><thead><tr>'+
-    // Location sits between Role and Status, the slot it has in the leads
-    // grid - and it has to be here at all now that Location A-Z is one of
-    // this tab's sorts (see APP_SORTS), or Grid view reorders on a column it
-    // doesn't show.
-    //
-    // Link closes the identity block rather than living only in Detail view.
-    // A row added by pasting a URL has nothing else in it until the overnight
-    // fill reads the posting - company, role and location are all blank - so
-    // without this column that row is an unidentifiable blank line in the one
-    // view meant for scanning.
+    // Location is here because Location A-Z is one of this tab's sorts. Link is
+    // here because a row added by URL has nothing else to identify it until the
+    // overnight fill reads the posting.
     '<th>Company</th><th>Role</th><th>Location</th><th>Link</th><th>Status</th><th>Applied</th><th>Days</th>'+
     '<th></th><th></th>'+
   '</tr></thead><tbody>';
 
-  // Order is what needs you first: a posting no run will ever read, then
-  // everything in normal shape, then the rows that need nothing from you
-  // until tonight. The middle group takes the tab's own name from config -
-  // it is not all "applied" (a hand-added row waiting to be applied to sits
-  // there too), it is the ones with nothing wrong.
+  // Ordered by what needs you first. The middle group takes the tab's own
+  // label: it holds every row with nothing wrong, not only applied ones.
   var groups=[
     {key:"stuck",label:"Couldn’t be read",note:"type it in, no run will fix this"},
     {key:"",label:(state.settings&&state.settings.applications_label)||"Applications",note:""},
@@ -2060,10 +1651,8 @@ function appsGridHtml(A){
     return g;
   }).filter(function(g){return g.rows.length;});
 
-  // On a day when every posting read cleanly there is one group, and a lone
-  // divider across the whole table says nothing anyone needs - so headers
-  // appear only when there is more than one state to separate, and the tab
-  // goes back to being the plain list it has always been.
+  // A lone divider says nothing, so headers appear only with more than one
+  // group.
   var grouped=groups.length>1;
 
   groups.forEach(function(grp){
@@ -2081,49 +1670,35 @@ function appsGridHtml(A){
     var d=daysSince(a.dateApplied);
     var link=safeUrl(a.link);
     var open=!!ui.expanded[a.id];
-    // Row is the expand/select click target (see leadsGridHtml above for
-    // why); most of an application row is form fields though, so the
-    // document click handler excludes clicks on those and only the row's
-    // non-input area (Days, the indicator cell, empty padding) toggles it.
-    // Same left-edge stripe the leads grid uses for the location tier, so
-    // the two grids read alike and the legend below the toolbar means the
-    // same thing on both.
+    // Same location stripe as the leads grid, so the legend means the same on
+    // both.
     var g=geo(a.location);
-    // A stuck row's edge says stuck rather than saying how close the job is:
-    // it has no location yet to be close to, and the one thing worth knowing
-    // about it is that it is waiting on you.
+    // A stuck row's edge says stuck: it has no location to rank, and the one
+    // thing worth knowing is that it's waiting on you.
     var clsList=(g&&grp.key!=="stuck"?[g.p]:[]).concat(
       grp.key==="stuck"?["stuck"]:[],
       String(ui.selected.applications)===String(a.id)?["gr-sel"]:[]);
     var cls=clsList.length?' class="'+clsList.join(" ")+'"':'';
-    // The empty cells stay editable in every state - you can always type it
-    // in yourself - but they say which of the two reasons they are empty for
-    // instead of naming the column back at you.
+    // Empty cells stay editable in every state; the placeholder says why they
+    // are empty.
     var ph=grp.key==="waiting"?"Reads overnight":(grp.key==="stuck"?"Type it in":"");
     var row='<tr data-expand="'+a.id+'" data-scope="applications"'+cls+'>'+
       '<td><input type="text" data-id="'+a.id+'" data-field="company" data-app="1" value="'+esc(a.company)+'" placeholder="'+esc(ph||"Company")+'"></td>'+
       '<td><input type="text" data-id="'+a.id+'" data-field="title" data-app="1" value="'+esc(a.title)+'" placeholder="'+esc(ph||"Role")+'"></td>'+
-      // An input, not the leads grid's plain text: an application's location
-      // is the installer's own field, correctable like every other cell here.
-      // No geo tier badge here. Grid view is a scan of rows you have already
-      // decided to apply to, where how close a job is has stopped being a
-      // question - it earns its place on a leads row, which is a decision,
-      // and it was only doubling the location text on this one.
+      // An input: an application's location is the user's own to correct. No
+      // tier badge: these rows are already decided on, so proximity is no
+      // longer a question.
       '<td class="loc"><input type="text" data-id="'+a.id+'" data-field="location" data-app="1" value="'+esc(a.location)+'" placeholder="'+esc(ph||"Location")+'"></td>'+
-      // The host, not the URL: enough to say where the posting lives and to
-      // click through, in a column narrow enough to sit between two others.
-      // Typing or correcting the URL itself stays in Detail view, where the
-      // field has room for it.
+      // The host, not the URL, to fit a narrow column; editing the URL is in
+      // Detail view.
       '<td class="lk">'+(link
         ? '<a href="'+esc(link)+'" target="_blank" rel="noopener" title="'+esc(link)+'">'+esc(hostOf(link))+' &#8599;</a>'
         : '<span class="lk-none">&mdash;</span>')+'</td>'+
       '<td>'+selectHtml(APP_STATUS,a.status,'data-id="'+a.id+'" data-field="status" data-app="1"')+'</td>'+
       '<td><input type="date" data-id="'+a.id+'" data-field="dateApplied" data-app="1" value="'+esc(a.dateApplied)+'"></td>'+
-      // Days counts from an applied date, which a row in either fill state
-      // hasn't got - so the column says what the row is waiting on instead
-      // of a dash. The stuck row carries the run's own note, which is the
-      // whole reason it is stuck and the thing that tells you whether
-      // typing it in is the answer.
+      // In either fill state the column says what the row is waiting on
+      // instead of a day count; a stuck row shows the run's note, which says
+      // whether typing it in is the answer.
       '<td class="dt'+(grp.key?"":" mono")+'">'+(
         grp.key==="waiting"?'<span class="eta"><i class="pulse"></i>Tonight</span>'
         :grp.key==="stuck"?'<span class="stuck-note" title="'+esc(a.autofill_note||"")+'">'+
@@ -2143,29 +1718,18 @@ function appsGridHtml(A){
   return h;
 }
 
-// Which search tab an application came from, for the track line the header
-// shares with leadDetailHtml. Read off the originating lead rather than
-// stored: a lead an application points at is the one kind the server never
-// deletes when its posting comes down (see setLeadStatus), so it's reliably
-// still in state.leads. Returns "" for a hand-added application, which has no
-// track to name - the line is then dropped rather than guessed at.
+// Read off the originating lead rather than stored: the server never deletes
+// a lead an application points at, so it's still in state.leads. A hand-added
+// application has no track, and the line is dropped rather than guessed.
 function appTrackLabel(a){
   if(!a.leadId)return "";
   var lead=state.leads.filter(function(l){return String(l.id)===String(a.leadId);})[0];
   return lead&&TRACKS[lead.search]?TRACKS[lead.search].label:"";
 }
 
-// The header mirrors leadDetailHtml's - track line, company, role, then a
-// meta line of location, geo tier and the posting link - so moving between a
-// search tab and this one doesn't mean re-reading a differently-shaped page
-// for the same facts.
-//
-// The difference is that these are inputs, not text. An application can be
-// added by hand and every part of it corrected later, which a lead (owned by
-// the search that found it) never needs. So rather than drop the editing to
-// match the look, the fields are styled as the headings they stand in for and
-// show their box on hover/focus - same data-id/data-field/data-app contract
-// as before, so commit() is unchanged.
+// Mirrors leadDetailHtml's header but as inputs styled as the headings they
+// stand in for (see .dh-in): an application is added and corrected by hand,
+// which a lead never needs.
 function appDetailHtml(a){
   var d=daysSince(a.dateApplied);
   var g=geo(a.location);
@@ -2180,9 +1744,6 @@ function appDetailHtml(a){
     fld("dh-h1","company",a.company,"Company")+
     fld("dh-sub-in","title",a.title,"Role")+
     '<div class="dh-meta dh-app-meta">'+
-      // Sized to its own text so it hugs the value the way the lead header's
-      // plain location does, instead of a full-width box shoving the tier and
-      // the link off to the far edge.
       '<input class="dh-in dh-loc-in" type="text" data-id="'+a.id+'" data-field="location" data-app="1"'+
         ' size="'+Math.max(14,Math.min(38,String(a.location||"").length+1))+'"'+
         ' value="'+esc(a.location)+'" placeholder="Location" aria-label="Location">'+
@@ -2202,13 +1763,10 @@ function appDetailHtml(a){
   return h;
 }
 
-// How much width the Overview's scroll region loses to its scrollbar. The
-// tile row is pinned outside that region, so without reserving the same
-// strip it sits wider than every card below it. Measured rather than
-// assumed - 0 where the platform draws overlay scrollbars, and 0 on the
-// narrow/short layout where nothing scrolls in there. Re-measured on
-// resize, because crossing that layout's breakpoint changes the answer
-// without anything re-rendering.
+// The pinned tile row sits outside .panel-scroll, so it must give up the same
+// scrollbar width or sit wider than the cards below. Measured, not assumed: 0
+// for overlay scrollbars and on the unpinned layout. Re-measured on resize,
+// since crossing that breakpoint changes it without a re-render.
 function syncScrollGutter(){
   var ov=document.querySelector(".panel-scroll");
   document.documentElement.style.setProperty("--sbw",
@@ -2216,15 +1774,10 @@ function syncScrollGutter(){
 }
 window.addEventListener("resize",syncScrollGutter);
 
-// The hairline on the Overview's scroll region (see #app.pinned
-// .panel-scroll.scrolled) - on only while there is content above the fold.
 function markScrolled(ov){
   ov.classList.toggle("scrolled",ov.scrollTop>0);
 }
 
-// Keeps the add control in step with the URL field as you type: which of its
-// two jobs it is about to do, and the sentence beside it. Called from
-// render() (the control is redrawn with the panel) and on every keystroke.
 function syncAddControl(){
   var url=document.getElementById("appurl"),
       btn=document.getElementById("addapp"),
@@ -2240,25 +1793,17 @@ function syncAddControl(){
 
 function render(){
   var tabs=buildTabs();
-  // ui.tab is restored from localStorage, so it can name a track that has
-  // since been removed from config (POST /api/config replaces the whole
-  // track list). Fall back to the first tab rather than rendering a track
-  // panel for a key TRACKS no longer has.
+  // ui.tab is restored from localStorage and can name a track since removed
+  // from config; fall back to the first tab.
   var current=tabs.filter(function(t){return t.id===ui.tab;})[0];
   if(!current){current=tabs[0]; ui.tab=current.id;}
   document.getElementById("tabs").innerHTML=tabsHtml();
   var p=document.getElementById("panel");
-  // Re-rendering replaces the master-detail list wholesale, which would
-  // otherwise reset its scroll position to the top on every click -
-  // including just selecting a different row. Preserve it across the swap.
+  // Replacing the panel would reset list scroll on every click, including row
+  // selection; carry it across the swap.
   var oldList=p.querySelector(".md-list"), scrollTop=oldList?oldList.scrollTop:null;
-  // Same problem, same fix, for the Overview's own scroll region (see
-  // #app.pinned): repainting it after a click would otherwise jump back to
-  // the top of the page.
+  // Same for the Overview's scroll region.
   var oldOv=p.querySelector(".panel-scroll"), ovTop=oldOv?oldOv.scrollTop:null;
-  // Only the Overview pins its header and tiles and scrolls the rest - the
-  // other tabs scroll as documents, with their own list panes capped inside
-  // the master/detail card.
   document.getElementById("app").classList.toggle("pinned",current.kind==="overview");
   if(current.kind==="overview")p.innerHTML=dashboard();
   else if(current.kind==="applications")p.innerHTML=appsTab();
@@ -2268,8 +1813,7 @@ function render(){
   syncAddControl();
   syncScrollGutter();
   if(newOv){
-    // render() replaces the panel wholesale, so this is a fresh element
-    // every time and the old listener goes with the old node.
+    // A fresh element each render, so the old listener goes with the old node.
     newOv.addEventListener("scroll",function(){markScrolled(newOv);});
     if(ovTop!==null)newOv.scrollTop=ovTop;
     // Restoring a scroll position has to restore the edge with it.
@@ -2280,11 +1824,8 @@ function render(){
     if(scrollTop!==null){
       newList.scrollTop=scrollTop;
     }else{
-      // No previous list to carry a scroll position over from - e.g.
-      // switching in from Grid view, where the selected row (highlighted
-      // via a grid click, see the data-expand handler below) can be far
-      // down the list. Scroll it into view instead of defaulting to the
-      // top, so Detail view doesn't hide the very row you just picked.
+      // No list to carry scroll from (e.g. coming from Grid view): bring the
+      // selected row into view so Detail view doesn't hide the row just picked.
       var selRow=newList.querySelector(".md-row.sel");
       if(selRow)selRow.scrollIntoView({block:"nearest"});
     }
@@ -2294,8 +1835,7 @@ function render(){
 document.addEventListener("click",function(e){
   if(e.target.id==="stageDateSave"){confirmStageDate();return;}
   if(e.target.id==="stageDateCancel"){closeStageDateModal(true);return;}
-  // The overlay itself, not anything inside the card - a click on the
-  // dimmed backdrop cancels, same as Cancel.
+  // The backdrop, not the card: cancels like Cancel.
   if(e.target.id==="stageDateModal"){closeStageDateModal(true);return;}
   if(e.target.id==="tokenSubmit"){submitToken();return;}
   if(e.target.id==="logout"){logout();return;}
@@ -2303,17 +1843,11 @@ document.addEventListener("click",function(e){
   if(e.target.closest("#whoami")){openPwModal();return;}
   if(e.target.id==="pwCancel"){closePwModal();return;}
   if(e.target.id==="pwSave"){submitPwChange();return;}
-  // The overlay itself, not the card on top of it - same dismiss-on-backdrop
-  // the date modal has.
   if(e.target.id==="pwModal"){closePwModal();return;}
 
-  // Clearing a drill-down without leaving the tab it filters.
   var dc=e.target.closest("[data-drill-clear]");
   if(dc){ui.drill=null; render(); return;}
 
-  // Folding one of the applications grid's fill-state groups away. The whole
-  // divider is the control - an 11px caret is a poor click target and there
-  // is nothing else on that row to click.
   var col=e.target.closest("[data-collapse]");
   if(col){
     var ck=col.getAttribute("data-collapse");
@@ -2324,9 +1858,8 @@ document.addEventListener("click",function(e){
 
   var t=e.target.closest("[data-tab]");
   if(t){ui.tab=t.getAttribute("data-tab");ui.q="";
-    // A tab opened from an Overview number arrives filtered to the rows that
-    // number counted - either a plain status filter or a named drill-down.
-    // Anything else (a tab click, a track name) lands unfiltered.
+    // Only an Overview number carries a filter; any other tab link lands
+    // unfiltered.
     var tf=t.getAttribute("data-tab-filter"), td=t.getAttribute("data-drill");
     ui.filter=tf||"All";
     ui.drill=(td&&DRILLS[td])?td:null;
@@ -2351,16 +1884,13 @@ document.addEventListener("click",function(e){
     return;
   }
 
-  // data-expand lives on the grid <tr> itself, so any click on the row
-  // toggles it - except clicks on an actual form control (editing a
-  // field, opening the status select, following the posting link,
-  // clicking Remove), which fall through to their own handling below.
+  // The whole grid row toggles, so no precise click is needed - except on a
+  // form control or link, which does its own job.
   var ex=e.target.closest("[data-expand]");
   if(ex&&!e.target.closest("input,select,textarea,a,button")){
     var exId=ex.getAttribute("data-expand"), exScope=ex.getAttribute("data-scope");
     ui.expanded[exId]=!ui.expanded[exId];
-    // Clicking a row - opening or closing it - is what "highlights" it:
-    // it's the row Detail view lands on when you switch there.
+    // The clicked row is the one Detail view lands on.
     ui.selected[exScope]=exId;
     render();
     return;
@@ -2369,10 +1899,8 @@ document.addEventListener("click",function(e){
   if(e.target.id==="addapp"){addApplication();return;}
 
   var del=e.target.closest("[data-del]");
-  // Removing a posting asks for a reason rather than just confirming. The
-  // reason is stored on the screened row the removal leaves behind, which is
-  // both the only lasting record of why it went and the thing that stops
-  // tomorrow's run rediscovering the URL and adding it straight back.
+  // Removing a posting asks why: the reason is stored on the screened row left
+  // behind, the only record of it and what stops tomorrow's run re-adding it.
   var rmLead=e.target.closest("[data-rmlead]");
   if(rmLead){
     var lid=rmLead.getAttribute("data-rmlead");
@@ -2411,8 +1939,7 @@ document.addEventListener("keydown",function(e){
   if(e.key==="Escape"&&!document.getElementById("pwModal").classList.contains("hidden")){closePwModal();}
   if(pendingStage&&e.key==="Escape"){closeStageDateModal(true);return;}
   if(e.target.id==="stageDateInput"&&e.key==="Enter"){confirmStageDate();}
-  // Paste, Enter, done - the point of the box is that adding an application
-  // takes one gesture, and reaching for the button after pasting is two.
+  // Paste, Enter, done: adding an application is one gesture.
   if(e.target.id==="appurl"&&e.key==="Enter"){addApplication();}
 });
 
@@ -2422,27 +1949,16 @@ document.addEventListener("input",function(e){
     var pos=e.target.selectionStart; render();
     var n=document.getElementById("q"); if(n){n.focus();n.setSelectionRange(pos,pos);}
   }
-  // No render() here, deliberately: this changes a label and a class on two
-  // elements, and repainting the panel under a field being typed into is how
-  // you lose a cursor position.
+  // No render(): repainting the panel under a field being typed into loses
+  // the cursor.
   if(e.target.id==="appurl")syncAddControl();
 });
 
-// Adding an application: a pasted URL, or nothing at all.
-//
-// With a URL, the row is created with the link and no other content, and that
-// is the entire handoff - the row is a candidate for the overnight fill
-// because of what is in it (a link, and no company/role/location), not
-// because anything here said so. See db.js's getAutofillQueue. Nothing is
-// flagged, requested or tracked from this side, so there is no state the page
-// can get wrong or leave stale. Without a URL, this is the blank row the
-// button always created.
-//
-// The duplicate check is exact-match and deliberately shallow: it catches
-// pasting the same URL twice, which is the mistake a one-box form invites,
-// and doesn't try to be the canonical-URL matching the server does for leads.
-// Two different URLs for one posting landing as two applications is a row to
-// delete, not data lost.
+// A pasted URL creates a row holding only the link, which alone queues it for
+// the overnight fill (getAutofillQueue in server/src/db.js); the page keeps
+// no fill state of its own. The duplicate check is exact-match on purpose: it
+// catches pasting the same URL twice, and two URLs for one posting is just a
+// row to delete.
 function addApplication(){
   var box=document.getElementById("appurl");
   var url=box?box.value.trim():"";
@@ -2476,12 +1992,9 @@ function commit(el){
   var list=isApp?state.applications:state.leads;
   var row=list.filter(function(r){return String(r.id)===String(id);})[0];
   if(!row||row[field]===el.value)return;
-  // Status changes go through dedicated endpoints instead of this
-  // function's generic field-whitelist write - the server validates the
-  // value and owns side effects a plain field write can't (creating a
-  // lead's application atomically, stamping a stage date). Every other
-  // field (notes, comp, referral, free-typed dates, ...) is a plain write
-  // and keeps using this path unchanged.
+  // Status goes through its own endpoints, which validate it and own the side
+  // effects a plain field write can't: creating a lead's application,
+  // stamping a stage date.
   if(field==="status"){
     if(isApp)setApplicationStatus(id,el.value); else setLeadStatus(id,el.value);
     return;
@@ -2493,16 +2006,13 @@ function commit(el){
   api("/api/update",{method:"POST",body:JSON.stringify(body)}).then(function(){
     setSaved("Saved",true);
   }).catch(function(){setSaved("Couldn't save — try again","bad");});
-  // Every other field renders the same whatever you type into it, but the
-  // link field grows (or loses) its "Open" anchor depending on the value -
-  // so it needs a re-render to show up, rather than waiting for the next
-  // unrelated click to repaint the panel.
+  // The link field gains or loses its "Open" anchor with its value, so it
+  // re-renders now rather than on the next unrelated click.
   if(field==="link")render();
 }
 
-// Replaces the entry in `list` matching item.id (in place, preserving its
-// position) - used below to swap in the server's authoritative row after
-// a status change, rather than optimistically guessing what changed.
+// Swaps in the server's authoritative row after a status change rather than
+// guessing what changed.
 function replaceById(list,item){
   for(var i=0;i<list.length;i++){
     if(String(list[i].id)===String(item.id)){list[i]=item;return true;}
@@ -2510,19 +2020,11 @@ function replaceById(list,item){
   return false;
 }
 
-// A lead's status and an application's pipeline stage are different
-// things (compare LEAD_STATUS to APP_STATUS) - marking a lead "Applied"
-// moves it to the Applications tab by creating a real application row,
-// rather than stretching the lead's own status to cover interview stages
-// later. See api.js's handleSetLeadStatus: the lead update and the
-// application creation happen atomically server-side now (previously this
-// was two sequential POSTs from the client, which could leave a lead
-// marked Applied with no application if the second one never landed).
-// The lead row itself is untouched beyond its status: it stays in
-// state.leads/the DB (URL dedup needs it to still exist), it just no longer
-// shows in the Leads tab - see leadsTab(). It's also the one kind of lead the
-// server will never delete when its posting comes down: an application row
-// points at this id. See api.js's removeDelistedLead.
+// Lead status and pipeline stage are separate, so marking a lead "Applied"
+// creates an application row; the server does both writes in one transaction
+// (handleSetLeadStatus in server/src/routes/leads.js). The lead stays in the
+// database because URL dedup needs it, and the server never deletes a lead an
+// application points at (removeDelistedLead in server/src/routes/delisting.js).
 function setLeadStatus(id,value){
   setSaved("Saving…",false);
   api("/api/leads/"+id+"/status",{method:"POST",body:JSON.stringify({status:value})}).then(function(res){
@@ -2535,19 +2037,12 @@ function setLeadStatus(id,value){
   }).catch(function(){setSaved("Couldn't save — try again","bad");});
 }
 
-// Files a lead under a different tab (see api.js's handleUpdate, where
-// `search` is the one field that can fail on its own terms). Its own function
-// rather than a `data-field="search"` ride on commit(): the row leaves the
-// list you're looking at, so the selection has to follow it to the new tab,
-// and the two ways this call can fail are both worth reading rather than the
-// generic "couldn't save" - an unknown key, and a destination that already
-// holds this posting.
-//
-// The visible tab deliberately doesn't change. Moving a stray row is
-// something you do in the middle of triaging a tab, and jumping to wherever
-// it went would cost you your place; the confirmation names the destination
-// instead. `selectEl` is reverted on failure because the browser has already
-// repainted the <select> by the time "change" fires.
+// Not a data-field="search" commit(): the selection has to follow the row to
+// its new tab, and both failures - an unknown track key, or a destination
+// already holding the URL (handleUpdate in server/src/routes/update.js) -
+// deserve their own message. The visible tab stays put so you keep your place
+// mid-triage. `selectEl` is reverted on failure because the browser has
+// already repainted it when "change" fires.
 function moveLead(id,key,selectEl){
   var row=state.leads.filter(function(r){return String(r.id)===String(id);})[0];
   if(!row||row.search===key)return;
@@ -2561,8 +2056,8 @@ function moveLead(id,key,selectEl){
         return;
       }
       replaceById(state.leads,res.lead);
-      // Leaving the old tab's selection pointed at a lead that is no longer
-      // in it renders an empty detail pane next to a list that still has rows.
+      // A selection left on a lead no longer in the tab renders an empty detail
+      // pane.
       if(String(ui.selected[from])===String(id))delete ui.selected[from];
       ui.selected[key]=res.lead.id;
       setSaved("Moved to "+((TRACKS[key]&&TRACKS[key].label)||key),true);
@@ -2574,12 +2069,10 @@ function moveLead(id,key,selectEl){
     });
 }
 
-// See api.js's handleSetApplicationStatus - stamps the matching Stage
-// history date server-side (only if it isn't already set) in the same
-// request as the status write, then returns the full row so the newly
-// stamped date shows up immediately. `date` (YYYY-MM-DD) is what the
-// stage-date modal below collects - omit it to fall back to today, same
-// as before that modal existed.
+// The server stamps the new stage's history date if blank and returns the full
+// row (handleSetApplicationStatus in server/src/routes/applications.js).
+// `date` (YYYY-MM-DD) comes from the stage-date modal; without it the server
+// uses today.
 function setApplicationStatus(id,value,date){
   setSaved("Saving…",false);
   var body={status:value};
@@ -2591,19 +2084,13 @@ function setApplicationStatus(id,value,date){
   }).catch(function(){setSaved("Couldn't save — try again","bad");});
 }
 
-// Holds the in-flight status change while #stageDateModal is open: which
-// application, which status it's moving to, which column that stamps, the
-// status it's moving away from (to revert the <select> on Cancel, since the
-// browser has already updated its displayed value by the time "change"
-// fires), and the select element itself. Null whenever the modal is closed.
+// The status change awaiting #stageDateModal, or null. prevStatus reverts the
+// <select> on Cancel, since the browser has already changed it when "change"
+// fires.
 var pendingStage=null;
 
-// These three stages are booked ahead of time - a recruiter reaches out to
-// set up a call, a loop gets scheduled for next week - so the date being
-// logged is often still in the future relative to today, not a done thing.
-// The rest (Applied, Offer, Rejected, Withdrawn) are only ever logged after
-// the fact. The modal's title asks the question that actually fits either
-// way, instead of "did this happen" for a screen that's booked for Friday.
+// Screens and loops are booked ahead, so their date is often in the future:
+// the modal asks when it's scheduled rather than when it happened.
 var STAGE_SCHEDULED={"Recruiter Screen":1,"Tech Screen":1,"Onsite / Loop":1};
 
 function openStageDateModal(app,newStatus,dateField,selectEl){
@@ -2648,11 +2135,8 @@ document.addEventListener("change",function(e){
     moveLead(mv.getAttribute("data-movelead"),mv.value,mv);
     return;
   }
-  // Moving an application into a pipeline stage that hasn't happened yet
-  // (its history column is still blank) asks when it actually happened,
-  // rather than silently stamping today - the change is often logged a few
-  // days after the fact. A stage already reached, or a plain field edit,
-  // skips straight to commit() same as always.
+  // A move into a stage whose history column is blank asks for the date first:
+  // status changes are often logged days after (or before) they happen.
   if(e.target.matches('select[data-field="status"][data-app]')){
     var appId=e.target.getAttribute("data-id");
     var app=state.applications.filter(function(a){return String(a.id)===String(appId);})[0];
@@ -2670,10 +2154,8 @@ document.addEventListener("focusout",function(e){
   if(e.target.matches("textarea[data-id],input[data-id]"))commit(e.target);
 });
 
-// API_BASE is a deploy-time setting (see local-config.js above) - a missing
-// one means whoever deployed this client skipped that step, not something a
-// visitor can fix here. Say so plainly instead of a token field that can
-// never succeed.
+// Without an API URL (client/README.md, "How it finds its API") no sign-in can
+// succeed, and a visitor can't fix it, so hide the fields and say so.
 if(!API_BASE){
   document.getElementById("gateHint").textContent="This deployment has no API URL configured - see public/local-config.example.js.";
   document.getElementById("nameInput").classList.add("hidden");

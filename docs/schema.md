@@ -21,16 +21,16 @@ reach another's.
 `user_id`.** It is the one company list every search indexes into, and it holds
 facts about each company's public careers site, shared by every account. What
 may be stored in it is set out at the top of
-`server/migrations/0010_company_fetch.sql` — a row describes a website, never a
-search — and amended by `0011_one_company_list.sql`, which put the list itself
-here: membership is visible across the deployment, while the record of who
-looked at a company and when stays with each search.
+`server/migrations/0010_company_fetch.sql` and
+`server/migrations/0011_one_company_list.sql`: a row describes a website,
+never a search, and membership is visible across the deployment, while the
+record of who looked at a company and when stays with each search.
 
 **`company_sweeps` reaches `company_fetch` through `company_key`.**
 Both hold `normalize(name)` from `server/src/exclude.js` — lowercased, each run
 of characters outside `a-z0-9` replaced by one space, trimmed — so the join is
 `company_sweeps.company_key = company_fetch.company_key`.
-`company_sweeps.company` still holds a name, but nothing joins on it: comparing
+`company_sweeps.company` holds a name too, but nothing joins on it: comparing
 raw strings misses, and `F5, Networks` is stored under `f5 networks`.
 
 **Every other relationship is a value match within one user.**
@@ -224,9 +224,8 @@ These hold across every table, so the per-table notes below leave them out.
   `leads.found`, `leads.company`, `leads.title`, `leads.url`, `leads.verified`,
   `screened.user_id`, `screened.search`, `screened.url`, `screened.date`,
   `applications.dateApplied` and `meta.value`.
-- `applications.user_id` is not on that list. `0002_multi_user.sql` added it
-  with `ALTER TABLE`, so it defaults to `''`, and an insert that omits it
-  succeeds with no owner.
+- `applications.user_id` is not on that list: it defaults to `''`, so an
+  insert that omits it succeeds with no owner. Always supply it.
 - The only defaults other than `''` and `0` are `leads.status` (`New`),
   `applications.status` (`Applied`) and `users.iterations` (`100000`).
 - `leads.id`, `screened.id` and `applications.id` are `AUTOINCREMENT`, unique
@@ -234,8 +233,8 @@ These hold across every table, so the per-table notes below leave them out.
 - `user_id` has its own index on `sessions`, `leads`, `screened` and
   `applications`. The other user-scoped tables lead their primary key with it.
 - The diagram lists columns in the order a database built from empty holds
-  them. The live D1 predates `0001_schema.sql` and holds some in a different
-  order; nothing reads a column by position.
+  them. The live D1 holds some in a different physical order, so never read a
+  column by position.
 
 ## Tables
 
@@ -336,16 +335,14 @@ it learned there. The list itself is `company_fetch`.
 
 - `company_key` is the `normalize()`d name, and is what readers join on,
   through an index on `(user_id, search, company_key)`. `company` is the name
-  as the list holds it. Rows written before `0011_one_company_list.sql` can
-  hold two spellings of one company for one search; readers take the most
-  recently swept.
+  as the list holds it. One search can hold two spellings of one company;
+  readers take the most recently swept.
 - `last_swept` is the `YYYY-MM-DD` this search last attempted the company, `''`
   for never. It is a record, and does not choose what runs next.
 - `note` is what this search learned about the company, for itself. It never
   travels to `company_fetch`.
-- `board` and `position` mirror `company_fetch` and are no longer read. They are
-  kept so the worker from before `0011` still runs against this table, until it
-  is rebuilt on `company_key`.
+- `board` and `position` mirror `company_fetch`. Read them from
+  `company_fetch`, never from here.
 
 ### company_fetch
 
@@ -372,5 +369,5 @@ name as written when the company joined.
 - A row with no facts is membership only, and is not attached to a company as
   `known` when a run is handed its slice.
 - A wrong row is retracted, not deleted: `retracted_on` and `retracted_note` are
-  set, reads return only the retraction, and runs can no longer update the row.
+  set, reads return only the retraction, and runs cannot update the row.
   A retracted company stays on the list.

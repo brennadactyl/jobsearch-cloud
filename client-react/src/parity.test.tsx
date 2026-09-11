@@ -1,10 +1,6 @@
 /**
- * Behaviour the old client has and the React client had to be taught, found by
- * auditing one against the other before retiring the old one.
- *
- * Each test names what the original does. The point of keeping them after the
- * old client is gone is that nothing else would notice these going missing: the
- * old client is no longer there to compare against.
+ * Detail-pane, grid, add-row and empty-track behaviour that nothing else in the
+ * suite would notice going missing.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -201,7 +197,6 @@ describe("grid rows", () => {
 
 describe("an empty track", () => {
   it("warns when its search has gone stale, not only when it errored", async () => {
-    // `stale || error && <warning>` rendered `true` - nothing - for stale.
     const staleBeta: TrackerData = {
       ...fixture,
       leads: fixture.leads.filter((l) => l.search !== "beta"),

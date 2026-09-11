@@ -1,7 +1,3 @@
-/**
- * The two pieces of imperative browser state the page genuinely needs: the
- * theme, and the Overview's measured scrollbar gutter.
- */
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Theme = "light" | "dark";
@@ -16,18 +12,13 @@ function explicitTheme(): Theme | null {
 }
 
 /**
- * The theme in force, and a toggle that makes it explicit.
- *
- * Three states, matching the CSS: no stored choice falls through to
- * prefers-color-scheme, and clicking the toggle always sets an explicit choice
- * from then on, in either direction. The initial application happens in
- * index.html before React mounts - it has to run before first paint, which no
- * component can do.
+ * Three states, matching the CSS: with no explicit choice the theme follows
+ * prefers-color-scheme; the toggle always sets an explicit one. A stored choice
+ * is first applied in index.html.
  */
 export function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => explicitTheme() ?? (osPrefersDark() ? "dark" : "light"));
 
-  // Follow the OS while no explicit choice has been made.
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
     if (!mq) return;
@@ -53,19 +44,11 @@ export function useTheme(): [Theme, () => void] {
 }
 
 /**
- * The Overview's scroll region: its shadow hairline, and the gutter the pinned
- * tile row above it has to reserve.
+ * The Overview scroll region's hairline, and the `--sbw` gutter the pinned tile
+ * row reserves so it lines up with the cards scrolling below it. Measured, not
+ * assumed: a scrollbar is ~15px on Windows and 0 where scrollbars overlay.
  *
- * The Overview scrolls inside itself while the tiles stay put, so the tile row
- * sits outside the scrollbar and would be that much wider than the card below
- * it. `--sbw` is the difference, measured rather than assumed - a scrollbar is
- * ~15px on Windows, 0 on an overlay-scrollbar platform, and guessing gets it
- * wrong on one of them.
- *
- * **This is the bug fix.** The old page measured in render() and re-measured on
- * a window `resize` listener, which left a stale value on a layout that had
- * stopped using the region at all. Keying a ResizeObserver to the element being
- * measured means the measurement cannot outlive it: no region, no value.
+ * A ResizeObserver on the region itself, so the value can't outlive it.
  */
 export function usePinnedLayout(active: boolean) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -94,7 +77,6 @@ export function usePinnedLayout(active: boolean) {
     };
   }, [active]);
 
-  // The hairline is on only while there is content above the fold.
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (el) setScrolled(el.scrollTop > 0);
@@ -104,14 +86,10 @@ export function usePinnedLayout(active: boolean) {
 }
 
 /**
- * A callback ref for a master/detail list: scrolls the selected row into view
- * when the list mounts.
- *
- * Mounting is the case that needs it - switching in from Grid, where the row was
- * picked by expanding it and can be far down a list that would otherwise open at
- * the top, beside a detail pane showing a row you can't see. Module-level, so its
- * identity never changes and React doesn't call it again on a re-render:
- * selecting a row must leave the list where it is.
+ * A callback ref that scrolls a master/detail list's selected row into view on
+ * mount, for a row picked in Grid far down the list. Module-level, so its
+ * identity never changes and React doesn't re-run it: selecting a row must leave
+ * the list where it is.
  */
 export function revealSelectedRow(list: HTMLElement | null): void {
   list?.querySelector<HTMLElement>(".md-row.sel")?.scrollIntoView?.({ block: "nearest" });

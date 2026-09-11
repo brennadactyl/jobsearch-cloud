@@ -11,40 +11,27 @@ files.** See [Setup](#setup-on-any-machine) below - the
 your resume(s), asks what roles/companies/locations you're after, and
 generates everything else.
 
-**This repo contains no personal data.** Resumes, candidate profile, target
-companies and search results live in the deployment - search config and results
-in D1, documents in R2 - reached with a per-person token. What is left on the
-machine that runs the searches is that token and its logs, in a gitignored
-`private/` folder; see [private.example/README.md](private.example/README.md).
-That separation is what makes this repo safe to keep on GitHub (it is public)
-and to reuse across machines.
+**This repo is public and contains no personal data.** Search config and
+results live in D1 and documents in R2, reached with a per-person token. The
+machine that runs the searches keeps only that token and its logs, in a
+gitignored `private/` folder; see
+[private.example/README.md](private.example/README.md).
 
-**The tracker is a plain webpage backed by an API, deployed as two
-independent pieces** - a static client ([client/README.md](client/README.md),
-a Cloudflare Worker serving static assets) and a Cloudflare Worker + D1 API
-([server/README.md](server/README.md)), talking to each other cross-origin
-over CORS. Neither is a Claude-specific artifact - the whole pipeline runs
-through the standalone `claude` CLI with no desktop app or special tooling
-required. Search results reach the tracker through a small helper the run
-invokes (`scripts/tracker.ps1`) rather than through prose describing a call;
-every edit is one D1 row write, not a shared blob, so a headless sync and a
-browser edit landing at the same moment can't clobber each other. Every tab
-the page draws, its label, the page title, and which locations count as
-top-priority are config the API stores itself (`/api/config`), not anything
-baked into the client - one deployed client + server pair works for anyone's
-tracks, and either half can be redeployed/updated independently of the other.
-Each track also records when its search last ran (`/api/runs`), surfaced on
-its tab and on the Overview: a search that finds nothing writes nothing, so
-without that record a search that quietly stopped firing looks exactly like a
-genuine zero-result day.
+**The tracker is a static client and an API, deployed independently** - a
+Cloudflare Worker serving the page ([client/README.md](client/README.md)) and
+a Cloudflare Worker + D1 API ([server/README.md](server/README.md), which
+covers how the two fit together). Searches run through the standalone
+`claude` CLI and reach the tracker through `scripts/tracker.ps1`. Tabs, labels,
+the page title and priority locations are per-account config the API stores
+(`/api/config`), so one deployed pair serves anyone's tracks.
 
 ## Architecture
 
 ![Architecture diagram: Windows Task Scheduler runs one headless Claude run per track, plus a nightly application fill. Each run fetches its prompt and documents from server/'s API Worker into a throwaway folder, searches and verifies career sites, reports through ./tracker, and writes back the doc it edited. The API keeps rows in D1 and documents in R2 and answers the browser's cross-origin calls; client/, a separate static-assets Worker, serves the tracker page.](docs/architecture.svg)
 
 Full write-up, with the scheduled tasks and where the API routes are defined:
-[docs/architecture.html](docs/architecture.html) (open locally in a browser -
-GitHub shows source for `.html` files rather than rendering them).
+[docs/architecture.html](docs/architecture.html) (open it locally in a browser;
+GitHub shows `.html` files as source).
 
 ## Contents
 
@@ -63,6 +50,7 @@ scripts/
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
   import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
   setup-scheduler.ps1          registers every person's tracks as daily Windows Scheduled Tasks
+  set-password.ps1             resets an account's password with the ADMIN_TOKEN, typed at a prompt
   seed-demo-user.ps1           creates the demo account and fills it with invented postings
   demo-user.json               that invented data - the only fabricated content in this repo
   backup-tracker.ps1           exports the whole database to a dated .sql file + an off-machine mirror
@@ -87,34 +75,24 @@ client/                        the tracker webpage - static, no build step
   wrangler.toml                  deploy config (Worker serving public/ as static assets)
   package.json                   lets the Deploy to Cloudflare button deploy it
   README.md                      one-time deploy instructions
+client-react/                  a second, unfinished client for the same API - see its README.md
 private.example/
   README.md                    expected layout for your own private data folder
 ```
 
-`server/` and `client/` are deployed and versioned independently - a client
-UI change never requires redeploying the API, and vice versa, as long as
-both stay compatible (see `server/README.md`'s API section for what's
-currently supported).
+Deploy `server/` and `client/` separately. A change to one needs the other
+redeployed only when it depends on something new - `server/README.md`'s API
+section says what the server supports.
 
 ## Setup on any machine
 
-No Node.js, no git, and no `wrangler` CLI required for any of this - see the
-note after each step if you'd rather do it the traditional way instead.
+No Node.js or `wrangler` CLI is required for any of this;
+[server/README.md](server/README.md) and [client/README.md](client/README.md)
+cover the CLI path.
 
-> **If PowerShell refuses with "running scripts is disabled on this system"**,
-> that is Windows' default execution policy, not anything about this repo. It
-> blocks the PowerShell shims Node installs, so `npm`, `npx` and a globally
-> installed `wrangler` all fail the same way while the `.cmd` next to each one
-> works. Either call those: `npx.cmd wrangler ...`, `npm.cmd run deploy`. Or
-> allow local scripts once, which is what most people want:
->
-> ```powershell
-> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-> ```
->
-> `RemoteSigned` still requires downloaded scripts to be signed; it only trusts
-> the ones on your own disk. The commands below are written plainly and work as
-> shown in `cmd.exe` and Git Bash either way.
+> PowerShell says "running scripts is disabled"? Use `npm.cmd`/`npx.cmd`, or
+> run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once - see
+> [server/README.md](server/README.md#one-time-setup).
 
 1. **Install Claude Code**:
    ```powershell
@@ -128,24 +106,12 @@ note after each step if you'd rather do it the traditional way instead.
    git clone https://github.com/brennadactyl/jobsearch-cloud.git
    ```
    Open the clone in Claude Code and the skills under `.claude/skills/` load
-   as project skills, which is all they were ever doing. This is not published
-   as an installable Claude Code plugin, so there is no `/plugin install` for
-   it - a clone is the supported way in.
-3. **Turn on R2** (once per Cloudflare account, before the deploys below).
-   The API stores documents - resumes and each track's baseline doc - in an R2
-   bucket, and R2 is off by default on a new account. The deploy button
-   provisions the bucket for you, but only once R2 itself is enabled;
-   otherwise that deploy fails with `Please enable R2 through the Cloudflare
-   Dashboard. [code: 10042]`.
-
-   Go to **[dash.cloudflare.com](https://dash.cloudflare.com/) → R2 Object
-   Storage → Overview** and complete the checkout flow. It is a subscription
-   with a free allowance, not a paid plan - 10 GB stored, 1M writes and 10M
-   reads a month, no egress fees - so it asks for billing details, and a
-   personal job search uses about a megabyte of that. Skipping this is a
-   supported choice: everything else works and the document endpoints answer
-   503, but then each machine running searches needs its own copy of the
-   baseline docs and resumes. See [server/README.md](server/README.md).
+   as project skills. There is no plugin to install; a clone is the way in.
+3. **Turn on R2** once per Cloudflare account, before the deploys below:
+   **[dash.cloudflare.com](https://dash.cloudflare.com/) → R2 Object Storage →
+   Overview** (free tier; it asks for billing details). Without it the server
+   deploy fails with `[code: 10042]`. See
+   [server/README.md](server/README.md#first-turn-on-r2).
 
 4. **Deploy the tracker** (once - not per machine). Two separate one-click
    deploys, server first:
@@ -154,20 +120,12 @@ note after each step if you'd rather do it the traditional way instead.
 
    Click it, sign in to Cloudflare (creates a free account if you don't have
    one), and accept the defaults - it forks the API code into your own
-   GitHub, provisions the D1 database, and deploys, all in Cloudflare's own
-   build environment. You'll land on your new Worker's dashboard; from
-   **Settings → Variables and Secrets**, add a secret named `ADMIN_TOKEN`
-   with any long random value you pick (no CLI needed to set it). This isn't
-   a login - it's the operator credential that creates accounts, since there
-   is no sign-up page. Then create your own account with it:
-   ```bash
-   curl -s -X POST "https://job-search-tracker.<your-subdomain>.workers.dev/api/users" \
-     -H "Authorization: Bearer <the ADMIN_TOKEN you just set>" \
-     -H "Content-Type: application/json" \
-     -d '{"name":"Your Name","password":"a-long-password-you-pick"}'
-   ```
-   Keep the `id` it returns - that's your user id, and step 5 puts your
-   search data under it.
+   GitHub, provisions the D1 database, and deploys. You'll land on your new
+   Worker's dashboard; from **Settings → Variables and Secrets**, add a secret
+   named `ADMIN_TOKEN` with any long random value you pick. It is the operator
+   credential that creates accounts, not a login. Then create your own account
+   with it - see [server/README.md](server/README.md#accounts). Keep the `id`
+   it returns; step 5 puts your search data under it.
 
    Then the client:
 
@@ -176,36 +134,27 @@ note after each step if you'd rather do it the traditional way instead.
    Same flow - it forks the client into your own GitHub and deploys it as a
    Worker serving a static page.
 
-   **Then one required step before it will work:** in your fork, create
+   **Required before it will work:** in your fork, create
    `client/public/local-config.js` (copy `local-config.example.js`) with your
-   API Worker's URL from the previous step, and redeploy. The API URL is a
-   deploy-time setting, not something a visitor types in - there's no field
-   for it on the sign-in screen. Skip this and the page just says "This
-   deployment has no API URL configured". See
-   [client/README.md](client/README.md).
+   API Worker's URL, and redeploy. Without it the page says "This deployment
+   has no API URL configured". See [client/README.md](client/README.md).
 
-   Now open the client's URL and sign in with the name and password from the
-   account you created above. It remembers you in that browser until you log
-   out.
+   Now open the client's URL and sign in with the name and password of the
+   account you created. It remembers you in that browser until you log out.
 
-   **The page will be empty at this point, and that's correct** - no track
-   tabs, just Overview and Applications. A fresh database ships with no
-   tracks, no title and no location rules of its own; step 5 is what fills
-   them in. (Nothing here is pre-seeded with anyone else's job search.)
-
-   (Prefer the CLI, or need to apply a schema change later?
-   [server/README.md](server/README.md) and [client/README.md](client/README.md)
-   document the manual `wrangler`-based path too - same end result.)
+   **The page is empty at this point, and that's correct** - no track tabs,
+   just Overview and Applications. A fresh database has no tracks, title or
+   location rules; step 5 fills them in.
 5. **Set up your private data folder** - either:
    - **With Claude's help (recommended):** put your resume(s) somewhere
      Claude can read them, then ask it to run the
-     [job-search-setup](.claude/skills/job-search-setup/) skill. It'll ask
-     what tracks/companies/locations you want and generate everything in
-     step 6 below for you, then run that step itself.
-   - **By hand:** it is one file now - `private\<user-id>\tracker.json` with
-     your API URL and a session token. Resumes and baseline docs go into the
-     tracker rather than into that folder; `scripts\import-documents.ps1`
-     uploads a folder you already have. See
+     [job-search-setup](.claude/skills/job-search-setup/) skill. It asks what
+     tracks/companies/locations you want, sets them up, and does step 6 for
+     you.
+   - **By hand:** create `private\<user-id>\tracker.json` with your API URL
+     and a session token (see [server/README.md](server/README.md#accounts)).
+     Resumes and baseline docs go into the tracker, not that folder;
+     `scripts\import-documents.ps1` uploads a folder you already have. See
      [private.example/README.md](private.example/README.md).
 
    Either way, point at the resulting folder with
@@ -217,8 +166,7 @@ note after each step if you'd rather do it the traditional way instead.
    .\scripts\setup-scheduler.ps1
    ```
    It discovers each person by their `private\<user-id>\tracker.json` and
-   asks their account what tracks it has - nothing to tell it about how many
-   you have, or how many people share the machine.
+   asks their account what tracks it has.
 7. **Test one run before trusting the schedule** - the previous step prints
    the exact command for whichever tracks it just registered, e.g.:
    ```bat
@@ -227,27 +175,18 @@ note after each step if you'd rather do it the traditional way instead.
    Check `private\<user-id>\logs\<track>.log` for what happened, then reload the
    tracker page: that track's tab should now show when it last ran and what
    it found. Until a track's first run reports in it reads "No run recorded
-   yet", which is also what you'll see on a brand-new install.
+   yet".
 
-8. **Set up backups** - see [Backups](#backups) below. One elevated command,
-   and it's the step you won't think to do until you need it: nothing above
-   this line leaves a copy of your data anywhere but Cloudflare.
+8. **Set up backups** - see [Backups](#backups) below. Nothing above leaves a
+   copy of your data anywhere but Cloudflare.
 
-Tasks run daily while you're logged in - no stored Windows password required.
-They are registered to **wake a sleeping machine** and to **re-run a slot they
-missed** once it's available, so an overnight schedule works on a machine you
-leave asleep.
+Tasks run daily while you're logged in, with no stored Windows password. They
+wake a sleeping machine and catch up a missed slot once it's available, but
+nothing wakes a machine that is shut down or hibernated - the run waits until
+you next boot. For overnight searches, leave the machine asleep, not off.
 
-A machine that is **shut down or hibernated** is a different matter: nothing
-Task Scheduler does can wake it, the missed run waits until you next boot, and
-`StartWhenAvailable` then runs it late rather than at the hour you picked. If
-you want reliable overnight searches, leave the machine asleep rather than off.
-Worth knowing because the failure is silent - a task that never fired looks
-exactly like a search that found nothing, which is what the per-track run record
-(`/api/runs`, shown on each tab) exists to tell apart.
-
-The webpage itself, unlike the tasks, is always up - it's hosted on Cloudflare,
-independent of any machine being on.
+The webpage is hosted on Cloudflare and stays up whether or not any machine is
+on.
 
 ## Running a search manually
 
@@ -257,8 +196,8 @@ independent of any machine being on.
 
 `<track key>` is whatever you named a track when setting it up - e.g.
 `engineering`. `<user id>` is the GUID whose folder under `private\` holds
-that person's resumes and credentials; omit it only on a single-user machine
-set up before per-user folders existed.
+that person's `tracker.json`; omit it only on a single-user machine with no
+per-user folders, whose credentials are in `TRACKER_URL`/`TRACKER_API_TOKEN`.
 
 To see exactly what that run will do, without running it:
 
@@ -271,8 +210,8 @@ curl -s "$TRACKER_URL/api/prompt/<track key>" -H "Authorization: Bearer <their t
 One deployment holds any number of job searches, each with its own tracks,
 leads, page title and location rules, and its own sign-in. To add someone:
 
-1. Create their account with the `ADMIN_TOKEN` (same `POST /api/users` call
-   as step 4 of Setup above). It returns their user id.
+1. Create their account with the `ADMIN_TOKEN` - see
+   [server/README.md](server/README.md#accounts). It returns their user id.
 2. Run the [job-search-setup](.claude/skills/job-search-setup/) skill for
    them - it makes `private\<their id>\`, mints the token their scheduled
    runs use, reads their resume, asks about their tracks and locations,
@@ -284,17 +223,13 @@ Their searches run on whichever machine holds their folder, under that
 machine's Claude account - so stagger everyone's `schedule_time`, since each
 run takes several minutes and they share one CLI.
 
-Note what this does and doesn't protect: the API keeps each person's data
-strictly separate, but whoever administers the Cloudflare account can read
-any of it directly in D1. This is for people who are fine with that.
+The API keeps each person's data separate, but whoever administers the
+Cloudflare account can read all of it directly in D1.
 
 ## The demo account
 
-A tracker with real data in it is a bad thing to show anyone. A job search is
-a document about where someone works, where they'd rather work, what they've
-been rejected from and what they expect to be paid, and none of that stops
-being true because the screen share is short. So there is a third kind of
-account here, alongside the real ones: a demo, whose every row is invented.
+An account whose every row is invented, for showing the tracker without
+showing anyone's real search:
 
 ```powershell
 .\scripts\seed-demo-user.ps1 -AdminToken <the ADMIN_TOKEN>
@@ -302,64 +237,33 @@ account here, alongside the real ones: a demo, whose every row is invented.
 
 That creates an account called `Demo`, fills it from
 [`scripts/demo-user.json`](scripts/demo-user.json), and prints the password to
-sign in with (pass `-Password` to choose a memorable one instead). It writes
-everything through the ordinary HTTP API, so the demo can only ever be in a
-state a real search could have produced - and running it is a live end-to-end
-check that those routes still work.
+sign in with (pass `-Password` to choose one). It writes through the ordinary
+HTTP API, so seeding it also checks those routes end to end.
 
 **The data is invented, not anonymised.** Northwind Systems and Kestrel
 Analytics are not companies, and every posting URL is under `example.com`,
-which IANA reserves for documentation and which can never resolve to a real
-job posting. Nothing in it can be mistaken for a record of a real company's
-hiring, and no link in it leads anywhere. It's the one place in this repo with
-fabricated content, which is why it's a single readable file rather than rows
-scattered through a script.
+which can never resolve to a real job posting.
 
-It covers most of what there is to show: three tracks including a `fed_by`
-pair (one search filling two tabs), leads across every status and every
-location tier, twenty screened postings, and nine applications walked through
-the pipeline from "To Apply" to an offer. The dates are stored as day offsets
-rather than calendar dates, so it always reads as a search that's been running
-for the last three weeks - re-run with `-Force` to move it forward to today.
+It has three tracks including a `fed_by` pair (one search filling two tabs),
+leads across every status and every location tier, twenty screened postings,
+and nine applications walked through the pipeline from "To Apply" to an offer.
+Dates are stored as day offsets; re-run with `-Force` to move them forward to
+today.
 
-**It never writes to the shared company list.** Every account's searches draw
-from one list of companies, and an invented company on it is one real nightly
-runs go looking for. So the account is marked `demo` when the seed provisions
-it, and the server refuses a demo account's `POST /api/coverage`; its rotation
-tab still shows the real list. This is learned rather than foreseen:
-`0011_one_company_list.sql` merged every account's rotation into that list,
-demo included, and `0012_demo_account.sql` took its 21 companies back out.
+**It never writes to the shared company list.** The seed marks the account
+`demo`, and the server refuses a demo account's `POST /api/coverage` - an
+invented company on that list is one every real nightly run would go looking
+for. Its rotation tab still shows the real list.
 
-**It has no scheduled search, and can't acquire one.** It gets no
-`private\<user id>\` folder, and `setup-scheduler.ps1` finds people by scanning
-for `<data dir>\*\tracker.json` - so an account with no folder is invisible to
-it. Its tracks carry no `schedule_time` for the same reason, and its
-`stale_run_hours` is set to a year, because the staleness warning reports a
-search that has stopped firing and this account never had one to stop. You can
-still fetch `GET /api/prompt/engineering` for it to show what a composed daily
-prompt looks like; it just refers to resume and notes files that only a real
-account would have on disk.
-
-`-Force` is needed to re-seed an account that already holds data, since
-application rows are the one thing nothing dedups. Before it deletes any of
-them it checks that every lead on the account is an `example.com` URL and
-refuses outright if one isn't - so pointing it at a real person's account by
-mistake costs nothing.
+It has no `private\` folder, so `setup-scheduler.ps1` never schedules it.
+`-Force` re-seeds an account that already holds data, and refuses if any lead
+on it isn't an `example.com` URL.
 
 ## Backups
 
-Cloudflare's own answer for D1 is [Time
-Travel](https://developers.cloudflare.com/d1/reference/time-travel/) -
-point-in-time recovery over the last 30 days, on by default, no setup. It is
-genuinely good at the thing it does: undoing a bad write. It is no help at all
-for the two cases worth planning for, because the recovery mechanism lives
-inside the thing being lost. `wrangler d1 delete` takes the database *and* its
-Time Travel history in one step, and if the Cloudflare account goes, both go
-with it.
-
-So the only real safety net is a copy of the data somewhere else, and a copy
-that whatever went wrong can't also delete. Three pieces, in order of how much
-they're worth:
+D1 [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)
+doesn't survive `wrangler d1 delete` or losing the Cloudflare account, so these
+scripts keep copies outside Cloudflare:
 
 | | where | who can destroy it |
 |---|---|---|
@@ -367,68 +271,48 @@ they're worth:
 | archive | `%ProgramData%\JobSearchTracker\backups\` | only an elevated process |
 | off-machine | OneDrive (or `JOB_SEARCH_BACKUP_MIRROR`) | deletable locally, but recoverable from the service's own trash |
 
-`backup-tracker.ps1` writes the first and third every night. It exports to a
-temp file and checks it before letting it count as a backup - right size, has
-tables, has rows, not dramatically smaller than yesterday's - because an export
-that succeeds and returns nothing is the failure that would otherwise go
-unnoticed for months. It never deletes anything; at roughly 800 KB a day,
-retention isn't worth a script that removes backups unattended.
+`backup-tracker.ps1` writes the working copy and the mirror every night. It
+checks each export before keeping it - right size, has tables, has rows, not
+dramatically smaller than yesterday's - and never deletes old backups.
 
-`archive-backups.ps1` copies new exports into the second. That folder is owned
-by Administrators and grants everyone else read-only, so an unelevated process -
-which is what a scheduled task, a script, or an AI agent actually is - can read
-the backups but cannot write, rename, truncate or delete them. Filling a folder
-like that needs a writer you aren't, hence a task running as SYSTEM.
+`archive-backups.ps1` copies new exports into the archive. That folder is owned
+by Administrators and read-only to everyone else, so an unelevated process - a
+scheduled task, a script, an AI agent - can read the backups but not write,
+rename, truncate or delete them. A task running as SYSTEM fills it.
 
-Set it up once, from an **Administrator** PowerShell:
+Set it up once, from an **Administrator** PowerShell in the repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "C:\VibeCoding\scripts\protect-backups.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\protect-backups.ps1
 ```
-
-(The `-ExecutionPolicy Bypass` isn't optional theatre: this machine leaves the
-policy Undefined, which means Restricted for an interactive shell, so calling
-the script by path just fails. The scheduled tasks pass the same flag. Spawning
-a child process this way inherits the elevation and changes no policy setting.)
 
 That creates the archive, sets its ownership and permissions, installs its own
 copy of the archiver inside it (a task running as SYSTEM must never execute a
-script you can edit - that turns the task into free administrator access), and
-registers both daily tasks: the export at 03:15 as you, the archive at 03:45 as
-SYSTEM. Re-run it after changing `archive-backups.ps1`.
+script you can edit), and registers both daily tasks: `JobSearchTracker-Backup`
+at 03:15 as you, and `JobSearchTracker-ArchiveBackups` at 03:45 as SYSTEM.
+Re-run it after changing `archive-backups.ps1`.
 
-Neither task name matches `JobSearch-*`, which is what `setup-scheduler.ps1`
-sweeps for stale search tasks - a backup job silently unregistered by the next
-scheduler run is exactly the failure you'd only find out about when you needed
-it. The export runs under the same Interactive logon as the searches, so like
-them it only fires while you're logged in; the archive runs as SYSTEM and
-doesn't care.
+Keep backup task names outside `JobSearch-*`: `setup-scheduler.ps1` unregisters
+stale tasks under that prefix. The export runs only while you're logged in; the
+archive runs regardless.
 
-Then check it from an ordinary, **unelevated** window - a permission scheme that
-quietly stopped applying looks exactly like one that works:
+Then check it from an ordinary, **unelevated** window:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "C:\VibeCoding\scripts\verify-backups.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-backups.ps1
 ```
 
-It makes real attempts to overwrite, rename and delete an archived backup, to
-edit the script SYSTEM runs, and to grant itself the permissions back - all of
-which must be refused. Safe to run: every archived file also exists in the
-working folder and the mirror, so even a probe that unexpectedly succeeded
-costs nothing.
+It tries to overwrite, rename and delete an archived backup, to edit the script
+SYSTEM runs, and to grant itself the permissions back - all of which must be
+refused. It is safe to run: every archived file also exists in the working
+folder and the mirror.
 
 To restore, feed a `.sql` file back with `wrangler d1 execute <db> --remote
---file <backup.sql>` - see `server/README.md`, which covers doing that against
-a database with live data in it.
+--file <backup.sql>`, into a freshly created D1 or one whose tables you have
+dropped.
 
-**What this does and doesn't cover.** It guarantees the data survives: if the
-database is deleted, the rows are still on disk and in OneDrive, in a form that
-restores. It does not prevent the deletion. That capability comes from
-wrangler's stored credential, and no file permission touches it - the
-`.claude/hooks/block-remote-d1-writes.mjs` PreToolUse hook refuses the obvious
-commands, but a hook is a config file, not a boundary, and something determined
-could call the Cloudflare API directly. The protection worth having is the one
-that makes the loss recoverable.
+This makes a deletion recoverable, not impossible: wrangler's stored Cloudflare
+credential can still delete the database.
 
 ## Things worth not relearning
 
@@ -439,87 +323,23 @@ finding. Watch especially for URLs that resolve to a company's *listing
 index* rather than the individual posting - the title text matches, so it
 looks right, and it isn't.
 
-**Fetch reliability varies by company and drifts week to week.** Each track's
-baseline doc in the tracker keeps per-company notes; re-verify rather than
-trusting them blindly. A note saying a domain is blocked is a claim from some
-past night, and it has been wrong: one company sat on the "blocked" list for
-two weeks on the strength of its direct site 403ing, while its Greenhouse board
-answered fine the whole time.
+**Per-company fetch notes in a track's baseline doc go stale.** Re-verify them
+rather than trusting them.
 
-**Scheduled tasks only run while you're logged in.** For true run-when-closed
-scheduling you'd need the machine to stay logged in (Task Scheduler can be
-configured to run whether logged on or not, but that requires storing your
-Windows password in the task - a bigger tradeoff, not set up here by default).
+**An amber dot on a track's tab means no run has reported in within
+`stale_run_hours`** (default 36; raise it via `/api/config` if searches run less
+often than daily). **A red dot means the last run reported an error.** Either
+way, check the scheduled task and `private\<user-id>\logs\<track>.log` - a
+search that stopped running looks like one that found nothing.
 
-**A search that finds nothing and a search that stopped running look
-identical, so the page tracks the difference explicitly.** Every run reports
-in when it finishes - including runs that found nothing - and each track's
-tab shows when it last ran and what it did. A track whose search hasn't
-reported in over 36 hours gets an amber dot on its tab; one whose last run
-reported an error gets a red one. If you see either, check the scheduled task
-and `private\logs\<track>.log` rather than reading a quiet tab as a quiet
-job market. Tune the threshold with `stale_run_hours` via `/api/config` if a
-track is scheduled less often than daily - a weekly search left at 36 hours
-would warn nearly all week.
+**Logging an application takes a URL.** Paste it on the Applications tab. One
+nightly task per machine (`JobSearch-Applications`, 06:30) reads each posting
+once and fills in company, role, location, work setup and posted comp - only
+into empty fields, so what you type wins. A row it couldn't fully read says so
+and isn't retried. Its log is `private\logs\applications.log`. See
+[server/README.md](server/README.md#applications-added-as-nothing-but-a-url).
 
-**Logging an application takes a URL and nothing else.** The Applications tab
-is the one thing on the page no search writes to - it's the record of what you
-actually applied to - and keeping it up to date used to mean copying nine
-fields off a posting you had open in the next tab. Paste the posting's URL
-into the box on that tab instead and leave it: one more nightly task per
-person (`JobSearch-<you>-Applications`, registered by the same
-`setup-scheduler.ps1`) opens the posting and writes down the company, role,
-location, work setup and any posted comp range.
-
-There is nothing to watch and nothing to press. Any application with a link
-and a blank company, role or location is read once, automatically, and a flag
-the page doesn't show records that it has been - so nothing is read twice, and
-a row that filled in just looks like a row you typed. The run only ever writes
-into fields that are still empty, so anything you fill in yourself wins.
-
-**What it couldn't read says so on its row.** Either it got nothing at all -
-a login wall, a 404, a domain that blocks automated fetches - or it got part
-of the posting and not the rest, which is the ordinary outcome on a board that
-renders its description in the browser but still ships the role and employer
-in the page's metadata. A closed listing that still names the role is filled
-in too: this is the record of what you applied to, not a check on whether the
-listing outlived it. Either way the row says what happened, in the run's own
-words, because that row is the one with something still to do on it - nothing
-is coming for it, and without saying so it would look exactly like a row still
-waiting its turn. There is no retry button: a posting is read once, and the
-note tells you whether the details are gone or the page is sitting right there
-for you to open. Nothing else about the tab
-changes: it is still yours alone, and a row only ever gets there because you
-put it there.
-
-It is **one task for the whole machine**, not one per person: the job is the
-same whoever the applications belong to, and most nights there is nothing
-waiting. It pulls every account's outstanding rows first, then fans the slow
-part out - one subagent per posting, reading pages in parallel - and makes the
-writes itself, one call per account with that account's own credential. The
-subagents get a URL and nothing else: no token, no account, no row id, so
-nothing they hand back can land on the wrong person's row. It runs at 06:30
-and writes `private\logs\applications.log` - one file for the machine, beside
-the per-person folders rather than inside one, and the only account of what it
-did, since unlike a search it records no run.
-
-**Headless runs use a scoped tool allowlist**, not full permission bypass -
-see `scripts/run-search.ps1`. If a search prompt ever needs a new capability,
-add it there deliberately rather than reaching for `--dangerously-skip-permissions`.
-
-**A cross-cutting convention changed in one track's doc silently drifts out
-of sync in the others.** Each `docs/tracked_<key>_postings.md` is
-self-contained - nothing at runtime cross-checks it against its siblings. They
-are at least all reachable now (`GET /api/documents` per account) rather than
-scattered across whichever machines hold them, so the reconciling is possible
-without being automatic.
-If you change something that's supposed to apply to every track (how leads
-sync to the tracker, the fetch-efficiency rule, the fit-filter philosophy),
-update every existing track's doc to match, not just the one you're actively
-iterating on. This has actually happened: one track's doc got updated when
-the tracker migrated off an old hosting mechanism, its siblings didn't, and
-a later scheduled run confidently tried to publish through the retired
-mechanism - it had no way to know the convention had moved on. The
-`job-search-setup` skill's templates are the shared source of truth for a
-*new* track; there's nothing equivalent that reconciles existing tracks
-against each other, so that's on whoever makes the cross-cutting change.
+**A convention changed in one track's doc doesn't reach the others.** Each
+`docs/tracked_<key>_postings.md` is self-contained; follow the
+[change-search-prompt](.claude/skills/change-search-prompt/) skill to update
+every track's doc.

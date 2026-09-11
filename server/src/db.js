@@ -1,40 +1,22 @@
 /**
- * The one place that knows this is D1 (SQLite). Every `env.DB.prepare(...)`
- * call for a user's own data lives here - the route modules and index.js
- * never touch D1 directly for it, only Db's methods below. That's the point:
- * if this ever needs to run on a different database, only this file changes.
- * The rest of the codebase (request parsing, validation, deciding *when*
- * something happens) doesn't know or care what's storing the rows.
+ * All D1 access for a user's own data. Route modules and index.js call Db's
+ * methods and never prepare statements for that data themselves, so only this
+ * file knows what stores the rows.
  *
- * ---- Every instance belongs to one user. `new Db(env.DB, userId)` binds the
- * repository to whoever is making the request, and every statement below
- * filters on `this.userId`. That is deliberately not a per-method parameter:
- * with a parameter, forgetting one argument at one call site silently returns
- * (or overwrites) another person's rows, and nothing about the code would look
- * wrong. Scoped at construction, there is no method left that *can* forget.
+ * Every instance is bound to one user - `new Db(env.DB, userId)` - and every
+ * statement filters on `this.userId`. Keep it a constructor argument, never a
+ * per-method parameter: one forgotten argument at one call site would read or
+ * overwrite another person's rows with nothing in the code looking wrong.
  *
- * A useful consequence: another user's row id simply doesn't resolve - getLead
- * returns null, updateLead reports zero changes - so the handlers' existing
- * "not found" paths become the cross-user access check for free, with no new
- * branch to keep correct.
+ * Another user's row id doesn't resolve (getLead returns null, updateLead
+ * reports no change), so a handler's not-found path is also its cross-user
+ * access check.
  *
- * Users and sessions are the exception and live in auth.js instead, because
- * resolving *which* user is calling necessarily happens before there's a
- * user-scoped Db to ask.
+ * Users and sessions live in auth.js: resolving which user is calling has to
+ * happen before a user-scoped Db exists.
  *
- * New to JS? A "class" here is just a bundle of related functions (the
- * methods below) that share some state - the D1 binding and the user id,
- * stored in the constructor. `new Db(env.DB, userId)` makes one instance;
- * every method call after that (`db.getLead(5)`) automatically has access to
- * both without you passing them around everywhere.
- *
- * ---- JSDoc typedefs: this project has no build step (see client/README.md),
- * so there's no TypeScript compiler. @typedef comments are the zero-build
- * substitute: plain comments that do nothing at runtime, but that VS Code
- * (and `tsc --checkJs`, if you ever want to run it) read to give you
- * autocomplete and type-checking on plain .js files. Think of them as the
- * "contract" for what shape an object has - documentation a tool can verify
- * for you, instead of documentation that quietly goes stale.
+ * There is no build step, so the @typedef blocks below are the type contract
+ * that editors and `tsc --checkJs` read.
  */
 
 /**
@@ -90,12 +72,11 @@
  * @property {string} dateOffer
  * @property {string} dateRejected
  * @property {string} dateWithdrawn
- * @property {string} autofill - '' | 'filled' | 'failed'; whether this row's posting has
- *   been read yet. Bookkeeping for the nightly fill - no route takes it from a caller,
- *   and the page renders nothing from it but the 'failed' case. See
+ * @property {string} autofill - '' | 'filled' | 'failed'; whether the nightly fill has read
+ *   this row's posting. Server bookkeeping: no route takes it from a caller. See
  *   migrations/0009_application_autofill.sql.
- * @property {string} autofill_note - why a 'failed' read failed; '' otherwise. Shown on
- *   the row, and the only thing about the fill the page ever says
+ * @property {string} autofill_note - why a read failed or came back partial; '' otherwise.
+ *   Shown on the row
  */
 
 /**
@@ -172,8 +153,8 @@
 import { normalize as normalizeCompany } from "./exclude.js";
 import { canonicalUrl } from "./url.js";
 
-// Same field lists the route modules validate/whitelist against - re-exported
-// from here so there is exactly one definition, not two that can drift apart.
+// The route modules validate against these same lists, so validation and
+// storage share one definition.
 export const EXTRA_FIELDS = [
   "team", "setup", "source", "link", "lastContact",
   "nextAction", "nextActionDate", "resume", "referral", "comp",
@@ -183,22 +164,18 @@ export const APP_STAGE_DATE_FIELDS = [
   "dateOffer", "dateRejected", "dateWithdrawn",
 ];
 
-// The `reason` written on the screened row a delisted lead leaves behind.
-// Since 0004_drop_lead_delisted_on.sql deletes the lead outright, that row is
-// the only surviving evidence a posting came down, and countRunActivity splits
-// the day's screened rows on this exact text to tell a delisting from an
-// ordinary rejection. A string a run's `delisted` count depends on gets one
-// definition, for the same reason EXTRA_FIELDS above does.
+// The `reason` on the screened row a delisted lead leaves behind. The lead is
+// deleted, so that row is the only record a posting came down, and
+// countRunActivity splits a day's screened rows on this exact text to tell a
+// delisting from an ordinary rejection.
 //
-// 0004 hardcodes the same text in SQL and cannot import it. Changing this
-// would also silently reclassify every historical row, which is a good reason
-// not to.
+// Don't change it: migrations/0004_drop_lead_delisted_on.sql hardcodes the
+// same text in SQL, and existing rows would be silently reclassified.
 export const DELISTED_REASON = "posting taken down";
 
-// Everything on a track row that isn't its identity (key) or its ordering.
-// Split in two because the two halves have different audiences: the first is
-// read by the client to draw tabs, the second only by prompt.js to compose
-// the daily search. Both are written by POST /api/config.
+// Every track column except `key`, split by audience: the client reads the
+// first list to draw tabs, and only prompt.js reads the second. POST
+// /api/config writes both.
 export const TRACK_DISPLAY_FIELDS = ["label", "full_description", "sort_order"];
 export const TRACK_CONFIG_FIELDS = [
   "role_search_line", "target_companies", "search_note", "resume_line",
@@ -212,10 +189,10 @@ export const SETTING_KEYS = [
   "display_title", "overview_label", "applications_label", "all_leads_label",
   "stale_run_hours",
 ];
-// ...and settings only prompt.js reads. Prose, stored verbatim: these are the
-// per-user half of the search config (the per-track half is TRACK_CONFIG_FIELDS),
-// and regenerating their sentences from keywords is exactly what would drop the
-// hand-written detail the live searches depend on.
+// ...and settings only prompt.js reads: the per-user half of the search config
+// (TRACK_CONFIG_FIELDS is the per-track half). Stored as verbatim prose - don't
+// rebuild these sentences from keywords, which would drop hand-written detail
+// the searches depend on.
 export const PROMPT_SETTING_KEYS = [
   "geo_scope_line", "scope_clause", "scope_disqualifier",
   "location_guidance", "footer_note", "pronouns",
@@ -225,17 +202,15 @@ export const DEFAULT_SETTINGS = {
   display_title: "Job Search Tracker",
   overview_label: "Overview",
   applications_label: "Applications",
-  // The cross-track leads tab, alongside the two above - a built-in tab, so
-  // a renameable one.
+  // The built-in cross-track leads tab.
   all_leads_label: "All leads",
   stale_run_hours: 36,
   priority_locations: [],
-  // Companies this person will not work for, at all. A list rather than a
-  // sentence buried in a track's prose: "is X excluded?" should be a lookup,
-  // and adding one should be an append, not surgery on a paragraph.
+  // A list rather than a sentence in a track's prose, so "is X excluded?" is a
+  // lookup and adding a company is an append.
   excluded_companies: [],
   // No geographic restriction by default: an unconfigured deployment shouldn't
-  // silently filter out postings it was never told to exclude.
+  // filter out postings it was never told to exclude.
   geo_scope_line: "",
   scope_clause: "",
   scope_disqualifier: "",
@@ -251,42 +226,24 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Every column an application row is created with. There are two insert paths
-// - insertApplication, and the one inside
-// setLeadStatusAndMaybeCreateApplication that has to happen in the same
-// transaction as the status change - and they were each carrying their own
-// hand-written column list. The lists had already drifted: the composite one
-// named twelve columns picked out by hand, the other twenty-three built from
-// EXTRA_FIELDS and APP_STAGE_DATE_FIELDS.
-//
-// Nothing was broken by that, because every missing column is NOT NULL
-// DEFAULT '' and '' is exactly what the long path was writing into them. The
-// problem was the next edit rather than the current state: a field added to
-// EXTRA_FIELDS would reach one path and silently not the other, and which of
-// the two created a row is not something anyone would think to check.
+// Every column an application row is created with. Both insert paths
+// (insertApplication, and the transaction in
+// setLeadStatusAndMaybeCreateApplication) share this one list, so a new field
+// can't reach only one of them.
 const APPLICATION_COLS = [
   "leadId", "company", "title", "location", "dateApplied", "status", "notes",
   ...EXTRA_FIELDS, ...APP_STAGE_DATE_FIELDS, "autofill", "autofill_note",
 ];
 
-// What a read is allowed to write. Everything a job posting states plainly and
-// nothing else: the rest of an application's fields (referral, resume, source,
-// notes, the stage dates) are the person's own account of their search, which
-// no amount of reading the posting can tell you. Same three posting-stated
-// extras the search itself captures - see step 6b in prompt.js. Local to this
-// file: it is the whitelist applyAutofill applies, not a shape any caller
-// needs to know.
+// The columns an autofill read may write: what a posting states plainly. The
+// rest (referral, resume, source, notes, stage dates) is the person's own
+// account of their search, which no posting can supply. team/setup/comp are
+// the same posting-stated extras the search captures in prompt.js.
 const AUTOFILL_FILL_FIELDS = ["company", "title", "location", "team", "setup", "comp"];
 
-// The two columns a new application doesn't default to '': it is applied-to
-// today unless the caller says otherwise, and its status is "Applied" unless
-// the caller is logging something it hasn't reached yet ("To Apply").
-//
-// `autofill` is deliberately not among them. Whether a row's posting still
-// wants reading is derived from the row itself at the moment a run asks (see
-// getAutofillQueue), not decided and stored when it is created - so nothing
-// has to be flagged, and nothing that creates an application has to know this
-// feature exists.
+// Don't set `autofill` here: whether a row's posting wants reading is derived
+// from the row when a run asks (getAutofillQueue), so nothing that creates an
+// application has to know about the fill.
 function applicationValues(fields) {
   return APPLICATION_COLS.map((f) => {
     if (f === "dateApplied") return fields.dateApplied || today();
@@ -295,14 +252,10 @@ function applicationValues(fields) {
   });
 }
 
-// How many lead ids one statement may name in an `IN (...)` list. D1 caps a
-// query at 100 bound parameters, and a nightly run re-confirming the postings
-// it tracks routinely reports more leads than that in one call - the whole
-// reason /api/verified takes a list instead of one URL per request. Over the
-// cap D1 rejects the statement outright, so this splits the ids across several
-// statements sent as one batch rather than letting a busy night be the thing
-// that discovers the limit. 90, not 100: the same statement also binds the
-// date and the user id.
+// Most values one statement may name in an `IN (...)` list. D1 rejects a
+// statement with more than 100 bound parameters, and a single call can carry
+// more ids or names than that, so callers split the list across statements in
+// one batch. 90 leaves room for the statement's other bindings.
 const ID_CHUNK = 90;
 
 export class Db {
@@ -367,21 +320,16 @@ export class Db {
   }
 
   /**
-   * The smallest thing a daily run needs to avoid re-processing what it has
-   * already seen: for one track, the ids/urls/statuses of its leads and the
-   * urls it has already screened out.
+   * What a daily run needs to skip what it has already seen, for one track: its
+   * leads' ids, urls and statuses, and the urls it has screened out.
    *
-   * This exists because the runs were using GET /api/data for it, which
-   * returns every field of every row across every track - 398KB to use 22KB
-   * of, at a point where screened rows were accumulating ~150/day. That grows
-   * without bound and lands in the run's context every night, so the failure
-   * mode was a run eventually truncating its own dedup list and re-adding
-   * postings it had already ruled out. Selecting three columns for one track
-   * keeps it roughly flat instead.
+   * Kept to these columns and this track because the result lands in the run's
+   * context every night and screened rows grow without bound. A full dump
+   * would eventually be truncated, and the run would re-add postings it had
+   * already ruled out.
    *
-   * `status` is here because the run needs it to tell a stale lead nobody has
-   * touched from one already applied to; `id` because a posting confirmed
-   * dead posts back against it (see routes/delisting.js's removeDelistedLead).
+   * `status` tells an untouched lead from one already applied to; `id` is what
+   * a dead posting is reported against (routes/delisting.js's removeDelistedLead).
    * @param {string} trackKey
    * @returns {Promise<{leads: Array<{id: number, url: string, status: string}>, screened: string[]}>}
    */
@@ -404,33 +352,29 @@ export class Db {
   /**
    * Shared facts for a set of company names, keyed by normalize().
    *
-   * Not user-scoped, and that is the point - see
-   * migrations/0010_company_fetch.sql and 0011_one_company_list.sql for the
-   * boundary it sits on. The caller supplies names and gets back facts about
-   * websites; nothing here is derived from any user's rows.
+   * Not user-scoped, by design: the caller supplies names and gets back facts
+   * about websites, nothing derived from any user's rows. See
+   * migrations/0010_company_fetch.sql and 0011_one_company_list.sql.
    *
    * A retracted row comes back with its fields blanked and only the retraction
    * visible, so a reader cannot use a withdrawn fact by forgetting to check one
    * more field.
    *
-   * A row that knows nothing is left out. Since 0011 every company on the list
-   * has a row here, most of them bare membership, and handing a run an empty
-   * `known` would say something is known about a company nothing has looked at.
+   * A row with no facts is left out. Every listed company has a row, most of
+   * them bare membership, and an empty entry would claim something is known
+   * about a company nothing has looked at.
    *
-   * A wall is served only once earned and while fresh: recorded on at least two
-   * separate dates, and last recorded within seven days. Otherwise it is left
-   * out rather than flagged, so a run meeting an expired wall simply fetches -
-   * which is the re-test, with nothing for the run to decide.
+   * A wall is served only when recorded on at least two separate dates and
+   * last recorded within seven days. Otherwise it is left out rather than
+   * flagged, so a run meeting an expired wall simply fetches, which is the
+   * re-test.
    *
    * @param {string[]} names @returns {Promise<Map<string, Object>>} by company_key
    */
   async getCompanyFetch(names) {
     const keys = [...new Set(names.map(normalizeCompany).filter(Boolean))];
     if (keys.length === 0) return new Map();
-    // Chunked by ID_CHUNK, like markVerified: D1 caps a statement at 100 bound
-    // parameters. Since 0011 `?all=1` asks for the whole list - 139 companies on
-    // the live deployment - where it used to ask for one search's rotation, which
-    // never reached the cap, so this was a limit nothing had hit yet.
+    // Chunked by ID_CHUNK: routes/coverage.js's `?all=1` asks for the whole list.
     const chunks = [];
     for (let i = 0; i < keys.length; i += ID_CHUNK) chunks.push(keys.slice(i, i + ID_CHUNK));
     const batches = await this.d1.batch(
@@ -474,8 +418,7 @@ export class Db {
    *
    * Non-empty-wins, field by field: a run that confirmed an endpoint but has
    * nothing to say about the dead signal must not wipe what an earlier run
-   * established. The failure this avoids is a shared table that degrades every
-   * time a run is terse.
+   * established, or the shared table degrades every time a run is terse.
    *
    * `wall` counts separate dates, not reports - two runs meeting one wall on one
    * day are one piece of evidence. A reported board or endpoint clears it, since
@@ -488,10 +431,10 @@ export class Db {
    *
    * @param {Array<{company: string, board?: string, endpoint?: string,
    *   url_shape?: string, dead_signal?: string, note?: string, wall?: string}>} rows
-   * @param {string} on YYYY-MM-DD, or "" for a fact nobody dated - stamped with
-   *   the server's own date, since `verified_on` records when a fact was last
-   *   established rather than whose night it belonged to. A `wall` never
-   *   arrives undated; routes/coverage.js refuses that before calling this.
+   * @param {string} on YYYY-MM-DD, or "" for a fact nobody dated, which is
+   *   stamped with the server's date: `verified_on` records when a fact was
+   *   established. A wall never arrives undated - routes/coverage.js refuses
+   *   that before calling this.
    */
   async upsertCompanyFetch(rows, on) {
     const date = on || today();
@@ -559,15 +502,14 @@ export class Db {
   /**
    * Put companies on the list.
    *
-   * Membership only. Nothing here claims to know anything about the company:
-   * what a row says about its website is written by upsertCompanyFetch on the
-   * same call, dated or not. A company already on the list keeps its place and
-   * its name: a
-   * position is assigned once, when a company joins, and never moves, or the
-   * cursor would step over companies it had already passed.
+   * Membership only: what a row says about the company's website is written by
+   * upsertCompanyFetch, on the same call, dated or not. A company
+   * already on the list keeps its place and its name: a position is assigned
+   * once, when a company joins, and never moves, or the cursor would step over
+   * companies it had already passed.
    *
-   * Not scoped to this.userId. It is the one write in this file that reaches
-   * every account, deliberately - see 0011_one_company_list.sql.
+   * Not scoped to this.userId: the list is shared by every account, by design -
+   * see 0011_one_company_list.sql.
    * @param {{company: string, position: number}[]} items
    * @returns {Promise<number>} how many joined
    */
@@ -590,13 +532,11 @@ export class Db {
    * The list is global (company_fetch, 0011_one_company_list.sql); what this
    * search did with each company - when it last tried, what it noted - is its
    * own, in company_sweeps. Ordered by `position`, a fixed place per company,
-   * shuffled once and appended to since - never by date. Which slice a run
-   * gets is decided by the cursor, in routes/coverage.js.
+   * never by date. routes/coverage.js picks a run's slice from the cursor.
    *
-   * Where one search holds two rows for one company - spellings normalize()
-   * merges, until company_sweeps is rebuilt on company_key - the most recently
-   * swept wins, and the newest row on a tie, so the answer never depends on
-   * which row SQLite happened to read first.
+   * company_sweeps is keyed by the name a run wrote, so one search can hold two
+   * rows for spellings normalize() merges. The most recently swept wins, then
+   * the newest row, so the answer never depends on SQLite's read order.
    *
    * `board` is the shared one, blank on a retracted row: a withdrawn board is
    * not a hint.
@@ -647,12 +587,9 @@ export class Db {
    * @param {string} key @param {number} next
    */
   async setSweepCursor(key, next) {
-    // Stored as given, with no wrap. It used to be taken modulo the company
-    // count, which is a different quantity from a position: gaps or excluded
-    // rows make count and highest-position disagree, and the wrap then landed
-    // somewhere arbitrary. Wrapping belongs at the read, where "nothing is at
-    // or after the cursor" means "start again at the front" and needs no
-    // arithmetic at all.
+    // Stored unwrapped. Don't take it modulo the company count: gaps and
+    // excluded rows make the count differ from the highest position. The read
+    // in routes/coverage.js wraps.
     const value = Math.max(0, Math.floor(next));
     await this.d1
       .prepare("UPDATE tracks SET sweep_cursor = ? WHERE user_id = ? AND key = ?")
@@ -670,9 +607,8 @@ export class Db {
    * blank a note an earlier one wrote.
    *
    * Membership is not written here - that is addCompanies, on the shared list.
-   * `company_key` is what readers join on. `company`, `board` and `position` are
-   * still written, mirroring the list, so the worker from before 0011 keeps
-   * working against this table until it is rebuilt on company_key.
+   * Readers join on `company_key`; `board` and `position` mirror the list only
+   * for rollback compatibility (see 0011_one_company_list.sql).
    * @param {string} search
    * @param {{company: string, board?: string, note?: string, position: number}[]} items
    *   `company` is the name as the list holds it, so every spelling of one
@@ -801,8 +737,8 @@ export class Db {
       one("SELECT COUNT(*) AS n FROM company_sweeps WHERE user_id = ? AND search = ?"),
       one("SELECT COUNT(*) AS n FROM search_runs WHERE user_id = ? AND track_key = ?"),
     ]);
-    // Applications don't carry a search of their own; they point at a lead id.
-    // This is the count that would be left pointing at nothing.
+    // Applications have no search column; they point at a lead id. These are
+    // the ones a purge would leave pointing at nothing.
     const apps = await this.d1
       .prepare(
         `SELECT COUNT(*) AS n FROM applications
@@ -816,29 +752,17 @@ export class Db {
 
   /**
    * Removes every trace of one retired search: its leads, the postings it
-   * screened, its slice of the company rotation, and its run record.
+   * screened, its company sweep records, and its run record.
    *
-   * All four tables in one transaction, because a half-purged search is worse
-   * than an un-purged one - screened rows with no leads still suppress
-   * rediscovery, and a surviving rotation slice still hands companies to a
-   * search that no longer exists.
+   * One transaction, because a half-purged search is worse than an un-purged
+   * one: screened rows left without their leads still suppress rediscovery.
    *
-   * ---- Applications are kept, and un-pointed rather than deleted. An
-   * application row references its originating lead by id, and that lead is
-   * about to stop existing. Deleting the application would throw away the
-   * record of having applied to a job, which is the single least recoverable
-   * thing in this database - the posting is gone from the internet too, so
-   * nothing could reconstruct it. Leaving the id would leave a pointer into
-   * nothing. So `leadId` is cleared to '', which the schema already defines as
-   * "added by hand" (see migrations/0001_schema.sql) - exactly what such a row
-   * becomes once the lead behind it is gone.
+   * Applications are kept, with `leadId` cleared to '' - the schema's "added by
+   * hand" (migrations/0001_schema.sql). An application is the least
+   * recoverable record here, and a dangling id would point at a deleted lead.
    *
-   * Deliberately no status check. deleteLeadAndScreen refuses to remove an
-   * applied-to lead, because there it is acting on one posting's report of
-   * being taken down and the application is the thing still being tracked.
-   * This is a different operation: the whole search is being retired on
-   * purpose, and the caller has said so. The applications survive it either
-   * way, which is what makes that safe.
+   * No applied-to check, unlike delisting: the caller is retiring the whole
+   * search on purpose, and the applications survive it.
    *
    * @param {string} key
    * @returns {Promise<{leads: number, screened: number, sweeps: number, runs: number, applications: number}>} rows affected
@@ -872,13 +796,10 @@ export class Db {
   async replaceTracks(tracks) {
     const cols = [...TRACK_DISPLAY_FIELDS, ...TRACK_CONFIG_FIELDS];
 
-    // A field the payload doesn't mention keeps its stored value, rather than
-    // being overwritten with ''. `tracks` replaces the *list* - which tracks
-    // exist - but a caller posting `{key, label}` to rename a tab is not
-    // asking to erase that track's target companies, resume line and schedule.
-    // Without this they'd be silently blanked, and the next morning's prompt
-    // would fall back to its generic defaults and still look fine. Clearing a
-    // field is done by sending it as "".
+    // A field the payload omits keeps its stored value. `tracks` replaces which
+    // tracks exist, but posting `{key, label}` to rename a tab must not blank
+    // its config - the prompt would quietly fall back to generic defaults.
+    // Clear a field by sending "".
     const existing = {};
     const current = await this.d1
       .prepare(`SELECT key, ${cols.join(", ")} FROM tracks WHERE user_id = ?`)
@@ -886,10 +807,8 @@ export class Db {
       .all();
     for (const row of current.results) existing[row.key] = row;
 
-    // Falls back through: what was posted, then what's stored, then the
-    // default. `sort_order` needs the same treatment as the text fields -
-    // defaulting it to the array index silently reorders someone's tabs when
-    // a caller posts the tracks in a different order than they're displayed.
+    // Posted, then stored, then default. `sort_order` too: defaulting it to the
+    // array index would reorder tabs when a caller posts them in another order.
     const keep = (t, f, fallback) => {
       const stored = existing[t.key] && existing[t.key][f];
       return stored !== undefined && stored !== null ? stored : fallback;
@@ -900,8 +819,8 @@ export class Db {
        ON CONFLICT(user_id, key) DO UPDATE SET
          ${cols.map((c) => `${c} = excluded.${c}`).join(", ")}`
     );
-    // INSERT OR IGNORE, not a plain INSERT - re-posting an unchanged track
-    // list is the normal case and must not wipe existing run history.
+    // INSERT OR IGNORE: re-posting an unchanged track list is normal and must
+    // not wipe run history.
     const runStmt = this.d1.prepare(
       "INSERT OR IGNORE INTO search_runs (user_id, track_key) VALUES (?, ?)"
     );
@@ -938,14 +857,11 @@ export class Db {
   /**
    * Sets any subset of this user's settings.
    *
-   * The two groups differ on what an empty string means, because what the
-   * user wants from it differs. For a display label ("" as a page title) the
-   * only sensible reading is "use the default", so it's ignored and
-   * DEFAULT_SETTINGS applies. For a prompt setting, "" is a real instruction:
-   * dropping a geographic restriction, or removing a footer note, means
-   * clearing the text. Ignoring it there would mean a widened search scope
-   * silently didn't take, and the searches would go on excluding what the
-   * installer just told them to stop excluding.
+   * An empty string means different things per group. A display label of "" is
+   * ignored, so DEFAULT_SETTINGS applies. A prompt setting of "" is stored:
+   * clearing a geographic restriction or a footer note is a real instruction,
+   * and ignoring it would leave the searches excluding what they were told to
+   * stop excluding.
    * @param {Partial<Settings>} patch
    */
   async setSettings(patch) {
@@ -966,8 +882,7 @@ export class Db {
     if (Array.isArray(patch.priority_locations)) {
       await this.setSetting("priority_locations", JSON.stringify(patch.priority_locations));
     }
-    // An empty array is a real instruction here - "I no longer exclude anyone" -
-    // so this checks for an array, not for a non-empty one.
+    // An empty array is a real instruction ("exclude no one"), so any array is written.
     if (Array.isArray(patch.excluded_companies)) {
       await this.setSetting(
         "excluded_companies",
@@ -990,30 +905,20 @@ export class Db {
   // ------------------------------------------------------------- runs --
 
   /**
-   * What one track actually gained on one date, counted from the rows
-   * themselves. This is what a run record's three numbers are derived from
-   * instead of being taken from the caller - see routes/runs.js's
-   * handleRecordRun for why the caller's own tally isn't trusted.
+   * What one track gained on one date, counted from the rows themselves. A run
+   * record's numbers come from here, not from the caller (see routes/runs.js's
+   * handleRecordRun).
    *
-   * Three counts, three different places they can be read from, and only one
-   * of them is obvious:
+   *   - `leadsAdded`: leads under this key whose `found` is this date.
+   *   - `delisted`: screened rows carrying DELISTED_REASON (see above).
+   *   - `screenedAdded`: every other screened row that day, so a delisting
+   *     isn't counted in both columns.
    *
-   *   - `leadsAdded` is leads filed under this key with `found` = this date.
-   *     `found` rather than an insert timestamp because that is the column the
-   *     table actually has, and it is the date the run itself supplies.
-   *   - `delisted` is counted out of `screened`, not out of `leads`, and that
-   *     is not a stylistic choice: 0004_drop_lead_delisted_on.sql removed
-   *     leads.delistedOn, and removeDelistedLead now DELETEs the lead and
-   *     writes a screened row in its place. By the time anything could count
-   *     the delisting, the lead row is gone - the screened row carrying
-   *     DELISTED_REASON is the only trace left.
-   *   - `screenedAdded` is therefore everything else screened that day. The
-   *     two live in the same table on the same date under the same key, so
-   *     without splitting them on the reason string every delisting would be
-   *     counted twice, once in each column.
+   * Only `added_by = 'run'` screened rows count, so a person clearing postings
+   * off their board isn't reported as the search's work
+   * (migrations/0007_screened_added_by.sql).
    *
-   * A multi-tab run calls this once per tab; each key counts only its own
-   * rows, which is the whole point of deriving them here.
+   * Each key counts only its own rows; a multi-tab run calls this once per tab.
    *
    * @param {string} key - track key
    * @param {string} on - YYYY-MM-DD, the run's own local date
@@ -1025,15 +930,9 @@ export class Db {
         .prepare("SELECT COUNT(*) AS n FROM leads WHERE user_id = ? AND search = ? AND found = ?")
         .bind(this.userId, key, on)
         .first(),
-      // One pass over the day's screened rows rather than two queries that
-      // would have to agree with each other about what "not delisted" means.
+      // One query, so both sums agree on what "not delisted" means.
       this.d1
         .prepare(
-          // `added_by = 'run'` is the whole point of migration 0007: a person
-          // clearing a posting off their board also writes a screened row, and
-          // without this it lands in the night's numbers as work the search
-          // did. Rows predating the column are '' and count as neither, which
-          // under-reports one day's history rather than inventing any.
           `SELECT SUM(CASE WHEN reason = ? THEN 1 ELSE 0 END) AS delisted,
                   SUM(CASE WHEN reason <> ? THEN 1 ELSE 0 END) AS screened
              FROM screened
@@ -1042,8 +941,7 @@ export class Db {
         .bind(DELISTED_REASON, DELISTED_REASON, this.userId, key, on)
         .first(),
     ]);
-    // SUM over zero rows is NULL in SQLite, not 0, and a quiet day is the
-    // normal case here - so both sums are floored rather than passed through.
+    // SUM over zero rows is NULL in SQLite, and a quiet day is normal.
     return {
       leadsAdded: (leads && leads.n) || 0,
       screenedAdded: (screened && screened.screened) || 0,
@@ -1062,19 +960,12 @@ export class Db {
   }
 
   /**
-   * Writes a run record for every tab one run filled, as a single transaction.
+   * Writes a run record for every tab one run filled, in one transaction
+   * (d1.batch). Written one at a time, a failure partway would leave tabs that
+   * were searched reading as never run, after the run could no longer retry.
    *
-   * All of them or none of them, which is the entire point. A branched run
-   * fills several tabs and each needs its own record, and the failure this
-   * whole change exists to fix is a tab that was searched last night reading
-   * as never having run. Writing them one at a time re-creates exactly that:
-   * a worker that dies, times out, or hits a D1 error partway through leaves
-   * the tabs it hadn't reached yet looking stale, and the run that could have
-   * retried has already ended. d1.batch is a real transaction, so a partial
-   * fan-out is not a state this can end up in.
-   *
-   * The counts are computed by the caller, per key, before any of this runs -
-   * they are reads, and they must not be inside the write transaction.
+   * The caller computes the counts first: they are reads, and stay outside the
+   * write transaction.
    *
    * @param {Array<{key: string, at: string, on: string, status: string, leadsAdded: number, screenedAdded: number, delisted: number, note: string}>} runs
    * @returns {Promise<SearchRun[]>} the written rows, in the order asked for
@@ -1119,29 +1010,19 @@ export class Db {
 
   /**
    * Splits a batch into the rows whose posting this user doesn't already have,
-   * and a count of the rest. Both insert paths dedup identically, so they
-   * share this - see addLeads for what the two layers are and why.
+   * and a count of the rest. Shared by addLeads and addScreened.
    *
-   * A row is already-known if its canonical URL (see ./url.js) matches a lead
-   * OR a screened row already held by the same *search*: both mean "this run
-   * has met this posting before".
+   * A row is already known if its canonical URL (./url.js) matches a lead or a
+   * screened row anywhere in the same feed group: the track that runs a search
+   * plus the tabs it fills (`fed_by`, migrations/0003_branched_tracks.sql).
+   * Scoped to one track, a posting filed under one tab and sorted into a
+   * sibling tab the next night would read as new and be added twice.
    *
-   * The search, not the track. Those differ for a branched search, where one
-   * run fills several tabs (`fed_by`, see migrations/0003_branched_tracks.sql)
-   * and step 7b decides which tab each finding belongs in. Scoped to the track
-   * alone, a posting filed under one tab yesterday and sorted into a sibling
-   * tab today reads as new, and the run adds it a second time - the same
-   * duplicate this whole filter exists to stop, arriving by a different door.
-   * The prompt already tells such a run to fetch dedup data per key and treat
-   * it as one combined set; this is the server agreeing with it.
+   * Two independent tracks with the same posting still get a row each; a feed
+   * group is one search with several outputs.
    *
-   * Two *independent* tracks tracking one posting are still two rows on
-   * purpose, which is what the UNIQUE constraint has always said. A feed group
-   * is not two searches, it is one search with several outputs, so widening to
-   * the group changes nothing for anyone who isn't running a branched search.
-   *
-   * Rows already accepted from this same batch join the set as it goes, which
-   * is what catches one payload naming the same posting twice.
+   * Rows accepted earlier in the same batch join the set, which catches one
+   * payload naming a posting twice.
    *
    * @param {Array<{search: string, url: string}>} rows
    * @returns {Promise<{fresh: Array<Object>, duplicates: number}>}
@@ -1200,42 +1081,28 @@ export class Db {
   /**
    * Inserts leads not already present for the same (user, search, posting).
    *
-   * Two layers, and they catch different things. `INSERT OR IGNORE` against
-   * `UNIQUE(user_id, search, url)` is the atomic, race-free backstop for a URL
-   * repeated byte-for-byte. The canonical-key filter above it is what catches
-   * the same posting arriving under a *different* URL - a `?gh_jid=` suffix, a
-   * slug, a tracking param - which is how 8 duplicate leads landed in one
-   * night's run on 2026-09-01. See ./url.js for the rule and the evidence.
+   * Two layers. The canonical-URL filter (dropKnownUrls) catches the same
+   * posting under a different URL - a `?gh_jid=` suffix, a slug, a tracking
+   * param; see ./url.js. `INSERT OR IGNORE` against `UNIQUE(user_id, search,
+   * url)` is the race-free backstop for a byte-identical URL.
    *
-   * The filter is a read-then-write, so unlike the constraint it is not
-   * race-free. That is an accepted trade rather than an oversight: a track's
-   * leads are written by exactly one caller, its own nightly run, so two
-   * concurrent inserts for one track do not happen in practice - and the
-   * alternative was a table rebuild to move the UNIQUE constraint onto a
-   * stored key, plus a generated backfill for every existing row. The
-   * constraint still holds the line for the case that actually races.
-   *
-   * Within-batch duplicates are dropped too: one payload carrying the same
-   * posting twice under two URLs is the same mistake as carrying it across two
-   * runs, and INSERT OR IGNORE cannot see it either.
+   * The filter is read-then-write, so it is not race-free. Accepted: a track's
+   * leads are written only by its own nightly run, and the constraint still
+   * covers an identical URL arriving concurrently.
    *
    * Never touches an existing row's status/notes. Two users tracking the same
    * posting are two separate rows, by design.
    *
    * @param {Array<Partial<Lead>>} leads
    * @param {string} [on] the run's local date, used for `found`/`verified`
-   *   when a lead doesn't carry its own - see the note on today() below
+   *   when a lead doesn't carry its own
    * @returns {Promise<{added: number, duplicates: number}>} inserted, and how
    *   many were dropped as already-known
    */
   async addLeads(leads, on) {
-    // The caller's local date when it sent one. The worker only knows UTC, and
-    // a search scheduled in the evening is already the next UTC day - the same
-    // reasoning /api/runs' `on` has always had. Falling back to UTC keeps the
-    // behaviour every existing caller already gets.
-    // Already validated by the caller (validate.js's isoDate), so this only
-    // has to choose between a date and none. Re-validating here would be a
-    // second copy of the rule, and the two would eventually disagree.
+    // Prefer the caller's local date: the worker only knows UTC, and an evening
+    // search is already the next UTC day. The caller validates it (validate.js's
+    // isoDate); don't re-validate here, or the rule has two copies.
     const t = on || today();
 
     const { fresh, duplicates } = await this.dropKnownUrls(leads);
@@ -1276,11 +1143,9 @@ export class Db {
    * Field-whitelist partial update - only keys present in `patch` (as
    * strings) are changed; everything else is left as-is via COALESCE.
    *
-   * `search` is in the list so a lead can be moved between this user's tabs -
-   * the case that turns up when one track is split in two, since a lead's
-   * track is otherwise fixed at the moment the search filed it and there is no
-   * delete route to re-add it through. The caller (handleUpdate) is what
-   * checks the target track exists and catches the UNIQUE(user_id, search,
+   * `search` is writable so a lead can move between this user's tabs, e.g. when
+   * a track is split in two. The caller (routes/update.js's handleUpdate)
+   * checks the target track exists and handles the UNIQUE(user_id, search,
    * url) collision; both are policy, not storage.
    * @param {number|string} id
    * @param {Partial<Lead>} patch
@@ -1292,19 +1157,14 @@ export class Db {
   }
 
   /**
-   * The field-whitelist partial update updateLead and updateApplication both
-   * are. Only keys `patch` carries as strings are written; every other column
-   * is bound null and left where it was by `COALESCE(?, col)`.
+   * The field-whitelist partial update behind updateLead and updateApplication.
+   * Only keys `patch` carries as strings are written; every other column binds
+   * null and `COALESCE(?, col)` keeps it. A non-string value is not a
+   * validation error: it means "leave this column", which is what makes a
+   * patch partial.
    *
-   * That rule is subtler than it looks - a non-string value is not a validation
-   * error here, it is the instruction "don't touch this column", which is what
-   * makes a partial patch partial - so it is worth having stated once rather
-   * than in two places that could come to disagree about, say, whether a number
-   * or an empty string counts.
-   *
-   * Private for the same reason #applicationInsert is: `table` and `fields` are
-   * interpolated straight into SQL, which is safe only because both are this
-   * file's own literals and never a caller's, and `#` is what keeps it that way.
+   * Private: `table` and `fields` are interpolated into SQL, which is safe only
+   * because both are this file's literals, never a caller's.
    *
    * @param {string} table
    * @param {string[]} fields the writable columns, in any order
@@ -1323,26 +1183,17 @@ export class Db {
   }
 
   /**
-   * Every lead this user tracks, in the few columns URL matching and the
-   * delisting policy actually need: `id` and `url` to match on, `status` for
-   * the applied-to check, and the company/title/location that
-   * deleteLeadAndScreen copies onto the screened row it leaves behind.
+   * Every lead this user tracks, in the columns URL matching and delisting
+   * need: `id` and `url` to match on, `status` for the applied-to check, and
+   * the company/title/location deleteLeadAndScreen copies onto its screened row.
    *
-   * Whole table rather than a `WHERE url IN (...)` narrowing, because the match
-   * these callers make is canonicalUrl's (see ./url.js) and that is JS, not
-   * SQL. A SQL `IN` list would be the raw string comparison url.js exists
-   * because of: it would miss the `?gh_jid=` variant of a URL the run reports
-   * and hand back "nothing tracked matches this", which for /api/delist means a
-   * dead posting quietly stays on the board.
+   * Whole table, not `WHERE url IN (...)`: matching uses canonicalUrl
+   * (./url.js), in JS. A raw SQL string match would miss URL variants and
+   * leave a dead posting on the board.
    *
-   * Deliberately not scoped to one track, even though both callers are handed a
-   * track key. A run that fills several tabs fetches dedup data per key and
-   * treats it as one combined already-seen set - the prompt says so in as many
-   * words - so the postings it re-checks are not all in the tab it reports
-   * under. Scoping here would drop those from the match and report them back as
-   * unmatched, which is the signal reserved for the run and the tracker
-   * genuinely disagreeing about what is tracked. A posting is live or dead on
-   * its own terms; which of this person's tabs holds it isn't part of that.
+   * Not scoped to the caller's track: a multi-tab run treats all its tabs'
+   * dedup data as one set, so the postings it re-checks aren't all in the tab
+   * it reports under, and narrowing would wrongly report them as unmatched.
    * @returns {Promise<Array<{id: number, search: string, url: string, status: string, company: string, title: string, location: string}>>}
    */
   async getLeadsForUrlMatch() {
@@ -1357,23 +1208,13 @@ export class Db {
   }
 
   /**
-   * Stamps `verified` on the given leads - the date someone last confirmed
-   * these postings were still live.
+   * Stamps `verified` on the given leads: the date someone last confirmed the
+   * postings were live. A delisted lead is deleted, so for a lead still in a
+   * tab this column is the only answer to "how long since anyone looked?".
    *
-   * Nothing wrote this column between a lead being created and this method
-   * existing: 267 of 279 older leads on the live deployment still read
-   * `verified === found`, because the only thing a run ever reported back about
-   * a posting it re-checked was that it was DEAD. Since delisting started
-   * deleting the row (migrations/0004_drop_lead_delisted_on.sql), a lead still
-   * sitting in a tab is implicitly presumed live, and this column is the only
-   * remaining answer to "how long since anyone actually looked?".
-   *
-   * The stamp is unconditional rather than `MAX(verified, on)`. A date that
-   * moves backwards - a run with a wrong clock, a report replayed late - costs
-   * one extra re-check and nothing else, whereas refusing to move it backwards
-   * would silently swallow a correction and leave the column claiming a posting
-   * was confirmed on a day nobody confirmed it. The value is already validated
-   * as YYYY-MM-DD by the caller; this only decides what to do with a real date.
+   * Unconditional, not `MAX(verified, on)`: a date moving backwards costs one
+   * extra re-check, whereas refusing it would swallow a correction and claim a
+   * confirmation on a day nobody made one. The caller validates `on`.
    * @param {Array<number|string>} ids
    * @param {string} on - YYYY-MM-DD, the run's own local date
    * @returns {Promise<number>} how many rows were actually stamped
@@ -1398,37 +1239,29 @@ export class Db {
   // -------------------------------------------------------- screened --
 
   /**
-   * Same two-layer dedup as addLeads - canonical-key filter over an
-   * INSERT-OR-IGNORE backstop - and for the same reason.
+   * Same two-layer dedup as addLeads.
    *
-   * A URL already tracked as a *lead* is dropped here too, not just one
-   * already screened. A run posting both about one posting is contradicting
-   * itself: step 7 sorts a candidate into tracked-or-screened, a finding, or a
-   * disqualified new one, and those are exclusive. Four such pairs exist in
-   * the live data, and the lead is the row worth keeping.
+   * A URL already tracked as a lead is dropped too, not just one already
+   * screened: the prompt's step 7 sorts each candidate into exactly one of
+   * tracked-or-screened, a finding, or a disqualified new one, so a run
+   * reporting both is contradicting itself, and the lead is the row to keep.
    *
-   * deleteLeadAndScreen does not come through here, so a posting being taken
-   * off the board still gets its screened row while its lead is deleted in the
-   * same transaction.
+   * deleteLeadAndScreen doesn't come through here, so a lead being removed
+   * still gets its screened row.
    *
    * @param {Array<Partial<ScreenedItem>>} items
    * @param {string} [on] the run's local date, for items without their own
    * @returns {Promise<{added: number, duplicates: number}>}
    */
   async addScreened(items, on) {
-    // Already validated by the caller (validate.js's isoDate), so this only
-    // has to choose between a date and none. Re-validating here would be a
-    // second copy of the rule, and the two would eventually disagree.
     const t = on || today();
 
     const { fresh, duplicates } = await this.dropKnownUrls(items);
     if (fresh.length === 0) return { added: 0, duplicates };
 
     const stmt = this.d1.prepare(
-      // added_by is hardcoded 'run' rather than taken from the caller: this
-      // path is POST /api/screened, which exists for a search reporting what
-      // it ruled out. A person removing a posting goes through
-      // deleteLeadAndScreen instead. See migrations/0007_screened_added_by.sql.
+      // added_by is always 'run': this path serves POST /api/screened, a
+      // search's report. A person's removal goes through deleteLeadAndScreen.
       `INSERT OR IGNORE INTO screened (user_id, search, url, company, title, location, reason, date, added_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'run')`
     );
@@ -1449,49 +1282,24 @@ export class Db {
   }
 
   /**
-   * Forget that a posting was ever screened, so it can be found again.
+   * Forget that postings were ever screened, so a later run can find them again.
    *
-   * The counterpart to a mistake. A screened row is a permanent instruction to
-   * every future run to skip a url, and `dropKnownUrls` honours it for leads
-   * too - so a lead wrongly delisted is not merely removed from the board, it
-   * is removed from what any later run is able to rediscover. That is the
-   * right default (it is what stops a rejected posting coming back nightly)
-   * and it is exactly wrong when the row should never have existed.
+   * A screened row tells every future run to skip a url, and dropKnownUrls
+   * applies it to leads too, so a wrongly delisted lead can never be
+   * rediscovered. This is the undo.
    *
-   * It happened, 2026-09-08: a run derived a "confirmed-dead signal" for one
-   * ATS from a sample it had just built, found that the signal split that
-   * sample cleanly, wrote it into the search's doc as reliable, and delisted
-   * ten live postings on it. The strings it keyed on were boilerplate present
-   * in every response from that host, dead or alive. Nothing in the API could
-   * undo it: /api/delist is one-way by design, and the screened rows it wrote
-   * made the same ten postings permanently invisible to rediscovery.
+   * The row is deleted, never flagged: a "screened but ignore" state would need
+   * every reader to honour it. Deleting restores the prior state exactly - the
+   * next run judges the posting on its merits.
    *
-   * So the row goes away entirely rather than being flagged. A "screened but
-   * ignore that" state would need every reader to honour it, and the readers
-   * are the thing being protected from a bad row in the first place. Removal
-   * restores the status quo ante exactly: the next run rediscovers the posting
-   * on its merits, and if it really is dead it gets screened again with a real
-   * reason.
+   * Matched on canonical url (./url.js): the caller works from a report or a
+   * webpage, whose url rarely carries the tracking params it was stored with.
    *
-   * Matched on canonical url (see ./url.js), not the stored string, because
-   * the caller is working from a report or a webpage and the url that comes
-   * back rarely carries the same tracking params it was stored with.
-   *
-   * Scoped to the whole feed group, not one key, and that is load-bearing
-   * rather than tidy. The two writers disagree about which key a screened row
-   * belongs to: handleAddScreened rewrites a fed tab's key to its feeder, so
-   * a run's rejections all land under the feeder - but delistLead writes the
-   * row under the *lead's* own search, and a lead lives in the tab it was
-   * filed into. So a delisted Principal-tab lead leaves a row under the fed
-   * key, which is exactly the row this route exists to remove. Resolving the
-   * caller's key through `fed_by` and deleting from that one search reaches
-   * the first kind and silently misses the second - found the hard way,
-   * recovering 4 of 10 rows and wondering where the rest went.
-   *
-   * Matching the group is also what makes this agree with dropKnownUrls,
-   * which reads screened rows across `groupKeys` when deciding what is
-   * already known. A row it can see is a row this must be able to remove,
-   * or the undo is only sometimes an undo.
+   * Scoped to the whole feed group, because screened rows for one search land
+   * under different keys: handleAddScreened files a run's rejections under the
+   * feeder, but delistLead writes the row under the lead's own tab. The group
+   * is also what dropKnownUrls reads, so every row that hides a posting is
+   * removable here.
    *
    * @param {string[]} searches every key in the feed group
    * @param {string[]} urls
@@ -1515,9 +1323,8 @@ export class Db {
         wanted.delete(key);
       }
     }
-    // Whatever is left in `wanted` matched no screened row. Reported rather
-    // than swallowed: the usual cause is a url that was never screened under
-    // this search, and a silent 0 there looks identical to a successful undo.
+    // Reported rather than swallowed: a silent 0 for a url never screened here
+    // would look the same as a successful undo.
     const unmatched = [...wanted.values()];
     if (hits.length === 0) return { removed: 0, urls: [], unmatched };
 
@@ -1559,16 +1366,12 @@ export class Db {
   }
 
   /**
-   * The prepared INSERT both application-creating paths use, bound and ready
-   * to `.run()` on its own or to drop into a `batch()` alongside other
-   * statements - which is the whole reason this hands back a statement instead
-   * of executing one. See APPLICATION_COLS for what the two paths were doing
-   * before, and why one list is worth the indirection.
+   * The bound INSERT behind both application-creating paths (APPLICATION_COLS).
+   * Returns a statement rather than running it, so it can also join a
+   * `batch()`.
    *
-   * Private so it stays an implementation detail of this class: it interpolates
-   * a column list into SQL, which is only safe because that list is this
-   * file's own constant and never a caller's, and `#` is what guarantees no
-   * caller can ever reach it to try.
+   * Private: it interpolates a column list into SQL, which is safe only
+   * because that list is this file's constant, never a caller's.
    *
    * @param {Partial<Application>} fields
    * @returns {D1PreparedStatement}
@@ -1636,29 +1439,14 @@ export class Db {
   // --------------------------------------------- the overnight fill --
 
   /**
-   * Which applications tonight's run should read, as `{id, link}` and nothing
-   * else - the same deliberate narrowness as getDedupData, and for the same
-   * reason (this lands in a nightly run's context).
+   * Which applications a nightly run should read, as `{id, link}` only: the
+   * result lands in the run's context. Derived from each row's own state;
+   * nothing is queued. See migrations/0009_application_autofill.sql.
    *
-   * Every row is a candidate; nothing is queued, flagged or asked for. Three
-   * conditions, each of them a fact about the row rather than a decision
-   * anyone made about it:
-   *
-   * - `link != ''` - there is something to open.
-   * - `autofill = ''` - it hasn't been looked at. This is the whole job of the
-   *   flag: one look per row, so a posting that can't be read doesn't come
-   *   back every night forever.
-   * - a blank company, role or location - there is something a posting could
-   *   actually supply. An application created from a lead carries all three,
-   *   so it is never fetched for nothing; one pasted in as a URL is missing
-   *   all three, so it is. It also means deploying this doesn't send a run at
-   *   every application already in the database - only at the ones with a gap
-   *   in them.
-   *
-   * The other posting-stated fields (team, setup, comp) are filled when a run
-   * does open a posting, but their absence is not a reason to open one: plenty
-   * of postings never state them, so "still blank" would be a permanent
-   * condition rather than a gap worth a fetch.
+   * `autofill = ''` limits each row to one read, so an unreadable posting
+   * doesn't return nightly. Only a blank company, title or location qualifies
+   * a row; blank team, setup or comp don't, since many postings never state
+   * them and the gap would never close.
    *
    * @returns {Promise<{id: number, link: string}[]>}
    */
@@ -1676,31 +1464,17 @@ export class Db {
   }
 
   /**
-   * Writes what a run read off one posting, and marks the row filled.
+   * Writes what a run read off one posting, and marks the row 'filled'.
    *
-   * Only ever writes into a column that is still empty - same CASE-guarded
-   * shape as setApplicationStatus's date stamp, for a stronger version of the
-   * same reason. A day passes between the row being queued and the run
-   * reading it, and the person may well have filled half of it in by hand in
-   * the meantime; their typing is the better source and must not be
-   * overwritten by a machine's reading of a page.
+   * Fills only columns still empty: the person may have typed values in since
+   * the queue was fetched, and their typing wins. `AND autofill = ''` makes a
+   * row already read, or deleted, match nothing rather than be written twice.
    *
-   * `AND autofill = ''` is the other half of that: a row already looked at,
-   * or deleted since the queue was fetched, matches nothing and comes back to
-   * the caller as unmatched rather than being written to twice.
+   * Marks the row read even when `fields` has nothing usable, or it would
+   * return in every later queue.
    *
-   * Marks the row read even when `fields` carries nothing usable. That is a
-   * posting a run opened and got nothing out of, which is a real (if odd)
-   * outcome, and leaving it unmarked would put it back in tomorrow's queue and
-   * every queue after that - the one thing the flag exists to prevent.
-   *
-   * `fields.note` is the partial-read case, and it is why a filled row has a
-   * note at all: a job board that renders its description client-side still
-   * ships the role and employer in its metadata, so a run can legitimately
-   * come back with two fields and an explanation for the rest. Recording that
-   * as a failure would throw away the fields; recording it as a plain fill
-   * would leave the person wondering why a filled-in row has no location. The
-   * note is shown on the row, the same as a failure's reason.
+   * `fields.note` explains a partial read - some fields found, the rest not -
+   * and is shown on the row like a failure's reason.
    *
    * @param {number|string} id
    * @param {Partial<Application>} fields - only AUTOFILL_FILL_FIELDS and `note` are read
@@ -1729,19 +1503,10 @@ export class Db {
   }
 
   /**
-   * Clears the read flag on rows the caller names, so the next run reads their
-   * postings again. The only way back into the queue, and deliberately not a
-   * retry: nothing here reacts to a row having failed, and no schedule calls
-   * it.
-   *
-   * It exists for one situation - the reader itself got better. A row that
-   * failed under an older set of instructions never really had its first read,
-   * and without this every improvement to the fill could only ever help
-   * postings nobody had looked at yet. That is an operator's judgement about a
-   * change to the code, not something a row's own state should trigger, which
-   * is why it takes ids and has no "everything that failed" mode.
-   *
-   * Chunked like markVerified: D1 caps a statement at 100 bound parameters.
+   * Clears the read flag on the named rows so the next run reads them again.
+   * An operator tool for after the fill's instructions improve, not a retry:
+   * it takes explicit ids, has no "everything that failed" mode, and nothing
+   * calls it on a schedule or in response to a failure.
    *
    * @param {(number|string)[]} ids
    * @returns {Promise<number>} rows actually cleared
@@ -1764,13 +1529,11 @@ export class Db {
   }
 
   /**
-   * Records that a run opened the link and couldn't read it. Final - see the
-   * migration for why a failed read isn't retried.
+   * Records that a run opened the link and couldn't read it. Final: a failed
+   * read isn't retried (migrations/0009_application_autofill.sql).
    *
-   * The note is shown on the row, and is the only thing about the fill that
-   * ever reaches the page: it is the answer to "why is this one still blank",
-   * which without it is indistinguishable from a row that simply hasn't been
-   * read yet. Stored as the run wrote it.
+   * The note is shown on the row; without it a failed row looks like one not
+   * yet read. Stored as the run wrote it.
    *
    * @param {number|string} id
    * @param {string} note - short, human-readable; the person reads this
@@ -1791,12 +1554,9 @@ export class Db {
   // ------------------------------------------------------- composite --
 
   /**
-   * Atomically (one D1 batch/transaction) sets a lead's status and,
-   * optionally, inserts a new application row alongside it - so a lead can
-   * never end up "Applied" with no application because a second, separate
-   * write failed partway. Whether to create one is the caller's decision
-   * (business logic: "Applied" + no existing application yet) - this method
-   * just makes doing both atomic once that decision's been made.
+   * Sets a lead's status and optionally inserts an application, in one D1
+   * batch (transaction), so a lead can't end up "Applied" with no application
+   * after a partial failure. Whether to create one is the caller's decision.
    * @param {number|string} id
    * @param {string} status
    * @param {Partial<Application>|null} newApplicationFields - pass an object to also create an application in the same transaction, or null to just set the status
@@ -1820,54 +1580,31 @@ export class Db {
   }
 
   /**
-   * Atomically (one D1 batch/transaction) deletes a lead and records its URL
-   * in `screened` - the mechanism behind routes/delisting.js's
-   * removeDelistedLead, which owns the decision about when this should happen
-   * at all.
+   * Deletes a lead and records its URL in `screened`, in one D1 batch
+   * (transaction). The callers decide when: routes/delisting.js's delistLead
+   * and routes/leads.js's handleDeleteLeads.
    *
-   * Both halves have to land together, and they fail in opposite directions:
-   * the delete alone leaves a URL nothing remembers, so tomorrow's run
-   * rediscovers it and adds it back as a brand-new lead; the screened row
-   * alone permanently hides a lead that is still sitting in the tab. Hence one
-   * batch rather than two writes.
+   * Both halves land together: the delete alone lets tomorrow's run re-add the
+   * URL as a new lead, and the screened row alone hides a lead still in its tab.
    *
-   * The screened insert is ordered first so that the recoverable direction is
-   * the one a partial failure can take: a screened row with its lead still
-   * present is visible and fixable, a deleted lead is gone. INSERT OR IGNORE
-   * because (user, search, url) is unique and a re-reported posting is a
-   * no-op, not an error.
+   * INSERT OR IGNORE because (user, search, url) is unique and a re-reported
+   * posting is a no-op. The screened row carries company/title/location
+   * because it is all that remains of the lead.
    *
-   * The screened row it leaves behind is all that remains of the lead, so it
-   * carries the company/title/location too, not just the URL - enough to read
-   * later as "this is what was here and when it went".
-   *
-   * Deleting a lead an application points at would strand that row;
-   * removeDelistedLead checks for one (not just for status "Applied", which a
-   * lead carrying an application can be moved out of) and never calls this
-   * when one exists.
+   * Never pass a lead an application points at: deleting it would strand that
+   * row. Both callers check for an application row first, not just for status
+   * "Applied".
    * @param {Lead} lead - the already-fetched row, so this doesn't re-read it
    * @param {string} reason - short human-readable note stored on the screened row
    * @param {string|null} date - YYYY-MM-DD the posting was confirmed dead (the run's own local date), or null for today
-   * @param {'run'|'hand'} addedBy - who removed it. Required rather than
-   *   defaulted: both callers know the answer, and a default would silently
-   *   attribute one to the other the next time a third caller appears. A
-   *   search reporting a posting gone is 'run'; a person clearing it off their
-   *   board is 'hand'. countRunActivity counts only 'run', which is what stops
-   *   a person's pruning being reported as the night's search work - see
-   *   migrations/0007_screened_added_by.sql.
+   * @param {'run'|'hand'} addedBy - 'run' for a search reporting a posting gone,
+   *   'hand' for a person clearing it off their board. Required, not defaulted:
+   *   countRunActivity counts only 'run' (migrations/0007_screened_added_by.sql).
    * @returns {Promise<boolean>} true if the lead row was actually deleted
    */
   async deleteLeadAndScreen(lead, reason, date, addedBy) {
-    // Refused rather than coerced. A ternary picking a fallback here would be
-    // the very default the parameter exists to prevent - a caller that forgets
-    // the argument passes `undefined`, which JavaScript reports as nothing at
-    // all, and its rows would be silently counted as the night's search work.
-    // That is this file's own bug, reintroduced at the one line that promises
-    // it cannot happen. Falling back to '' instead would fail safe but let ''
-    // grow, and 0007 states in writing that it does not.
-    //
-    // Both call sites are in this repo and a test covers the refusal, so this
-    // throws on a programming error rather than on anything a request can do.
+    // Throw rather than default: a fallback would misattribute the rows. Only
+    // a programming error reaches this, never request input.
     if (addedBy !== "run" && addedBy !== "hand") {
       throw new Error(`deleteLeadAndScreen: addedBy must be 'run' or 'hand', got ${JSON.stringify(addedBy)}`);
     }

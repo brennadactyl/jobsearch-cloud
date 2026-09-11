@@ -1,6 +1,6 @@
 ---
 name: job-search-setup
-description: Onboards a person into this job-search tracker (or adds a track to an existing one) - provisions their account, reads their resume(s), asks about desired role tracks/target companies/locations, uploads their resume and per-track baseline doc, posts their search config and page config to /api/config, and registers their scheduled tasks. Use when someone wants to set up this repo for themselves, add a second person to an existing deployment, or add/change a tracked search.
+description: Onboards a person into this job-search tracker (or adds a track to an existing one) - provisions their account, reads their resume(s), asks about desired role tracks and locations, uploads their resume and per-track baseline doc, posts their search config and page config to /api/config, and registers their scheduled tasks. Use when someone wants to set up this repo for themselves, add a second person to an existing deployment, or add/change a tracked search.
 ---
 
 # Job search setup
@@ -160,8 +160,13 @@ the resume where reasonable, then confirm):
 - **Role search line**: the actual titles/seniority to search for (e.g.
   "Senior/Staff Software Engineer, Backend Engineer, or Distributed Systems
   roles").
-- **Target companies**: a starter list is fine - the doc's "Expanded net"
-  section is where the daily search grows the list over time.
+- **Companies**: don't ask for a list. The deployment has one company list,
+  shared by every search and every account, and this track reads it from its
+  first night. If the installer names a company they particularly want
+  searched, check whether it is already there and add it with
+  `.claude/skills/add-target-company/SKILL.md` - and if they name one they
+  never want to see, that is `excluded_companies` in their settings, not a
+  company list of their own.
 - Any **track-specific fit caveat** worth calling out (e.g. a PM track that
   should exclude non-technical PM roles) - optional. Keep this scoped to an
   actual, verifiable mismatch (a skill, language, location, or level the
@@ -254,7 +259,6 @@ step 6 - plus one document:
   | `{{CANDIDATE_PROFILE_PARAGRAPH}}` | The profile paragraph from step 2, as agreed with the installer. |
   | `{{BEST_FIT_SENTENCE}}` | The best-fit-roles sentence from step 2. |
   | `{{RESUME_FILENAME}}` | The resume the profile came from, named in the section heading. |
-  | `{{TARGET_COMPANIES_CORE}}` | The starter company list, comma-separated. The same list seeds coverage in step 6. |
 
 - `{{LOCATION_TIER_ROWS}}`: one Markdown table row per priority tier, e.g.
   `| Top | Seattle, Bellevue, ... - or remote within scope | teal stripe +
@@ -295,13 +299,16 @@ the finished sentence you want the search to read:
 - `role_search_line` - the titles/seniority to search for, as it will appear
   mid-sentence ("Senior/Staff Software Engineer, Backend Engineer, or
   Distributed Systems roles").
-- `target_companies` - a JSON array of names, joined with commas into the
-  prompt. Pass a plain string instead when the list has structure worth
-  keeping ("gaming first (...), then creator platforms (...), then the
-  expanded net in the doc") - it's used as written.
-- `search_note` - anything qualifying that company list. This is where "none
-  of these are industry-only searches, surface any matching role at them"
-  goes.
+- `target_companies` - this search's *strategy* prose: which kinds of
+  employer it favours and why ("gaming first, then creator platforms, then
+  anything with a real engineering org in the scope"). Step 3 of the prompt
+  names it as context beside the companies step 1c hands the run. It is not
+  the list of companies to search - that list is shared and lives in the
+  tracker - so don't write names here expecting them to be searched. Leave it
+  empty when the track has no preference worth stating.
+- `search_note` - anything qualifying how those companies are searched. This
+  is where "none of these are industry-only searches, surface any matching
+  role at them" goes.
 - `resume_line` - the whole "read the resume" instruction: which file, any
   fallback file, and how this track frames that resume. **Name the `.txt`
   from step 2 as the file to read, and say plainly that the binary original
@@ -341,7 +348,7 @@ make these actually filter.
 ### 5. Confirm with the installer
 
 Show the doc you wrote and the config you drafted (or a summary if long)
-before moving on - cheaper to fix a wrong target company or location tier now
+before moving on - cheaper to fix a wrong role line or location tier now
 than after it's pushed live and scheduled.
 
 After step 6 has posted it, fetch the composed prompt and show them that too:
@@ -421,100 +428,39 @@ Posting `tracks` also creates each new track's `search_runs` row, so its tab
 shows "No run recorded yet" until its first scheduled run reports in. That's
 expected on a fresh setup, not a problem to chase.
 
-**Put the starter companies on the list.** There is one company list for the
-whole deployment: every search, every account, reads it, and a name added here
-reaches everybody's searches. Every search rotates through it - a slice per
-night, wrapping - with no switch to set.
+**There is no company list to seed.** One list serves the whole deployment -
+every search, every account, reads the same one - and a new track starts at the
+front of it on its first night. Nothing registers companies for a new person,
+and a per-person list is not a thing that can exist.
 
-Check what is already there before seeding, so a name does not arrive twice
-under a second spelling. `GET /api/coverage/<key>?all=1` returns the whole list
-for any key; `.claude/skills/add-target-company/SKILL.md` step 1 has the
-matching check. The server matches through `normalize()`, so `Cursor
-(Anysphere)` and `Cursor Anysphere` are one company, but a parent and its brand
-are not.
-
-Seed with the new person's own token - a demo account gets 403 on this route:
+Sanity-check that the list is there, with any key:
 
 ```
-curl -s -X POST "$TRACKER_URL/api/coverage" \
-  -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-  -d '{"search":"<key>","on":"","swept":[{"company":"Acme"},{"company":"Globex"}]}'
+curl -s "$TRACKER_URL/api/coverage/<key>?all=1" \
+  -H "Authorization: Bearer $USER_TOKEN" | node -pe '"companies: " + JSON.parse(require("fs").readFileSync(0,"utf8")).total'
 ```
 
-`on: ""` means "register these, nobody has swept them" - it adds the companies
-and leaves every cursor where it is. Names only: a `board` or `endpoint` sent
-with `on: ""` is dropped, because a seed is a list somebody typed and the shared
-fetch facts are things a run confirmed. Those go in later, with a date - see the
-`add-target-company` skill.
+Each run covers `COVERAGE_BATCH` of them - a hard constant of 24 in
+`server/src/routes/coverage.js` - and every company is reached once per cycle
+before any is reached twice, so a 144-company list turns over in about six
+nights. Ignore `batch` in the `?all=1` branch: it reports the whole table's
+length, not the nightly slice.
 
-Never seed with today's date: it claims sweeps that didn't happen, and for any
-company inside the slice that search is currently served it advances that
-search's cursor, skipping everything before it for the rest of the cycle.
+A deployment whose list is empty is the one case worth a word: the first
+deployment ever, before any run has recorded a company. Nothing needs seeding
+there either - step 3b of each nightly run searches outside the list and step 9d
+records what it finds, so the list builds itself from the first night. Say so
+rather than typing names in, and if the installer wants a specific employer on
+it today, use `.claude/skills/add-target-company/SKILL.md`.
 
-The order companies are covered in is not the order you seed them in. Positions
-are assigned once and shuffled, so no company is permanently first or
-permanently last - seeding alphabetically, which is the natural thing to do,
-would otherwise mean the back half of the alphabet is always reached last and
-first to be dropped when a run runs short. `board` is the JSON-board kind where
-one is already known (`greenhouse`, `ashby`, `lever`, `workday cxs`); one fetch
-there covers discovery *and* verification, so it makes a company cheap to
-cover - it doesn't buy it a place in every run, the rotation is the rotation.
-Leave it empty here either way - a run fills it in when it finds one.
-
-`search` names the track whose record the registration is filed under, not who
-gets the companies: the list is shared. Use one of this person's own searching
-tracks; a `fed_by` tab has no search of its own.
-
-**Seed a starting point, not a finished list, and make sure discovery can grow
-it.** The shared list is the only list a run reads, so a deployment whose list never
-gains a company can only ever re-check the names it was born with. Once every
-posting those companies have open is tracked or screened, the search reports
-zero new every night and looks broken while working exactly as configured.
-
-That is a real failure, not a caution: one track was seeded with 36 well-known
-employers and ran for eight days. Every one of its 75 leads came from 12 of
-those 36 - nothing ever entered from outside the seed - and by day six it was
-finding nothing at all. Its doc had a broader-discovery step the whole time. The
-step had nowhere to put what it found, because the doc told it to write names
-into an "Expanded net" prose section that no run reads, while the rotation sat
-untouched at exactly 36.
-
-Note what did *not* cause that. The seed being 36 is the memorable detail and
-the irrelevant one: a rotation that cannot grow goes dry at 12 names and at
-120, it just takes longer to notice, and shrinking the seed would have made
-that track go quiet sooner rather than later. What failed was the write-back -
-discovery had no route into the list a run actually reads. Fix that, and seed
-size becomes an ordinary tradeoff between how fast a cycle turns and how many
-strong names are in it, with no cliff either way.
-
-So when setting a track up:
-
-- **Say the discovery step out loud in the track's doc**, including the
-  non-tech verticals - `templates/tracked-postings.template.md` now carries
-  both, and the rule that a discovered company is recorded with
-  `./tracker swept` rather than only written down.
-- **Make sure discovery can write back, and check that it did.** This is the
-  one that matters. The doc must tell the run to register what it finds with
-  `./tracker swept`, not merely to note the name in prose - the route behind
-  it appends any company handed to it, so a discovered name joins the rotation
-  without jumping the queue. A track whose `total` never moves has a broken
-  discovery step no matter how good its seed was.
-- **Seed as many strong names as you have.** A long list costs a longer cycle,
-  nothing else: the nightly slice is a fixed 24 either way, and every company is
-  reached once per cycle before any is reached twice. This deployment runs 144
-  companies, about six nights a cycle. Prefer a name you can justify over
-  filler, and let discovery supply the rest.
-- **Check the companies arrived.** Re-run the `?all=1` check and look for the
-  names you seeded. `total` is the whole deployment's list and grows from every
-  search's discovery, so a rising total says nothing about this person's seed -
-  the names do.
-
-  Ignore `batch` in that branch: `?all=1` returns the whole table and reports
-  `batch` as its length, so a 144-company list prints `batch: 144`. The real
-  per-run slice is `COVERAGE_BATCH` in `server/src/routes/coverage.js` - a hard
-  constant of 24, applied as `Math.min(COVERAGE_BATCH, eligible.length)`. Drop
-  `?all=1` to see the actual slice. Adding companies lengthens the *cycle*, it
-  does not widen the nightly batch.
+The one thing a track still owes the list is a working way to grow it: the
+track's doc must tell the run to register a company it discovers with
+`./tracker swept`, not to write the name into prose. `templates/tracked-postings.template.md`
+carries that rule and the non-tech verticals already. A track whose doc only
+notes names in prose finds nothing new once the postings its known companies
+have open are all tracked or screened - that happened to a track here, which ran
+eight days, drew all 75 of its leads from the same 12 employers, and was finding
+nothing at all by day six.
 
 If there's no deployment to post to yet, skip this step and tell the
 installer to come back to it (re-running this skill is fine, or they can run

@@ -1,70 +1,60 @@
 # Job Search Tracker API (Cloudflare Worker + D1)
 
-The API-only backend: a small JSON API over a real SQL database (Cloudflare
-D1, which is SQLite), so the headless search CLI can update it with a `curl`
-call and concurrent writes (a search syncing new leads while you're editing a
-status) don't race and silently clobber each other - each row is its own
-database record with its own atomic writes, not one big JSON blob.
+The API-only backend: a JSON API over Cloudflare D1 (SQLite). Every lead,
+application and screened posting is its own row with its own atomic write, so
+a search posting new leads while someone edits a status can't clobber either
+change, and the headless search CLI can update it with a `curl` call.
 
-This worker serves **no HTML** - the tracker webpage is a separate deployable
-at [`../client/`](../client/), served from its own origin (typically
-Cloudflare Pages) and talking to this API cross-origin (CORS is on by
-default, see `src/http.js`). Server and client are versioned, deployed, and
-updated independently - a client redeploy never needs a server redeploy and
-vice versa, as long as both are compatible with the API described below.
+This worker serves **no HTML**. The tracker webpage is
+[`../client/`](../client/), a separate Worker serving static assets from its
+own origin and calling this API cross-origin (CORS is on, see `src/http.js`).
+Server and client deploy independently, as long as both match the API below.
 
-No personal data lives in this repo - the actual data (company names, URLs,
-your notes) lives only in D1 once deployed.
+No personal data lives in this repo - it lives only in D1 once deployed.
 
 One deployment holds **any number of people's job searches**. Every row
 carries a `user_id`, and every request is scoped to whoever's token made it,
-so two people share a worker and a database while seeing entirely separate
-tracks, leads, applications, page titles and location rules.
+so people sharing a worker and a database see entirely separate tracks,
+leads, applications, page titles and location rules.
 
 ## Code layout
 
-- `src/index.js` - the entry point, and nothing else: the CORS preflight
-  (`OPTIONS`), resolving the caller's session once up front, building the one
-  `Db` scoped to that person, and dispatching to the route table. It knows
-  about no individual endpoint.
+- `src/index.js` - the entry point: the CORS preflight (`OPTIONS`), resolving
+  the caller's session, building the one `Db` scoped to that person, and
+  dispatching to the route table. It knows about no individual endpoint.
 - `src/routes/index.js` - the route table: which method and path map to which
   handler, in two lists split by whether the caller is known yet. Adding an
   endpoint is one line here plus one exported function in the module beside
   it.
 - `src/routes/*.js` - one module per resource (`leads.js`, `applications.js`,
   `screened.js`, `config.js`, `coverage.js`, `runs.js`, `prompt.js`,
-  `data.js`, `accounts.js`, `admin.js`, `update.js`, `delisting.js`). Each
-  holds its endpoints' parsing, validation and response shaping, and each
-  endpoint's contract is documented on its own handler. No D1 access of their
-  own - every one is handed a `Db`.
+  `data.js`, `documents.js`, `accounts.js`, `admin.js`, `update.js`,
+  `delisting.js`). Each holds its endpoints' parsing, validation and response
+  shaping, with each endpoint's contract documented on its handler. None
+  touches D1 - every one is handed a `Db`.
 - `src/http.js` - every `Response` this worker builds: `json()`, `text()`, the
   two canned refusals, and `CORS_HEADERS` on all of them. Route modules never
-  construct a `Response` themselves, which is what keeps the header on the
-  error replies too.
+  construct a `Response` themselves, or their error replies lose the CORS
+  header.
 - `src/validate.js` - the checks more than one route makes: `isoDate`, the
-  unknown-track refusals, the exclusion matcher.
+  unknown-track refusals, the exclusion matcher, `isDocumentPath`.
 - `src/auth.js` - passwords (PBKDF2 via Web Crypto), session tokens, and
   looking a bearer token up to a user. The only file that touches either.
 - `src/db.js` - all D1 access for a person's own data. Every instance is
   bound to one user id at construction, so no query can forget to filter.
 - `src/r2.js` - all R2 access for their documents: resumes, and the per-track
-  baseline doc the nightly search reads and edits. Scoped the same way `db.js`
-  is - every key is prefixed with the owner's id at construction, so no method
-  can address another person's object. An object's key is
-  `<user-id>/<relative path>`, and there is no table beside it: `kind` is the
-  first path segment and R2's own `list()` returns the rest.
+  baseline doc the nightly search reads and edits. Every key is prefixed with
+  the owner's id at construction, so no method can address another person's
+  object. A key is `<user-id>/<relative path>`, with no table beside it: `kind`
+  is the first path segment and R2's own `list()` returns the rest.
 - `src/prompt.js` - composes the two prompts the scheduled runs execute:
   `buildSearchPrompt`, one track's daily search, from that track's config; and
   `buildAutofillPrompt`, the nightly fill for applications logged as a bare
-  URL, which takes no arguments because it is the same text for everybody.
-- `verify-local.mjs` - the cross-user isolation checks, run against a local
-  `wrangler dev`. `verify-migration.mjs` - what `0002` does to a database that
-  already has data. `verify-schema-doc.mjs` - that `../docs/schema.md` matches
-  what the migrations build; CI runs it. See [Verifying](#verifying-a-change)
-  below.
-- `migrations/` - `0001_schema.sql` creates every table; `0002_multi_user.sql`
-  adds accounts and gives every table an owner. See below. The tables all of
-  them add up to are described in [`../docs/schema.md`](../docs/schema.md).
+  URL, which is the same text for everybody.
+- `verify-local.mjs`, `verify-migration.mjs`, `verify-schema-doc.mjs` - the
+  checks to run before a deploy. See [Verifying a change](#verifying-a-change).
+- `migrations/` - the numbered schema migrations. What they build, table by
+  table, is [`../docs/schema.md`](../docs/schema.md).
 
 ## One-time setup
 
@@ -93,11 +83,10 @@ Please enable R2 through the Cloudflare Dashboard. [code: 10042]
 
 To enable it: **[dash.cloudflare.com](https://dash.cloudflare.com/) → R2 Object
 Storage** (under **Storage & databases**) **→ Overview**, then complete the
-checkout flow to add an R2 subscription. It is a subscription with a free
-allowance rather than a paid plan - 10 GB of storage, 1 million writes and 10
-million reads a month, and no egress charges - so Cloudflare wants billing
-details on file, but this deployment's documents run to about a megabyte and
-stay inside the free tier by three or four orders of magnitude.
+checkout flow to add an R2 subscription. Cloudflare wants billing details on
+file, but the subscription has a free allowance - 10 GB of storage, 1 million
+writes and 10 million reads a month, no egress charges - and this deployment's
+documents run to about a megabyte.
 
 Confirm it took (in PowerShell, `npx.cmd` - see the note above):
 
@@ -107,11 +96,10 @@ npx wrangler r2 bucket list
 
 An empty list is the answer you want. The 10042 above means it did not take.
 
-If you would rather not enable R2 at all, the tracker still runs without it:
-every other endpoint works, and the four `/api/documents` routes answer 503
-saying documents are not configured. What you lose is the document store - the
+Without R2 the tracker still runs: every other endpoint works, and the four
+`/api/documents` routes answer 503 saying documents are not configured. The
 searches then need their baseline docs and resumes on the machine that runs
-them, which is where they lived before.
+them.
 
 ### Quick deploy (recommended)
 
@@ -123,20 +111,19 @@ Cloudflare's own environment.
 1. Click the button, sign in to Cloudflare (creates a free account if you
    don't have one), and accept the defaults on the setup page it shows you.
 2. It forks this `server/` directory into a new repo in your own GitHub, and
-   reads `wrangler.toml` to auto-provision both a D1 database and the R2
-   documents bucket for you (filling in the `database_id` for you - nothing to
-   paste in by hand). `package.json`'s `deploy` script (`wrangler d1 migrations
-   apply DB --remote && wrangler deploy`) runs the schema migrations and
-   deploys in one step.
+   reads `wrangler.toml` to auto-provision a D1 database (filling in
+   `database_id` for you) and the R2 documents bucket. `package.json`'s
+   `deploy` script (`wrangler d1 migrations apply DB --remote && wrangler
+   deploy`) runs the schema migrations and deploys in one step.
 
    The bucket is only auto-provisioned if you enabled R2 first - see above.
    Skip that and this step is where it fails.
 3. It lands you on your new Worker's dashboard. Go to **Settings → Variables
    and Secrets** and add a secret named `ADMIN_TOKEN` - any long random value
    you pick (a password generator, or `-join ((48..57)+(97..122)|Get-Random
-   -Count 40|%{[char]$_})` in PowerShell, works fine). This is done through
-   the dashboard UI, no CLI needed. It is **not** a login: it's the operator
-   credential that creates accounts and resets passwords, nothing else.
+   -Count 40|%{[char]$_})` in PowerShell). It is **not** a login: it's the
+   operator credential that creates accounts and resets passwords, nothing
+   else.
 4. Your Worker's URL is shown on that same dashboard page (something like
    `https://job-search-tracker.<your-subdomain>.workers.dev`). You'll need it
    for the client (see [`../client/README.md`](../client/README.md)) and in
@@ -169,18 +156,17 @@ Cloudflare's own environment.
    ```bat
    wrangler r2 bucket create job-search-tracker-docs
    ```
-   Unlike D1 there is no id to paste - `wrangler.toml` binds it by name, so
-   this only has to match. If it errors with `[code: 10042]`, R2 is not enabled
-   on the account yet; see "First: turn on R2" above.
+   There is no id to paste - `wrangler.toml` binds it by name, so the name
+   must match. `[code: 10042]` means R2 is not enabled on the account yet; see
+   [First: turn on R2](#first-turn-on-r2).
 
 5. **Apply the schema:**
    ```bat
    wrangler d1 migrations apply job-search-tracker-db --remote
    ```
-   Every table, no seed data, and no accounts. Your tracks, page title and
-   priority locations are set later via `/api/config` (the `job-search-setup`
-   skill does it), so the page is deliberately empty until then rather than
-   pre-filled with someone else's job search.
+   Every table, no seed data, and no accounts. Tracks, page title and priority
+   locations are set later via `/api/config` (the `job-search-setup` skill
+   does it); the page is empty until then.
 
 6. **Set the admin token.** This creates accounts and resets passwords; it is
    not a login and nothing else accepts it. Pick a long random value:
@@ -206,21 +192,14 @@ Cloudflare's own environment.
 
 ## Accounts
 
-There is no sign-up page, and deliberately so: this is a handful of people
-who know each other, not a service. Accounts are created by whoever operates
-the deployment, using the `ADMIN_TOKEN` secret.
+There is no sign-up page. Whoever operates the deployment creates accounts
+with the `ADMIN_TOKEN` secret.
 
-**Changing a password is not an operator job, though.** Anyone signed in can
-change their own from the tracker page (click "Signed in as ..." in the header),
-which posts `/api/password` with their current password alongside their
-session. That route is the only one that sets a password without the admin
-secret, and it is deliberately narrow - see [Changing your own
-password](#changing-your-own-password) below. The admin path stays for the two
-cases it is actually for: making an account, and resetting a password nobody
-knows any more.
+Anyone signed in changes their own password from the tracker page - see
+[Changing your own password](#changing-your-own-password). The admin path is
+for new accounts and forgotten passwords.
 
-**Create someone (or reset their password)** - same call either way, because
-nothing else in the system can hash a password:
+**Create someone (or reset their password)** - the same call either way:
 
 ```bash
 curl -s -X POST "$TRACKER_URL/api/users" \
@@ -229,10 +208,10 @@ curl -s -X POST "$TRACKER_URL/api/users" \
 ```
 
 Returns `{"id": "<guid>", "name": "...", "created": true|false}`. The id is
-what every row of theirs is keyed by; it never changes, so a password reset
+what every row of theirs is keyed by and never changes, so a password reset
 or a rename leaves their data alone. Passwords must be at least 12
-characters - `/api/login` has no rate limiting in front of it, so length is
-the whole defence (see [Security](#security-notes)).
+characters - `/api/login` has no rate limiting, so length is the whole
+defence (see [Security](#security-notes)).
 
 **Sign in** - the webpage does this for them. Do it by hand once per machine
 that runs their searches, to mint the long-lived token for the scheduled
@@ -245,43 +224,24 @@ curl -s -X POST "$TRACKER_URL/api/login" -H "Content-Type: application/json" \
 
 Returns `{"token": "...", "user": {...}}`. Put that token, with the worker
 URL, in `<data dir>/<their id>/tracker.json` (see
-[`../private.example/README.md`](../private.example/README.md)). The password
-itself never goes on disk.
+[`../private.example/README.md`](../private.example/README.md)). Never put the
+password itself on disk.
 
 ### Changing your own password
 
-Signed in, from the page. `POST /api/password` takes `currentPassword` and
-`newPassword`, and it requires both the session and the current password.
+Signed in, from the page: click "Signed in as ..." in the header. It posts
+`POST /api/password` with `currentPassword` and `newPassword`, and needs the
+current password as well as the session.
 
-**The session token alone is deliberately not enough.** A token copied off a
-shared machine already reads and writes that person's data, which is bad and
-recoverable - they can sign out everywhere. If the same token could set the
-password, it would turn that into "someone has your account and you don't",
-which is not recoverable without the operator.
+Other sessions survive the change, including the scheduled search's token in
+`tracker.json` - revoking it would stop that person's nightly search without
+any error. `signOutOthers: true` revokes only this person's other browser
+sessions (label `browser`), never the one making the request.
 
-**Sessions survive it by default**, the same promise `POST /api/users` makes.
-The one that matters is the long-lived token a scheduled search keeps in
-`tracker.json`: a password change that revoked it would stop that person's
-nightly search silently, and a search that never fired looks exactly like one
-that found nothing, so they would find out weeks later from an empty tab.
+### Revoking and listing sessions
 
-`signOutOthers: true` is the opt-in for when that isn't what you want - you
-are changing it *because* something is wrong. It revokes only sessions
-labelled `browser`, and not the one making the request. That filter is an
-allowlist of what may be revoked rather than a denylist of what must be
-spared, on purpose: written the other way round, any credential someone later
-labels something else - a second machine, a script - would die the first time
-anybody changed their password. An unrecognised label is kept, so the worst
-case is a session that should have gone and didn't, which they can see and log
-out of.
-
-This is the first thing to use `sessions.label` the way it was added to be
-used: revoking a credential by what it is rather than by guessing which opaque
-string is which.
-
-**Revoke one credential.** `label` is why sessions are worth having: a
-browser signing out kills only its own token, and you can drop a leaked
-scheduled-search token without disturbing anyone's browser.
+**Revoke one credential.** Sessions are labelled, so a leaked scheduled-search
+token can be dropped without signing out anyone's browser:
 
 ```bash
 wrangler d1 execute job-search-tracker-db --remote \
@@ -289,8 +249,7 @@ wrangler d1 execute job-search-tracker-db --remote \
 ```
 
 **See who exists, and what they hold.** `sessions.id` is a SHA-256 of the
-token, not the token, so this (and a `d1 export`) shows what exists without
-handing out anything usable:
+token, not the token, so this (and a `d1 export`) hands out nothing usable:
 
 ```bash
 wrangler d1 execute job-search-tracker-db --remote \
@@ -298,224 +257,102 @@ wrangler d1 execute job-search-tracker-db --remote \
 ```
 
 Sessions have no expiry and nothing prunes them, so a person who signs in
-from a lot of browsers accumulates rows. Harmless, but that's the query to
-notice it with, and a `DELETE FROM sessions WHERE user_id = '<guid>'` signs
-that person out everywhere.
+from many browsers accumulates rows. `DELETE FROM sessions WHERE user_id =
+'<guid>'` signs that person out everywhere.
 
 ## Updating after code changes
 
 **Always deploy from `main`, never from a feature branch or worktree** -
-merge/fast-forward `main` and push first, then deploy from a checkout that's
-actually on `main`. `wrangler deploy` and `wrangler d1 migrations apply
---remote` both push whatever's on disk live regardless of git branch, so
-deploying from a branch leaves the live Worker running code that isn't in
-`main`'s history.
+merge `main` and push first, then deploy from a checkout on `main`.
+`wrangler deploy` and `wrangler d1 migrations apply --remote` push whatever is
+on disk, so a branch deploy leaves the live Worker running code that isn't in
+`main`'s history. Run the [checks](#verifying-a-change) first.
 
 ```bat
 cd server
 wrangler deploy
 ```
 
-### Migrating an existing deployment to multi-user
+### Schema changes
 
-`0002_multi_user.sql` gives every table an owner and replaces the old shared
-`API_TOKEN` with accounts.
+Schema changes are numbered migrations in `migrations/`. Wrangler records
+which have run, so `apply` executes only new ones. Write one by following
+[`../.claude/skills/add-d1-migration/SKILL.md`](../.claude/skills/add-d1-migration/SKILL.md).
+What the migrations build is [`../docs/schema.md`](../docs/schema.md) - update
+it in the same change.
 
-> **The window between migrating and deploying is not safe, and it fails
-> quietly.** Once the migration has run, the *old* Worker code is talking to
-> the *new* schema, and its writes don't work: `INSERT OR IGNORE` into `leads`
-> and `screened` no longer matches the new UNIQUE constraint, so it inserts
-> nothing and returns `{"added": 0}` - a success-shaped response a scheduled
-> search will happily report a clean run on, having thrown away everything it
-> found that morning. `/api/runs` and any status edit 500 outright, and an
-> application added by hand lands with an empty `user_id` and is invisible
-> afterwards. So: **disable the scheduled tasks first, and do steps 2-5 back
-> to back**, outside every track's `schedule_time`.
+**Never edit a migration that has been applied.** Wrangler skips it, so the
+change silently never lands.
 
-1. **Back up first.** `wrangler d1 export job-search-tracker-db --remote
-   --output backup.sql`. Then stop the searches for the duration:
-   ```powershell
-   Get-ScheduledTask -TaskName "JobSearch-*" | Disable-ScheduledTask
-   ```
-2. `wrangler d1 migrations apply job-search-tracker-db --remote` - creates
-   `users`/`sessions` and assigns every existing row to one account named
-   `owner`, with login disabled (SQL can't hash a password).
-3. `wrangler secret put ADMIN_TOKEN` - a fresh value, not the old `API_TOKEN`.
-4. Keep the running searches authenticating by turning the token they already
-   have into a session. `sessions.id` holds the SHA-256 of a token, not the
-   token, so insert the hash:
-   ```powershell
-   $t = "<the current API_TOKEN value>"
-   $h = [Convert]::ToBase64String([System.Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($t)))
-   wrangler d1 execute job-search-tracker-db --remote --command "INSERT INTO sessions (id, user_id, created_at, label) VALUES ('$h', 'ab266b6c-00cc-45d1-92ac-cdad412c1558', date('now'), 'legacy scheduled search')"
-   ```
-   Nothing on the search machine changes - it keeps sending the same token -
-   and the credential stays revocable by deleting that one row later.
-5. `wrangler deploy`, then deploy the client. **Leave the tasks disabled** -
-   they have nothing to run yet. The migration copies no search config, so
-   until step 8 each track exists for the webpage but not for searching.
-   `/api/prompt` returns a 409 for a track in that state rather than
-   composing a prompt out of its generic fallbacks, so a run started early
-   fails loudly instead of searching for nothing in particular and reporting
-   success - but there's no reason to make it fail at all.
-6. Give the account a real name and password. **The two names must match** -
-   `POST /api/users` with a name that doesn't match an existing account
-   creates a new empty one rather than setting the password on this one.
-   (Case doesn't matter: `users.name` is `COLLATE NOCASE`.)
-   ```bash
-   wrangler d1 execute job-search-tracker-db --remote \
-     --command "UPDATE users SET name = 'Your Name' WHERE name = 'owner'"
-   curl -s -X POST "$TRACKER_URL/api/users" -H "Authorization: Bearer $ADMIN_TOKEN" \
-     -H "Content-Type: application/json" -d '{"name":"Your Name","password":"..."}'
-   ```
-   Check it returned `"created": false`. If it says `true`, the names didn't
-   match and you now have a second, empty account - delete it and retry.
-   Then sign in on the webpage.
-7. Delete the old `API_TOKEN` secret - its value now works only as that
-   session row.
-8. Move each track's search config into D1 and retire the prompt files. Post
-   the config (the `job-search-setup` skill does this), then **diff before
-   deleting anything**: `curl -s "$TRACKER_URL/api/prompt/<key>" -H
-   "Authorization: Bearer <token>"` against the `.md` it replaces. Expect
-   only wording normalizations; anything else means config is missing.
-9. Move the data folder to `private\<user-id>\`, write its `tracker.json`
-   (see [`../private.example/README.md`](../private.example/README.md)), then
-   re-register the schedule and re-enable it:
-   ```powershell
-   .\scripts\setup-scheduler.ps1
-   Get-ScheduledTask -TaskName "JobSearch-*" | Enable-ScheduledTask
-   ```
-   **Then unregister the old, pre-migration tasks.** They're named
-   `JobSearch-<Track>` where the new ones are `JobSearch-<user>-<Track>`, so
-   nothing replaces them and nothing cleans them up - left alone, each track
-   would run twice a day, once through each task:
-   ```powershell
-   Get-ScheduledTask -TaskName "JobSearch-*" |
-     Where-Object { $_.TaskName -notmatch '^JobSearch-.+-' } |
-     Unregister-ScheduledTask -Confirm:$false
-   ```
-10. Confirm a real run works end to end before trusting the schedule:
-    `.\scripts\run-search.ps1 -Task <key> -User <user-id>`, then check the log
-    and that the track's tab reports the run.
+A schema or API change only requires redeploying `server/`; `client/` needs a
+redeploy only if it uses the new field or route. Keep the API additive (new
+optional fields, new routes) where you can, so old clients don't break
+against a newer server, and note any breaking change in the commit and in the
+API section below.
 
-**If it goes wrong**, the recovery is the step-1 export: `wrangler d1 execute
-job-search-tracker-db --remote --file backup.sql` against a database you've
-dropped the tables from, or re-create the D1 and import there. There is no
-down-migration - `0002` drops and recreates five tables, and a partially
-applied run is not something to unpick by hand.
+## API
 
-### The schema files
-
-The base schema lives in one file, `migrations/0001_schema.sql`, which
-creates every table a fresh database needs in a single pass and seeds
-nothing. It replaced a seven-file migration history that had accumulated
-around one bad early migration - since there has only ever been one
-deployment, no database needed those files to reach the current state, and
-collapsing them fixed a real bug that had made setting up a fresh database
-impossible. Anything that consulted the old numbered files (`0004_add_lead_delisted.sql`
-and friends, referenced from code comments) now points here.
-
-Schema changes from here are still tracked migrations - Wrangler records
-which files have run, so `apply` is always safe to re-run, executing only
-what it hasn't seen. To add one:
-```bat
-cd server
-wrangler d1 migrations create job-search-tracker-db <short-name>
-```
-Edit the generated file - using real `ALTER TABLE` statements - then apply it
-the same way as step 4 above:
-```bat
-wrangler d1 migrations apply job-search-tracker-db --remote
-```
-Update [`../docs/schema.md`](../docs/schema.md) in the same change.
-
-**Do not add a column by editing `0001_schema.sql`.** Against any database
-that has already run it, an edit there does nothing at all: Wrangler skips
-files it has already applied, and `CREATE TABLE IF NOT EXISTS` is a no-op
-against a table that exists, so the column silently never appears while the
-file claims otherwise. That exact trap is what produced the history this file
-replaced.
-
-A schema/API change only requires redeploying `server/` - `client/` doesn't
-need a redeploy unless it also needs to use the new field/route. Keep the API
-additive (new optional fields, new routes) where you can, so old clients
-don't break against a newer server; note any breaking change clearly in the
-commit and in this README's API section below.
-
-
-## API (used by the search scripts, see ../private.example/README.md, and by the client, see ../client/)
+Used by the search scripts (see
+[`../private.example/README.md`](../private.example/README.md)) and by the
+client ([`../client/`](../client/)).
 
 Every route except the three marked otherwise needs `Authorization: Bearer
 <session token>`, and every one of them is **scoped to whoever that token
 belongs to**. There is no user id in any request: another person's lead id,
-application id or track key simply doesn't resolve, and comes back as a 404.
+application id or track key doesn't resolve, and comes back as a 404.
 
 ### Auth
 
-- `POST /api/login` - **no auth** - body `{ name, password, label? }` -> `{ token, user: { id, name } }`, or `401` for both a wrong password and an unknown name (told apart, they'd enumerate who has an account). `label` records what the token is for (`"browser"`, `"scheduled-search"`) so it can be revoked by purpose later; defaults to `"browser"`. Tokens don't expire - the shared token they replaced didn't either, and a headless search that had to re-authenticate on a schedule would be a new failure mode for no gain.
-- `POST /api/logout` - revokes **only the token that made the request**, so signing out of a browser leaves the scheduled search's credential alone.
-- `POST /api/users` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ name, password, demo? }` -> creates an account with a fresh GUID, or sets an existing name's password (`201` vs `200`, `{id, name, created, demo}`). Doubles as password reset because nothing else can run PBKDF2. Minimum 12 characters. `demo: true` marks an account whose data is invented, which `POST /api/coverage` then refuses; omitted, a new account is a person and an existing one keeps what it was. See [Accounts](#accounts).
-- `POST /api/password` - body `{ currentPassword, newPassword, signOutOthers? }` -> `{ ok, signedOut }`. Changes the caller's own password. Requires the current one as well as the session - see [Changing your own password](#changing-your-own-password) for why the token alone is not enough. `403` for a wrong current password, `400` for a new one under 12 characters or identical to the old. Those are told apart in the reply, unlike `/api/login`'s deliberately ambiguous refusal: there is nothing to withhold from a caller already authenticated as this person, and the two need different corrections. Sessions survive by default; `signOutOthers: true` revokes only this person's other `browser`-labelled sessions and reports how many, never the scheduled search's. Absent, it defaults to false, so a scripted caller never gets a revocation it did not ask for.
+- `POST /api/login` - **no auth** - body `{ name, password, label? }` -> `{ token, user: { id, name } }`, or `401` for both a wrong password and an unknown name (keep them indistinguishable, or the reply enumerates accounts). `label` records what the token is for (`"browser"`, `"scheduled-search"`) so it can be revoked by purpose; defaults to `"browser"`. Tokens don't expire.
+- `POST /api/logout` - revokes **only the token that made the request**.
+- `POST /api/users` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ name, password, demo? }` -> `{ id, name, created, demo }`: creates an account with a fresh GUID (`201`), or sets an existing name's password (`200`), which makes it the password reset too. Minimum 12 characters. `demo: true` marks an account whose data is invented, which `POST /api/coverage` then refuses; omitted, a new account is a person and an existing one keeps what it was. See [Accounts](#accounts).
+- `POST /api/password` - body `{ currentPassword, newPassword, signOutOthers? }` -> `{ ok, signedOut }`. Changes the caller's own password; needs the current password as well as the session. `403` for a wrong current password, `400` for a new one under 12 characters or identical to the old. Other sessions survive unless `signOutOthers: true`, which revokes only this person's other `browser`-labelled sessions and reports how many in `signedOut`. See [Changing your own password](#changing-your-own-password).
 - `GET /api/me` -> `{ id, name }` - who this token belongs to.
 
 ### Data
 
-- `GET /api/data` - returns `{ user, updated, leads[], applications[], screened[], tracks[], settings }` - everything the page renders, for this person only. `user` is `{id, name}`, so the page can say whose search it's showing.
-- `POST /api/leads` - body `{ "on": "YYYY-MM-DD", "leads": [ {search, company, title, location, url, fit, team, setup, comp} ] }` - appends only leads whose *posting* this user doesn't already have. Two layers of dedup: a canonical-URL match (see `src/url.js`) over the DB-enforced `UNIQUE(user_id, search, url)`, so the same posting arriving under a different URL - a `?gh_jid=` suffix, a slug, a tracking param - is caught as well as a byte-identical repeat. The scope is the *search*, not the tab: a branched run filling several tabs cannot file one posting into two of them, while two independent tracks each holding it stay two rows. Companies on `excluded_companies` are dropped here rather than trusted to the prompt. `on` is the caller's local date and is what `found`/`verified` are stamped with, so a posting doesn't need to repeat a date on every row. Never touches existing status/notes. Two people tracking the same posting are two independent rows. `team`/`setup`/`comp` are optional (omit rather than send empty) and only meaningful when the posting states them - other Details fields (referral, resume, lastContact, nextAction*, link) are accepted too but are user-entered only, never sent by the search scripts. Every distinct `search` in the payload must name one of your configured tracks - a fed tab counts, since a branched run legitimately files into one - and an unknown key gets a 404 naming it with **nothing inserted**, not even the rows whose key was fine: a half-applied payload leaves the run reporting rows it never filed, and treating those postings as already saved. This used to accept any string, which is how 145 leads accumulated under a retired key with no tab left to display them. Responds `{added, duplicates, excluded}`.
-- `POST /api/screened` - body `{ "search": "SWE", "on": "YYYY-MM-DD", "screened": [ {search, url, company, title, location, reason} ] }` - records a posting the search looked at and decided NOT to add as a lead (dead-on-arrival, out of scope, wrong level, duplicate), so the next run's dedup check skips it without re-verifying. Same canonical dedup and exclusion handling as `/api/leads`. Rows are filed under the search that did the screening: for a branched run the `search` is rewritten to the track that owns the search, since nothing displays screened rows per tab. **Send `on`** - it is the date these rows carry, and `/api/runs` counts a day's screened rows by it, so omitting it on an evening run stamps them with the worker's UTC date (already tomorrow) and the run records having screened nothing. `reason` is free text with one reserved value: `"posting taken down"` is the server's own marker for a delisted lead and is rewritten if a caller sends it, so an ordinary screening can't be counted as a delisting. Same configured-track check as `/api/leads` - unknown key, 404, nothing inserted - and it is applied to the `search` the caller sent, before the `fed_by` rewrite, because the string a drifted prompt gets wrong is the one it sent. Responds `{added, duplicates, excluded}`.
-- `POST /api/runs` - body `{ "search": "SWE", "status": "ok"|"error", "on": "YYYY-MM-DD", "note": "..." }` - records that one track's scheduled search just finished. **Called at the end of every run, including runs that found nothing** - that's the whole point: a run that finds nothing writes no leads, no screened rows and no `updated` bump, so without this a search that quietly stopped firing is indistinguishable from a genuine zero-result day. **The counts are not supplied by the caller.** `leadsAdded`, `screenedAdded` and `delisted` are derived from the rows themselves (`db.countRunActivity`) - counted per track from that track's own rows on that date - because a run that had to tally them itself got them wrong: one multi-tab run reported its four tabs' combined total against a single tab and left the other three with no record at all. They are still accepted in the body and ignored, so a run part-way through a night on an older prompt keeps recording correctly. One POST also writes a record for **every tab this run feeds** (`fed_by`), which is what stops a branched search's other tabs reading as never-run; the response is `{ok, run, also}`, where `also` carries those extra records. `on` is the caller's *local* date (the worker only knows UTC, and a morning run is already the next UTC day) and is the date the counts are taken on; `status: "error"` marks a run that couldn't do its job, which the client surfaces as a warning. 404s on a `search` that isn't one of *this person's* configured tracks.
-- `POST /api/update` - body `{ "type": "lead", "id": ..., "status": "...", "notes": "...", "search": "..." }` or `{ "type": "application", ... }`. All fields are optional per call, and all but one are plain field writes. **`delistedOn` is the exception: the server acts on it rather than storing it.** A scheduled search sending `delistedOn` is reporting that a posting it tracks is gone from the internet; what the tracker does about that is decided in `routes/delisting.js`'s `removeDelistedLead`, not by the caller - a lead that hasn't been applied to is deleted and its URL written into `screened` in one transaction (so tomorrow's run doesn't rediscover it and add it straight back), and a lead an application row points at (normally one marked "Applied") is kept untouched, because what's tracked from then on is the application rather than whether the listing outlived it. The response says which happened: `{"removed": true, "screened": "<url>"}` or `{"removed": false, "lead": {...}}`; `removed` is what the DELETE actually matched, so a second report of the same lead comes back `false`. `delistedOn` must be a `YYYY-MM-DD` date - anything else is a 400, because what it triggers is a permanent delete and a value that isn't a date isn't a report of anything. **The report can't be undone.** The lead row is gone and its URL sits in `screened`, which the next run skips, so a posting reported dead by mistake does not come back on its own - putting it back means deleting the `screened` row and re-adding the lead by hand. (`"delistedOn": ""` is still accepted and ignored - there is no stored delisted state left to clear - but nothing instructs a run to send it.) A lead also accepts `search`, which **moves it to another of this person's tabs** - the case that comes up when one track is split in two and the leads the old search already filed need re-filing. It 404s on a track key this person doesn't have and 409s when the destination tab already holds that url (`UNIQUE(user_id, search, url)`); a `delistedOn` report is the only thing that deletes a lead, so a move is how a mis-filed one gets where it belongs.
+- `GET /api/data` -> `{ user, updated, leads[], applications[], screened[], tracks[], settings }` - everything the page renders, for this person only. `user` is `{id, name}`.
+- `POST /api/leads` - body `{ "on": "YYYY-MM-DD", "leads": [ {search, company, title, location, url, fit, team, setup, comp} ] }` -> `{ added, duplicates, excluded }`. Appends only postings this person doesn't already have under that search. Dedup matches the canonical URL (`src/url.js`) as well as `UNIQUE(user_id, search, url)`, so a `?gh_jid=` suffix, a slug or a tracking param is still a duplicate. Dedup is per search, not per tab: a branched run can't file one posting into two of its tabs, while two independent tracks each keep their own row. Companies on `excluded_companies` are dropped. `on` is the caller's local date and stamps `found`/`verified`. Never touches an existing row's status or notes. `team`/`setup`/`comp` are optional - omit them unless the posting states them. Other Details fields (referral, resume, lastContact, nextAction*, link) are accepted but are for the person to enter; search scripts don't send them. Every distinct `search` must be one of this person's configured tracks (a fed tab counts); an unknown key is a 404 naming it, and nothing in the payload is inserted.
+- `POST /api/screened` - body `{ "search": "SWE", "on": "YYYY-MM-DD", "screened": [ {search, url, company, title, location, reason} ] }` -> `{ added, duplicates, excluded }`. Records postings a search looked at and rejected (dead on arrival, out of scope, wrong level, duplicate), so the next run's dedup skips them. Same canonical dedup, exclusion handling and configured-track check as `/api/leads` (unknown key: 404, nothing inserted); the check applies to the `search` sent, and rows for a fed tab are then filed under the track that feeds it. **Send `on`**: `/api/runs` counts a day's screened rows by it, and without it an evening run's rows take the worker's UTC date and the run records screening nothing. `reason` is free text except `"posting taken down"`, which is reserved for delistings and rewritten if a caller sends it.
+- `POST /api/runs` - body `{ "search": "SWE", "status": "ok"|"error", "on": "YYYY-MM-DD", "note": "..." }` -> `{ ok, run, also }`. **Call it at the end of every run, including runs that found nothing** - without it a search that stopped firing looks like a quiet day. `leadsAdded`, `screenedAdded` and `delisted` are counted server-side from that track's rows dated `on`; values sent for them are ignored. It also records a run for every tab this search feeds (`fed_by`), returned in `also`. `on` is the caller's local date. `status: "error"` marks a run that couldn't do its job, which the page shows as a warning. 404 on a `search` that isn't one of this person's tracks.
+- `POST /api/update` - body `{ "type": "lead", "id": ..., "status": "...", "notes": "...", "search": "...", "delistedOn": "..." }` or `{ "type": "application", "id": ..., ... }`. Every field is optional and is a plain field write, except two on a lead:
+  - `delistedOn` reports that the posting is gone. It must be `YYYY-MM-DD`, else `400`. A lead no application points at is deleted and its URL added to `screened`: `{"removed": true, "screened": "<url>"}`. A lead an application points at is kept: `{"removed": false, "lead": {...}}`, and a repeat report of a deleted lead also returns `false`. Irreversible - the way back is `/api/unscreen`. The rule lives in `routes/delisting.js`.
+  - `search` moves the lead to another of this person's tabs: `404` for a track key they don't have, `409` if that tab already holds the URL.
 - `POST /api/leads/:id/status` - body `{ status }` - validates against `LEAD_STATUS`; if the new status is "Applied", atomically also creates the matching application row unless one already exists.
 - `POST /api/applications/:id/status` - body `{ status }` - validates against `APP_STATUS`; stamps the matching Stage history date if that column is still empty.
 - `POST /api/delete-application` - body `{ "id": ... }` - removes one application row.
-- `POST /api/verified` - body `{ search, on?, urls: [...] }` -> `{ stamped, unmatched, unmatchedUrls, on }` - a run reporting which of the postings it tracks it re-checked and found still live, which stamps their `verified` date. URLs are matched by posting identity (`src/url.js`'s canonical URL), not raw string, so a run reporting the link its search handed it still lands on the lead. An `on` that isn't `YYYY-MM-DD` falls back to the worker's UTC date rather than failing the report.
-- `POST /api/delist` - body `{ search, on, urls: [...] }` -> `{ removed, kept, unmatched, unmatchedUrls, on }` - a run reporting, in one call, every posting it confirmed taken down. Matched the same way as `/api/verified`. Each matching lead is deleted and its URL written to `screened` as `"posting taken down"`, unless an application points at it, which keeps it (`kept`) - the same rule as `/api/update`'s `delistedOn`, held once in `routes/delisting.js`. `on` must be `YYYY-MM-DD` or the whole call is refused with a 400, because what it triggers is a permanent delete.
-- `POST /api/unscreen` - body `{ search, urls: [...] }` -> `{ removed, urls, unmatched }` - deletes `screened` rows so those postings can be found again: the way back from a wrong delisting or a wrong screening, and the only route that makes a posting rediscoverable. `search` is resolved through `fed_by`, so it covers every tab that search fills. No prompt mentions it - a run able to clear its own screened rows could re-add yesterday's correct rejections every night.
+- `POST /api/verified` - body `{ search, on?, urls: [...] }` -> `{ stamped, unmatched, unmatchedUrls, on }` - stamps `verified` on the tracked postings a run re-checked and found still live. URLs are matched by canonical URL (`src/url.js`), not raw string. An `on` that isn't `YYYY-MM-DD` falls back to the worker's UTC date.
+- `POST /api/delist` - body `{ search, on, urls: [...] }` -> `{ removed, kept, unmatched, unmatchedUrls, on }` - every posting a run confirmed taken down, in one call. Matched like `/api/verified`. Each matching lead is deleted and its URL written to `screened` as `"posting taken down"`, unless an application points at it (`kept`) - the same rule as `delistedOn`. `on` must be `YYYY-MM-DD` or the whole call is a 400.
+- `POST /api/unscreen` - body `{ search, urls: [...] }` -> `{ removed, urls, unmatched }` - deletes `screened` rows so those postings can be found again; the way back from a wrong delisting or screening, and the only route that makes a posting rediscoverable. `search` resolves through `fed_by`, so it covers every tab that search fills. Keep it out of every prompt: a run that can clear its own screened rows can re-add correct rejections.
 
 #### Applications added as nothing but a URL
 
-Logging an application by hand was nine fields copied off a posting open in
-the next tab. The tracker page now takes the URL alone, and a nightly run
-reads the posting and fills the rest in - **one task for the whole machine**,
-not one per person (`JobSearch-Applications`, running `scripts/run-fill.ps1`
-against the reserved `_applications` prompt below). It covers every account in
-a single CLI turn, pulling each one's outstanding rows and then fanning the
-reading out to a subagent per posting.
+The tracker page can log an application from its URL alone, and a nightly
+task fills in the rest: **one task per machine**, not per person
+(`JobSearch-Applications`, running `scripts/run-fill.ps1` against the
+`_applications` prompt below). It covers every account in one CLI turn,
+pulling each account's outstanding rows and giving each posting to its own
+subagent.
 
-**Almost none of this is visible on the tracker page, deliberately.** There is
-no per-row "waiting", no button to press and nothing to answer while it works.
-`applications.autofill` is bookkeeping - `''` (not read yet), `filled`,
-`failed` - and its only job is that a posting is read **once**. What the page
-does show is `autofill_note`, whenever there is one: on a `failed` row ("could
-not read this posting") and on a partially-read `filled` row ("read part of
-this posting"). Those are the rows with something still to do on them, and
-nothing else would say so. Neither is retried; `POST /api/applications/requeue` below is an operator's tool, not a retry. Which rows a run gets is
-derived from the rows themselves, not requested: a link, the flag still `''`,
-and a blank company, role or location. So nothing is queued or flagged at
-creation, an application made from a lead is never fetched (it has all three
-already), and deploying this doesn't send a run at every application in the
-database - only at the ones with a gap. See
-`migrations/0009_application_autofill.sql`.
+Nothing about this is shown on the page except `autofill_note`, on a row that
+was partly read or not read at all. `applications.autofill` is `''` (not read
+yet), `filled` or `failed`. A run gets the rows with a link, `autofill = ''`,
+and a blank company, role or location. Each posting is read once; nothing
+retries.
 
-- `GET /api/applications/pending` -> `{ applications: [{id, link}] }` - what tonight's run should read. Two columns, for the same reason `/api/dedup/:key` is narrow: it lands in a headless run's context every night. The server decides what belongs here rather than the caller filtering - a run asked to judge which applications look unfinished is a run that can decide a filled-in one looks unfinished enough to overwrite. An empty list is the ordinary answer and means "stop", not "something is wrong".
-- `POST /api/applications/autofill` - body `{ filled: [{id, company, title, location, team, setup, comp, note?}], failed: [{id, reason}] }` -> `{ filled, failed, unmatched: [id] }`. **A partial read is a `filled` row with a `note`, not a failure** - a board that renders its description client-side still ships the role and employer in its JSON-LD and `<title>`, and so does a closed listing that still names the role, so a run legitimately comes back with some fields and an explanation for the rest. The fields are real; the note says why the row is still short. `failed` is only for a posting that yielded nothing at all. One call for the whole night, the shape `/api/verified` and `/api/delist` take. **A fill only ever writes into a column that is still empty** - a day passes between a row being added and its posting being read, and the person's own typing must win over a machine's reading of a page. Only rows still flagged `''` move, so an id in `unmatched` means that row was deleted or already reported in between: ordinary, and nothing to retry. A `filled` entry carrying no usable field still marks the row read - refusing it would be tidier and would put that row back in every queue from then on. `failed` is final too (`autofill_note` holds the reason, which nothing displays): the failures that happen here - taken down, login wall, blocked domain - are the ones a retry doesn't fix, so a row that kept its place would be re-fetched every night forever without ever saying so. Nothing a run calls re-queues a row, and that is the point.
-- `POST /api/applications/requeue` - body `{ ids: [...] }` -> `{ requeued }` - clears the read flag on rows the caller names, so the next run reads their postings again. **Not a retry**: a row is read once by design, nothing on the page or on a schedule calls this, and it takes explicit ids rather than offering a "re-read everything that failed" switch that would invite being wired to one. It exists for the one case the design can't cover on its own - the reader itself got better, so rows that failed under the older instructions never really had a first read. That is a judgement about a change to the code, made by whoever made the change.
-- `GET /api/prompt/_applications` -> **`text/plain`** - that nightly run's prompt (`src/prompt.js`'s `buildAutofillPrompt`). A reserved key under `/api/prompt`, not a track; underscore-first so it can't collide with a track key someone actually chose, and the route sits above the track pattern in `src/routes/index.js` for the same reason. **The only route here whose body doesn't depend on who asked** - one nightly task (`scripts/run-fill.ps1`, registered as `JobSearch-Applications`) covers every account on a machine, so the prompt is written for "each account you were given" and the runner supplies the accounts as `TRACKER_TOKEN_1..N`. That keeps this feature from needing a cross-user route at all: every request is still one person's token against their own rows. The run pulls all the queues, then fans the reading out to one subagent per posting - each given a URL and nothing else, no token or id - and makes the writes itself. **It records no run**, unlike every search: this fills in fields the person can always type themselves, on rows already in front of them, and a run record would be a status readout for something with no status. The evidence it stopped is a row that stayed blank, and the fix for that row is the same either way.
+- `GET /api/applications/pending` -> `{ applications: [{id, link}] }` - the rows tonight's run should read, chosen by the server by the rule above. An empty list is the ordinary answer and means stop.
+- `POST /api/applications/autofill` - body `{ filled: [{id, company, title, location, team, setup, comp, note?}], failed: [{id, reason}] }` -> `{ filled, failed, unmatched: [id] }`. A partial read is a `filled` entry with a `note` saying what's missing; `failed` is for a posting that yielded nothing. **Writes only into columns that are still empty**, so anything the person typed wins. Only rows still at `''` change, so an id in `unmatched` was deleted or already reported - nothing to retry. A `filled` entry with no usable field still marks the row read. `filled` and `failed` are final; the note or failure reason is stored in `autofill_note`, which the page shows on that row.
+- `POST /api/applications/requeue` - body `{ ids: [...] }` -> `{ requeued }` - clears the read flag on the named rows so the next run reads them again. Not a retry: nothing on the page or on a schedule calls it, and it takes explicit ids only. Use it after improving the reader, for rows that failed under the old instructions.
+- `GET /api/prompt/_applications` -> **`text/plain`** - the nightly fill's prompt (`src/prompt.js`'s `buildAutofillPrompt`). A reserved key, not a track: the leading underscore keeps it out of the names installers choose for tracks, and its route must stay above the track pattern in `src/routes/index.js` or that pattern swallows it. The only route whose body doesn't depend on who asked: the prompt addresses "each account you were given", and `scripts/run-fill.ps1` supplies the accounts as `TRACKER_TOKEN_1..N`, so every request is still one person's token against their own rows. Each subagent gets a posting URL and nothing else - no token or id - and the run makes the writes itself. **It records no run.**
 - `POST /api/delete-leads` - body `{ "ids": [...], "reason": "..." }` ->
   `{ removed, kept, unmatched, reason }`. Postings the person has decided
   against. Each lead is deleted and its URL written to `screened` with the
-  reason given, which is what stops tomorrow's run rediscovering the URL and
-  adding it straight back. `reason` is required: the screened row is the only
-  lasting record of why the posting went, and `/api/delist`'s fixed "posting
-  taken down" would file a screening nobody performed. A lead an application
-  points at is kept and named in `kept`, the same rule delisting applies.
-  Batched, because narrowing a search's locations can leave a few hundred leads
-  that no longer qualify.
+  reason given, so tomorrow's run doesn't add it straight back. `reason` is
+  required - the screened row is the only lasting record of why the posting
+  went. A lead an application points at is kept and named in `kept`, the same
+  rule delisting applies. Batched, for clearing many leads at once.
 
 ### The three ways a lead can be deleted
-
-They differ in who is allowed to ask and how much they can take, and the
-differences are deliberate:
 
 | route | auth | scope | applications |
 |---|---|---|---|
@@ -523,21 +360,16 @@ differences are deliberate:
 | `POST /api/delete-leads` | session | ids the person names | kept, reported in `kept` |
 | `POST /api/purge` | **ADMIN_TOKEN** | every row under one retired track | kept, `leadId` cleared |
 
-Only `purge` needs the admin secret, and that is the point: it empties tables,
-so it must not be reachable with the session token a nightly run keeps on disk.
-The two session-authenticated routes are both id- or URL-scoped and both refuse
-to strand an application, which is what makes it safe for a run - or a person -
-to reach them.
+Only `purge` takes the admin secret.
 
-- `POST /api/purge` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ user, search, dryRun? }` -> `{ purged }`, or `{ dryRun: true, wouldPurge }` - removes every row a retired search left behind: its leads, screened rows, company-rotation rows and run record, in one transaction, with counts per table. `user` is the account name. Refuses a `search` that is still a configured track, so retiring the track through `/api/config` comes first and a typo naming a live search is an error rather than a delete. Application rows survive with `leadId` cleared.
+- `POST /api/purge` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ user, search, dryRun? }` -> `{ purged }`, or `{ dryRun: true, wouldPurge }` - removes every row a retired search left behind: its leads, screened rows, company-rotation rows and run record, in one transaction, with counts per table. `user` is the account name. Refuses a `search` that is still a configured track, so retire the track through `/api/config` first. Application rows survive with `leadId` cleared.
 
-One shared trap: `DELISTED_REASON` ("posting taken down") is the server's own
-marker. `countRunActivity` splits a day's `screened` rows on that exact string
-to tell a delisting from an ordinary rejection, so **every route that lets a
-caller supply a reason must reserve it** - `handleAddScreened` rewrites it to
-"dead on arrival", `handleDeleteLeads` to "removed by hand". The primitive
-underneath (`deleteLeadAndScreen`) can't refuse the string itself, because
-`delistLead` passes it legitimately. A new caller-reason path needs the same
+`DELISTED_REASON` ("posting taken down") is the server's marker for a
+delisting: `countRunActivity` splits a day's `screened` rows on that exact
+string. **Every route that lets a caller supply a reason must reserve it** -
+`handleAddScreened` rewrites it to "dead on arrival", `handleDeleteLeads` to
+"removed by hand". `deleteLeadAndScreen` can't refuse the string itself,
+because `delistLead` passes it, so a new caller-reason path needs its own
 guard.
 
 ### Documents
@@ -550,116 +382,65 @@ JSON. All four routes answer 503 on a deployment with no `DOCS` bucket.
 
 - `GET /api/documents` -> `{ documents: [...] }` - the index: path, kind, content type, size, etag and upload time for each, with no bodies. The nightly runner fetches this first, then each path it needs.
 - `GET /api/documents/<path>` -> the object's bytes, with the content type it was stored with and its etag.
-- `PUT /api/documents/<path>` - raw body, optional `If-Match` -> `{ path, etag, bytes }`. With `If-Match`, a stale etag is a 412 and nothing is written, which is how a nightly run that held the baseline doc for many minutes avoids erasing an edit made in between. Without it the write is unconditional, which is what the import script and the setup skill want. 8 MB maximum; anything larger is a 413.
+- `PUT /api/documents/<path>` - raw body, optional `If-Match` -> `{ path, etag, bytes }`. With `If-Match`, a stale etag is a 412 and nothing is written - send it whenever the write follows an earlier read, so an edit made in between isn't erased. Without it the write is unconditional (the import script and the setup skill). 8 MB maximum; anything larger is a 413.
 - `DELETE /api/documents/<path>` -> `{ path, deleted }`, or 404 for a path this person doesn't have.
 
 ### Config and prompts
 
 - `GET /api/config` -> `{ tracks: [{key, label, full_description, sort_order, last_run, ...search config}], settings }` - this person's config: the track tabs, labels, display title, priority-location rules and staleness threshold the client renders from, plus the per-track search config and prose settings the prompt is composed from. Each track's `last_run` is its `search_runs` row (`{at, on, status, leads_added, screened_added, delisted, note}`; all-empty means never recorded).
-- `POST /api/config` - body `{ tracks?, display_title?, overview_label?, applications_label?, all_leads_label?, stale_run_hours?, priority_locations?, excluded_companies?, geo_scope_line?, scope_clause?, scope_disqualifier?, location_guidance?, footer_note?, pronouns? }`. `tracks`, if present, **replaces this person's whole track list** (existing leads keep their `search` value even if its track is removed - they just lose their tab, they're never deleted) and keeps `search_runs` 1:1 with it. It never touches anyone else's tracks. Each track entry may carry its search config: `role_search_line`, `target_companies` (array, or a string when the list has prose structure), `search_note`, `resume_line`, `fit_clause`, `fit_disqualifier`, `fit_filter_step`, `leads_note`, `doc_file`, `doc_summary`, `doc_update_line`, `intro_note`, `report_line`, `screened_examples`, `schedule_time`, `fed_by`.
-- `fed_by` (in the POST above) is how **one search fills more than one tab**. A track with `fed_by` set to a sibling's key has no search of its own: `setup-scheduler.ps1` registers no task for it, `GET /api/prompt` refuses to compose one (409, naming the track to run instead), and the feeding track's prompt turns multi-tab - its `./tracker dedup` covers every tab it fills, it files each finding under one of them (using each tab's `full_description` as the rule for what belongs there), and records a run against each (a tab with no run record of its own reads as stale forever). Use it when the split is by *level or kind of role* over an identical search - same companies, same resume, same scope; a genuinely different search should just be its own track. Refused if `fed_by` names anything but another track in the same posted list.
-- `excluded_companies` (in the POST above) is a list of companies this person will not work for at all - plain names, or a catch-all phrase ("any other company X owns or leads"). The composed prompt renders it into a single never-search sentence, so adding an exclusion is an append to a list rather than a sentence hand-written into a track's prose - which is how the first two ended up in two different fields, discovered only by accident.
-- `GET /api/dedup/:key` -> `{ leads: [{id, url, status}], screened: [url, ...] }` - the smallest thing a scheduled run needs to know what it has already found or ruled out, for one track. This exists because the runs were using `/api/data` for it, which returns every field of every row across every track: 398KB to use 22KB of, with screened rows accumulating ~150/day. That lands in the run's context every night and grows without bound, so the failure mode was a run eventually truncating its own dedup list and re-adding postings it had already screened. 404s on an unknown key rather than returning empty arrays - empty is exactly what a mistyped key would produce, and a run that believes it has seen nothing re-adds everything.
-- `GET /api/coverage/:key` -> `{ companies: [{company, position, last_swept, board, note, known?}], total, batch, cursor }` - **the companies this run should cover**: the next `COVERAGE_BATCH` (24) along the one company list, starting at this search's cursor and wrapping at the end. The list is shared by every search on the deployment (`0011_one_company_list.sql`); `last_swept` and `note` are this search's own record of each company, and `board` and `known` are the shared facts. A company list long enough to be worth having is longer than one run can verify properly, and the failure isn't a company going uncovered for a day, it's every company being skimmed. The server picks rather than the prompt describing how to pick, because a cap a run is asked to respect is one it can talk itself out of on a night the list looks short. `known` is present only when something is known about the company; its `wall` is present only once recorded on two separate dates and within seven days of the last, so a run meeting an expired wall simply fetches. `?all=1` returns the whole list (seeding, and looking at it). 404s on an unknown key for the same reason `/api/dedup/:key` does - an empty list would read as "nothing to sweep" and the run would search nothing at all.
-- `POST /api/coverage` - body `{ "search": "SWE", "on": "YYYY-MM-DD", "swept": [{company, board?, endpoint?, url_shape?, wall?, note?}] }` -> `{ recorded, added, excluded, on, cursor, shared, withheld }` - stamps the companies a run attempted, and `403`s for a demo account, since the company list is shared and a demo's companies are invented. Attempted, not found: a company whose board was blocked today still gets stamped, or the rotation retries it every run forever and the tail of the list starves. A company not on the list joins it (`added`) in a shuffled position past everything already there, so one that broader discovery turned up is in every search's rotation from then on. `note` and the date only overwrite when non-empty and stay with this search; `board`, `endpoint`, `url_shape` and `wall` go to the shared list, where a reported `board` or `endpoint` clears a `wall`. A row reporting a `wall` beside a `board` or `endpoint` contradicts itself - a wall means no route to the listings worked - so none of its shared fields are written and it is counted in `withheld`; its sweep and `note` are still recorded. `wall` beside `url_shape` is not a contradiction: a posting can load while the listing is walled. `on` is the caller's local date, same as `/api/runs`; an explicit `""` means "register these companies, I haven't swept them" - the seeding case, which puts companies on the list, stamps no `last_swept` and moves no cursor. It still writes what the row says about the website (`board`, `endpoint`, `url_shape`, `dead_signal`) to the shared list: `on` governs the sweep record, not what is known about reaching a company. `wall` is the exception and needs a date, since a wall is served only after two separate dates - sending one with `""` is a `400`. Otherwise the cursor moves past the last company reported from the slice this search was served; a company outside that slice - one discovery found already on the list, or one re-sent after it was recorded - is recorded without moving it.
-- Every track gets two extra steps in its composed prompt once the company list has anything on it (1c: fetch this run's companies and cover exactly those; 9d: record what you covered). That's gated on the shared list being non-empty rather than on a config flag - putting the first company on the list turns rotation on for every search, and there's nothing to remember to set.
-- `GET /api/prompt/:key` -> **`text/plain`** - the daily search prompt for that track, composed from the config above (see `src/prompt.js`). This is what `run-search.ps1` pipes into the CLI, and the fastest way to check what a search will actually do. 404s on a key this person doesn't have, and 409s on one with `fed_by` set (that tab is filled by a sibling's run - the error names it).
-- `OPTIONS *` - CORS preflight for any route above - no auth, returns `204` + `CORS_HEADERS`. Every real response (including error responses) carries `CORS_HEADERS` too (`Access-Control-Allow-Origin: *` - the session token, not the origin, is the access boundary, and it is never a cookie, so there's nothing here for a hostile origin to ride on).
+- `POST /api/config` - body `{ tracks?, display_title?, overview_label?, applications_label?, all_leads_label?, stale_run_hours?, priority_locations?, excluded_companies?, geo_scope_line?, scope_clause?, scope_disqualifier?, location_guidance?, footer_note?, pronouns? }`. `tracks`, if present, **replaces this person's whole track list** and keeps `search_runs` 1:1 with it; leads under a removed track keep their `search` value and lose their tab, never deleted. It never touches anyone else's tracks. Each track entry may carry its search config: `role_search_line`, `target_companies` (array, or a string when the list has prose structure), `search_note`, `resume_line`, `fit_clause`, `fit_disqualifier`, `fit_filter_step`, `leads_note`, `doc_file`, `doc_summary`, `doc_update_line`, `intro_note`, `report_line`, `screened_examples`, `schedule_time`, `fed_by`.
+- `fed_by` (in the POST above) is how **one search fills more than one tab**. A track with `fed_by` set to a sibling's key has no search of its own: `setup-scheduler.ps1` registers no task for it, `GET /api/prompt` refuses to compose one (409, naming the track to run instead), and the feeding track's prompt turns multi-tab - its dedup covers every tab it fills, it files each finding under one of them (by each tab's `full_description`), and records a run against each. Use it when the split is by *level or kind of role* over an identical search - same companies, same resume, same scope; a different search should be its own track. Refused if `fed_by` names anything but another track in the same posted list.
+- `excluded_companies` (in the POST above) is a list of companies this person will not work for at all - plain names, or a catch-all phrase ("any other company X owns or leads"). The composed prompt renders it into a single never-search sentence; add an exclusion here, not in a track's prose.
+- `GET /api/dedup/:key` -> `{ leads: [{id, url, status}], screened: [url, ...] }` - what one track's run has already found or ruled out. Runs use this, not `/api/data`, which returns every field of every row and would grow without bound in the run's context. 404s on an unknown key rather than returning empty arrays: a run that believes it has seen nothing re-adds everything.
+- `GET /api/coverage/:key` -> `{ companies: [{company, position, last_swept, board, note, known?}], total, batch, cursor }` - **the companies this run should cover**: the next `COVERAGE_BATCH` (24) along the one company list shared by every search on the deployment, starting at this search's cursor and wrapping at the end. `last_swept` and `note` are this search's own record of each company; `board` and `known` are shared. `known` is present only when something is known about the company; its `wall` is present only once recorded on two separate dates and within seven days of the last, so a run meeting an expired wall simply fetches. `?all=1` returns the whole list. 404s on an unknown key, for the same reason as `/api/dedup/:key`.
+- `POST /api/coverage` - body `{ "search": "SWE", "on": "YYYY-MM-DD", "swept": [{company, board?, endpoint?, url_shape?, wall?, note?}] }` -> `{ recorded, added, excluded, on, cursor, shared, withheld }` - stamps the companies a run attempted, and `403`s for a demo account. Report every company attempted, including one whose board was blocked; an unstamped company is retried every run and the rest of the list starves. A company not on the list joins it (`added`) in a shuffled position past everything already there. `note` and the date only overwrite when non-empty and stay with this search; `board`, `endpoint`, `url_shape` and `wall` go to the shared list, where a reported `board` or `endpoint` clears a `wall`. A row reporting a `wall` beside a `board` or `endpoint` contradicts itself, so none of its shared fields are written and it is counted in `withheld`; its sweep and `note` are still recorded. `wall` beside `url_shape` is not a contradiction: a posting can load while the listing is walled. `on` is the caller's local date, same as `/api/runs`; an explicit `""` registers companies without sweeping them (seeding) - it stamps no `last_swept` and moves no cursor, but still writes what the row says about the website (`board`, `endpoint`, `url_shape`, `dead_signal`) to the shared list, since `on` governs the sweep record rather than what is known about reaching a company. `wall` is the exception: it is served only after two separate dates, so sending one without `on` is a `400`. Otherwise the cursor moves past the last company reported from the slice this search was served; a company outside that slice is recorded without moving it.
+- Every track's composed prompt includes steps 1c (fetch this run's companies and cover exactly those), 9d (record what you covered) and 9e (replace the companies you couldn't read). There is no gate: 9d is the only step that adds a company to the list, so the steps are there even when the shared list is empty, and 1c then returns no companies.
+- `GET /api/prompt/:key` -> **`text/plain`** - the daily search prompt for that track, composed from the config above (see `src/prompt.js`). This is what `run-search.ps1` pipes into the CLI, and the fastest way to check what a search will do. 404s on a key this person doesn't have, and 409s on one with `fed_by` set (the error names the track that fills it).
+- `OPTIONS *` - CORS preflight for any route above - no auth, returns `204` + `CORS_HEADERS`. Every real response, errors included, carries `CORS_HEADERS` too (`Access-Control-Allow-Origin: *` - the session token, never a cookie, is the access boundary).
 
-### Config fields are mostly prose, on purpose
+### Config fields are prose
 
-Most of the per-track config is the finished sentence the prompt uses, not a
-keyword the worker expands into one. That's a decision the migration forced:
-the hand-maintained prompt files these replaced had drifted from the template
-that generated them, and the drift carried real weight - a resume line naming
-a `.txt` fallback because the machine can't read `.docx`, a sentence widening
-a company list beyond its apparent industry, worked examples of what counts
-as out of scope. Reducing those to keywords and regenerating the sentences
-lost them silently. Only the fields the app itself reads (`key`, `label`,
-`sort_order`, `schedule_time`, `target_companies`, `fed_by`) are structured.
+Per-track config is stored as the finished prose the prompt uses. Only `key`,
+`label`, `sort_order`, `schedule_time`, `target_companies` and `fed_by` are
+structured.
 
 ## Verifying a change
 
-There's no CI and no test suite, but there is one property worth checking
-before every deploy: **two people's data cannot reach each other.**
-`verify-local.mjs` is over 170 checks, most of them exactly that - one user
-trying to read and write another's leads, applications, tracks, runs, prompts
-and application-fill queue by id, and getting a 404 or an empty result each
-time - plus the auth behaviour around it (password reset, indistinguishable
-login failures, per-token revocation).
+Before a server deploy, run the cross-user isolation checks against a local
+`wrangler dev` (a local database only - it creates users and writes freely):
 
 ```bash
 cd server
-wrangler d1 migrations apply job-search-tracker-db --local
-echo ADMIN_TOKEN=local-admin-token-for-testing > .dev.vars
-wrangler dev --local --port 8787          # in another terminal
-node verify-local.mjs
+node verify-local.mjs <url> <admin token>
 ```
 
-Run it against a **local** database - it creates users and writes freely.
-It expects one with no accounts yet; re-running against the same local
-database is fine.
+Run it whenever `db.js` changes: a missing `AND user_id = ?` breaks no page
+and serves someone else's job search.
 
-If you change anything in `db.js`, run this. A missing `AND user_id = ?`
-fails nothing, breaks no page, and silently serves someone else's job search.
-
-The migration gets its own check, because `verify-local.mjs` only ever sees a
-database the migration built from empty - it would not notice `0002` losing a
-column, dropping rows, or resetting AUTOINCREMENT on a database that already
-had data. `verify-migration.mjs` seeds a throwaway in-process SQLite database
-with pre-migration rows, applies both migration files, and checks what came
-out the other side. No wrangler, no dev worker, nothing to clean up:
+If you touched `migrations/`, also run these (no dev worker needed; CI runs
+`verify-schema-doc.mjs`):
 
 ```bash
 cd server
 node verify-migration.mjs
-```
-
-`docs/schema.md` has a check of its own, which CI also runs on every push to
-`main`. It applies every migration to an in-process SQLite database and
-compares the result with the doc:
-
-```bash
-cd server
 node verify-schema-doc.mjs
 ```
+
+The full procedure - choosing a port, starting the dev worker, deploying - is
+[`../.claude/skills/verify-and-deploy/SKILL.md`](../.claude/skills/verify-and-deploy/SKILL.md).
 
 ## Security notes
 
 - **`/api/login` has no rate limiting.** A guessable password is brute-forcible
-  over the internet in a way the old 32-byte shared token wasn't. PBKDF2 at
-  100k iterations makes each attempt cost real worker CPU - which is also its
-  own small denial-of-service surface - and the 12-character minimum is the
-  rest of the defence. A per-name attempt throttle is a sensible follow-up.
+  over the internet. PBKDF2 at 100k iterations makes each attempt cost real
+  worker CPU - itself a small denial-of-service surface - and the 12-character
+  minimum is the rest of the defence.
 - **Isolation is app-level, not privacy from the operator.** Whoever holds
-  the Cloudflare account can read every user's rows directly in D1. This is
-  for people who are fine with that; it is not a multi-tenant SaaS boundary.
-- **Tokens never expire.** Revoke by deleting the `sessions` row (see
-  [Accounts](#accounts)). Losing a laptop means revoking its session, not
-  rotating one secret shared by every machine and person - which is what the
-  old model would have required.
-- **Every session token can reach every session route.** A browser sign-in and
-  the long-lived credential a scheduled search keeps on disk are the same kind
-  of thing to this API: `sessions.label` records which is which, but only
-  `deleteOtherBrowserSessions` reads it, and no route enforces on it.
-
-  That points the wrong way. The weakest credential holds the most authority -
-  the `scheduled-search` token sits in plaintext in a `tracker.json` on a
-  Windows box, never expires, and can today delete every lead, rewrite the
-  search config or change what the tabs are called. A nightly run needs none of
-  that; it posts findings and reads its own prompt.
-
-  The fix is to split the routes the way the callers already are. Roughly:
-  a machine-to-machine credential gets the run's endpoints (`/api/leads`,
-  `/api/screened`, `/api/runs`, `/api/verified`, `/api/delist`, the coverage
-  and dedup reads, the prompt reads, the application fill) and the document
-  reads and writes it materializes from; a signed-in person gets the rest, and
-  the destructive and configuring ones - `/api/config`, `/api/password`,
-  `/api/delete-leads`, `/api/delete-application`, `/api/unscreen` - go to a
-  human session only. Some of that boundary already exists as prose: `/api/unscreen`'s
-  handler says it is deliberately in no prompt, which is a convention where it
-  could be a rule.
-
-  The shape to reach for is the one `./routes/index.js` already uses for
-  public-vs-session: another list, not a flag per row, so membership cannot be
-  got wrong by omission. Not built yet.
+  the Cloudflare account can read every user's rows directly in D1. It is not
+  a multi-tenant SaaS boundary.
+- **Tokens never expire.** Revoke one by deleting its `sessions` row (see
+  [Revoking and listing sessions](#revoking-and-listing-sessions)).
+- **Every session token reaches every session route.** A scheduled search's
+  token, stored in plaintext in `tracker.json`, can rewrite config or delete
+  leads just as a browser session can. A separate route list for machine
+  credentials is planned, not built.

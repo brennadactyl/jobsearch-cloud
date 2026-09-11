@@ -21,16 +21,15 @@ export async function handleGetConfig({ db }) {
 /**
  * POST /api/config - requires a Bearer token. Body `{ tracks?, display_title?,
  * overview_label?, applications_label?, all_leads_label?, stale_run_hours?,
- * priority_locations?,
- * geo_scope_line?, scope_clause?, scope_disqualifier?, location_guidance?,
- * footer_note?, pronouns? }`.
+ * priority_locations?, excluded_companies?, geo_scope_line?, scope_clause?,
+ * scope_disqualifier?, location_guidance?, footer_note?, pronouns? }` ->
+ * `{ tracks[], settings }`; 400 for an empty or invalid track list, a `fed_by`
+ * that isn't another listed track, or a non-positive `stale_run_hours`.
  *
- * Replaces the whole track list (setup writes the complete desired set at
- * once, rather than incrementally patching rows) and/or updates individual
- * settings. Existing leads/applications keep their `search` value even if
- * its track is later removed here - they just stop having a tab, they're
- * never deleted. Writing `tracks` also keeps search_runs 1:1 with it - new
- * tracks gain a "never ran" row, removed tracks lose theirs.
+ * `tracks` replaces the whole track list, since setup writes the complete set
+ * at once. Leads and applications under a removed track keep their `search`
+ * and only lose their tab. search_runs stays 1:1 with the list: new tracks gain
+ * a "never ran" row, removed tracks lose theirs.
  */
 export async function handleSetConfig({ request, db }) {
   const body = await readJson(request);
@@ -57,11 +56,9 @@ export async function handleSetConfig({ request, db }) {
     await db.replaceTracks(valid);
   }
 
-  // display_title, overview_label, applications_label, all_leads_label, stale_run_hours,
-  // priority_locations, plus the prompt-only prose settings
-  // (PROMPT_SETTING_KEYS in db.js). db.setSettings reads only the keys it
-  // cares about, so it's a safe no-op to call even when `body` had none of
-  // them (e.g. a tracks-only config post).
+  // db.setSettings reads only its own keys (SETTING_KEYS, PROMPT_SETTING_KEYS,
+  // priority_locations, excluded_companies), so a tracks-only post is a no-op
+  // there.
   if (body.stale_run_hours != null) {
     const n = Number(body.stale_run_hours);
     if (!Number.isFinite(n) || n <= 0) return json({ error: "stale_run_hours must be a positive number" }, 400);

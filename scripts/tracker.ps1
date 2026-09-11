@@ -1,40 +1,20 @@
 <#
 .SYNOPSIS
   The tracker API's calling convention, as commands a nightly search run
-  invokes - instead of composing every HTTP call itself from prose.
+  invokes instead of composing HTTP calls itself.
 
 .DESCRIPTION
-  Materialized into each run's working directory by run-search.ps1, alongside
-  that person's documents, and invoked from the prompt as
-  `./tracker <command> [file]`.
+  Copied into each run's working directory by run-search.ps1 and invoked from
+  the prompt as `./tracker <command> [file]`.
 
-  ---- Why this exists.
+  Rules with one right answer - `search` is this run's key, `on` is today's
+  local date, reports go by url, an unset field is omitted - are applied here
+  from the run's environment. The prompt carries only what the run alone knows.
 
-  The composed prompt used to carry the whole calling convention as text: a
-  curl invocation per endpoint, the JSON body's shape, what each field meant,
-  and a warning for every way the body could come out wrong. That was about
-  15,000 characters - half the prompt's fixed text - read by four scheduled
-  runs a night to describe six HTTP calls that never change. See
-  docs/prompt-size-plan.md.
-
-  It was also prose asking for something only code can guarantee. "`search`
-  must be this run's own key", "`on` is today's *local* date, not the server's
-  UTC one", "report by url, never by id", "omit the key rather than sending an
-  empty string" - each has exactly one right answer, and each was restated
-  every night in the hope the model applied it. All of them are decided here
-  now, from the run's own environment, and none of them can be got wrong by a
-  run having a bad night.
-
-  What is left for the prompt is what only the run knows: which postings are
-  new, which it confirmed dead, which companies it managed to read.
-
-  ---- What it deliberately does not do.
-
-  It makes no judgement about the search. It will not invent a lead, drop one
-  for looking wrong, or turn an unreadable page into a delisting. A row it
-  refuses is refused loudly - named on stdout and counted in the summary line -
-  never dropped quietly, because the run writes its own report from what this
-  prints.
+  It makes no judgement about the search: it never invents or drops a lead, or
+  turns an unreadable page into a delisting. A row it refuses is named on
+  stdout and counted in the summary line, because the run writes its report
+  from what this prints.
 
   ---- Commands.
 
@@ -50,10 +30,10 @@
     tracker swept     <file>      POST /api/coverage
     tracker run --status ok --note "..."   POST /api/runs
 
-  Each <file> is a JSON array (an object carrying the array under the command's
-  own name is accepted too, since that is the shape the old prompt's curl body
-  had). An empty array is a no-op that says so and exits 0, so a step with
-  nothing to send needs no conditional in the prompt.
+  Each <file> is a JSON array; an object carrying the array under its field
+  name (`leads`, `screened`, `urls`, `swept`) is accepted too. An empty array
+  is a no-op that says so and exits 0, so a step with nothing to send needs no
+  conditional in the prompt.
 
 .EXAMPLE
   ./tracker dedup
@@ -75,11 +55,8 @@ function Fail($msg) {
     exit 1
 }
 
-# Today, in the timezone the run is actually happening in. This was the single
-# most repeated instruction in the old prompt ("`on` is today's **local**
-# date") and the one with the worst failure mode: an evening run that let the
-# server fall back to UTC stamped its rows with tomorrow and then recorded
-# having found nothing. Nothing asks a run for a date any more.
+# Local date, sent on every call: the server's UTC default stamps an evening
+# run's rows with tomorrow.
 $Today = (Get-Date).ToString("yyyy-MM-dd")
 
 $Base = $env:TRACKER_URL
@@ -130,30 +107,21 @@ if (-not $Search) {
 
 # ---- What is worth retrying, and why replaying a call is safe here at all.
 #
-# Cloudflare answers a Worker *exception* with a 5xx whose body is
-# `error code: 1101`. It is not a 429, not a 404, and it says nothing about the
-# request: three consecutive GETs got one on 2026-09-10 during rapid sequential
-# calls, and every one of them succeeded on the very next attempt. Unretried,
-# that fails a sync step with nothing wrong with it, in the middle of an
-# unattended run, with nobody awake to see that the failure was spurious.
-#
-# Which statuses are transient is decided here, once, by number - not by
-# reading an error message and forming an opinion about it per call:
+# Transient statuses are decided by number. run-search.ps1 uses the same rule
+# and numbers for its own calls; change both together.
 #
 #   retry   no status at all (the connection never got an answer: reset, DNS,
-#           timeout), 429, and any other 5xx - which is where 1101 lands.
-#   stop    503, and every 4xx except 429. A 4xx is the server saying the
-#           request itself is wrong, and it will be exactly as wrong in twelve
-#           seconds; retrying only turns a clear error into a slow one. 503 is
-#           excluded from the 5xx rule on this API's own terms - it is what a
+#           timeout), 429, and any other 5xx. That includes Cloudflare's
+#           `error code: 1101` - its answer to a Worker exception, which says
+#           nothing about the request and usually succeeds on the next attempt.
+#   stop    503, and every 4xx except 429. A 4xx means the request itself is
+#           wrong, and it will be as wrong in twelve seconds. 503 is what a
 #           handler returns when the deployment is missing a binding, where
 #           "the fix is a config change rather than a retry" (see
 #           ../server/src/routes/documents.js).
 #
-# Replaying a POST has to be safe, and it is for every endpoint reached from
-# here. That is a precondition rather than a happy accident, because a retry
-# cannot tell "the request never landed" from "it landed and the response was
-# lost":
+# A retry cannot tell "the request never landed" from "it landed and the
+# response was lost", so every POST reached from here must be idempotent:
 #
 #   /api/leads, /api/screened    dedup by url and report the duplicates back
 #   /api/verified, /api/delist   are keyed by url and idempotent
@@ -162,12 +130,12 @@ if (-not $Search) {
 #                                than incrementing it (db.js setSweepCursor)
 #   /api/runs                    upserts on (user, track)
 #
-# So the worst a replay costs is a duplicate counted in this command's own
-# output line, never a duplicate row. An endpoint that is not idempotent does
-# not belong on this path without an idempotency key of its own.
+# So a replay costs at most a duplicate counted in the output line, never a
+# duplicate row. An endpoint that is not idempotent needs an idempotency key
+# of its own before it is called from here.
 #
-# Worst case is 19s of sleeping on one call, and a run makes eight of them.
-# That is the right trade for a job that has all night and nobody watching.
+# Worst case is 19s of sleeping per call, which an unattended overnight run can
+# afford.
 $RetryAttempts = 4
 $RetryBackoff = @(2, 5, 12)
 
@@ -176,9 +144,8 @@ function Test-Transient($status) {
     return ($status -eq 0 -or $status -eq 429 -or $status -ge 500)
 }
 
-# One line's worth of an error body. A 1101 arrives as a whole HTML error page,
-# and the retry lines are progress reporting rather than the diagnosis - the
-# last attempt's Fail prints the body in full.
+# One line of an error body for the retry progress lines: a 1101 arrives as a
+# whole HTML page, and the final attempt's Fail prints the body in full.
 function Squish($text) {
     if (-not $text) { return "" }
     $one = ($text -replace "\s+", " ").Trim()
@@ -189,9 +156,8 @@ function Squish($text) {
 function Invoke-Tracker($method, $path, $bodyObj) {
     $uri = "$Base$path"
     $headers = @{ Authorization = "Bearer $Token" }
-    # Encoded once, outside the retry loop. It cannot change between attempts,
-    # and re-encoding per attempt is one more way the request that replaces a
-    # failed one could differ from it.
+    # Encoded once, outside the retry loop, so every attempt sends identical
+    # bytes.
     $bytes = $null
     if ($null -ne $bodyObj) {
         $jsonText = $bodyObj | ConvertTo-Json -Depth 10 -Compress
@@ -222,10 +188,8 @@ function Invoke-Tracker($method, $path, $bodyObj) {
             if (-not $detail) { $detail = $_.Exception.Message }
 
             if (-not (Test-Transient $status) -or $attempt -ge $RetryAttempts) {
-                # How many attempts it took is part of the error. A step that
-                # failed four times over twenty seconds and one that failed
-                # once are different problems, and this log line is all anyone
-                # has the next morning.
+                # The attempt count is part of the error: four failures over
+                # twenty seconds and a single failure are different problems.
                 $tries = ""
                 if ($attempt -gt 1) { $tries = " after $attempt attempts" }
                 Fail "$method $path failed ($status)$tries`: $detail"
@@ -247,16 +211,13 @@ function Write-Json($path, $obj) {
 
 # ------------------------------------------------------------------ input ---
 
-# Rows as the run wrote them. A bare array is the documented shape; an object
-# carrying the array under the command's own name is accepted too, because that
-# is what the previous prompt's `-d '{"leads":[...]}'` body looked like and a
-# run that writes one is not wrong about anything that matters.
+# A bare array is the documented shape; an object carrying the array under
+# $key is accepted too, since a run that writes one means the same rows.
 function Read-Rows($path, $key) {
     if (-not $path) { Fail "'$Command' needs a file: tracker $Command <file>.json" }
     if (-not (Test-Path -LiteralPath $path)) {
-        # Not treated as "nothing to send". A mistyped filename and a quiet
-        # night look identical from here, and only one of them silently
-        # discards the run's findings.
+        # Not "nothing to send": a mistyped filename would silently discard the
+        # run's findings.
         Fail "'$path' does not exist. Write the rows to it first - an empty array [] if there are none."
     }
     $raw = Get-Content -Raw -LiteralPath $path -Encoding UTF8
@@ -278,7 +239,6 @@ function Field($row, $name) {
     return ([string]$v).Trim()
 }
 
-# A row that cannot be sent is named and counted, never dropped in silence.
 $script:Refused = 0
 function Refuse($what, $why) {
     $script:Refused++
@@ -354,10 +314,6 @@ switch ($Command) {
           $title = Field $r "title"
           if (-not $url) { Refuse "a lead with no url" "there is nothing to track or dedup on"; continue }
           if (-not $company -or -not $title) { Refuse "$url" "a lead needs both a company and a title"; continue }
-          # Every rule the prompt used to state: this run's key unless the row
-          # names one of the tabs the run fills, today's local date once for the
-          # whole call, and an unstated optional field omitted rather than sent
-          # as an empty string.
           $row = @{ search = $Search; company = $company; title = $title; url = $url }
           $rowSearch = Field $r "search"
           if ($rowSearch) { $row["search"] = $rowSearch }
@@ -430,53 +386,22 @@ switch ($Command) {
           if ($r -is [string]) { $company = ([string]$r).Trim() } else { $company = Field $r "company" }
           if (-not $company) { Refuse "a sweep with no company" "there is nothing to stamp"; continue }
           $row = @{ company = $company }
-          # `endpoint` and `url_shape` travel to the shared company_fetch table
-          # and benefit every search on the deployment; `board` does too; `note`
-          # stays in this search's own row (see routes/coverage.js for which
-          # fields cross that boundary and why prose does not).
-          #
-          # They were missing from this list until 2026-09-11, which is the
-          # whole reason the shared table was broad and shallow: 58 of its 63
-          # rows had a board kind and no endpoint, because the only two fields
-          # a run could send were the two that were already duplicated
-          # elsewhere. A field the API accepts and the helper drops is a field
-          # that does not exist.
-          #
-          # `wall` travels too: what stops a fetch at this company, pooled and
-          # expired by the server (docs/one-company-list-plan.md). It goes in
-          # this list in the same change as the server column, never before.
-          # handleRecordSweeps reads fields by name, so a `wall` sent to a
-          # server without the column is dropped silently - and because the
-          # prompt stops putting the obstacle in `note`, it would be lost
-          # outright rather than merely left unpooled.
-          #
-          # `dead_signal` is deliberately still not passed - see prompt.js's
-          # step 9d.
+          # `board`, `endpoint`, `url_shape` and `wall` go to the shared
+          # company_fetch table used by every search on the deployment; `note`
+          # stays in this search's own row (see routes/coverage.js). The server
+          # reads fields by name and drops the rest, so a new field is added
+          # here in the same change as its server column. `dead_signal` is
+          # deliberately not sent - see prompt.js's step 9d.
           foreach ($f in @("board", "endpoint", "url_shape", "wall", "note")) {
               $v = Field $r $f
               if ($v) { $row[$f] = $v }
           }
-          # A row carrying a `wall` plus a `board` or `endpoint` contradicts
-          # itself: the wall says no route to this company's listings worked
-          # tonight, and a board or endpoint says one did. It is sent exactly as
-          # written, and the server decides what it shares from it.
-          #
-          # This used to strip the board and endpoint and keep the wall, on the
-          # theory that the board was an echo of companies.json. That settled
-          # the row the wrong way. It is just as often honest - "careers.x.com
-          # 403s" alongside a Greenhouse board that works - and keeping the wall
-          # gets a reachable company skipped by every search until the wall
-          # expires, because once it is served nothing fetches that company
-          # again to disprove it. A missed posting costs more than a wasted
-          # fetch. Rewriting the row here also hid the contradiction from the
-          # server: it received a clean-looking wall-only row, so no rule there
-          # could ever fire. The rule belongs in one place, where a curl or a
-          # skill writing to the API meets it too.
-          #
-          # So this only says so, and says how to fix it. url_shape is not part
-          # of the contradiction: it describes a posting page, not a route to
-          # the listings, and step 9e asks a run to record a posting page that
-          # loads while the listings stay walled.
+          # A `wall` plus a `board` or `endpoint` contradicts itself: the wall
+          # says no route to the listings worked, the board or endpoint says one
+          # did. The row is sent exactly as written and the server, which
+          # applies this rule for every caller, shares nothing from it; this
+          # only warns. `url_shape` is not part of the contradiction - it
+          # describes a posting page, not a route to the listings.
           if ($row.ContainsKey("wall") -and ($row.ContainsKey("board") -or $row.ContainsKey("endpoint"))) {
               Say "WARNING: $company reports a wall and a working board/endpoint in one row, which contradicts itself. If any route to its listings worked, re-send it without the wall; if none did, re-send it without the board/endpoint."
           }
@@ -484,26 +409,18 @@ switch ($Command) {
       }
       if ($send.Count -eq 0) { Say "swept: nothing to record (refused=$($script:Refused))"; exit 0 }
       $res = Invoke-Tracker "POST" "/api/coverage" @{ search = $Search; on = $Today; swept = @($send) }
-      # `added` is how many of these companies joined the shared list on this
-      # call. Since one list serves every search, a company one run adds is
-      # swept by everyone, so it is worth a run being able to say it did that.
-      #
-      # `withheld` is the server's count of rows that reported a wall alongside
-      # a board or endpoint, from which it shared nothing. It should equal the
-      # number of WARNING lines above: both use the same test - a non-empty
-      # wall plus a non-empty board or endpoint, url_shape not counted - and
-      # this helper only puts a field in a row when it is non-empty, so a
-      # present key is a non-empty one. If the two ever disagree, the rule has
-      # drifted between here and handleRecordSweeps. Blank from a server that
-      # predates the rule.
+      # `added`: companies this call put on the shared list, which every search
+      # sweeps. `withheld`: rows the server shared nothing from because of the
+      # wall contradiction. It should equal the WARNING count above - both apply
+      # the same test, and a field is only in a row when non-empty - so a
+      # mismatch means the rule has drifted between here and handleRecordSweeps.
       Say "swept: recorded=$($res.recorded) added=$($res.added) withheld=$($res.withheld) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
       break
   }
 
   "run" {
-      # Status and note are taken from flags or from the positional arguments,
-      # so neither spelling of the one call that must never be skipped can fail
-      # on its arguments.
+      # Status is taken from --status or a positional argument, so the one call
+      # that must never be skipped cannot fail on how it is spelled.
       $status = "ok"
       if ($Opts.ContainsKey("status") -and $Opts["status"]) { $status = $Opts["status"].ToLowerInvariant() }
       elseif ($File) { $status = $File.ToLowerInvariant() }

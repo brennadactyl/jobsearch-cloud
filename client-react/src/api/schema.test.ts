@@ -106,7 +106,6 @@ describe("loginSchema", () => {
   });
 
   it("rejects a 200 that carries no token", () => {
-    // The old client checks `!r.body.token` by hand; here it is the schema's job.
     expect(loginSchema.safeParse({ user: { id: "u1", name: "Ada" } }).success).toBe(false);
     expect(loginSchema.safeParse({ token: "" }).success).toBe(false);
   });

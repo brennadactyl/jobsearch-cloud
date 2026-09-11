@@ -16,32 +16,27 @@ import { removeDelistedLead } from "./delisting.js";
 
 /**
  * POST /api/update - requires a Bearer token. Body
- * `{ type: "lead"|"application", ... }`.
+ * `{ type: "lead"|"application", ... }` -> `{ ok, lead }` or
+ * `{ ok, application }`; 400 for an unknown type or a `delistedOn` that isn't
+ * YYYY-MM-DD, 404 for an unknown lead, application or destination track, 409
+ * when the destination tab already holds the lead's url. A lead with
+ * `delistedOn` answers as ./delisting.js's removeDelistedLead.
  */
 export async function handleUpdate({ request, db }) {
   const body = await readJson(request);
   if (body instanceof Response) return body;
 
   if (body.type === "lead") {
-    // `delistedOn` is the one field here the server acts on rather than
-    // stores. A scheduled search sending it is reporting a fact it observed -
-    // "this posting is gone from the internet" - and what the tracker does
-    // about that is a decision this codebase owns, not the caller's: see
-    // ./delisting.js's removeDelistedLead. Every other key is a plain field
-    // write.
+    // `delistedOn` is the one field the server acts on rather than stores: the
+    // caller reports the posting is gone, and what that means is decided in
+    // ./delisting.js's removeDelistedLead.
     //
-    // An empty string is the "found live again" clear, which no longer has
-    // anything to undo. It falls through to the normal update path, where the
-    // field whitelist ignores it and the lead comes back unchanged - a no-op
-    // rather than an error, so a run using the documented call doesn't fail
-    // on a posting that came back.
+    // "" is a no-op, not an error: it falls through to the plain update, whose
+    // field whitelist ignores it, and the lead comes back unchanged.
     //
-    // Anything else has to be a real YYYY-MM-DD before it acts. What it
-    // triggers is a permanent delete and the caller is an LLM: "unknown" or
-    // "today" reaching the old code left a bad string in a column, whereas
-    // here it would take a live posting off the board for good. A value that
-    // isn't a date isn't a report of anything, so it's refused rather than
-    // quietly read as "dead, date unknown".
+    // Any other value must be a real YYYY-MM-DD. It triggers a permanent delete
+    // and the caller is an LLM, so "unknown" or "today" is refused rather than
+    // read as "dead, date unknown".
     if (typeof body.delistedOn === "string" && body.delistedOn.trim()) {
       const on = isoDate(body.delistedOn.trim());
       if (!on) return json({ error: "delistedOn must be YYYY-MM-DD" }, 400);

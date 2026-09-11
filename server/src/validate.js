@@ -1,11 +1,7 @@
 /**
- * The checks more than one route makes, and the date they all fall back to.
- *
- * Each of these was written out once per handler before it lived here, which
- * is how the same rule drifts into two slightly different rules: a stricter
- * date on one route than another, or a track check on the routes that read by
- * key and none on the two that write by it. Nothing here talks to D1 directly;
- * excluderFor takes the caller's already-scoped `Db` (see ./db.js).
+ * The checks more than one route makes, defined once so no two routes enforce
+ * slightly different versions of a rule. excluderFor takes the caller's
+ * already-scoped `Db` (see ./db.js).
  */
 
 import { json } from "./http.js";
@@ -15,36 +11,24 @@ export function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// A caller-supplied local date, or "" if it isn't one. Every route that takes
-// an `on` validates it identically, and the shape was written out ten times
-// before this existed - which is nine chances for one of them to drift into
-// accepting something the others refuse, on a value that decides what date
-// rows are stamped with and, on /api/delist, whether a lead is deleted.
-//
-// Strict on purpose: no coercion, no "2026-9-1". The callers are LLM runs, and
-// a value that isn't a date isn't a report of anything.
+// A caller-supplied local date, or "" if it isn't one. Strict on purpose - no
+// coercion, no "2026-9-1": the callers are LLM runs, a value that isn't a date
+// isn't a report of anything, and this value decides what date rows are
+// stamped with and, on /api/delist, whether a lead is deleted.
 export function isoDate(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
 }
 
-// The refusal every route that takes a single track key gives for a key that
-// isn't one of the caller's configured tracks - /api/dedup/:key,
-// /api/coverage/:key (both verbs), /api/runs, /api/prompt/:key, and the
-// `search` move in /api/update. Worded identically on all of them because it
-// always means the same thing: the caller's idea of this search and the
-// tracker's have drifted apart.
+// The refusal for a track key that isn't one of the caller's configured tracks.
+// Worded identically on every route because it always means the same thing:
+// the caller's idea of this search and the tracker's have drifted apart.
 export function unknownTrack(key) {
   return json({ error: `unknown track "${key}" - not in the configured tracks` }, 404);
 }
 
-// The guard /api/leads and /api/screened were missing. Every route that reads
-// by track key - /api/dedup/:key, /api/coverage/:key (both verbs), /api/runs -
-// 404s a key that isn't one of the caller's configured tracks, while those two
-// write routes accepted whatever string they were handed. That asymmetry is
-// how 145 leads and 185 screened rows came to sit under a retired "TPM" key:
-// in the database, invisible on the page (a row's tab comes from the track
-// list, and there was no longer a track named TPM), with nothing erroring on
-// either side. Nothing said so until someone counted rows.
+// unknownTrack for a batch whose rows each name a track. A row filed under a
+// key that isn't a configured track is stored but invisible on the page (a
+// row's tab comes from the track list), and nothing errors on either side.
 //
 // A fed track passes like any other: `fed_by` marks a tab, not a non-track, so
 // it is a row in `tracks` and a branched run legitimately files into it.
@@ -56,11 +40,9 @@ export function unknownTrackResponse(tracks, rows) {
   const configured = new Set(tracks.map((t) => t.key));
   const unknown = [...new Set(rows.map((r) => r.search))].filter((k) => !configured.has(k));
   if (unknown.length === 0) return null;
-  // The whole request is refused rather than the drifted rows dropped. Partly
-  // for symmetry with /api/runs, which answers the same drift the same way;
-  // mostly because a partial insert leaves the run believing it filed rows it
-  // did not. It reads `added`, reports that number in its own summary, and
-  // treats those postings as ones it never has to go find again.
+  // Refuse the whole request; never drop just the drifted rows. The run reads
+  // `added` as filed and treats those postings as ones it never has to find
+  // again.
   const named = unknown.map((k) => `"${k}"`).join(", ");
   return json(
     { error: `unknown track${unknown.length > 1 ? "s" : ""} ${named} - not in the configured tracks` },
@@ -68,49 +50,34 @@ export function unknownTrackResponse(tracks, rows) {
   );
 }
 
-// The three folders a document can live in, which are also the three values of
-// its `kind`. A list rather than "any folder" because the runner materializes
-// these paths onto a disk (see scripts/run-search.ps1): an open-ended folder
-// name is a directory this run creates on someone's machine, and the set that
-// is actually meaningful has been three since private.example/README.md was
-// written.
+// The folders a document can live in, which are also the values of its `kind`.
+// A fixed list because the runner materializes these paths onto a disk (see
+// scripts/run-search.ps1), where an open-ended folder name is a directory
+// created on someone's machine.
 export const DOCUMENT_FOLDERS = ["docs", "resumes", "reference"];
 
-// Whether a caller-supplied document path is one this API will store.
+// One known folder and one plain filename, no nesting, so `kind` is derivable
+// from the path itself.
 //
-// One rule doing two jobs, which is why it is a single regexp rather than a
-// classification step and a security step that could disagree. It fixes the
-// vocabulary - one known folder, one plain filename, no nesting - so `kind` is
-// derivable from the path itself with nothing stored alongside it. And in
-// fixing it, it refuses "..", absolute paths, backslashes, empty segments and
-// a leading dot, with no separate traversal check to keep correct.
+// This is a security boundary. The nightly runner writes each path to a file
+// under its working directory, so this regexp alone is what refuses "..",
+// absolute paths, backslashes, empty segments and a leading dot - a path that
+// got past it would be a write-anywhere primitive for any session token. Don't
+// loosen it, and don't split it into separate classification and traversal
+// checks that could disagree. Filenames are narrow on purpose: a name needing
+// more than word characters, spaces, dots and hyphens is likelier a mistake or
+// an attack than a document.
 //
-// That second job is the load-bearing one. These paths are not only object
-// keys: the nightly runner writes each of them to a file under its working
-// directory. A path this accepted with a ".." in it would be a write-anywhere
-// primitive on the machine running the search, reachable by anyone holding a
-// session token.
-//
-// Deliberately narrow on filenames. Real ones here are `tracked_swe_postings.md`
-// and `Someone_Resume.docx`; a name needing anything outside word characters,
-// spaces, dots and hyphens is likelier a mistake or an attempt than a document
-// somebody meant to store.
-//
-// First and last character must both be word characters, which is what rules
-// out a name ending in a space or a dot. Windows drops both silently when it
-// creates a file, so `x.md ` stored here materializes on the runner as `x.md` -
-// and the write-back, which decides what to send by comparing hashes of what is
-// on disk, would then PUT to `x.md` and leave the original orphaned. Nothing
-// errors; the account quietly grows a second copy of its most important
-// document and starts editing the wrong one.
+// The first and last characters must be word characters because Windows
+// silently strips a trailing space or dot when it creates a file: `x.md `
+// would materialize as `x.md`, and the hash-compared write-back would PUT to
+// `x.md`, orphaning the original and editing a second copy.
 const DOCUMENT_PATH = new RegExp(`^(${DOCUMENT_FOLDERS.join("|")})/\\w(?:[\\w .-]*\\w)?$`);
 
-// The DOS device names, which are not filenames on Windows whatever extension
-// follows them: `CON`, `PRN.md` and `aux.txt` all resolve to a device rather
-// than a file. The failure mode is not an error - the runner's write appears to
-// succeed while `Test-Path` reports the file does not exist, so a materialized
-// document is written and absent at the same time. Matched against the stem
-// before the first dot, case-insensitively, the way Windows resolves it.
+// DOS device names are not filenames on Windows whatever extension follows:
+// `CON`, `PRN.md` and `aux.txt` all resolve to a device, so the runner's write
+// appears to succeed while `Test-Path` reports no file. Matched against the
+// stem before the first dot, case-insensitively, the way Windows resolves it.
 const DOS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
 
 /** @param {unknown} path @returns {boolean} */
@@ -120,9 +87,8 @@ export function isDocumentPath(path) {
   return !DOS_DEVICE.test(name.split(".")[0]);
 }
 
-// The refusal every document route gives for a path it will not store. Names
-// the rule rather than the offending part: the callers are a PowerShell script
-// and an LLM run, and "what am I allowed to send" is the useful answer to both.
+// Names the whole rule rather than the offending part: the callers are a
+// PowerShell script and an LLM run, and what they may send is the useful answer.
 export function badDocumentPath(path) {
   return json(
     {
@@ -137,10 +103,7 @@ export function badDocumentPath(path) {
   );
 }
 
-// The exclusion predicate for this user, built from their settings. Every
-// write path that can introduce a company needs it (leads, screened, and the
-// coverage rotation both ways), and each one was fetching settings and
-// building the matcher itself.
+// Every write path that can introduce a company filters through this.
 export async function excluderFor(db) {
   const { settings } = await db.getTracksAndSettings();
   return excludedCompanyMatcher(settings.excluded_companies);

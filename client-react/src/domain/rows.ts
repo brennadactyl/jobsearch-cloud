@@ -1,6 +1,3 @@
-/**
- * Sorting, and the three states the overnight fill leaves an application in.
- */
 import type { Application, Lead, PriorityLocation } from "../api/schema";
 import { safeUrl } from "./format";
 import { rank } from "./geo";
@@ -35,10 +32,8 @@ export function appComparator(sortKey: string): (a: Application, b: Application)
   if (sortKey === "company-asc") return (a, b) => String(a.company).localeCompare(String(b.company));
   if (sortKey === "location-asc") {
     return (a, b) => {
-      // Unlike a lead, an application can have no location at all - one added
-      // by hand starts blank. An empty string sorts first, which would put the
-      // rows saying nothing about where they are at the top of the sort that
-      // asks exactly that, so they sink instead.
+      // A hand-added application can have no location, and "" would sort first
+      // in the sort that asks about location, so blanks sink.
       const ea = a.location ? 0 : 1;
       const eb = b.location ? 0 : 1;
       if (ea !== eb) return ea - eb;
@@ -49,11 +44,9 @@ export function appComparator(sortKey: string): (a: Application, b: Application)
     sortKey === "applied-asc"
       ? (a: Application, b: Application) => String(a.dateApplied).localeCompare(String(b.dateApplied))
       : (a: Application, b: Application) => String(b.dateApplied).localeCompare(String(a.dateApplied));
-  // "To Apply" rows have no applied date, so either date sort would clump them
-  // at one end on an empty string - last, under the default, which is the wrong
-  // place for the only rows still owing an application. Float them instead.
-  // Company A-Z is left alone: an explicit alphabetical sort should be exactly
-  // alphabetical.
+  // "To Apply" rows have no applied date and are the only rows still owing an
+  // application, so both date sorts float them rather than clump them on "".
+  // Company A-Z stays exactly alphabetical.
   return (a, b) => {
     const ta = a.status === "To Apply" ? 0 : 1;
     const tb = b.status === "To Apply" ? 0 : 1;
@@ -66,15 +59,11 @@ export function appComparator(sortKey: string): (a: Application, b: Application)
 export type FillState = "" | "waiting" | "stuck";
 
 /**
- * Which of the overnight fill's three states a row is in, and the only place
- * that decides it.
+ * The only place that decides a row's fill state.
  *
- * The 'waiting' arm mirrors getAutofillQueue() in server/src/db.js - link,
- * unread flag, and a gap the posting could fill - with the obligation to stay in
- * step that implies: a row called waiting that no run would fetch would sit
- * there promising a fill that is never coming. The blank-field condition is the
- * easy one to drop and the one that matters, because a row whose company, role
- * and location are already filled is not in the queue.
+ * 'waiting' must stay in step with getAutofillQueue() in server/src/db.js - a
+ * link, no autofill flag, and a blank company, role or location - or a row
+ * promises a fill no run will attempt.
  */
 export function fillState(a: Application): FillState {
   if ((a.autofill || "") === "failed") return "stuck";
