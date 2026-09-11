@@ -26,14 +26,14 @@ Each run should:
 
 Don't re-spend a full verification attempt rediscovering a **domain-wide fetch block** that's already confirmed - that's different from a specific posting closing, which is real signal and always worth checking. The distinction: if *every* URL tried at a domain fails the *same way* regardless of which posting (robots.txt block, blanket 403/429, a JS-rendered shell with no static content ever, metadata-only, or systematic truncation), that's a tooling wall, not news. If specific postings turn out closed/404 while others at the same domain verify fine, that's normal churn - keep checking those in full.
 
-Once a domain-wide block has shown up on 2+ separate run-dates (track it in the Reliability notes below as it happens), stop spending a fresh attempt confirming it: use a known working fallback if one exists (a different subdomain, an ATS mirror), or skip that domain for the run entirely if none exists, noting in the addendum that it was skipped on cadence grounds rather than re-tested. Re-attempt a skipped domain at most about once a week, or immediately if a specific new posting surfaces there via search that looks like a strong fit - a concrete new lead always earns one verification attempt even at an otherwise-blocked domain.
+Walls are recorded in the tracker, not here. When no route to a company's listings works - including the fallbacks, a different subdomain or an ATS mirror - record a `wall` for it in step 9d. Once the same wall has been recorded on two separate dates, `./tracker companies` serves it, and a served wall means skip that company's listing for the run; the tracker stops serving it after seven days, and that is the re-test. A served wall never stops a specific posting URL - a concrete new lead there still earns its verification attempt. If any route works, report it as `board` or `endpoint` instead of a wall. Any company note below that calls a domain blocked or skippable on cadence is history from before walls were shared: it records what a past run found, and it no longer decides whether to skip.
 
-## Company coverage (apply on every run, once this search has a coverage list)
+## Company coverage (apply on every run)
 
 A company list long enough to be worth having is usually longer than one run
 can verify properly, and covering all of it every night is what makes a run
-shallow. If this search has been seeded with a coverage list, the daily prompt
-carries extra steps for it - 1c picks which companies this run covers, 9d
+shallow. Every search draws from one shared company list, so the daily prompt
+carries steps for it - 1c picks which companies this run covers, 9d
 records what was attempted, and 9e replaces the ones that turned out
 unreadable. Follow them.
 
@@ -50,10 +50,10 @@ does. `./tracker companies` writes out the slice with each company's
 last-attempted date and the cursor; `./tracker swept` stamps what a run
 attempted and advances the cursor. Don't keep a parallel
 table here: what belongs in this doc is which companies are worth searching
-(Target Companies below) and what is known about fetching each one (Fetch
-efficiency above). A confirmed board endpoint belongs in both - here as the
-URL shape, and as `board` on the coverage row, so a run that draws that company
-knows it can be had in one fetch.
+(Target Companies below). How to reach a company is not a doc edit any more - a
+board, an endpoint, a URL shape that works, and a wall when nothing does all go
+in step 9d, where every search reads them. The fetch notes above stay as
+reference, since they are where each way in was first written down.
 
 ## Scope rules (apply on every run)
 
