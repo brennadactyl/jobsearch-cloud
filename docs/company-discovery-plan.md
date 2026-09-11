@@ -163,7 +163,9 @@ the routes, not in the prompt.
 the list is **logged as a suggestion and nothing else is written for it**: no
 `company_sweeps` row, and no shared facts either - not even when the report
 carries a `board` or a `wall`. Skipping `addCompanies` is not enough on its own,
-because `upsertCompanyFetch` would create the row itself, at position 0. A sweep row for a company that is not on the list
+because `upsertCompanyFetch` would create the row itself, at position 0.
+
+A sweep row for a company that is not on the list
 would point at a `company_key` with no list entry, which breaks the invariant
 0011 established and 0012 was checked against: every sweep row joins a company
 on the list.
