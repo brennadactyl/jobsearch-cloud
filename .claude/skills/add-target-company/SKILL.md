@@ -121,9 +121,17 @@ company with no facts (step 4) and let the runs establish it.
 
 ## 3. Pick the search key to write under
 
-A dated report stamps that search's `last_swept` for the company, and **moves
-that search's cursor if the company is inside the slice it is currently being
-served** - which would mark every company before it in that slice as covered.
+A dated report has two side effects on the search you write it under:
+
+- It stamps that search's `last_swept` for the company, so its record says it
+  swept the company today when no run did. Selection never reads dates, so the
+  cost is a misleading record, nothing more. Say which key you used when you
+  report back.
+- It **moves that search's cursor if the company is inside the slice it is
+  currently being served**. The cursor jumps past every company before it in
+  that slice, and those are skipped for the rest of the cycle - not recorded as
+  covered, just never served.
+
 Pick a key whose current slice does not contain the company:
 
 ```bash
