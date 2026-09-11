@@ -105,38 +105,6 @@
     }
   ],
 
-  "coverage": {
-    "engineering": [
-      { "company": "Northwind Systems", "board": "greenhouse" },
-      { "company": "Vantage Labs", "board": "ashby" },
-      { "company": "Cobalt Interactive", "board": "greenhouse" },
-      { "company": "Harborline Software", "board": "lever" },
-      { "company": "Kestrel Analytics", "board": "" },
-      { "company": "Lumenwave", "board": "greenhouse" },
-      { "company": "Tidepool Games", "board": "" },
-      { "company": "Fernbrook Robotics", "board": "ashby" },
-      { "company": "Silverpine Media", "board": "workday cxs" },
-      { "company": "Arcadia Grid", "board": "greenhouse" },
-      { "company": "Bellwether Health", "board": "" },
-      { "company": "Driftwood Studios", "board": "lever" },
-      { "company": "Meridian Freight", "board": "" },
-      { "company": "Oakmoss Design", "board": "ashby" },
-      { "company": "Pinehurst Cloud", "board": "greenhouse" }
-    ],
-    "data": [
-      { "company": "Kestrel Analytics", "board": "" },
-      { "company": "Lumenwave", "board": "greenhouse" },
-      { "company": "Bellwether Health", "board": "" },
-      { "company": "Arcadia Grid", "board": "greenhouse" },
-      { "company": "Quillfeather AI", "board": "ashby" },
-      { "company": "Sandbar Metrics", "board": "" },
-      { "company": "Thornfield Energy", "board": "workday cxs" },
-      { "company": "Wavelet Labs", "board": "ashby" },
-      { "company": "Ironvale Retail", "board": "lever" },
-      { "company": "Marrowstone Bio", "board": "" }
-    ]
-  },
-
   "leads": [
     { "search": "engineering", "company": "Northwind Systems", "title": "Senior Backend Engineer", "location": "Seattle, WA", "url": "https://careers.northwind.example.com/jobs/482103", "foundDaysAgo": 18, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Payments services in Go, on-call ownership, and a team that runs what it builds - close to the last four years of the profile.", "team": "Payments Platform", "setup": "Hybrid, 3 days onsite", "comp": "$185k - $225k", "notes": "Recruiter replied to the application; waiting on a screen time." },
     { "search": "engineering", "company": "Vantage Labs", "title": "Staff Software Engineer, Platform", "location": "Remote (US)", "url": "https://careers.vantagelabs.example.com/jobs/771248", "foundDaysAgo": 16, "verifiedDaysAgo": 1, "status": "New", "fit": "Staff-level scope on internal platform tooling. The posting asks for multi-team technical leadership, which is a stretch but a stated one.", "team": "Developer Platform", "setup": "Remote", "comp": "$210k - $250k" },

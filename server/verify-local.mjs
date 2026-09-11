@@ -1729,6 +1729,32 @@ check("a wall beside a url_shape is not a contradiction, and both are shared",
   shapeRow.known.wall === "listing renders client-side" && shapeRow.known.url_shape === "shapeco.example/jobs/<id>",
   JSON.stringify({ withheld: shapeRes.json.withheld, row: shapeRow }));
 
+// A demo account's companies are invented, and the list is shared: 0011 merged
+// a seeded demo rotation into it and put 21 companies that do not exist in
+// front of real searches. So the account is marked when it is provisioned, and
+// the one route that writes the list refuses it - swept or seeded.
+check("an account created without saying is a person", aCreate.json.demo === false, JSON.stringify(aCreate.json));
+const demoName = `Demo ${olRun}`;
+const demoCreate = await req("POST", "/api/users", { admin: true, body: { name: demoName, password: "demo-long-password", demo: true } });
+check("POST /api/users marks an account as a demo", demoCreate.status === 201 && demoCreate.json.demo === true,
+  JSON.stringify(demoCreate.json));
+const demoReset = await req("POST", "/api/users", { admin: true, body: { name: demoName, password: "demo-long-password" } });
+check("and a password reset that does not say leaves the mark alone", demoReset.json.demo === true, JSON.stringify(demoReset.json));
+const DEMO_TOK = (await req("POST", "/api/login", { body: { name: demoName, password: "demo-long-password" } })).json.token;
+await req("POST", "/api/config", { token: DEMO_TOK, body: { tracks: [{ key: "ENG", label: "Eng" }] } });
+const inventedCo = `Invented Co ${olRun}`;
+const demoSwept = await req("POST", "/api/coverage", { token: DEMO_TOK, body: { search: "ENG", on: daysAgo(0),
+  swept: [{ company: inventedCo, board: "greenhouse" }] } });
+const demoSeeded = await req("POST", "/api/coverage", { token: DEMO_TOK, body: { search: "ENG", on: "",
+  swept: [{ company: inventedCo }] } });
+check("a demo account cannot write to the company list, swept or seeded",
+  demoSwept.status === 403 && demoSeeded.status === 403, JSON.stringify([demoSwept.status, demoSeeded.status]));
+check("and nothing it sent reached anyone's list",
+  !(await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).json.companies.some((c) => c.company === inventedCo));
+const demoRead = await req("GET", "/api/coverage/ENG?all=1", { token: DEMO_TOK });
+check("but a demo account still reads the shared list",
+  demoRead.status === 200 && demoRead.json.total > 0, JSON.stringify({ status: demoRead.status, total: demoRead.json && demoRead.json.total }));
+
 const staleCo = `Stale Wall ${olRun}`;
 for (const on of [daysAgo(20), daysAgo(19)]) {
   await req("POST", "/api/coverage", { token: T1, body: { search: "ENG", on,

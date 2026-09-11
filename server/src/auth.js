@@ -32,7 +32,7 @@ const TOKEN_BYTES = 32;
 // Used when no account matches the name given at login - see verifyPassword.
 const DUMMY_SALT = "AAAAAAAAAAAAAAAAAAAAAA==";
 
-/** @typedef {{id: string, name: string, password_hash: string, password_salt: string, iterations: number, created_at: string}} User */
+/** @typedef {{id: string, name: string, password_hash: string, password_salt: string, iterations: number, created_at: string, demo: number}} User */
 
 // base64url (no padding) rather than plain base64: session tokens travel in an
 // Authorization header and get pasted into JSON config files by hand, and '+'
@@ -140,13 +140,16 @@ export function bearer(request) {
  * user simply isn't one.
  * @param {D1Database} d1
  * @param {string} token
- * @returns {Promise<{id: string, name: string, session_id: string}|null>}
+ * `demo` rides along because a route has to refuse a demo account before it
+ * writes anything shared (migrations/0012_demo_account.sql), and this is the
+ * one lookup every request already makes.
+ * @returns {Promise<{id: string, name: string, demo: number, session_id: string}|null>}
  */
 export async function getSessionUser(d1, token) {
   if (!token) return null;
   const row = await d1
     .prepare(
-      `SELECT u.id AS id, u.name AS name, s.id AS session_id
+      `SELECT u.id AS id, u.name AS name, u.demo AS demo, s.id AS session_id
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.id = ?`
     )
@@ -195,27 +198,32 @@ export async function deleteSession(d1, token) {
  * @param {D1Database} d1
  * @param {string} name
  * @param {string} password
- * @returns {Promise<{id: string, name: string, created: boolean}>}
+ * @param {boolean} [demo] whether the account's data is invented
+ *   (migrations/0012_demo_account.sql). Omitted, a new account is a person and
+ *   an existing one keeps what it was, so a password reset never changes it.
+ * @returns {Promise<{id: string, name: string, created: boolean, demo: boolean}>}
  */
-export async function upsertUser(d1, name, password) {
+export async function upsertUser(d1, name, password, demo) {
   const { hash, salt, iterations } = await hashPassword(password);
   const existing = await getUserByName(d1, name);
   if (existing) {
+    const flag = demo === undefined ? (Number(existing.demo) ? 1 : 0) : demo ? 1 : 0;
     await d1
-      .prepare("UPDATE users SET password_hash = ?, password_salt = ?, iterations = ? WHERE id = ?")
-      .bind(hash, salt, iterations, existing.id)
+      .prepare("UPDATE users SET password_hash = ?, password_salt = ?, iterations = ?, demo = ? WHERE id = ?")
+      .bind(hash, salt, iterations, flag, existing.id)
       .run();
-    return { id: existing.id, name: existing.name, created: false };
+    return { id: existing.id, name: existing.name, created: false, demo: flag === 1 };
   }
   const id = crypto.randomUUID();
+  const flag = demo ? 1 : 0;
   await d1
     .prepare(
-      `INSERT INTO users (id, name, password_hash, password_salt, iterations, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO users (id, name, password_hash, password_salt, iterations, created_at, demo)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(id, name, hash, salt, iterations, new Date().toISOString().slice(0, 10))
+    .bind(id, name, hash, salt, iterations, new Date().toISOString().slice(0, 10), flag)
     .run();
-  return { id, name, created: true };
+  return { id, name, created: true, demo: flag === 1 };
 }
 
 /**

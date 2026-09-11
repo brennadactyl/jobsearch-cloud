@@ -291,5 +291,86 @@ console.log("\n== 0011 against an empty database ==");
   db.close();
 }
 
+const STOP12 = MIGRATIONS.find((f) => f.startsWith("0012_"));
+const DEMO_ID = "1c773239-0000-4000-8000-000000000000";
+const listed = (d) => d.prepare("SELECT company_key k, position p FROM company_fetch ORDER BY company_key").all();
+
+console.log("\n== 0012: a seeded demo account's companies leave the shared list ==");
+{
+  // Northwind and Kestrel are demo-user.json companies a demo account holds.
+  // Lumenwave is on that list too, but no demo account holds it here - which is
+  // the case of a real company that happens to share a name.
+  const db = migratedThrough(STOP12, `
+INSERT INTO users (id, name, created_at) VALUES
+  ('${OWNER}', 'Brenna', '2026-08-31'),
+  ('${DEMO_ID}', 'Demo', '2026-09-02');
+INSERT INTO tracks (user_id, key, label, sweep_cursor) VALUES
+  ('${OWNER}', 'SWE', 'SWE', 2), ('${DEMO_ID}', 'engineering', 'Engineering', 0);
+INSERT INTO leads (user_id, search, found, company, title, url, verified) VALUES
+  ('${DEMO_ID}', 'engineering', '2026-09-01', 'Northwind Systems', 'Engineer', 'https://careers.northwind.example.com/jobs/1', '2026-09-01'),
+  ('${OWNER}', 'SWE', '2026-09-01', 'Acme', 'Engineer', 'https://boards.greenhouse.io/acme/jobs/1', '2026-09-01');
+INSERT INTO applications (user_id, dateApplied, link) VALUES
+  ('${DEMO_ID}', '2026-09-02', 'https://careers.kestrel.example.com/apply');
+INSERT INTO company_fetch (company_key, display_name, position) VALUES
+  ('northwind systems', 'Northwind Systems', 0), ('acme', 'Acme', 1),
+  ('kestrel analytics', 'Kestrel Analytics', 2), ('lumenwave', 'Lumenwave', 3), ('zeta', 'Zeta', 4);
+INSERT INTO company_sweeps (user_id, search, company, company_key, last_swept, note, position) VALUES
+  ('${DEMO_ID}', 'engineering', 'Northwind Systems', 'northwind systems', '', '', 0),
+  ('${DEMO_ID}', 'engineering', 'Kestrel Analytics', 'kestrel analytics', '', '', 2),
+  ('${OWNER}', 'SWE', 'Northwind Systems', 'northwind systems', '2026-09-11', 'No identifiable real company', 0),
+  ('${OWNER}', 'SWE', 'Acme', 'acme', '2026-09-10', '', 1),
+  ('${OWNER}', 'SWE', 'Lumenwave', 'lumenwave', '2026-09-11', '', 3);
+`);
+  const flags = Object.fromEntries(db.prepare("SELECT id, demo FROM users").all().map((u) => [u.id, u.demo]));
+  check("the seeded demo account is marked, and the person is not",
+    flags[DEMO_ID] === 1 && flags[OWNER] === 0, JSON.stringify(flags));
+  check("the companies a demo account holds are off the list, and every other keeps its position",
+    JSON.stringify(listed(db)) === JSON.stringify([{ k: "acme", p: 1 }, { k: "lumenwave", p: 3 }, { k: "zeta", p: 4 }]),
+    JSON.stringify(listed(db)));
+  const sweeps = db.prepare("SELECT user_id u, company_key k FROM company_sweeps ORDER BY u, k").all();
+  check("their sweep rows go for every account, including a real search's note about one",
+    JSON.stringify(sweeps) === JSON.stringify([{ u: OWNER, k: "acme" }, { u: OWNER, k: "lumenwave" }]), JSON.stringify(sweeps));
+  check("no cursor moves",
+    JSON.stringify(db.prepare("SELECT key, sweep_cursor c FROM tracks ORDER BY key").all()) ===
+    JSON.stringify([{ key: "SWE", c: 2 }, { key: "engineering", c: 0 }]));
+  check("the demo account's own leads and applications are its data, and stay",
+    db.prepare("SELECT COUNT(*) c FROM leads WHERE user_id = ?").get(DEMO_ID).c === 1 &&
+    db.prepare("SELECT COUNT(*) c FROM applications WHERE user_id = ?").get(DEMO_ID).c === 1);
+  check("no scratch table is left behind",
+    !db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'demo_%'").get());
+  db.close();
+}
+
+console.log("\n== 0012: an account called Demo holding one real posting is a person ==");
+{
+  // A lookalike host, not a subdomain of example.com - the case a LIKE on the
+  // whole URL gets wrong.
+  const db = migratedThrough(STOP12, `
+INSERT INTO users (id, name) VALUES ('${DEMO_ID}', 'Demo');
+INSERT INTO leads (user_id, search, found, company, title, url, verified) VALUES
+  ('${DEMO_ID}', 'engineering', '2026-09-01', 'Northwind Systems', 'Engineer', 'https://careers.northwind.example.com/jobs/1', '2026-09-01');
+INSERT INTO screened (user_id, search, url, date) VALUES
+  ('${DEMO_ID}', 'engineering', 'https://example.com.jobs-mirror.io/realco/9', '2026-09-01');
+INSERT INTO company_fetch (company_key, display_name, position) VALUES ('northwind systems', 'Northwind Systems', 0);
+INSERT INTO company_sweeps (user_id, search, company, company_key, position) VALUES
+  ('${DEMO_ID}', 'engineering', 'Northwind Systems', 'northwind systems', 0);
+`);
+  check("it is not marked", db.prepare("SELECT demo FROM users").get().demo === 0);
+  check("and nothing is removed",
+    db.prepare("SELECT COUNT(*) c FROM company_fetch").get().c === 1 &&
+    db.prepare("SELECT COUNT(*) c FROM company_sweeps").get().c === 1);
+  db.close();
+}
+
+console.log("\n== 0012 against an empty database ==");
+{
+  const db = migratedThrough(STOP12, null);
+  const col = db.prepare("SELECT dflt_value d, [notnull] n FROM pragma_table_info('users') WHERE name = 'demo'").get();
+  check("users gains demo, not null, defaulting to a person", !!col && col.d === "0" && col.n === 1, JSON.stringify(col));
+  check("no scratch table is left behind",
+    !db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'demo_%'").get());
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

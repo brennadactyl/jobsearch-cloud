@@ -322,6 +322,14 @@ the pipeline from "To Apply" to an offer. The dates are stored as day offsets
 rather than calendar dates, so it always reads as a search that's been running
 for the last three weeks - re-run with `-Force` to move it forward to today.
 
+**It never writes to the shared company list.** Every account's searches draw
+from one list of companies, and an invented company on it is one real nightly
+runs go looking for. So the account is marked `demo` when the seed provisions
+it, and the server refuses a demo account's `POST /api/coverage`; its rotation
+tab still shows the real list. This is learned rather than foreseen:
+`0011_one_company_list.sql` merged every account's rotation into that list,
+demo included, and `0012_demo_account.sql` took its 21 companies back out.
+
 **It has no scheduled search, and can't acquire one.** It gets no
 `private\<user id>\` folder, and `setup-scheduler.ps1` finds people by scanning
 for `<data dir>\*\tracker.json` - so an account with no folder is invisible to
