@@ -25,6 +25,18 @@ import { excluderFor, isoDate, today, unknownTrack } from "../validate.js";
 // A constant, not config: a setting nobody sets is a setting that goes stale.
 export const COVERAGE_BATCH = 24;
 
+// The slice a search is served from `cursor`: eligible companies at or after it
+// in position order, then round from the front, capped at the batch. Both
+// routes go through this one function - GET to serve the slice, POST to bound
+// how far a report can move the cursor - so the two cannot come to disagree
+// about what a run was given.
+function sliceAt(eligible, cursor) {
+  return eligible
+    .filter((c) => c.position >= cursor)
+    .concat(eligible.filter((c) => c.position < cursor))
+    .slice(0, COVERAGE_BATCH);
+}
+
 /**
  * GET /api/coverage/:key[?on=YYYY-MM-DD] - requires a Bearer token ->
  * `{ companies: [{company, last_swept, board, note}], total, batch }`.
@@ -71,9 +83,8 @@ export async function handleGetCoverage({ db, params, url }) {
       }),
       total: eligible.length,
       // Reports the whole table, because that is what this branch returns. Not
-      // the per-run cap - COVERAGE_BATCH is still a hard 12 (see below), and
-      // reading `batch` from this branch as the nightly slice is a mistake
-      // that has already been made.
+      // the per-run cap - that is COVERAGE_BATCH, and reading `batch` from this
+      // branch as the nightly slice is a mistake that has already been made.
       batch: eligible.length,
       cursor,
     });
@@ -102,11 +113,7 @@ export async function handleGetCoverage({ db, params, url }) {
   // Wrapping falls out of the concatenation: once the cursor passes the last
   // position, nothing is at or after it and the whole slice comes from the
   // front of the log.
-  const take = Math.min(COVERAGE_BATCH, eligible.length);
-  const companies = eligible
-    .filter((c) => c.position >= cursor)
-    .concat(eligible.filter((c) => c.position < cursor))
-    .slice(0, take);
+  const companies = sliceAt(eligible, cursor);
 
   // What is already known about reaching each of these, pooled across the
   // whole deployment (migrations/0010_company_fetch.sql). Attached to the
@@ -124,7 +131,7 @@ export async function handleGetCoverage({ db, params, url }) {
   return json({
     companies: withIntel,
     total: eligible.length,
-    batch: take,
+    batch: companies.length,
     // Where this search has read up to, as a position rather than an index.
     // Progress through the rotation is a number now rather than something
     // inferred from dates - "24 of 55" is answerable, and so is "when does a
@@ -247,37 +254,49 @@ export async function handleRecordSweeps({ request, db }) {
       )
     : { written: 0 };
 
-  // Advance the cursor past the furthest company actually reported, so the
-  // next read starts after it - including within the same run, which is what
-  // lets a run come back for replacements without a date filter.
+  // Advance the cursor past the last company reported from the slice this
+  // search was served, so the next read starts after it - including within the
+  // same run, which is what lets a run come back for replacements without a
+  // date filter.
   //
   // Committed only now, after the sweep is recorded. A run that dies before
   // reporting leaves the cursor where it was and tomorrow re-reads the same
   // stretch; it never advances past work nobody recorded.
   //
   // Seeding (`on: ""`) registers companies without claiming to have covered
-  // them, so it must not move the cursor. Only companies already on the list
-  // count: one that joined in this call was appended past every cursor.
+  // them, so it must not move the cursor.
+  //
+  // Only the served slice counts, rebuilt here by the function GET served it
+  // with. A report routinely names companies outside it, and each of those is
+  // recorded, but none of them moves the cursor:
+  //  - a company discovery turned up that is already on the list. On one shared
+  //    list that is the ordinary case - another search's run added it - and it
+  //    can sit anywhere along the log. Counting it moved the cursor past it,
+  //    and everything between the slice and that company went unswept for the
+  //    rest of the cycle.
+  //  - a company re-sent after it was already recorded, which sits behind the
+  //    cursor. Measured along the rotation that is nearly a whole lap, so it
+  //    outranked the replacements reported beside it.
+  //  - a company that joined in this call, appended past every cursor.
+  // The slice is in rotation order, wrap included, so the last one reported is
+  // the furthest along. That also settles the slice that runs off the end of
+  // the log and back round to the front: the highest position in it is not the
+  // last one served, and advancing past the highest re-served the front of that
+  // slice early - 12 companies a cycle at a batch of 24.
+  //
+  // The rebuild matches what the run was served because reading never moves the
+  // cursor, so a run cannot be handed a second slice without reporting the
+  // first. The list can still change between the read and the report - another
+  // run appending while a slice wraps, an exclusion edited mid-run - and the
+  // worst either does is stop the cursor short, so a company is served twice.
+  // A company is never skipped: the cursor only passes companies this report
+  // named.
   let cursor = await db.getSweepCursor(key);
   if (on !== "") {
-    const positions = allowed
-      .map((i) => onList.get(normalize(i.company)))
-      .filter(Boolean)
-      .map((c) => c.position);
-    if (positions.length) {
-      // "Furthest" is furthest along the rotation from where this search had
-      // read to - not the highest position number. The two differ for the one
-      // slice per cycle that runs off the end of the log and back round to the
-      // front: its highest position sits near the end, so advancing past that
-      // left the cursor past the end, the next read started at the front again,
-      // and the front half of that slice was served a second time before the
-      // rest of the cycle had been reached. The full-cycle check measured 12
-      // companies served twice early at a batch of 24.
-      const span = Math.max(cursor, Math.max(...log.map((c) => c.position)) + 1);
-      const along = (p) => (p >= cursor ? p - cursor : p + span - cursor);
-      const lastServed = positions.reduce((a, p) => (along(p) > along(a) ? p : a));
-      cursor = await db.setSweepCursor(key, lastServed + 1);
-    }
+    const reported = new Set(allowed.map((i) => normalize(i.company)));
+    const served = sliceAt(log.filter((c) => !isExcluded(c.company)), cursor);
+    const lastServed = served.findLast((c) => reported.has(normalize(c.company)));
+    if (lastServed) cursor = await db.setSweepCursor(key, lastServed.position + 1);
   }
 
   return json({ recorded, added, excluded, on, cursor, shared: shared.written });

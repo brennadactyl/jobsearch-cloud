@@ -40,9 +40,9 @@ genuine zero-result day.
 
 ## Architecture
 
-![Architecture diagram: Task Scheduler fires the headless Claude CLI daily, once per configured track, which fetches that track's documents from the tracker into a throwaway run folder, searches and verifies career sites, writes back the doc it edited, and posts new leads to server/'s Cloudflare Worker API. That API reads and writes a D1 database and answers the browser's cross-origin API calls; a separate static-assets Worker deployment, client/, serves the browser the tracker page itself.](docs/architecture.svg)
+![Architecture diagram: Windows Task Scheduler runs one headless Claude run per track, plus a nightly application fill. Each run fetches its prompt and documents from server/'s API Worker into a throwaway folder, searches and verifies career sites, reports through ./tracker, and writes back the doc it edited. The API keeps rows in D1 and documents in R2 and answers the browser's cross-origin calls; client/, a separate static-assets Worker, serves the tracker page.](docs/architecture.svg)
 
-Full write-up with a reference table of routes and schedules:
+Full write-up, with the scheduled tasks and where the API routes are defined:
 [docs/architecture.html](docs/architecture.html) (open locally in a browser -
 GitHub shows source for `.html` files rather than rendering them).
 

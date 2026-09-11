@@ -12,7 +12,8 @@
  */
 import { useSyncExternalStore } from "react";
 
-export type SaveTone = "" | "ok" | "bad";
+/** "off" greys the dot: a write is in flight and has not landed yet. */
+export type SaveTone = "off" | "ok" | "bad";
 export interface SaveState {
   text: string;
   tone: SaveTone;
@@ -27,14 +28,15 @@ function set(next: SaveState) {
 }
 
 export const saved = {
-  saving: () => set({ text: "Saving…", tone: "" }),
+  /** "Saving…", or the verb that fits better - "Moving…". */
+  saving: (text = "Saving…") => set({ text, tone: "off" }),
   ok: () => set({ text: "Saved", tone: "ok" }),
   failed: () => set({ text: "Couldn't save — try again", tone: "bad" }),
   /** For a failure worth reading rather than the generic one - an unknown track, a duplicate posting. */
   message: (text: string) => set({ text, tone: "bad" }),
   /** A success worth saying more precisely than "Saved" - "Added — it fills in overnight". */
   note: (text: string) => set({ text, tone: "ok" }),
-  loading: () => set({ text: "Loading", tone: "" }),
+  loading: () => set({ text: "Loading", tone: "off" }),
 };
 
 export function useSaved(): SaveState {

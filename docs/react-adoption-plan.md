@@ -1,6 +1,6 @@
 # Build the tracker page a second time, in React
 
-> Status: **phases 0-5 built** (2026-09-10). A `client-react/` deployable — React,
+> Status: **phases 0-5 built** (2026-09-10); **side-by-side review closed** (2026-09-11). A `client-react/` deployable — React,
 > Vite, TypeScript, TanStack Query, Vitest — built alongside the page that ships
 > today rather than converting it. The existing `client/` keeps working and keeps
 > deploying throughout, and the two only ever meet at a cutover decision that is
@@ -385,7 +385,7 @@ the repo deliberately commits no lockfile.
 
 ## Where the parity bar stands (2026-09-10)
 
-Phases 0-5 are built. Measured against the bar above, with 116 tests passing:
+Phases 0-5 are built. Measured against the bar above, with 177 tests passing:
 
 | Bar item | Status | How it is held |
 |---|---|---|
@@ -398,10 +398,27 @@ Phases 0-5 are built. Measured against the bar above, with 116 tests passing:
 | One authenticated path to the server | **clear** | `fetch` appears in `api/client.ts` only, twice — `request()` and `logout`. Login needs no exception here, unlike the original's three sites |
 | The write indicator | **clear** | every mutation sets it; asserted on success, on failure, and on the two failures worth reading as written |
 
-Not yet done, and not blocking: a same-account side-by-side against the live
-API. Everything above was verified against a local mock serving the same fixture
-both clients render, which is the right substitute for looking at real job data
-to check a layout, but it is not the same as the real thing.
+**The same-account side-by-side has been done.** A separate review session signed
+in to both deployed clients as `demo` and compared them screen by screen -
+computed styles, save-indicator text polled during writes, a real-keyboard Tab
+walk, three viewports and both themes. Its report is
+`docs/react-ux-comparison.md` (on `claude/beautiful-driscoll-40a197`). It found
+twenty differences. Each is now ported, or kept as a stated difference below.
+Every ported one has a test in `src/review.test.tsx` carrying the finding's
+number, and each of those tests fails against the code before the fix.
+
+The differences kept:
+
+| Finding | The React client | Why |
+|---|---|---|
+| 1.11, signing in | disables the button, which reads "Signing in…" | a second click can't send a second sign-in; the old page wrote the same words into its error line |
+| 1.18, loading | shows "Loading…" | the old page showed the sign-in card while the data loaded, asking for a password nobody needed to type |
+| 1.18, a failed load | says "Couldn't load: …" in the page, not on the gate | the same: the gate is for signing in, and signing in again isn't the fix |
+| 1.19, favicon | serves one | the old page 404s it |
+
+One more thing the review measured is wrong in both clients, so it isn't a
+parity item: the Overview's `--sbw` gutter stays at 15px after a pinned Overview
+is resized narrow enough to unpin.
 
 **One item did not survive first contact with production.** Reloading or
 bookmarking any tab other than the Overview returned 404: the Worker serves only

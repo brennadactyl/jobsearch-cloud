@@ -133,3 +133,16 @@ export function usePref<K extends keyof Prefs>(key: K): [Prefs[K], (v: Prefs[K])
 export function selectRow(scope: string, id: string): void {
   setPrefs({ selected: { ...current.selected, [scope]: id } });
 }
+
+/**
+ * The row a master/detail tab shows: the selected one while it is in the list,
+ * otherwise the first. Grid highlights by the same rule, so switching views lands
+ * on the same row either way.
+ *
+ * Worked out on every render and never stored. Storing the fallback raced adding
+ * an application: a render could see the new row's selection before it saw the
+ * new row, fall back to the first, and write that over the selection.
+ */
+export function shownRow<T extends { id: number }>(rows: readonly T[], selected: string | undefined): T {
+  return rows.find((r) => String(r.id) === String(selected)) ?? rows[0];
+}

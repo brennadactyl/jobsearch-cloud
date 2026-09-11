@@ -159,15 +159,22 @@ export interface PendingStage {
  */
 export function AppStatusSelect({
   app,
+  pending,
   onNeedsDate,
 }: {
   app: Application;
+  /**
+   * The change StageDateModal is asking about, if any. The select shows it while
+   * the dialog is open, so it reads as the stage being dated rather than the one
+   * being left.
+   */
+  pending?: PendingStage | null;
   onNeedsDate: (p: PendingStage) => void;
 }) {
   const setStatus = useSetApplicationStatus();
   return (
     <select
-      value={app.status}
+      value={pending?.app.id === app.id ? pending.status : app.status}
       aria-label="Status"
       onChange={(e) => {
         const status = e.target.value;

@@ -20,7 +20,8 @@ import { geo } from "../domain/geo";
 import { leadComparator } from "../domain/rows";
 import { runState } from "../domain/runs";
 import { buildTracks, pathForTab, trackCountLine } from "../domain/tabs";
-import { selectRow, setPrefs, usePrefs } from "../ui/prefs";
+import { revealSelectedRow } from "../ui/hooks";
+import { selectRow, setPrefs, shownRow, usePrefs } from "../ui/prefs";
 import { DrillChip, GeoBadge, GeoKey, Pill, RunStamp, SortSelect, TrashIcon, ViewSwitch } from "./bits";
 import { LeadFactsCard, NotesBlock } from "./facts";
 import { EditableField, LeadStatusSelect } from "./writes";
@@ -181,14 +182,13 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
     );
   }
 
-  const selectedId = prefs.selected[trackKey];
-  const sel = rows.find((l) => String(l.id) === String(selectedId)) ?? rows[0];
+  const sel = shownRow(rows, prefs.selected[trackKey]);
 
   return (
     <>
       {toolbar}
       <div className="md">
-        <div className="md-list">
+        <div className="md-list" ref={revealSelectedRow}>
           {rows.map((l) => {
             const g = geo(l.location, settings.priority_locations);
             return (
@@ -275,6 +275,8 @@ function LeadsGrid({
   const prefs = usePrefs();
   const { settings } = data;
   const cols = 6 + LEAD_GRID_FIELDS.length + (isAll ? 1 : 0);
+  // The row Detail shows is the row highlighted here, by the same rule.
+  const shownId = shownRow(rows, prefs.selected[trackKey]).id;
 
   return (
     <div className="card grid-wrap">
@@ -297,7 +299,7 @@ function LeadsGrid({
           {rows.map((l) => {
             const g = geo(l.location, settings.priority_locations);
             const open = !!prefs.expanded[l.id];
-            const cls = [g ? g.p : "", String(prefs.selected[trackKey]) === String(l.id) ? "gr-sel" : ""]
+            const cls = [g ? g.p : "", l.id === shownId ? "gr-sel" : ""]
               .filter(Boolean)
               .join(" ");
             // Opening or closing a row is what "highlights" it: it is the row
@@ -433,7 +435,14 @@ function MoveLead({ lead, data }: { lead: Lead; data: TrackerData }) {
       value={lead.search}
       title="Move this posting to another tab"
       aria-label="Tab"
-      onChange={(e) => move.mutate({ id: lead.id, search: e.target.value })}
+      // The moved row is the one selected under its new tab, so opening that tab
+      // lands on it.
+      onChange={(e) =>
+        move.mutate(
+          { id: lead.id, search: e.target.value },
+          { onSuccess: (moved) => selectRow(moved.search, String(moved.id)) },
+        )
+      }
     >
       {keys.map((k) => (
         <option key={k} value={k}>
