@@ -527,6 +527,21 @@ check("step 4 still requires every candidate URL to be opened and confirmed",
 // own rows was the loop that left a track with none unable to ever start.
 check("a track that has never swept anything still gets both rotation commands",
   boSteps.includes("./tracker companies") && boSteps.includes("./tracker swept"));
+// Step 9d has to name every field a run can send, or the field does not exist
+// in practice: until 2026-09-11 it named {company, board, note}, so endpoint
+// and url_shape reached no run and 58 of company_fetch's 63 rows had no
+// endpoint. `wall` is the newest, and the one whose absence would cost most -
+// an obstacle with nowhere shared to go is rediscovered by every search.
+check("step 9d names every field a sweep can carry, wall included",
+  sweSteps.includes("{company, board, endpoint, url_shape, wall, note}"));
+// A reported board or endpoint clears a company's wall for every search
+// (db.js upsertCompanyFetch, `works`), and companies.json hands every run the
+// board it already knows. tracker.ps1 drops those fields from a row that also
+// reports a wall, but a failed fetch with no wall recorded is caught by one
+// sentence only - this one. Without it, echoing a known board on a night the
+// fetch failed deletes a true wall, and nothing downstream can tell.
+check("step 9d forbids echoing a known board or endpoint back from companies.json",
+  /Never copy `board`, `endpoint` or `url_shape` out of `companies\.json`/.test(sweSteps));
 // The cap is the whole point, and it has to hold on the night it matters most:
 // a freshly seeded list, where every row is never-swept and nothing has a date
 // to sort by. It also has to be the *server's* cap - the prompt describing one

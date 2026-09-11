@@ -137,10 +137,11 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
 
   const docUpdateLine =
     track.doc_update_line ||
-    'If you learned something about fetch reliability worth keeping - a ' +
-      'newly-blocked domain, a working URL-format fix, a company worth ' +
-      'promoting from "expanded net" to "core" - update the relevant section ' +
-      `of \`${doc}\`. Do not add a found-postings table or a screened/dead-link ` +
+    'If you learned something worth keeping about this search - a company ' +
+      'worth promoting from "expanded net" to "core" - update the relevant ' +
+      `section of \`${doc}\`. A blocked domain or a working URL format is not a ` +
+      "doc edit: it is a `wall`, `endpoint` or `url_shape` in step 9d, where every " +
+      "search reads it. Do not add a found-postings table or a screened/dead-link " +
       "list back to the doc; those live in the tracker only.";
 
   let companies = "";
@@ -317,7 +318,7 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
   const sweepStep = rotates
     ? `9d. RECORD WHAT YOU COVERED. Write every company this run actually
    attempted to \`swept.json\` - a JSON array of
-   \`{company, board, endpoint, url_shape, note}\` - and run
+   \`{company, board, endpoint, url_shape, wall, note}\` - and run
    \`./tracker swept swept.json\`.
 
    \`endpoint\` is the reachable thing itself - a slug, host or full URL
@@ -325,27 +326,50 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
    "workday cxs" saves nobody anything while the tenant slug still has to be
    guessed. \`url_shape\` is how one posting's URL is built when the endpoint
    doesn't give it (\`apply.careers.microsoft.com/careers/job/<19-digit id>\`).
-   Send both whenever you establish them, including for a company that yielded
-   nothing - what you learned about reaching it is true either way. Those two
-   and \`board\` are pooled across every search here, so saying it once spares
-   everyone the same fetch; \`note\` is not, and stays on this search's row.
+   Send both whenever this run's own fetch established them - including for a
+   company with no matching roles, since a fetch that worked is true either way.
+   Those two and \`board\` are pooled across every search here, so saying it once
+   spares everyone the same fetch; \`note\` is not, and stays on this search's row.
+
+   **Never copy \`board\`, \`endpoint\` or \`url_shape\` out of \`companies.json\`.**
+   Report one only when your own fetch against it worked tonight. A reported
+   board or endpoint is taken as proof the company is reachable and clears its
+   \`wall\` for every search, so echoing a known board on a night the fetch
+   failed silently deletes a true wall - and the tracker cannot tell an echo
+   from a confirmation.
 
    This is the rotation's only memory. A run that covers companies without
    recording them leaves tomorrow's run covering the same ones, and the tail of
    the list never gets searched at all. Record a company you attempted and
-   *couldn't* fetch too, with the reason in \`note\` - the date tracks when a
-   company was last attempted, not when it last worked, or a blocked domain
-   comes back to the front of the queue every single run. Send \`board\`
-   whenever you confirm one: that is what moves a company into the every-run
-   tier. A company not already in the list is created by this call, so one that
-   broader discovery turned up joins the rotation here.
+   *couldn't* fetch too - the date tracks when a company was last attempted,
+   not when it last worked, or a blocked domain comes back to the front of the
+   queue every single run. Send \`board\` whenever you confirm one: that is what
+   moves a company into the every-run tier. A company not already in the list is
+   created by this call, so one that broader discovery turned up joins the
+   rotation here.
+
+   Put the reason a company gave you nothing in the field it belongs to. A
+   \`wall\` means **no route to this company's listings worked tonight** - not
+   the careers page, not a board API, not a mirror - and it is true for anyone
+   who tried those same routes: "the careers site 403s a plain fetch and no
+   board endpoint answers", "an empty client-side shell, and no JSON-LD or
+   board behind it". If any route to the listings worked, it is not a wall:
+   report that route as \`board\` or \`endpoint\` instead. A reason that turns on
+   this search - the role, the level, the location - is a \`note\`: "no
+   PM-titled openings besides two Director-level reqs". A \`wall\` is pooled
+   across every search, so step 4 applies before you write one: a truncated
+   page, or one whose JSON-LD carries the posting, is not a wall.
 
 9e. REPLACE THE COMPANIES YOU COULDN'T READ. Count the ones in tonight's slice
    you got nothing usable out of - the domain refused the fetch, every job id
    404'd, the board only filters client-side, the page was an empty JS shell,
-   or the doc's fetch-efficiency rule already had it down as a wall so you
-   skipped it without fetching. Not the ones you read fine that had nothing
-   matching: those are ordinary covered sweeps and by far the common case.
+   or \`companies.json\` served it with a \`wall\` so you skipped it without
+   fetching. A served wall means skip its listing tonight - the tracker stops
+   serving it once it goes stale, and that is the re-test. It never stops a
+   specific posting URL: step 4 requires every candidate URL to be opened, so a
+   posting URL for that company still gets its one direct fetch. Not the ones
+   you read fine that had nothing matching: those are ordinary covered sweeps
+   and by far the common case.
 
    If that count is more than zero, run \`./tracker companies\` again and cover
    that many companies from what comes back, then record those with 9d and
@@ -355,9 +379,13 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
    cursor, so what comes back is further along the list rather than the names
    you just did, and there is nothing to filter out.
 
-   Whether a domain is worth retrying, and what workaround exists, is
-   \`${doc}\`'s job - it holds the URL-format fixes and ATS mirrors that a flag
-   never could. Keep writing those up in \`note\` and in step 8b.
+   A way into a walled listing - an ATS mirror, a JSON endpoint behind a page
+   that renders nothing - is an \`endpoint\`. Report it in 9d with **no**
+   \`wall\`: you have just shown the listing is readable, and that clears the
+   wall for every search. A single posting page that loads while the listing
+   stays walled is different - record its \`url_shape\` alongside the \`wall\`,
+   not instead of it. One page loading does not make the listing readable, so
+   it leaves the wall standing.
 `
     : "";
 
@@ -437,7 +465,7 @@ ${coverageStep}2. ${resumeLine}
 
    **Before you write a domain off as a wall, check what the HTML actually carried.** Three things survive on a page whose body renders client-side, and each is the page stating something rather than you inferring it: a \`JobPosting\` block in \`<script type="application/ld+json">\` (Ashby, Greenhouse, Lever, Workday and iCIMS all emit one - \`title\`, \`hiringOrganization\`, \`jobLocation\`, \`employmentType\`, \`baseSalary\`, usually the whole description); \`og:title\` / \`og:description\` meta tags; and the \`<title>\` tag. A JSON-LD \`JobPosting\` carrying a real description **is** the job description rendering - the same document in machine-readable form - so verify from it rather than calling the posting unconfirmable. A \`<title>\` naming no role ("Careers", "Job Board") states nothing, and an \`ItemList\` is a listing page, not a posting.
 
-   **And tell a truncated page apart from an empty one.** A fetch that returned a megabyte of navigation and got cut off before the description is a size problem, not a block - the content is there, and the workaround for that domain (a reader-proxy, an ATS JSON endpoint, a different URL format) is what \`${doc}\`'s fetch-reliability notes are for. Recording "truncated" as "blocked" is how a company that is perfectly readable ends up skipped for weeks.
+   **And tell a truncated page apart from an empty one.** A fetch that returned a megabyte of navigation and got cut off before the description is a size problem, not a block - the content is there, and the workaround for that domain (a reader-proxy, an ATS JSON endpoint, a different URL format) goes in step 9d as an \`endpoint\` or \`url_shape\`. Recording "truncated" as "blocked" is how a company that is perfectly readable ends up skipped for weeks.
 5. ${geoStep}
 6. ${locationGuidance}
 ${fitFilterStep}${captureNum}. While the posting is open, also capture - only when it's stated plainly, never inferred or guessed - the team/org named for the role (\`team\`), the stated work arrangement (\`setup\`, e.g. "Remote", "Hybrid - 3 days/week onsite", "Onsite"), and any posted compensation range (\`comp\`, e.g. "$180,000-$230,000/yr"; many US states disclose this by law). Leave any of these as an empty string when the posting doesn't say. These land in the tracker's per-lead "Details" panel alongside referral/resume/next-action fields that are ${name}'s alone to fill in by hand - this search never touches those.
