@@ -11,6 +11,58 @@
 > redeploy fixed are listed separately under
 > [Found during this review and already fixed](#found-during-this-review-and-already-fixed).
 
+## Re-verification after the fixes
+
+Re-checked on 2026-09-11 against the React worker version
+`ac3e8336-356c-4666-baa7-68abb553a7f8`, bundle `index-BMOtXW6V.js` and
+`index-BHby8czA.css`, built from `origin/main` `b69ea92`. The old client is
+unchanged: its `index.html` is byte-identical (142,127 bytes), and nothing has
+touched `client/public/index.html` since `bd89bf8`. The findings in section 1
+below describe the client *before* these fixes and are kept as the record.
+
+Failures were simulated by stubbing `window.fetch` for a single request type in
+the page. The re-check made these writes on demo and reverted every one of
+them:
+
+- one comp edit
+- one lead moved to Data Science and back
+- four test applications, created and deleted
+- three demo browser sessions, revoked
+
+Demo ends where it started: tiles 12 / 10 / 24 / 9 / 2 / 2, and badges
+Applications 10, All leads 12, Engineering 6, Eng Leadership 3, Data Science 3.
+
+| Finding | Status | How it was checked |
+|---|---|---|
+| 1.1 Applications foot notes | **Fixed** | Detail and Grid notes are word-for-word the old copy, with no "N of M shown" |
+| 1.2 List row labels | **Fixed** | Stonebridge (To Apply) ends "Not applied yet"; a link-only row's title line is "—". "Couldn’t read the posting" can't be reached with the demo data, which has no failed-fill row |
+| 1.3 Drill chip colour | **Fixed** | Chip text is `rgb(45, 212, 191)` on Applications and All leads; tiles stay `rgb(233, 235, 244)`. Live rule is `.tile, .jumplink { color: inherit; }` |
+| 1.4 Expired session on a write | **Fixed** | Revoked the token, then edited Referral. Result: gate, "Your session has expired - sign in again.", name "Demo" kept, focus in the password field, URL `/`, token cleared. Referral unchanged on the server |
+| 1.5 Save dot while saving | **Fixed** | `dot ok` → `dot off` → `dot ok` across a field edit and a move |
+| 1.6 Move-lead copy | **Fixed** | "Moving…" → "Moved to Data Science", then "Moved to Eng Leadership". A rejected request gives "Couldn't move it — try again" with the picker back on Eng Leadership |
+| 1.7 Grid → Detail scroll | **Fixed** | Fernbrook Robotics picked in Grid: Detail list `scrollTop` 1722, row in view. Selecting another row keeps 1722 |
+| 1.8 Default row highlighted in Grid | **Fixed** | On a fresh load, Stonebridge (Detail's default) carries `gr-sel`; an explicit Harborline selection carries too |
+| 1.9 Link box on add | **Fixed** | Box still holds the link right after the click, is empty after success, and empty on a duplicate (Quillfeather selected, "Already in your applications"). A rejected add keeps the link, says "Couldn't save — try again" and adds no row |
+| 1.10 Password dialog | **Fixed** | Focus on `#pwCurrent` at open; `.pw-msg` always present; card 399.9 → 405.5px, the same as old |
+| 1.11 Gate | **Fixed**, one difference kept | Placeholders "Name"/"Password" with aria-labels and no `<label>`. Log out from `/applications` goes to `/` and focuses the password field. Kept: the disabled "Signing in…" button |
+| 1.12 Tab title | **Fixed** | `document.title` is "Demo Job Search (sample data)" |
+| 1.13 Theme toggle height | **Fixed** | `id="themeToggle"`, line-height 15px, 29px tall |
+| 1.14 Link cell arrow | **Fixed** | "careers.quillfeather.example.com ↗" |
+| 1.15 Tooltip and hint | **Fixed** | Full tooltip text; curly apostrophes in the tooltip and the hint |
+| 1.16 Select while stage dialog open | **Fixed** | Reads "Offer" while the dialog is open, "Onsite / Loop" after Escape |
+| 1.17 Logout revoke failure | **Fixed** | With `/api/logout` rejected: "Signed out here, but couldn't reach the server to revoke this session.", focus in the password field, URL `/`. The token left live was then revoked by hand |
+| 1.18 Loading and load failure | **Fixed** (copy); placement kept | A rejected `/api/data` retries twice, then shows "Couldn't load: Failed to fetch (test)" in the page body; "Loading…" is kept. **Still open:** that text is `rgb(233, 235, 244)`, not red, because `.err` is only coloured under `#gate` |
+| 1.19 Favicon | Kept on purpose | — |
+| 1.20 Tile focus ring offset | **Fixed** | Live stylesheet has `.tile:focus-visible { outline-offset: 0px; }`. Checked as a rule; the keyboard walk wasn't repeated |
+
+Still open after the re-check:
+
+- **1.18's error text isn't red.** Give the page-body `.err` the `--crit` colour, or scope the rule wider than `#gate`.
+- **Seen once, not reproduced.** In the first add-from-link of this round, the selection still read Stonebridge right after "Added — it fills in overnight". Three later adds selected the new row in the same frame. My read most likely raced the render; it's noted here so it isn't lost.
+- **The `--sbw` gutter bug in both clients** is tracked separately.
+
+Testing note: the in-app Browser pane reports `document.visibilityState` as `hidden` even with the tab in front. TanStack Query v5 parks retries while hidden, so a failed load sits on "Loading…" in this pane indefinitely. To exercise 1.18, the check overrode `visibilityState` to `visible`.
+
 How things were checked: `getComputedStyle` and `getBoundingClientRect` in both
 tabs, DOM outlines of the same row in each client, text sequences of the save
 indicator polled every 20ms during a write, a real-keyboard Tab walk, 1280×800,
