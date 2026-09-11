@@ -109,8 +109,8 @@ export async function handleGetCoverage({ db, params, url }) {
  * `{ search, on?, swept: [{company, board?, endpoint?, url_shape?,
  * dead_signal?, wall?, note?}] }` -> `{ recorded, added, excluded, on, cursor,
  * shared, withheld }`, or `{ recorded: 0, excluded, on }` when every company is
- * excluded; 400 for a missing search or no companies, 403 for a demo account,
- * 404 for an unknown track.
+ * excluded; 400 for a missing search, no companies, or a wall sent without a
+ * date, 403 for a demo account, 404 for an unknown track.
  *
  * Records what a run attempted, not what it found: a company whose board was
  * blocked still gets stamped, or the rotation retries it every run and the rest
@@ -154,6 +154,25 @@ export async function handleRecordSweeps({ request, db, user }) {
   const allowed = valid.filter((i) => !isExcluded(i.company));
   const excluded = valid.length - allowed.length;
   if (allowed.length === 0) return json({ recorded: 0, excluded, on });
+
+  // A wall is dated evidence: it is served only after two separate dates, and
+  // only while the last is fresh (db.getCompanyFetch). An undated one is not a
+  // weaker wall, it is nothing that would sit in the column looking like one.
+  // Refused rather than dropped, so a caller that thinks it recorded a wall
+  // hears that it didn't.
+  if (on === "") {
+    const walled = allowed.filter((i) => typeof i.wall === "string" && i.wall !== "");
+    if (walled.length) {
+      return json(
+        {
+          error:
+            "a wall is dated evidence - it is served only after two separate dates - so send it with `on`: " +
+            walled.map((i) => i.company).join(", "),
+        },
+        400
+      );
+    }
+  }
 
   // The list is shared (0011_one_company_list.sql): `log` is every company on
   // it, with this search's own record of each. Matched through normalize(), so
@@ -220,25 +239,32 @@ export async function handleRecordSweeps({ request, db, user }) {
   // The same report, pooled: the fields that describe a website. `last_swept`,
   // the cursor and `note` stay in this search's own record.
   //
-  // Seeding (`on: ""`) writes no shared fact: a typed list isn't something a
-  // run confirmed. It still adds companies to the list, via addCompanies above.
-  const withheld = on ? allowed.filter(contradicts).length : 0;
-  const shared = on
-    ? await db.upsertCompanyFetch(
-        allowed.filter((i) => !contradicts(i)).map((i) => ({
-          company: i.company,
-          board: typeof i.board === "string" ? i.board : "",
-          endpoint: typeof i.endpoint === "string" ? i.endpoint : "",
-          url_shape: typeof i.url_shape === "string" ? i.url_shape : "",
-          dead_signal: typeof i.dead_signal === "string" ? i.dead_signal : "",
-          wall: typeof i.wall === "string" ? i.wall : "",
-          // `note` stays out: it is prose, and prose carries a search's own
-          // reasoning ("skipped, nothing at my level here"). A shared note
-          // needs its own field, not this private one.
-        })),
-        on
-      )
-    : { written: 0 };
+  // Written whether or not `on` carries a date: `on` governs the sweep record
+  // alone, so seeding (`on: ""`) stamps nothing and moves no cursor while what
+  // the row says about reaching the company still reaches the shared list.
+  // Sharing only dated rows dropped what a person had verified by hand and left
+  // it in a per-search `note`, where no other search could read it. What a row
+  // may claim is the caller's business: the server cannot tell a verified board
+  // from a typed one, which is why the skills say to send only what was checked.
+  //
+  // An undated fact is stamped with the server's date (upsertCompanyFetch takes
+  // `on || today()`): `verified_on` records when a fact was established, not
+  // whose night it was.
+  const withheld = allowed.filter(contradicts).length;
+  const shared = await db.upsertCompanyFetch(
+    allowed.filter((i) => !contradicts(i)).map((i) => ({
+      company: i.company,
+      board: typeof i.board === "string" ? i.board : "",
+      endpoint: typeof i.endpoint === "string" ? i.endpoint : "",
+      url_shape: typeof i.url_shape === "string" ? i.url_shape : "",
+      dead_signal: typeof i.dead_signal === "string" ? i.dead_signal : "",
+      wall: typeof i.wall === "string" ? i.wall : "",
+      // `note` stays out: it is prose, and prose carries a search's own
+      // reasoning ("skipped, nothing at my level here"). A shared note
+      // needs its own field, not this private one.
+    })),
+    on
+  );
 
   // Advance the cursor past the last company reported from the slice this
   // search was served, so the next read - including a replacements read in the

@@ -440,6 +440,33 @@ await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: ""
 const seeded = (await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK })).json.companies;
 check("registering with an empty date doesn't overwrite a real sweep",
   seeded.find((c) => c.company === "Acme").last_swept === "2026-08-28");
+
+// `on: ""` claims no sweep. It does not mean the row says nothing: what the
+// caller established about reaching the company is a fact about a website, and
+// the shared list is what that is for. Dropping it silently is what left NFL
+// and Fetch on the live list carrying nothing, with the Greenhouse token that
+// reaches NFL's jobs sitting in one search's private note.
+const undatedCo = `Undated Co ${Date.now().toString(36)}`;
+const cursorBefore = (await req("GET", "/api/coverage/SWE", { token: A_TOK })).json.cursor;
+const undated = await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: "",
+  swept: [{ company: undatedCo, board: "greenhouse", endpoint: "undated.example/careers/jobs" }] } });
+const undatedRow = (await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK })).json.companies
+  .find((c) => c.company === undatedCo);
+check("an undated write still shares what the row says about the website",
+  undated.json.shared === 1 && !!undatedRow && !!undatedRow.known &&
+  undatedRow.known.board === "greenhouse" && undatedRow.known.endpoint === "undated.example/careers/jobs",
+  JSON.stringify({ shared: undated.json.shared, row: undatedRow }));
+check("but it claims no sweep and moves no cursor",
+  !!undatedRow && undatedRow.last_swept === "" && undated.json.cursor === cursorBefore,
+  JSON.stringify({ last_swept: undatedRow && undatedRow.last_swept, cursor: undated.json.cursor, before: cursorBefore }));
+const undatedWall = await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: "",
+  swept: [{ company: undatedCo, wall: "403 on a plain fetch" }] } });
+const stillNoWall = (await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK })).json.companies
+  .find((c) => c.company === undatedCo);
+check("a wall without a date is refused, because a wall is dated evidence",
+  undatedWall.status === 400 && /wall/i.test((undatedWall.json && undatedWall.json.error) || "") &&
+  !!stillNoWall && !!stillNoWall.known && stillNoWall.known.wall === undefined,
+  JSON.stringify({ status: undatedWall.status, error: undatedWall.json && undatedWall.json.error }));
 // Asserted against the log as it was before the append, not against the end of
 // the list: later blocks in this file add companies of their own, so "last
 // overall" is a fact about the whole run rather than about where a new company
@@ -1573,9 +1600,10 @@ const seededCo = `Seeded Co ${ciRun}`;
 await req("POST", "/api/coverage", { token: T1, body: { search: "ENG",
   on: "", swept: [{ company: seededCo, board: "greenhouse" }] } });
 const allView = (await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).json.companies;
-check("seeding (on: \"\") writes no shared fact",
-  !allView.find((c) => c.company === seededCo).known,
-  JSON.stringify(allView.find((c) => c.company === seededCo)));
+const seededRow = allView.find((c) => c.company === seededCo);
+check("seeding (on: \"\") shares the board it was given, and still stamps no sweep",
+  !!seededRow && !!seededRow.known && seededRow.known.board === "greenhouse" && seededRow.last_swept === "",
+  JSON.stringify(seededRow));
 check("the ?all=1 view carries intel too",
   allView.find((c) => c.company === F5).known.board === "workday cxs");
 
