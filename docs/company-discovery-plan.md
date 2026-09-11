@@ -26,8 +26,20 @@ its own numbered "broader discovery" step and a prose log of industries tried.
 ### 1. The discovery log
 
 A new table records every company evaluated for the list, so none is evaluated
-twice inside its retry window. Like `company_fetch` it has no `user_id`: a row
-describes a company, never a search.
+twice inside its retry window.
+
+**The log is shared, not per-user**, and `0013`'s own comment says so. It is the
+second table after `company_fetch` with no `user_id`, for the same reason: one
+job serves the whole deployment, and a per-account log would have every account
+re-evaluating the companies another had already ruled out - the duplication this
+plan exists to end. The nightly cap is therefore deployment-wide by design.
+
+What keeps that safe is what the table may hold: a row describes a company and
+nothing else. No `user_id`, no track key, and no role, level or location text in
+`note` - "no Seattle or remote-US engineering or product postings", never
+"nothing at Brenna's level". A row that named a search would leak one person's
+search behaviour into everyone's view, which is the line `company_fetch` already
+holds.
 
 `company_discovery`
 
@@ -114,7 +126,10 @@ the routes, not in the prompt.
 - A company already on the list, matched through `normalize()`, is `known` and
   writes nothing.
 - `added` appends to `company_fetch` after the highest position, shuffled within
-  the call - the same insertion `POST /api/coverage` does today. `board`,
+  the call - the same insertion `POST /api/coverage` does today. That makes this
+  route the second caller of `db.addCompanies`, which writes the one table every
+  account reads; say so where it is called, since every neighbouring write in
+  `db.js` is scoped to one user. `board`,
   `endpoint`, `url_shape` and `wall` go through `upsertCompanyFetch` under its
   existing rules. No `company_sweeps` row is written and no cursor moves. Past
   the cap, a `job` add is `over_cap`; a `person` add is never capped.
@@ -124,9 +139,16 @@ the routes, not in the prompt.
   account's excluded companies (`GET /api/coverage`).
 
 `POST /api/coverage` stops creating companies. A swept company that is not on
-the list and has no log row is logged as `suggested` with `source = 'search'`
-and no search key, and the response reports `suggested` where it reported
-`added`.
+the list is **logged as a suggestion and its sweep is not recorded**: no
+`company_fetch` row is created, and - the part that matters - no
+`company_sweeps` row either. A sweep row for a company that is not on the list
+would point at a `company_key` with no list entry, which breaks the invariant
+0011 established and 0012 was checked against: every sweep row joins a company
+on the list.
+
+So the row is logged as `suggested` with `source = 'search'` and no search key,
+once per company, and the response reports `suggested` in place of `added`,
+alongside `recorded`, which counts only the companies that were on the list.
 
 ### 4. The searches
 
@@ -144,9 +166,10 @@ A search covers the companies it is served and reports what it covered.
 
 ### 5. Adding a company by hand
 
-`add-target-company` and `job-search-setup` register a company through
-`POST /api/discovery` with `source: "person"` and outcome `added`, in place of
-`POST /api/coverage` with `on: ""`.
+`add-target-company` registers a company through `POST /api/discovery` with
+`source: "person"` and outcome `added`, in place of `POST /api/coverage` with
+`on: ""`. It is the only skill that has to move: `job-search-setup` no longer
+registers companies at all.
 
 ## Build order
 
@@ -175,6 +198,7 @@ prompt together.
   `scripts/setup-scheduler.ps1`
 - `.claude/skills/add-target-company/SKILL.md`,
   `.claude/skills/job-search-setup/SKILL.md`
+- `server/README.md` - the `POST /api/coverage` response loses `added`
 - `docs/schema.md`, `docs/README.md`
 - each track's baseline doc in R2
 
@@ -183,7 +207,11 @@ prompt together.
 `verify-local.mjs`:
 
 - `POST /api/coverage` naming an unknown company leaves the list total
-  unchanged and logs one `suggested` row with no search key.
+  unchanged, records no sweep for it, and logs one `suggested` row.
+- After that call, no `company_sweeps` row points at a `company_key` missing
+  from `company_fetch` - the check 0012 was verified against.
+- Nothing the discovery routes return, and nothing they store, carries a
+  `user_id` or a track key.
 - A job `added` lands at the highest position + 1 and leaves every search's
   cursor where it was.
 - A `no_match` inside 60 days of the last one is `too_soon`; an `added` for the
