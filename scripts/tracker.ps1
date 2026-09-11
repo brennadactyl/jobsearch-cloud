@@ -442,9 +442,17 @@ switch ($Command) {
           # elsewhere. A field the API accepts and the helper drops is a field
           # that does not exist.
           #
+          # `wall` travels too: what stops a fetch at this company, pooled and
+          # expired by the server (docs/one-company-list-plan.md). It goes in
+          # this list in the same change as the server column, never before.
+          # handleRecordSweeps reads fields by name, so a `wall` sent to a
+          # server without the column is dropped silently - and because the
+          # prompt stops putting the obstacle in `note`, it would be lost
+          # outright rather than merely left unpooled.
+          #
           # `dead_signal` is deliberately still not passed - see prompt.js's
           # step 9d.
-          foreach ($f in @("board", "endpoint", "url_shape", "note")) {
+          foreach ($f in @("board", "endpoint", "url_shape", "wall", "note")) {
               $v = Field $r $f
               if ($v) { $row[$f] = $v }
           }

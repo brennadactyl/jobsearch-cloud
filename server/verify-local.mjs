@@ -512,6 +512,13 @@ check("step 4 still requires every candidate URL to be opened and confirmed",
     .test(sweSteps) && /A search-snippet URL is a lead, not a finding, until opened and confirmed/.test(sweSteps));
 check("a track with no rotation gets neither rotation command",
   !boSteps.includes("./tracker companies") && !boSteps.includes("./tracker swept"));
+// Step 9d has to name every field a run can send, or the field does not exist
+// in practice: until 2026-09-11 it named {company, board, note}, so endpoint
+// and url_shape reached no run and 58 of company_fetch's 63 rows had no
+// endpoint. `wall` is the newest, and the one whose absence would cost most -
+// an obstacle with nowhere shared to go is rediscovered by every search.
+check("step 9d names every field a sweep can carry, wall included",
+  sweSteps.includes("{company, board, endpoint, url_shape, wall, note}"));
 // The cap is the whole point, and it has to hold on the night it matters most:
 // a freshly seeded list, where every row is never-swept and nothing has a date
 // to sort by. It also has to be the *server's* cap - the prompt describing one
