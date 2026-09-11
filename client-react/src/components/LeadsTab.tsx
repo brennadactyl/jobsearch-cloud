@@ -21,7 +21,7 @@ import { leadComparator } from "../domain/rows";
 import { runState } from "../domain/runs";
 import { buildTracks, pathForTab, trackCountLine } from "../domain/tabs";
 import { revealSelectedRow } from "../ui/hooks";
-import { selectRow, setPrefs, usePrefs, useRememberSelection } from "../ui/prefs";
+import { selectRow, setPrefs, shownRow, usePrefs } from "../ui/prefs";
 import { DrillChip, GeoBadge, GeoKey, Pill, RunStamp, SortSelect, TrashIcon, ViewSwitch } from "./bits";
 import { LeadFactsCard, NotesBlock } from "./facts";
 import { EditableField, LeadStatusSelect } from "./writes";
@@ -182,8 +182,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
     );
   }
 
-  const selectedId = prefs.selected[trackKey];
-  const sel = rows.find((l) => String(l.id) === String(selectedId)) ?? rows[0];
+  const sel = shownRow(rows, prefs.selected[trackKey]);
 
   return (
     <>
@@ -229,7 +228,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
           })}
         </div>
         <div className="md-detail">
-          <LeadDetail lead={sel} data={data} scope={trackKey} />
+          <LeadDetail lead={sel} data={data} />
         </div>
       </div>
       <div className="note">
@@ -276,6 +275,8 @@ function LeadsGrid({
   const prefs = usePrefs();
   const { settings } = data;
   const cols = 6 + LEAD_GRID_FIELDS.length + (isAll ? 1 : 0);
+  // The row Detail shows is the row highlighted here, by the same rule.
+  const shownId = shownRow(rows, prefs.selected[trackKey]).id;
 
   return (
     <div className="card grid-wrap">
@@ -298,7 +299,7 @@ function LeadsGrid({
           {rows.map((l) => {
             const g = geo(l.location, settings.priority_locations);
             const open = !!prefs.expanded[l.id];
-            const cls = [g ? g.p : "", String(prefs.selected[trackKey]) === String(l.id) ? "gr-sel" : ""]
+            const cls = [g ? g.p : "", l.id === shownId ? "gr-sel" : ""]
               .filter(Boolean)
               .join(" ");
             // Opening or closing a row is what "highlights" it: it is the row
@@ -373,8 +374,7 @@ function LeadsGrid({
   );
 }
 
-function LeadDetail({ lead, data, scope }: { lead: Lead; data: TrackerData; scope: string }) {
-  useRememberSelection(scope, String(lead.id));
+function LeadDetail({ lead, data }: { lead: Lead; data: TrackerData }) {
   const { settings } = data;
   const g = geo(lead.location, settings.priority_locations);
   const url = safeUrl(lead.url);

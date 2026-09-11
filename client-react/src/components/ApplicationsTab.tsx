@@ -21,7 +21,7 @@ import { appComparator, fillState, type FillState } from "../domain/rows";
 import { buildTracks, pathForTab } from "../domain/tabs";
 import { revealSelectedRow } from "../ui/hooks";
 import { saved } from "../ui/saved";
-import { selectRow, setPrefs, usePrefs, useRememberSelection } from "../ui/prefs";
+import { selectRow, setPrefs, shownRow, usePrefs } from "../ui/prefs";
 import { DrillChip, GeoBadge, GeoKey, Pill, SortSelect, TrashIcon, ViewSwitch } from "./bits";
 import { AppFactsCards, AutofillNote, NotesBlock } from "./facts";
 import { AppStatusSelect, EditableField, StageDateModal, type PendingStage } from "./writes";
@@ -172,7 +172,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
     );
   }
 
-  const sel = rows.find((a) => String(a.id) === String(prefs.selected.applications)) ?? rows[0];
+  const sel = shownRow(rows, prefs.selected.applications);
 
   return (
     <>
@@ -309,6 +309,8 @@ function AppsGrid({
   // On a day when every posting read cleanly there is one group, and a lone
   // divider across the whole table says nothing anyone needs.
   const grouped = groups.length > 1;
+  // The row Detail shows is the row highlighted here, by the same rule.
+  const shownId = shownRow(rows, prefs.selected.applications).id;
 
   return (
     <div className="card grid-wrap">
@@ -365,7 +367,7 @@ function AppsGrid({
                     const cls = [
                       g && grp.key !== "stuck" ? g.p : "",
                       grp.key === "stuck" ? "stuck" : "",
-                      String(prefs.selected.applications) === String(a.id) ? "gr-sel" : "",
+                      a.id === shownId ? "gr-sel" : "",
                     ]
                       .filter(Boolean)
                       .join(" ");
@@ -487,7 +489,6 @@ function AppDetail({
   pending: PendingStage | null;
   onNeedsDate: (p: PendingStage) => void;
 }) {
-  useRememberSelection("applications", String(app.id));
   const { settings } = data;
   const d = daysSince(app.dateApplied);
   const g = geo(app.location, settings.priority_locations);

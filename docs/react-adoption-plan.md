@@ -385,7 +385,7 @@ the repo deliberately commits no lockfile.
 
 ## Where the parity bar stands (2026-09-10)
 
-Phases 0-5 are built. Measured against the bar above, with 176 tests passing:
+Phases 0-5 are built. Measured against the bar above, with 177 tests passing:
 
 | Bar item | Status | How it is held |
 |---|---|---|

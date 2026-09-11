@@ -131,7 +131,7 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
     if (error instanceof UnauthorizedError) return null;
     return (
       <div className="wrap">
-        <div className="err" role="alert" style={{ padding: "40px 0" }}>
+        <div className="load-err" role="alert">
           {`Couldn't load: ${error.message}`}
         </div>
       </div>

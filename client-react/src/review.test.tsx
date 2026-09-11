@@ -8,8 +8,10 @@
  * once the old client is gone there is nothing left to compare against, and
  * nothing else would notice these going missing.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -37,6 +39,15 @@ function withApp(id: number, patch: Partial<Application>): TrackerData {
 const app = (id: number) => fixture.applications.find((a) => a.id === id)!;
 const detail = () => document.querySelector(".md-detail") as HTMLElement;
 const status = () => screen.getByRole("status");
+
+/** The declarations of every rule selecting exactly `selector` in tracker.css, comments stripped. */
+function rulesFor(selector: string): string {
+  const css = readFileSync(join(process.cwd(), "src", "tracker.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  return [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter(([, selectors]) => selectors.split(",").some((s) => s.trim() === selector))
+    .map(([, , body]) => body)
+    .join(";");
+}
 
 beforeEach(() => {
   localStorage.clear();
@@ -190,6 +201,30 @@ describe("the row Detail shows by default (1.8)", () => {
     expect(highlighted).toHaveLength(1);
     expect(within(highlighted[0]).getByLabelText("Company")).toHaveValue(company);
   });
+
+  it("never replaces a selection whose row hasn't reached the page yet", async () => {
+    // Adding an application selects the new row from the write's onSuccess, and
+    // a render can see that selection before it sees the row. Storing Detail's
+    // fallback then wrote the first row over the new selection for good - seen
+    // once live, after "Added — it fills in overnight".
+    setPrefs({ selected: { applications: "9100" } });
+    vi.spyOn(client, "getData").mockResolvedValue(fixture);
+    window.history.pushState({}, "", "/applications");
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <App />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    const added: Application = { ...app(13), id: 9100, company: "Newco" };
+    act(() => {
+      qc.setQueryData<TrackerData>(["data"], (d) => (d ? { ...d, applications: [added, ...d.applications] } : d));
+    });
+
+    await waitFor(() => expect(within(detail()).getByLabelText("Company")).toHaveValue("Newco"));
+  });
 });
 
 describe("adding from a link that fails to save (1.9)", () => {
@@ -305,6 +340,11 @@ describe("a load that fails (1.18)", () => {
     );
     // Two retries with backoff before the error is final.
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load: boom");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't load: boom");
+    // Red, as the old page's was. `.err` is only coloured under #gate, and this
+    // sits in the page body.
+    expect(alert).toHaveClass("load-err");
+    expect(rulesFor(".load-err").replace(/\s+/g, "")).toContain("color:var(--crit)");
   });
 });

@@ -572,6 +572,10 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 /* A button's focus ring sits on its edge and a link's 1px outside it. */
 .tile:focus-visible { outline-offset: 0; }
 
+/* A load that failed, said in the page rather than on the gate (see App.tsx).
+   .err is only coloured under #gate. */
+.load-err { padding: 40px 0; color: var(--crit); }
+
 /* Grid rows expand on a click anywhere on the row, as in the original, which
    put the plain word "Details" in this cell. It is a real button here as well,
    so the same toggle is reachable by keyboard - the original's was not - and it

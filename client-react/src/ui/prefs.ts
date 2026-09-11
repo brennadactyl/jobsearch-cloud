@@ -12,7 +12,7 @@
  * it replaces - a filtered view is now something you can link to, and the back
  * button undoes a drill.
  */
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export interface Prefs {
   view: "detail" | "grid";
@@ -135,12 +135,14 @@ export function selectRow(scope: string, id: string): void {
 }
 
 /**
- * Writes down the row a detail pane is showing when nothing picked it - the
- * first row, by default - so switching to Grid highlights the row Detail was
- * showing rather than none at all.
+ * The row a master/detail tab shows: the selected one while it is in the list,
+ * otherwise the first. Grid highlights by the same rule, so switching views lands
+ * on the same row either way.
+ *
+ * Worked out on every render and never stored. Storing the fallback raced adding
+ * an application: a render could see the new row's selection before it saw the
+ * new row, fall back to the first, and write that over the selection.
  */
-export function useRememberSelection(scope: string, id: string): void {
-  useEffect(() => {
-    if (String(current.selected[scope]) !== id) selectRow(scope, id);
-  }, [scope, id]);
+export function shownRow<T extends { id: number }>(rows: readonly T[], selected: string | undefined): T {
+  return rows.find((r) => String(r.id) === String(selected)) ?? rows[0];
 }
