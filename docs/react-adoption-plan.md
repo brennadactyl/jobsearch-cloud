@@ -403,6 +403,17 @@ API. Everything above was verified against a local mock serving the same fixture
 both clients render, which is the right substitute for looking at real job data
 to check a layout, but it is not the same as the real thing.
 
+**One item did not survive first contact with production.** Reloading or
+bookmarking any tab other than the Overview returned 404: the Worker serves only
+files that exist in `dist/`, and `/applications`, `/all-leads` and
+`/t/<track>` are not files. Clicking around from `/` never showed it, and no
+local run could - `vite dev` and `vite preview` both fall back to `index.html`
+by themselves. It was found by loading `/applications` on the deployed site,
+fixed with `not_found_handling = "single-page-application"`, and pinned by
+`src/deploy-config.test.ts`, which reads the Worker config because nothing short
+of a deploy can exercise it. Tabs being real URLs is listed above as a deliberate
+upgrade; it is also the one upgrade that only the deployed site could test.
+
 **The cutover decision is open.** All three answers in Phase 5 remain live and
 none of them is implied by the table above - clearing the bar makes the React
 client *eligible* to replace the page that ships, which is a different question
