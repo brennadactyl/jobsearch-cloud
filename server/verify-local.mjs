@@ -1662,6 +1662,41 @@ check("meeting a wall does not mark the row verified",
 await reportWall(T1, daysAgo(0), { board: "greenhouse" });
 check("a reported board clears the wall", (await servedWall()) === undefined, JSON.stringify(await wallRow()));
 
+// A wall beside a board or endpoint in one row contradicts itself, and neither
+// half can be trusted: a board copied from companies.json on a night the fetch
+// failed would delete a true wall, and a wall kept over a board that really
+// worked would have every search skip a reachable company. The row shares
+// nothing; the sweep is still recorded.
+const contraCo = `Contra Co ${olRun}`;
+const reportContra = (tok, on, extra) => req("POST", "/api/coverage", { token: tok, body: { search: "ENG", on,
+  swept: [{ company: contraCo, ...extra }] } });
+await reportContra(T1, daysAgo(1), { wall: "403 on a plain fetch" });
+await reportContra(T2, daysAgo(0), { wall: "403 on a plain fetch" });
+const contra = await reportContra(T1, daysAgo(0), { wall: "403 on a plain fetch", board: "greenhouse", note: "Contra note" });
+const contraRow = (await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).json.companies
+  .find((c) => c.company === contraCo);
+check("a row reporting a wall beside a board shares neither, and counts as withheld",
+  contra.json.withheld === 1 && !!contraRow && !!contraRow.known &&
+  contraRow.known.wall === "403 on a plain fetch" && !contraRow.known.board,
+  JSON.stringify({ withheld: contra.json.withheld, row: contraRow }));
+check("but its sweep and note are still recorded",
+  !!contraRow && contraRow.last_swept === daysAgo(0) && contraRow.note === "Contra note",
+  JSON.stringify(contraRow));
+
+// url_shape is not a route to the listings. Step 9e sends a run at a specific
+// posting when the listing is walled, and a posting that loads beside a walled
+// listing is both true at once - so that row shares as normal.
+const shapeCo = `Shape Co ${olRun}`;
+const shapeReport = { company: shapeCo, wall: "listing renders client-side", url_shape: "shapeco.example/jobs/<id>" };
+await req("POST", "/api/coverage", { token: T2, body: { search: "ENG", on: daysAgo(1), swept: [shapeReport] } });
+const shapeRes = await req("POST", "/api/coverage", { token: T1, body: { search: "ENG", on: daysAgo(0), swept: [shapeReport] } });
+const shapeRow = (await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).json.companies
+  .find((c) => c.company === shapeCo);
+check("a wall beside a url_shape is not a contradiction, and both are shared",
+  shapeRes.json.withheld === 0 && !!shapeRow && !!shapeRow.known &&
+  shapeRow.known.wall === "listing renders client-side" && shapeRow.known.url_shape === "shapeco.example/jobs/<id>",
+  JSON.stringify({ withheld: shapeRes.json.withheld, row: shapeRow }));
+
 const staleCo = `Stale Wall ${olRun}`;
 for (const on of [daysAgo(20), daysAgo(19)]) {
   await req("POST", "/api/coverage", { token: T1, body: { search: "ENG", on,
