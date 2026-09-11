@@ -113,8 +113,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
         {toolbar}
         <div className="card empty">
           <strong>No applications logged</strong>
-          When you apply to something, add it here to track the conversation. Days-since and the follow-up list update
-          themselves.
+          When you apply to something, add it here to track the conversation. Days-since updates itself.
         </div>
         {modal}
       </>

@@ -89,7 +89,7 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
       `section of \`${doc}\`. A blocked domain or a working URL format is not a ` +
       "doc edit: it is a `wall`, `endpoint` or `url_shape` in step 9d, where every " +
       "search reads it. Do not add a found-postings table or a screened/dead-link " +
-      "list back to the doc; those live in the tracker only.";
+      "list to the doc; those live in the tracker only.";
 
   let companies = "";
   try {
@@ -287,7 +287,7 @@ same arguments.)
 
 ${intro}Do the following:
 
-1. Read \`${doc}\` - ${docSummary}. Follow its numbered process. The doc doesn't keep a found-postings table or a screened/dead-link list of its own - dedup data comes from step 1b instead.
+1. Read \`${doc}\` - ${docSummary}. Follow its numbered process. The doc doesn't keep a found-postings table or a screened/dead-link list - dedup data comes from step 1b instead.
 1b. Fetch what this track has already seen: \`./tracker dedup\`. It writes \`dedup.json\`: \`leads[]\` as \`{url, status}\` - postings already tracked, where \`url\` is what step 8 reports back and \`status\` is context for your report (that's how you tell a stale lead nobody's touched from one ${name} has already applied to) - and \`screened[]\`, a plain list of urls already looked at and rejected, which is what stops you re-verifying the same dead or out-of-scope candidate every run.${dedupNote}
 ${coverageStep}2. ${resumeLine}
 3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}. Step 1c is the list for today, drawn from: ${companies}.${searchNote}${exclusionNote}
@@ -347,7 +347,7 @@ ${filingStep}8. REPORT WHAT THE RE-CHECK OF ALREADY-TRACKED LEADS FOUND. For the
    in the note. A wrongly-cheerful "ok" is worse than no record at all: it's
    what stops the webpage flagging a search that has quietly broken.
 
-   No counts to send or tally: the tracker derives them from what steps 8, 9
+   Send no counts: the tracker derives them from what steps 8, 9
    and 9b wrote${multi ? ", per tab and from that tab's own rows" : ""}.
 ${sweepStep}10. ${report}
 
