@@ -659,8 +659,18 @@ for (let guard = 0; guard < 200 && reached.size < cycleTotal; guard++) {
 // nothing at or after it and starts again at the front.
 const whole = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.companies;
 const furthest = whole.reduce((a, c) => (c.position > a.position ? c : a));
+// Only a served company moves the cursor, so read along to the slice holding
+// the end of the log and record it up to that company.
+let endSlice = [];
+for (let guard = 0; guard < 200; guard++) {
+  endSlice = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json.companies;
+  if (endSlice.some((c) => c.company === furthest.company)) break;
+  await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
+    swept: endSlice.map((c) => ({ company: c.company })) } });
+}
 const pastEnd = await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
-  swept: [{ company: furthest.company }] } });
+  swept: endSlice.slice(0, endSlice.findIndex((c) => c.company === furthest.company) + 1)
+    .map((c) => ({ company: c.company })) } });
 const fromFront = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
 check("once past the end, the next slice starts again at the front of the log",
   pastEnd.json.cursor > furthest.position &&
@@ -703,6 +713,33 @@ check("an excluded company before the cursor does not cause a skip",
   exNext[0].position === shouldBeNext.position,
   JSON.stringify({ expected: shouldBeNext.position, actual: exNext[0].position, excludedAt: 0 }));
 await req("POST", "/api/config", { token: C_TOK, body: { excluded_companies: [] } });
+
+// Only the served slice moves the cursor. On one shared list the company
+// discovery turns up is usually one another search's run already added, and it
+// can sit anywhere along the log: counting it moved the cursor past it, and
+// everything between the slice and that company went unswept for the cycle.
+const bSlice = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
+const outsideSlice = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.companies
+  .filter((c) => !bSlice.companies.some((s) => s.company === c.company));
+const farAhead = outsideSlice.filter((c) => c.position >= bSlice.cursor).pop() || outsideSlice[0];
+const dayAfter = "2026-09-12";
+const recAhead = await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: dayAfter,
+  swept: [bSlice.companies[0], farAhead].map((c) => ({ company: c.company })) } });
+const farRow = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.companies
+  .find((c) => c.company === farAhead.company);
+check("a listed company outside the served slice is recorded but does not move the cursor",
+  recAhead.json.cursor === bSlice.companies[0].position + 1 && farRow.last_swept === dayAfter,
+  JSON.stringify({ cursor: recAhead.json.cursor, expected: bSlice.companies[0].position + 1,
+    farAhead: farAhead.position, last_swept: farRow.last_swept }));
+// A company re-sent after it was recorded sits just behind the cursor, nearly a
+// whole lap along from it - so it outranked the replacements reported beside
+// it, and they were served again the next day.
+const nextSlice = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json.companies;
+const resentRec = await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: dayAfter,
+  swept: [bSlice.companies[0], nextSlice[0], nextSlice[1]].map((c) => ({ company: c.company })) } });
+check("a company re-sent from behind the cursor does not hold it back",
+  resentRec.json.cursor === nextSlice[1].position + 1,
+  JSON.stringify({ cursor: resentRec.json.cursor, expected: nextSlice[1].position + 1 }));
 
 // Discovery appends rather than jumping the queue or landing behind the cursor.
 const found = `Rot ${rotStamp}-discovered`;
