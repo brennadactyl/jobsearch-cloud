@@ -488,7 +488,10 @@ export class Db {
    *
    * @param {Array<{company: string, board?: string, endpoint?: string,
    *   url_shape?: string, dead_signal?: string, note?: string, wall?: string}>} rows
-   * @param {string} on YYYY-MM-DD
+   * @param {string} on YYYY-MM-DD, or "" for a fact nobody dated - stamped with
+   *   the server's own date, since `verified_on` records when a fact was last
+   *   established rather than whose night it belonged to. A `wall` never
+   *   arrives undated; routes/coverage.js refuses that before calling this.
    */
   async upsertCompanyFetch(rows, on) {
     const date = on || today();
@@ -556,9 +559,10 @@ export class Db {
   /**
    * Put companies on the list.
    *
-   * Membership only. No fact is written, so a list somebody typed never becomes
-   * something company_fetch claims to know - 0010's rule, which still holds for
-   * facts. A company already on the list keeps its place and its name: a
+   * Membership only. Nothing here claims to know anything about the company:
+   * what a row says about its website is written by upsertCompanyFetch on the
+   * same call, dated or not. A company already on the list keeps its place and
+   * its name: a
    * position is assigned once, when a company joins, and never moves, or the
    * cursor would step over companies it had already passed.
    *
