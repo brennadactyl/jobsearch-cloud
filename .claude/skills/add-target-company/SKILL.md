@@ -25,7 +25,7 @@ prose or doc reaches that search only, and disagrees with the list the day
 either changes. The per-search `note` a sweep carries is private to that search
 too, and is never shared.
 
-## Before you start: the credential and the date
+## Before you start: the credential
 
 Use a real account's `tracker.json`. A demo account gets `403` on every write to
 the list.
@@ -33,13 +33,14 @@ the list.
 ```bash
 cd <data dir>/<user-id>
 url=$(node -pe "require('./tracker.json').url"); tok=$(node -pe "require('./tracker.json').token")
-today=$(date +%F)   # local date; in PowerShell: Get-Date -Format yyyy-MM-dd
 curl -s "$url/api/config" -H "Authorization: Bearer $tok" > /tmp/config.json
 node -e 'require("/tmp/config.json").tracks.filter(t=>!t.fed_by).forEach(t=>console.log(t.key))'
 ```
 
 `POST /api/coverage` requires a `search` - one of this account's track keys.
-It does not choose who gets the company; step 3 says how to pick one safely.
+It does not choose who gets the company, and with `on: ""` (step 3) it changes
+nothing about that search either: no date is stamped and no cursor moves. Any
+of this account's own keys will do.
 
 ## 1. Check it is not already on the list - required
 
@@ -114,50 +115,31 @@ A company with no board still gets an `endpoint` when a plain page lists its
 jobs: `fetch.com/careers/jobs`.
 
 **Never write a `wall`.** A wall is a run's report that no route worked on a
-given night; the server serves one only after two separate dates within seven
-days. A row carrying a `wall` beside a `board` or `endpoint` contradicts itself
-and shares nothing at all (`withheld: 1`). If no route works for you, add the
-company with no facts (step 4) and let the runs establish it.
+given night, and the server serves one only after two separate dates within
+seven days - so an undated wall is not a weaker wall, it is nothing sitting in
+the column looking like one. Sent with `on: ""` it is refused with a `400` and
+the **whole request is written off**: no company joins the list, no facts are
+shared, not even for the other rows in the same call. Sent with a date beside a
+`board` or `endpoint` it contradicts itself and shares nothing (`withheld: 1`).
+If no route works for you, add the company with no facts (step 3) and let the
+runs establish it.
 
-## 3. Pick the search key to write under
+## 3. Write it
 
-A dated report has two side effects on the search you write it under:
-
-- It stamps that search's `last_swept` for the company, so its record says it
-  swept the company today when no run did. Selection never reads dates, so the
-  cost is a misleading record, nothing more. Say which key you used when you
-  report back.
-- It **moves that search's cursor if the company is inside the slice it is
-  currently being served**. The cursor jumps past every company before it in
-  that slice, and those are skipped for the rest of the cycle - not recorded as
-  covered, just never served.
-
-Pick a key whose current slice does not contain the company:
-
-```bash
-for k in $(node -e 'require("/tmp/config.json").tracks.filter(t=>!t.fed_by).forEach(t=>console.log(t.key))'); do
-  curl -s "$url/api/coverage/$k" -H "Authorization: Bearer $tok" | node -e '
-    const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const s = JSON.parse(require("fs").readFileSync(0,"utf8"));
-    const hit = (s.companies||[]).some(c => norm(c.company) === norm(process.argv[2]));
-    console.log(process.argv[1], "cursor", s.cursor, hit ? "IN CURRENT SLICE - do not use" : "safe");
-  ' "$k" "<company>"
-done
-```
-
-If every key says "do not use", wait for tonight's runs to move past it.
-
-## 4. Write it
+Always `on: ""`. A date is a run's claim to have covered the company tonight,
+and a person recording how a company is reached is claiming nothing of the
+sort. Undated, the write shares the facts, stamps no `last_swept`, and moves no
+search's cursor.
 
 With verified facts - adds the company if it is new, and shares the facts:
 
 ```bash
 curl -s -X POST "$url/api/coverage" -H "Authorization: Bearer $tok" \
   -H "Content-Type: application/json" \
-  -d "{\"search\":\"<safe key>\",\"on\":\"$today\",\"swept\":[{\"company\":\"Fetch\",\"endpoint\":\"fetch.com/careers/jobs\"}]}"
+  -d '{"search":"<key>","on":"","swept":[{"company":"Fetch","endpoint":"fetch.com/careers/jobs"}]}'
 ```
 
-With no verified facts - membership only, no date stamped, no cursor touched:
+With no verified facts - membership only:
 
 ```bash
 curl -s -X POST "$url/api/coverage" -H "Authorization: Bearer $tok" \
@@ -165,20 +147,22 @@ curl -s -X POST "$url/api/coverage" -H "Authorization: Bearer $tok" \
   -d '{"search":"<key>","on":"","swept":[{"company":"<company>"}]}'
 ```
 
-`on: ""` writes **no** facts: a `board` or `endpoint` sent with it is dropped
-from the shared row. Facts need a date.
+`board`, `endpoint` and `url_shape` all travel undated; `wall` does not, and
+refuses the whole request (step 2). Each field is written only when what you
+send is non-empty, so recording an endpoint never blanks a board another search
+established. The server stamps `verified_on` itself, in UTC.
 
 Read the response: `{recorded, added, excluded, on, cursor, shared, withheld}`.
 
 | Field | Want |
 |---|---|
 | `added` | `1` for a new company, `0` for one already on the list |
-| `shared` | `1` when facts were sent with a date |
+| `shared` | `1` when you sent any fact |
 | `withheld` | `0` - anything else means a `wall` went in beside a route |
 | `excluded` | `0` - anything else means this account excludes it |
-| `cursor` | the same number step 3 printed for that key |
+| `cursor` | unchanged - an undated write never moves one |
 
-## 5. Verify against the list, not the response
+## 4. Verify against the list, not the response
 
 Re-run step 1's check. The company appears exactly once, `known` shows the
 fields you sent, and the total rose by `added`.
