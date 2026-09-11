@@ -23,8 +23,8 @@ facts about each company's public careers site, shared by every account. What
 may be stored in it is set out at the top of
 `server/migrations/0010_company_fetch.sql` — a row describes a website, never a
 search — and amended by `0011_one_company_list.sql`, which put the list itself
-here: membership is visible across the deployment, while who looked at a
-company and when stays in `company_sweeps`.
+here: membership is visible across the deployment, while the record of who
+looked at a company and when stays with each search.
 
 **`company_sweeps` reaches `company_fetch` through `company_key`.**
 Both hold `normalize(name)` from `server/src/exclude.js` — lowercased, each run
@@ -232,8 +232,6 @@ These hold across every table, so the per-table notes below leave them out.
   across all users.
 - `user_id` has its own index on `sessions`, `leads`, `screened` and
   `applications`. The other user-scoped tables lead their primary key with it.
-  `company_sweeps` also has one on `(user_id, search, company_key)`, which is
-  what a rotation joins on.
 - The diagram lists columns in the order a database built from empty holds
   them. The live D1 predates `0001_schema.sql` and holds some in a different
   order; nothing reads a column by position.
@@ -333,10 +331,11 @@ A setting with no row falls back to `DEFAULT_SETTINGS` in `server/src/db.js`.
 One search's record of a company on the list: when it last tried it, and what
 it learned there. The list itself is `company_fetch`.
 
-- `company_key` is the `normalize()`d name, and is what readers join on.
-  `company` is the name as the list holds it. Rows written before
-  `0011_one_company_list.sql` can hold two spellings of one company for one
-  search; readers take the most recently swept.
+- `company_key` is the `normalize()`d name, and is what readers join on,
+  through an index on `(user_id, search, company_key)`. `company` is the name
+  as the list holds it. Rows written before `0011_one_company_list.sql` can
+  hold two spellings of one company for one search; readers take the most
+  recently swept.
 - `last_swept` is the `YYYY-MM-DD` this search last attempted the company, `''`
   for never. It is a record, and does not choose what runs next.
 - `note` is what this search learned about the company, for itself. It never
