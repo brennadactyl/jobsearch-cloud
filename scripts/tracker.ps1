@@ -456,34 +456,38 @@ switch ($Command) {
               $v = Field $r $f
               if ($v) { $row[$f] = $v }
           }
-          # A row that records a wall is a fetch that failed; board, endpoint
-          # and url_shape each assert one that worked. They cannot both be true
-          # of tonight, so the worked-fields go and the wall stays.
+          # A row carrying a `wall` plus a `board` or `endpoint` contradicts
+          # itself: the wall says no route to this company's listings worked
+          # tonight, and a board or endpoint says one did. It is sent exactly as
+          # written, and the server decides what it shares from it.
           #
-          # This is not stricter than the server - it is the only way the wall
-          # survives at all. upsertCompanyFetch clears a company's wall whenever
-          # a board or endpoint is reported (db.js, `works`), so a row carrying
-          # both erases the wall it records in the same write. And the board on
-          # such a row is almost always an echo: companies.json hands every run
-          # the board it already knows, which is exactly the report that would
-          # delete a true wall. The server cannot tell an echo from a
-          # confirmation, and neither can this - but a row that also says the
-          # fetch failed has answered the question itself.
+          # This used to strip the board and endpoint and keep the wall, on the
+          # theory that the board was an echo of companies.json. That settled
+          # the row the wrong way. It is just as often honest - "careers.x.com
+          # 403s" alongside a Greenhouse board that works - and keeping the wall
+          # gets a reachable company skipped by every search until the wall
+          # expires, because once it is served nothing fetches that company
+          # again to disprove it. A missed posting costs more than a wasted
+          # fetch. Rewriting the row here also hid the contradiction from the
+          # server: it received a clean-looking wall-only row, so no rule there
+          # could ever fire. The rule belongs in one place, where a curl or a
+          # skill writing to the API meets it too.
           #
-          # url_shape does not clear a wall, but it does move verified_on, so an
-          # echoed one would claim a freshness nobody established.
-          if ($row.ContainsKey("wall")) {
-              $echoed = @("board", "endpoint", "url_shape") | Where-Object { $row.ContainsKey($_) }
-              if ($echoed) {
-                  foreach ($f in $echoed) { $row.Remove($f) }
-                  Say "dropped $($echoed -join '/') from $company - that row also reports a wall, and a reported board or endpoint would clear the wall in the same write"
-              }
+          # So this only says so, and says how to fix it. url_shape is not part
+          # of the contradiction: it describes a posting page, not a route to
+          # the listings, and step 9e asks a run to record a posting page that
+          # loads while the listings stay walled.
+          if ($row.ContainsKey("wall") -and ($row.ContainsKey("board") -or $row.ContainsKey("endpoint"))) {
+              Say "WARNING: $company reports a wall and a working board/endpoint in one row, which contradicts itself. If any route to its listings worked, re-send it without the wall; if none did, re-send it without the board/endpoint."
           }
           $send += $row
       }
       if ($send.Count -eq 0) { Say "swept: nothing to record (refused=$($script:Refused))"; exit 0 }
       $res = Invoke-Tracker "POST" "/api/coverage" @{ search = $Search; on = $Today; swept = @($send) }
-      Say "swept: recorded=$($res.recorded) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
+      # `added` is how many of these companies joined the shared list on this
+      # call. Since one list serves every search, a company one run adds is
+      # swept by everyone, so it is worth a run being able to say it did that.
+      Say "swept: recorded=$($res.recorded) added=$($res.added) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
       break
   }
 

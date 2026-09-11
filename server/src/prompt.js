@@ -348,11 +348,14 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
    created by this call, so one that broader discovery turned up joins the
    rotation here.
 
-   Put the reason a company gave you nothing in the field it belongs to, judged
-   by what the sentence is about. If it would be equally true for a stranger
-   fetching the same URL, it is a \`wall\`: "careers.draftkings.com 403s a plain
-   fetch", "renders a client-side shell with nothing in the HTML". If it turns on
-   this search - the role, the level, the location - it is a \`note\`: "no
+   Put the reason a company gave you nothing in the field it belongs to. A
+   \`wall\` means **no route to this company's listings worked tonight** - not
+   the careers page, not a board API, not a mirror - and it is true for anyone
+   who tried those same routes: "the careers site 403s a plain fetch and no
+   board endpoint answers", "an empty client-side shell, and no JSON-LD or
+   board behind it". If any route to the listings worked, it is not a wall:
+   report that route as \`board\` or \`endpoint\` instead. A reason that turns on
+   this search - the role, the level, the location - is a \`note\`: "no
    PM-titled openings besides two Director-level reqs". A \`wall\` is pooled
    across every search, so step 4 applies before you write one: a truncated
    page, or one whose JSON-LD carries the posting, is not a wall.
@@ -361,11 +364,12 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
    you got nothing usable out of - the domain refused the fetch, every job id
    404'd, the board only filters client-side, the page was an empty JS shell,
    or \`companies.json\` served it with a \`wall\` so you skipped it without
-   fetching. A served wall means skip it tonight - the tracker stops serving it
-   once it goes stale, and that is the re-test. The one exception is yours to
-   judge: a specific, strong lead that has surfaced there still earns one
-   verification attempt. Not the ones you read fine that had nothing
-   matching: those are ordinary covered sweeps and by far the common case.
+   fetching. A served wall means skip its listing tonight - the tracker stops
+   serving it once it goes stale, and that is the re-test. It never stops a
+   specific posting URL: step 4 requires every candidate URL to be opened, so a
+   posting URL for that company still gets its one direct fetch. Not the ones
+   you read fine that had nothing matching: those are ordinary covered sweeps
+   and by far the common case.
 
    If that count is more than zero, run \`./tracker companies\` again and cover
    that many companies from what comes back, then record those with 9d and
@@ -375,11 +379,13 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
    cursor, so what comes back is further along the list rather than the names
    you just did, and there is nothing to filter out.
 
-   A workaround you find - a URL format that works, an ATS mirror, a JSON
-   endpoint behind a page that renders nothing - is an \`endpoint\` or
-   \`url_shape\`, not a \`note\`. Send it in 9d: a fetch that worked is the only
-   evidence that settles a wall, so reporting one clears that company's wall
-   for every search.
+   A way into a walled listing - an ATS mirror, a JSON endpoint behind a page
+   that renders nothing - is an \`endpoint\`. Report it in 9d with **no**
+   \`wall\`: you have just shown the listing is readable, and that clears the
+   wall for every search. A single posting page that loads while the listing
+   stays walled is different - record its \`url_shape\` alongside the \`wall\`,
+   not instead of it. One page loading does not make the listing readable, so
+   it leaves the wall standing.
 `
     : "";
 
