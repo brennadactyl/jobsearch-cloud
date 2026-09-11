@@ -1,10 +1,6 @@
 /**
- * The editable controls, and the one dialog that interrupts a write.
- *
- * A field commits on blur, not on every keystroke: the old page does the same,
- * and it is the right granularity for text someone is still typing. Status is
- * the exception on both kinds of row - it goes through its own endpoint,
- * because the server owns side effects a plain field patch cannot do.
+ * Editable controls. A field commits on blur, not per keystroke - the right
+ * granularity for text someone is still typing.
  */
 import { useEffect, useState } from "react";
 import type { Application, Lead } from "../api/schema";
@@ -12,22 +8,10 @@ import { useSetApplicationStatus, useSetLeadStatus, useUpdateField } from "../ap
 import { APP_STAGE_DATE_MAP, APP_STATUS, LEAD_STATUS } from "../domain/constants";
 import { today } from "../domain/format";
 
-/**
- * These three are booked ahead - a recruiter reaches out to set up a call, a
- * loop gets scheduled for next week - so the date being logged is often still in
- * the future. The rest are only ever logged after the fact, and the dialog's
- * title asks the question that fits either way.
- */
+/** Stages booked ahead, so the date logged is often in the future; the dialog asks accordingly. */
 const STAGE_SCHEDULED = new Set(["Recruiter Screen", "Tech Screen", "Onsite / Loop"]);
 
-/**
- * A text/date field that saves when you click away.
- *
- * Controlled from props while idle and from local state while focused, so a
- * refetch landing mid-edit cannot yank the text out from under the cursor -
- * which is a hazard this client has and the old page did not, because there the
- * only repaint was one it triggered itself.
- */
+/** Shows the local draft while there is one, so a refetch landing mid-edit can't replace the text under the cursor. */
 export function EditableField({
   row,
   kind,
@@ -62,26 +46,17 @@ export function EditableField({
       placeholder={placeholder}
       aria-label={ariaLabel ?? field}
       onChange={(e) => setDraft(e.target.value)}
-      // Reads the value off the event rather than out of `draft`. The state set
-      // by the last keystroke has not necessarily committed by the time blur
-      // runs - the two can land in the same task - and a handler closing over a
-      // stale `draft` would silently skip the save. The element always knows
-      // what it is showing, so ask it.
+      // Read the value from e.target, not `draft`: the last keystroke's state
+      // may not have committed when blur runs, and a stale draft skips the save.
       onBlur={(e) => {
         const value = e.target.value;
         if (value === serverValue) {
           setDraft(null);
           return;
         }
-        // The draft is held until the write settles, not dropped here. The
-        // optimistic cache patch lands a tick later (onMutate awaits
-        // cancelQueries), so clearing now would render one frame of the *old*
-        // value in between - which on an empty field is the placeholder
-        // flashing back up behind what was just typed.
-        //
-        // By the time onSettled runs the field agrees either way: on success
-        // the patch has made serverValue this value, and on failure the
-        // rollback has restored the old one, which is what should be shown.
+        // Hold the draft until onSettled. The optimistic patch lands a tick
+        // later (onMutate awaits cancelQueries), so clearing now flashes the old
+        // value; by onSettled the cache holds the new value or the rollback.
         update.mutate(
           { kind, id: row.id, field, value },
           { onSettled: () => setDraft(null) },
@@ -91,7 +66,7 @@ export function EditableField({
   );
 }
 
-/** The notes box. Same commit-on-blur contract as EditableField, and the same reason for reading the event. */
+/** Same commit-on-blur contract as EditableField, and the same reason for reading the event. */
 export function EditableNotes({
   row,
   kind,
@@ -150,12 +125,9 @@ export interface PendingStage {
 }
 
 /**
- * An application's status.
- *
- * Moving into a pipeline stage that has not happened yet - its history column is
- * still blank - asks when it actually happened rather than silently stamping
- * today, because the change is often logged a few days after the fact. A stage
- * already reached goes straight through.
+ * Moving into a stage whose history column is still blank asks for its date
+ * rather than stamping today, because changes are often logged days later. A
+ * stage already reached goes straight through.
  */
 export function AppStatusSelect({
   app,
@@ -194,12 +166,8 @@ export function AppStatusSelect({
 }
 
 /**
- * Asks for the date a status change actually happened, or is scheduled for.
- *
- * Cancelling makes no write at all, which is why the select it was opened from
- * is a controlled component: React re-renders it back to the row's real status
- * with no reverting needed. The old page had to reset the element by hand,
- * because the browser had already repainted it by the time "change" fired.
+ * Cancelling writes nothing; the select it was opened from is controlled, so it
+ * returns to the row's real status on its own.
  */
 export function StageDateModal({
   pending,
@@ -208,10 +176,8 @@ export function StageDateModal({
   pending: PendingStage | null;
   onClose: () => void;
 }) {
-  // Split so the dialog below *mounts* per opening rather than being reset by
-  // an effect. Today's date is then plain initial state and the input's
-  // autoFocus does the focusing - both of which an effect was doing by hand,
-  // which is a re-render the mount gets for free.
+  // Split so the dialog mounts per opening: today's date is plain initial state
+  // and autoFocus does the focusing, with no resetting effect.
   if (!pending) return null;
   return <StageDateDialog key={`${pending.app.id}:${pending.status}`} pending={pending} onClose={onClose} />;
 }
@@ -243,8 +209,7 @@ function StageDateDialog({ pending, onClose }: { pending: PendingStage; onClose:
       role="dialog"
       aria-modal="true"
       aria-labelledby="stageDateTitle"
-      // The overlay itself, not the card on top of it - a click on the dimmed
-      // backdrop cancels, same as Cancel.
+      // Only a click on the backdrop itself cancels, not one on the card.
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

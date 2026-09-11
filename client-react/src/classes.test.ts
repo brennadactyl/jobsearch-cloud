@@ -1,18 +1,11 @@
 /**
- * Every class name a component writes has to exist in the stylesheet.
+ * Every literal class name a component writes must be selected somewhere in
+ * tracker.css. Components emit the class names tracker.css targets, and an
+ * invented one fails silently: a class with no rule is not an error, and jsdom
+ * applies no styling.
  *
- * tracker.css is a copy of the old client's stylesheet, and components are meant
- * to emit the class names it already targets. The first pass at the facts cards
- * didn't - it invented `facts`, `fcard`, `fgrid` and `stage-history`, none of
- * which the stylesheet has ever had - so Role details, Notes and Stage history
- * rendered unstyled. Nothing failed: a class with no rule behind it is not an
- * error anywhere, jsdom applies no styling, and a test that asks whether a card
- * exists gets the same answer either way.
- *
- * This reads the literal class names out of the components and checks each one
- * is selected somewhere in tracker.css. Names built at runtime (a tier's `pri0`,
- * a status pill's colour) can't be read statically and are not covered; the
- * literal ones are where invention happens.
+ * Names built at runtime (a tier's `pri0`, a pill's colour) can't be read
+ * statically and aren't covered.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,10 +50,8 @@ describe("class names", () => {
 
 describe("the drill chip", () => {
   it("keeps its accent text - no later rule of the same weight overrides the colour", () => {
-    // `.tile, .chip.drill { color: inherit }`, appended for the tiles that became
-    // links, came after `.chip.drill { color: var(--accent) }` and won, so the
-    // chip read as grey or white text in a teal pill. Found side by side with
-    // the old client, not by any test.
+    // The link resets at the end of tracker.css come later at the same
+    // specificity, so `.chip.drill` must not be given `color: inherit` there.
     // Comments out first: they sit in front of selectors and hold commas.
     const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
     const colours = [...rules.matchAll(/([^{}]+)\{([^}]*)\}/g)]

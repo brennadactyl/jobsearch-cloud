@@ -1,12 +1,6 @@
 /**
- * What the side-by-side review found the React client doing differently from the
- * page it replaces - docs/react-ux-comparison.md, whose finding numbers these
- * describe blocks carry. Each was measured on both deployed clients with the same
- * account.
- *
- * Kept apart from parity.test.tsx for the same reason those are kept at all:
- * once the old client is gone there is nothing left to compare against, and
- * nothing else would notice these going missing.
+ * One describe per finding in docs/react-ux-comparison.md, numbered to match,
+ * so none of them regresses unnoticed.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -204,9 +198,7 @@ describe("the row Detail shows by default (1.8)", () => {
 
   it("never replaces a selection whose row hasn't reached the page yet", async () => {
     // Adding an application selects the new row from the write's onSuccess, and
-    // a render can see that selection before it sees the row. Storing Detail's
-    // fallback then wrote the first row over the new selection for good - seen
-    // once live, after "Added — it fills in overnight".
+    // a render can see that selection before it sees the row.
     setPrefs({ selected: { applications: "9100" } });
     vi.spyOn(client, "getData").mockResolvedValue(fixture);
     window.history.pushState({}, "", "/applications");
@@ -342,8 +334,6 @@ describe("a load that fails (1.18)", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Couldn't load: boom");
-    // Red, as the old page's was. `.err` is only coloured under #gate, and this
-    // sits in the page body.
     expect(alert).toHaveClass("load-err");
     expect(rulesFor(".load-err").replace(/\s+/g, "")).toContain("color:var(--crit)");
   });

@@ -3,19 +3,9 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
 /**
- * Refuses to build without an API URL.
- *
- * This is `client/predeploy-check.mjs`'s job moved one step earlier, and it is
- * the one place this client is strictly safer than the page it may replace.
- * Over there the API URL is a gitignored runtime file, so a checkout missing it
- * builds and deploys perfectly happily into a site that tells every visitor
- * "This deployment has no API URL configured" - which is exactly what happened
- * on 2026-09-08, from a worktree, and took the sign-in page down for hours.
- *
- * Here it is a build input. A build without it fails, so that deploy cannot be
- * produced in the first place. `dev` is exempt: a dev server with no API is a
- * useful thing to run (the components render, the requests fail), and failing
- * to start would just be in the way.
+ * Fails the build without VITE_API_BASE, so a deploy missing the API URL can't
+ * be produced. `dev` is exempt: it still renders without an API. See README.md,
+ * "The API URL is a build input".
  */
 function requireApiBase(): Plugin {
   return {
@@ -42,8 +32,6 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    // Domain logic and components only. The scaffold's own files are excluded
-    // by living outside src/.
     include: ["src/**/*.test.{ts,tsx}"],
   },
 });

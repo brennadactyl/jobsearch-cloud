@@ -1,11 +1,7 @@
 /**
- * Source-level boundaries.
- *
- * These are the parity-bar items that are properties of the *codebase* rather
- * than of any rendered output, so they are checked by reading the source. That
- * is a blunt instrument and deliberately so: each one is a rule that would
- * otherwise be enforced by everyone remembering it, which is the arrangement
- * this whole rebuild exists to stop relying on.
+ * Rules that are properties of the source rather than of rendered output, so
+ * they are checked by reading it. Blunt on purpose: otherwise each would hold
+ * only while everyone remembers it.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";

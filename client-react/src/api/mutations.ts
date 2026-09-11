@@ -1,24 +1,11 @@
 /**
- * Every write, as an optimistic mutation over the single `["data"]` cache.
+ * Every write, as an optimistic mutation over the single `["data"]` cache:
  *
- * The shape is the same throughout and is worth stating once:
- *
- *   onMutate   cancel any in-flight read (so it cannot land on top of us),
- *              snapshot the cache, apply the change locally
+ *   onMutate   cancel any in-flight read, snapshot the cache, apply the change
  *   onError    put the snapshot back, and say so
- *   onSuccess  replace the optimistic row with the server's authoritative one
+ *   onSuccess  replace the optimistic row with the server's
  *
- * The last step is the one that matters and the reason every write endpoint
- * returns its row: an optimistic edit is a *guess* at what the server will do,
- * and several of these guesses are knowingly incomplete. Setting a lead to
- * "Applied" creates an application; moving a lead can be refused; a stage change
- * stamps a date column this client did not compute. Replacing rather than
- * confirming means the guess never has to be right, only close enough to look
- * settled for one round trip.
- *
- * The page this is ported from had no optimistic layer: it mutated `state` then
- * called render(), or refetched everything. This is faster and strictly more
- * honest about failure, because a rollback is visible.
+ * The local guess may be incomplete; onSuccess corrects it.
  */
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { saved } from "../ui/saved";
@@ -27,7 +14,6 @@ import type { Application, Lead, TrackerData } from "./schema";
 
 export const DATA_KEY = ["data"] as const;
 
-/** Replaces a row by id, in place, preserving its position in the list. */
 function replaceById<T extends { id: number }>(list: T[], item: T): T[] {
   return list.map((r) => (r.id === item.id ? item : r));
 }
@@ -37,11 +23,10 @@ function patch(qc: QueryClient, fn: (d: TrackerData) => TrackerData) {
 }
 
 /**
- * A write refused for a revoked token is not a failed save to retry: nothing
- * will save until someone signs in again. Ends the session, which takes the page
- * to the gate, rather than leaving a page that looks signed in and rolls back
- * every edit. The request that got the 401 has usually ended it already; ending
- * it twice lands on the same gate.
+ * A write refused for a revoked token is not a save to retry: nothing will save
+ * until someone signs in again, so end the session and go to the gate. The
+ * request that got the 401 has usually ended it already; twice lands on the
+ * same gate.
  */
 function signedOut(err: Error): boolean {
   if (!(err instanceof api.UnauthorizedError)) return false;
@@ -54,10 +39,7 @@ function serverSaid(err: Error): boolean {
   return err.constructor === Error && !/^Request failed [(]/.test(err.message);
 }
 
-/**
- * Shared wiring. `optimistic` may be omitted where there is nothing sensible to
- * guess - adding a row has no id until the server assigns one.
- */
+/** `optimistic` is omitted where there is nothing to guess, e.g. a new row has no id yet. */
 function useWrite<TVars, TResult>(opts: {
   mutationFn: (v: TVars) => Promise<TResult>;
   optimistic?: (d: TrackerData, v: TVars) => TrackerData;
@@ -82,8 +64,6 @@ function useWrite<TVars, TResult>(opts: {
       return { snapshot };
     },
     onError(err: Error, _vars, ctx) {
-      // Put it back. With an optimistic update the row has already changed on
-      // screen, so leaving it there would show a save that did not happen.
       if (ctx?.snapshot) qc.setQueryData(DATA_KEY, ctx.snapshot);
       if (signedOut(err)) return;
       const specific = opts.message?.(err);
@@ -99,12 +79,7 @@ function useWrite<TVars, TResult>(opts: {
   });
 }
 
-/**
- * One whitelisted field on a lead or an application.
- *
- * Status is deliberately not routed through here - see the dedicated hooks
- * below and the note in client.ts.
- */
+/** Not for status, which has its own hooks below - see the Writes note in client.ts. */
 export function useUpdateField() {
   return useWrite<{ kind: "lead" | "application"; id: number; field: string; value: string }, Lead | Application>({
     mutationFn: ({ kind, id, field, value }) =>
@@ -146,11 +121,8 @@ export function useSetLeadStatus() {
 }
 
 /**
- * Files a lead under a different tab.
- *
- * The visible tab deliberately does not change: moving a stray row is something
- * you do in the middle of triaging a tab, and jumping to wherever it went would
- * cost you your place.
+ * The visible tab doesn't follow the lead: moving a stray row happens mid-triage,
+ * and jumping to its new tab would cost you your place.
  */
 export function useMoveLead() {
   return useWrite<{ id: number; search: string }, Lead>({
@@ -160,18 +132,16 @@ export function useMoveLead() {
       leads: d.leads.map((l) => (l.id === id ? { ...l, search } : l)),
     }),
     onResult: (d, lead) => ({ ...d, leads: replaceById(d.leads, lead) }),
-    // Named for what it does and where the row went: it has just left the list
-    // you are looking at, and this line is the only thing on screen saying which
-    // tab it is under now.
+    // The row has just left the list on screen, so this line is what says
+    // which tab it is under now.
     pending: "Moving…",
     done: (lead, d) => `Moved to ${d?.tracks.find((t) => t.key === lead.search)?.label || lead.search}`,
-    // Both of this call's refusals are worth reading: an unknown track key, and
-    // a destination that already holds this posting. No answer at all is not.
+    // The server's refusals are worth showing (see client.ts moveLead); no
+    // answer at all is not.
     message: (err) => (serverSaid(err) ? err.message : "Couldn't move it — try again"),
   });
 }
 
-/** An application's status, which stamps the stage-date column it moves into. */
 export function useSetApplicationStatus() {
   return useWrite<{ id: number; status: string; date?: string }, Application>({
     mutationFn: ({ id, status, date }) => api.setApplicationStatus(id, status, date),
@@ -185,21 +155,16 @@ export function useSetApplicationStatus() {
   });
 }
 
-/** Adds a row that is nothing but a link, for the overnight fill to read. */
 export function useAddApplication() {
   return useWrite<{ link: string }, Application>({
-    // No optimistic row: it would need an id the server has not assigned yet.
     mutationFn: ({ link }) => api.addApplication(link),
     onResult: (d, app) => ({ ...d, applications: [app, ...d.applications] }),
   });
 }
 
 /**
- * Removes a posting, with the reason that stops tomorrow's run rediscovering it.
- *
- * `kept` coming back non-empty means an application still points at the lead and
- * nothing was deleted - which is why the optimistic removal has to be undone on
- * a *successful* response, not only on an error.
+ * A non-empty `kept` means nothing was deleted, so the optimistic removal is
+ * undone on a *successful* response too.
  */
 export function useDeleteLead() {
   const qc = useQueryClient();

@@ -1,10 +1,6 @@
 /**
- * Vocabulary shared with the server, duplicated here on purpose.
- *
- * These mirror LEAD_STATUS / APP_STATUS in server/src/routes/, the same way
- * client/public/index.html does. Nothing ties the two together yet - a shared
- * types package is the natural follow-on if this client ever replaces that one,
- * and is deliberately out of scope until then (see docs/react-adoption-plan.md).
+ * Vocabulary mirrored by hand from server/src/routes/; nothing checks the copies
+ * agree. A shared types package is out of scope (docs/react-adoption-plan.md).
  */
 
 /** server/src/routes/leads.js */
@@ -20,7 +16,6 @@ export const APP_STATUS = [
   "Onsite / Loop", "Offer", "Rejected", "Withdrawn",
 ] as const;
 
-/** The stages that mean a conversation is live rather than finished. */
 export const ACTIVE: readonly string[] = ["Recruiter Screen", "Tech Screen", "Onsite / Loop"];
 
 /**
@@ -44,7 +39,6 @@ export const STAGE_HISTORY_FIELDS: readonly (readonly [field: string, label: str
   ...STAGE_DATE_FIELDS.map(([label, field]) => [field, label] as const),
 ];
 
-/** Facts about the opportunity itself, stable once entered. */
 export const ROLE_FIELDS: readonly (readonly [field: string, label: string])[] = [
   ["referral", "Referral"],
   ["comp", "Comp range"],
@@ -82,7 +76,6 @@ export const APP_SORTS: readonly (readonly [key: string, label: string])[] = [
  */
 export const ALL_LEADS = "allleads";
 
-/** Status -> the CSS pill class that colours it. */
 export function pillFor(status: string): string {
   const map: Record<string, string> = {
     "New": "new", "Reviewing": "hot", "Applied": "go", "Not a fit": "no",
@@ -93,12 +86,7 @@ export function pillFor(status: string): string {
   return map[status] || "live";
 }
 
-/**
- * status -> the history column it stamps. Mirrors STAGE_DATE_MAP in
- * server/src/routes/applications.js - the same intentional duplication as
- * APP_STATUS itself. Used to decide whether picking a status needs to ask for a
- * date first.
- */
+/** Mirrors STAGE_DATE_MAP in server/src/routes/applications.js. */
 export const APP_STAGE_DATE_MAP: Record<string, string> = {
   Applied: "dateApplied",
   ...Object.fromEntries(STAGE_DATE_FIELDS.map(([label, field]) => [label, field])),

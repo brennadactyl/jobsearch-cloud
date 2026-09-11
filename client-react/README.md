@@ -1,28 +1,23 @@
 # Job Search Tracker client — React rebuild
 
-A **second** client for the same API, built beside
-[`../client/`](../client/) rather than replacing it. That one still ships and is
-still the one to use; this one is not finished and is deployed, if at all, to its
-own URL where nobody depends on it.
+A **second** client for the same API, beside [`../client/`](../client/).
+`../client/` is the one in use; this one is not finished, is deployed only to
+its own URL, and nothing depends on it. See
+[`../docs/react-adoption-plan.md`](../docs/react-adoption-plan.md).
 
-Why it exists, what it has to clear before it could replace anything, and what
-happens if it never does: [`../docs/react-adoption-plan.md`](../docs/react-adoption-plan.md).
-
-**Status: Phase 4.** Signs in, draws the Overview, both leads tabs and
-Applications in Detail and Grid, and writes: every field saves on blur, statuses
+It signs in, draws the Overview, both leads tabs and Applications in Detail and
+Grid, changes your password and logs out. Every field saves on blur, statuses
 go through their own endpoints, and rows can be added and removed. Writes are
 optimistic - the row changes first and the server's answer decides whether it
 stays changed.
 
 ## Stack
 
-React 19, Vite, TypeScript (`strict`), TanStack Query, Zod, Vitest +
-Testing Library. Five dependencies with a job each rather than a starter
-template taken whole — the reasoning is in the plan's "The target" section.
+React 19, Vite, TypeScript (`strict`), TanStack Query, React Router, Zod,
+Vitest + Testing Library.
 
-Not here on purpose: any component library, any CSS framework, any state manager
-beyond Query plus `useState`, and SSR. This is a single-user dashboard behind a
-login; there is nothing for a server renderer to do.
+Don't add a component library, a CSS framework, a state manager beyond Query
+plus `useState`, or SSR.
 
 ## Running it
 
@@ -38,13 +33,10 @@ Edit `.env.local` and set `VITE_API_BASE` to your `../server/` deploy's URL, the
 npm run dev
 ```
 
-`.env.local` is gitignored, the same treatment `../client/public/local-config.js`
-gets and for the same reason — it is *your* deployment's detail, not something
-that belongs in the template other people fork.
+`.env.local` is gitignored, like `../client/public/local-config.js`.
 
-The blocks here are `cmd.exe`. In PowerShell they can die with "running scripts
-is disabled on this system" before running anything; use `npm.cmd` / `npx.cmd`,
-or see [`../server/README.md`](../server/README.md)'s setup section.
+The blocks here are `cmd.exe`. In PowerShell use `npm.cmd` / `npx.cmd` (see
+[`../server/README.md`](../server/README.md#one-time-setup)).
 
 ## Checks
 
@@ -53,50 +45,36 @@ npm run typecheck
 npm test
 ```
 
-Both run in CI on every push and pull request
-([`../.github/workflows/checks.yml`](../.github/workflows/checks.yml)) — the
-repo's first. What the tests cover at this phase:
+Both run in CI, with a build, on pushes to `main` and on pull requests
+([`../.github/workflows/checks.yml`](../.github/workflows/checks.yml)). What the
+tests cover:
 
-- **`src/api/schema.test.ts`** — the API boundary. That the schema defaults what
-  a brand-new deployment omits, ignores fields the server has and this client
-  does not render, and fails loudly rather than quietly on a payload it cannot
-  make sense of.
+- **`src/api/schema.test.ts`** — the API boundary.
 - **`src/theme.test.ts`** — that every colour token is defined in all three
-  theme blocks, and that no rule inlines a hex value. A check the single-file
-  page cannot make of itself, covering the failure its editing skill warns about.
+  theme blocks, and that no rule inlines a hex value.
+- **`src/classes.test.ts`** — that every literal class name a component writes
+  exists in `tracker.css`.
+- **`src/fonts.test.ts`** — that every font family the stylesheet names is
+  requested by `index.html`.
+- **`src/boundaries.test.ts`** — source-level rules, checked by reading the
+  source.
+- **`src/deploy-config.test.ts`** — that `wrangler.toml` falls back to
+  `index.html`, so tab URLs don't 404 on reload.
 - **`src/domain/drills.test.ts`** — the drill invariant: for every tile and
-  funnel row, the number shown is the length of the rows it opens. Includes a
-  mutation test that edits one rule and asserts the number moves *with* it,
-  which is the property that matters — parity passed trivially the day it was
-  written, and the question is whether it keeps passing after an edit.
-- **`src/domain/domain.test.ts`** — the ported rules: `safeUrl` against a list
-  of hostile inputs, location tiers, comparators, run state, fill state, and
-  that every tab label comes from config.
+  funnel row, the number shown is the length of the rows it opens.
+- **`src/domain/domain.test.ts`** — the ported rules.
 - **`src/App.test.tsx`** — the gate, shell and routing, queried by role and
-  accessible name. Querying that way is what turns "every interactive element is
-  a real control" into an assertion: a `div` with a click handler has no role to
-  find, so these fail if one appears. Also walks a drill end to end — read the
-  figure off a rendered tile, click it, count the rows that arrive.
-- **`src/writes.test.tsx`** — the optimistic layer, which is where this client
-  has a failure mode the old page did not. A field saves on blur and not before;
-  a failed save puts the old value back and says so; a lead marked Applied takes
-  the application the server creates; a stage change asks for a date and writes
-  nothing if you cancel; a delete the server refused is undone on a *successful*
-  response.
+  accessible name.
+- **`src/writes.test.tsx`** — the optimistic layer.
+- **`src/parity.test.tsx`** — behaviour of `../client/` this client had to be
+  taught.
+- **`src/review.test.tsx`** — differences a side-by-side review of the two
+  clients found.
 
 ## The API URL is a build input, not a runtime file
 
 `VITE_API_BASE` is baked into the bundle at build time, and
 [`vite.config.ts`](vite.config.ts) **fails the build without it**.
-
-This is the one place this client is strictly safer than the page it may replace.
-Over there the URL is a gitignored runtime file, so a checkout missing it builds
-and deploys perfectly happily into a site that tells every visitor "This
-deployment has no API URL configured" — which is what happened on 2026-09-08,
-from a git worktree, and took the sign-in page down for hours.
-[`../client/predeploy-check.mjs`](../client/predeploy-check.mjs) exists to catch
-that after the fact. Here the same failure cannot produce a deployable artifact
-at all.
 
 ## Deploying
 
@@ -106,23 +84,14 @@ npm run deploy
 ```
 
 Builds, then `wrangler deploy`s to its own Worker
-(`job-search-tracker-client-react`) at its own URL. It shares nothing with
-`../client/`'s deployment and cannot affect it.
+(`job-search-tracker-client-react`) at its own URL, separate from
+`../client/`'s deployment.
 
 **Main checkout, main branch, never a worktree** — see
 [`../.claude/skills/verify-and-deploy/SKILL.md`](../.claude/skills/verify-and-deploy/SKILL.md).
-The worktree rule bites differently here than it does for `../client/`: a
-worktree has no `.env.local`, so the build fails rather than deploying something
-broken. That is the guard working, not a problem to route around.
 
-## Why the lockfile is committed here
+## The lockfile is committed here
 
-`package-lock.json` is gitignored repo-wide, and un-ignored for this directory
-(see [`../.gitignore`](../.gitignore)). The repo-wide rule is about `client/` and
-`server/`, which have wrangler as effectively their only dependency and would
-otherwise hand every forker a version that got pinned by accident. This is a real
-application with a real dependency tree, where an unpinned install resolves
-differently on every machine and in CI.
-
-That is the supply chain the plan named as the honest price of this stack. The
-single-file page has none at all.
+`package-lock.json` is gitignored repo-wide and un-ignored for this directory
+(see [`../.gitignore`](../.gitignore)). CI installs with `npm ci`, which fails
+when `package.json` and the lockfile disagree, so commit them together.

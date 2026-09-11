@@ -1,7 +1,6 @@
 /**
- * Dates, durations and URLs. Pure, and the reason the old page's equivalents
- * are worth porting rather than reaching for a date library: each one encodes a
- * decision about what this page should say, not just how to format a number.
+ * Dates, durations and URLs. No date library: each helper encodes what the page
+ * should say, not just how to format a number.
  */
 
 /** Whole days since a YYYY-MM-DD or ISO date, or null if there isn't one. Never negative. */
@@ -38,18 +37,10 @@ export function relWhen(iso: string | null | undefined): string {
 }
 
 /**
- * The half of the XSS boundary React does not cover.
- *
- * React escapes text and attribute values, so a company name carrying markup is
- * already safe. It does *not* stop `javascript:` reaching an href - that is a
- * URL the framework will happily render. Lead data comes from job postings read
- * off the internet, and a hand-typed link field is just text, so only http(s)
- * becomes a real anchor here.
- *
- * A bare "acme.com/jobs/1" is common enough to accept (https:// assumed).
- * Anything else - javascript:, data:, a note to self - gets no link at all
- * rather than an href built from whatever was typed. Returns "" when there is
- * nothing safe to open.
+ * The half of the XSS boundary React does not cover: it escapes text, but will
+ * render a `javascript:` href. Lead data comes from postings read off the
+ * internet, so only http(s) becomes a link, plus a bare "acme.com/jobs/1"
+ * (https assumed). Anything else returns "".
  */
 export function safeUrl(v: string | null | undefined): string {
   const t = String(v ?? "").trim();
@@ -60,13 +51,9 @@ export function safeUrl(v: string | null | undefined): string {
 }
 
 /**
- * The host a link points at ("boards.greenhouse.io"), or "".
- *
- * Stands in for the company on an application that is still nothing but a URL:
- * between pasting one in and the overnight fill reading the posting, it is the
- * only thing known about the row, and a list of rows all reading "Untitled"
- * cannot be told apart. Displayed, never stored - a host is good enough to find
- * a row by and nowhere near good enough to write into the company field as fact.
+ * Stands in for the company on a row that is still only a URL, so a list of
+ * such rows isn't all "Untitled". Displayed, never stored: a host is not a
+ * company name.
  */
 export function hostOf(v: string | null | undefined): string {
   const u = safeUrl(v);

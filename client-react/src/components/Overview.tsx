@@ -1,15 +1,7 @@
 /**
- * The Overview.
- *
- * **Every number here opens the rows behind it, and takes its value from them.**
- * A tile or funnel row declares a `DrillTarget` - a tab, plus at most one
- * narrowing - and `drillCount` turns that same declaration into the figure while
- * `pathForTarget` turns it into the link. There is one expression, so what you
- * clicked and what you land in cannot be different sets.
- *
- * That is not a stylistic preference. In the page this is ported from, four of
- * six tiles and every funnel row carried a second copy of their predicate and
- * agreed only by luck; see docs/react-adoption-plan.md.
+ * Every number here opens the rows behind it. A tile or funnel row declares one
+ * `DrillTarget`; `drillCount` turns it into the figure and `pathForTarget` into
+ * the link, so what you clicked and what you land in are the same set.
  */
 import { Link } from "react-router-dom";
 import type { usePinnedLayout } from "../ui/hooks";
@@ -109,8 +101,6 @@ export default function Overview({
         })}
       </div>
 
-      {/* Everything below the tiles scrolls inside itself, so the tabs and
-          the numbers stay put while you read the searches. */}
       <div
         className={`panel-scroll${scrolled ? " scrolled" : ""}`}
         ref={scrollRef}
@@ -164,9 +154,6 @@ function PanelBody({
     "Not a fit": "var(--line)",
   };
 
-  // Each row is named by the drill that reproduces it, and its count comes from
-  // that drill - so the bar, the number beside it and the rows its header opens
-  // are all one set.
   const funnel: { label: string; drill: string; n: number }[] = [
     { label: "Applied", drill: "applied", n: appliedCount },
     ...STAGE_DATE_FIELDS.slice(0, 4).map(([label, field]) => ({
