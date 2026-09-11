@@ -70,6 +70,10 @@ Anything that reads the new field through the API needs a route change too -
 see the `add-api-route` skill. A column no route exposes is a column only a
 migration can ever have written.
 
+Update `docs/schema.md` in the same change - the column in the diagram, and a
+line under its table if the name doesn't say what it holds. That doc describes
+what the migrations produce, not what a plan proposes.
+
 ## 3. Verify
 
 Two checks, and they cover different things.
