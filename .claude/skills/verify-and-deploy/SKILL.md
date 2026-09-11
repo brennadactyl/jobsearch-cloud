@@ -37,10 +37,44 @@ comes *down* off the live site.
 
    A branch deploy publishes that branch's code as the live tracker, including
    whatever it is missing relative to main.
+3. **Look at what is already deployed before you overwrite it.** Up to date
+   with `origin/main` is not the same claim as up to date with what is *live*,
+   and the two came apart on 2026-09-10: one session deployed a feature from a
+   branch not yet merged, a second session deployed a legitimate fast-forward
+   of `main` an hour later, and the first feature came off the site. Nothing
+   failed. The D1 migration it needed stayed applied, so the table sat there
+   with code that no longer knew it existed.
+
+   ```bash
+   cd server && npx wrangler deployments status
+   ```
+
+   That gives the live version id and when it was created - enough to see that
+   *someone* deployed since you last looked, not what they shipped. If the
+   timestamp is newer than you expect, find out what went out before you
+   replace it, and probe the live site for the feature you think is there
+   rather than assuming. A behavioural probe is what actually caught this:
+
+   ```bash
+   curl -s "$TRACKER_URL/api/coverage/<key>" -H "Authorization: Bearer $TOKEN"
+   ```
 
 If the session is in a worktree (which it usually is), the deploy is not
 yours to run: verify here, get the change merged to main, and tell the person
 the exact command to run from the main checkout.
+
+**If the main checkout has diverged** - another session commits there too, and
+it may be ahead with unpushed work, behind, or both - do not pull or merge it
+to tidy it up. That is someone else's tree. What actually has to be true is
+narrower than "the checkout is clean": *the half you are deploying* must equal
+the tree you verified. Check that directly and deploy on the answer:
+
+```bash
+git -C <main checkout> diff --stat HEAD origin/main -- server/   # empty = same
+```
+
+Empty means a `server/` deploy from there ships exactly what you tested, and
+their in-flight `client/` work is irrelevant to it. Non-empty means stop.
 
 ## Verifying a `server/` change
 
@@ -76,6 +110,23 @@ Run `wrangler dev` in the background and wait for it to report listening.
 Then confirm the thing answering is the worker you just started - an
 unauthenticated request to a route that exists should come back `401`, not a
 connection error and not a 404:
+
+> **A 401 proves *a* worker is there, not that it is *yours*.** Two
+> `wrangler dev` processes can both hold the same port on Windows without the
+> second one failing loudly, and the pre-existing one answers. That happened on
+> 2026-09-10: the checks ran against another session's worker, serving the main
+> checkout against a local database two migrations old, and reported a crash
+> that had nothing to do with the code under test. Prove ownership two ways
+> before trusting a single result:
+>
+> ```bash
+> netstat -ano | grep -E ":8788\s"        # exactly one LISTENING line
+> ```
+>
+> and probe for something only your tree emits - a field a route gained in the
+> change you are testing, or a stack trace naming your directory. A port that
+> was free ten seconds ago is not the same claim as a port that is yours now.
+> This matters more than it used to: several sessions work this repo at once.
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8788/api/data
