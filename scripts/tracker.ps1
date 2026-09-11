@@ -487,7 +487,16 @@ switch ($Command) {
       # `added` is how many of these companies joined the shared list on this
       # call. Since one list serves every search, a company one run adds is
       # swept by everyone, so it is worth a run being able to say it did that.
-      Say "swept: recorded=$($res.recorded) added=$($res.added) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
+      #
+      # `withheld` is the server's count of rows that reported a wall alongside
+      # a board or endpoint, from which it shared nothing. It should equal the
+      # number of WARNING lines above: both use the same test - a non-empty
+      # wall plus a non-empty board or endpoint, url_shape not counted - and
+      # this helper only puts a field in a row when it is non-empty, so a
+      # present key is a non-empty one. If the two ever disagree, the rule has
+      # drifted between here and handleRecordSweeps. Blank from a server that
+      # predates the rule.
+      Say "swept: recorded=$($res.recorded) added=$($res.added) withheld=$($res.withheld) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
       break
   }
 
