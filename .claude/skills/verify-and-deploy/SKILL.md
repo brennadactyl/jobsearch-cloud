@@ -138,6 +138,33 @@ list both bindings - `env.DB` and `env.DOCS` - and a missing `env.DOCS` there
 means the config is wrong rather than the account: the document checks would
 then fail as `503 documents are not configured` while everything else passed.
 
+**When you are done, stop the worker properly - stopping the command that
+started it is not enough.** A `wrangler dev` is a tree of about six processes:
+the shell, the `wrangler` node process, and `workerd` with its helpers.
+Stopping a backgrounded task, or closing the shell, ends only the top of that
+tree. The `wrangler` node process and `workerd` keep running and keep holding
+the port - which is where the stale workers the warning above is about come
+from. On 2026-09-11 one session found four of its own still listening after it
+had "stopped" every one of them, the oldest a day old.
+
+Kill the tree from the `wrangler` node parent, not from `workerd`, which leaves
+the parent free to linger:
+
+```powershell
+$w = Get-NetTCPConnection -LocalPort 8788 -State Listen | Select-Object -First 1
+$parent = (Get-CimInstance Win32_Process -Filter "ProcessId=$($w.OwningProcess)").ParentProcessId
+taskkill /PID $parent /T /F
+```
+
+Then confirm the port is free. **And look before you kill: a worker on a port
+can be another session's.** A `workerd` running out of
+`C:\VibeCoding\jobsearch-cloud\server\node_modules` belongs to the main
+checkout. One running from the global wrangler install was started from a
+directory with no `node_modules` of its own, which usually means a worktree -
+usually, not certainly, so match it against the port and time you started
+yours. Kill only what you can attribute; someone else's dev worker is their
+test loop.
+
 ### 3. Run the checks
 
 ```bash
