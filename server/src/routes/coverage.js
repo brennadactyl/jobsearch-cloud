@@ -153,7 +153,20 @@ export async function handleGetCoverage({ db, params, url }) {
  * list joins it, so one that broader discovery turned up is in every search's
  * rotation from then on.
  */
-export async function handleRecordSweeps({ request, db }) {
+export async function handleRecordSweeps({ request, db, user }) {
+  // A demo account's companies are invented, and this route is the only thing
+  // that writes the list every account's searches are served from - membership
+  // through addCompanies, facts through upsertCompanyFetch. 0011 merged a demo
+  // account's seeded rotation into that list and put 21 companies that do not
+  // exist in front of real nightly runs (migrations/0012_demo_account.sql).
+  // Refused whole rather than filtered, so a seed or a run that thinks it wrote
+  // something hears that it didn't. Reading the list is unaffected.
+  if (user.demo) {
+    return json(
+      { error: "a demo account cannot write to the company list - every account shares it, and a demo's companies are invented" },
+      403
+    );
+  }
   const body = await readJson(request);
   if (body instanceof Response) return body;
 

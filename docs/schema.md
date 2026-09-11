@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: ten tables, from
-`0001_schema.sql` through `0011_one_company_list.sql` applied in order. This is the
+`0001_schema.sql` through `0012_demo_account.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -71,6 +71,7 @@ erDiagram
         TEXT password_salt
         INTEGER iterations
         TEXT created_at
+        INTEGER demo
     }
     sessions {
         TEXT id PK "SHA-256 of the token"
@@ -243,6 +244,8 @@ These hold across every table, so the per-table notes below leave them out.
 One row per account. `id` is a GUID, and is what every `user_id` holds. `name`
 is for login and display only, unique regardless of case. `password_hash` and
 `password_salt` are base64 PBKDF2-SHA256; an empty hash means login is disabled.
+`demo` is `1` for an account whose data is invented; `POST /api/coverage`
+refuses it, so nothing it holds reaches the shared company list.
 
 ### sessions
 

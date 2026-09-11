@@ -38,7 +38,7 @@
 
   ---- Re-running it. Safe, and the way to refresh the dates: the postings are
   stored as day offsets, so a re-seed moves the whole search forward to today.
-  Leads and screened rows dedup on the server, config and coverage are upserts,
+  Leads and screened rows dedup on the server, config is an upsert,
   and run records are overwritten. Application rows are the exception - nothing
   dedups them - so a re-seed needs -Force, which deletes this account's existing
   applications before recreating them.
@@ -256,7 +256,7 @@ if (($existingLeads.Count -gt 0 -or $existingApps.Count -gt 0) -and -not $Force)
     Write-Error @"
 $demoName already holds $($existingLeads.Count) leads and $($existingApps.Count) applications.
 
-Re-run with -Force to refresh it. Leads, screened rows, config and coverage all
+Re-run with -Force to refresh it. Leads, screened rows and config all
 merge safely on their own; -Force is about the application rows, which nothing
 dedups, so they are deleted and recreated rather than doubled.
 "@
@@ -298,6 +298,28 @@ application records. No rows have been changed.$resetWarning
     }
 }
 
+# ------------------------------------------------------------- demo marker --
+
+# Marked only here, once the safeguards above have run - never on the
+# create-or-reset call further up, which can land on a real person who happens
+# to be called Demo. And only when every lead already on the account is one this
+# script could have written, by the same test -Force uses. The mark is what
+# keeps the account off the company list every account shares
+# (server/migrations/0012_demo_account.sql). The password is the one this run
+# just signed in with, so resetting to it changes nothing else, and sessions
+# survive it.
+$notOurs = @($existingLeads | Where-Object { $_.url -notmatch '(^|\.)example\.com/' })
+if ($notOurs.Count -gt 0) {
+    Write-Warning "Not marking $demoName as a demo account: it holds $($notOurs.Count) lead(s) on hosts other than example.com, so it may be a person's."
+} else {
+    Invoke-Api -Method POST -Path "/api/users" -Token $AdminToken -What "Marking the account as a demo" -Body @{
+        name     = $demoName
+        password = $Password
+        demo     = $true
+    } | Out-Null
+    Say "Marked $demoName as a demo account - it cannot write to the shared company list."
+}
+
 # ------------------------------------------------------------------- config --
 
 # One post carries the whole track list and every setting. `tracks` replaces the
@@ -312,17 +334,12 @@ Say "Configured $(@($data.tracks).Count) tracks and the page settings."
 
 # --------------------------------------------------------------- coverage --
 
-# `on = ""` registers a company without claiming a sweep that never happened,
-# which is what leaves the whole list sorted as never-covered.
-foreach ($prop in $data.coverage.PSObject.Properties) {
-    $swept = @($prop.Value)
-    Invoke-Api -Method POST -Path "/api/coverage" -Token $token -What "Seeding company coverage for $($prop.Name)" -Body @{
-        search = $prop.Name
-        on     = ""
-        swept  = $swept
-    } | Out-Null
-    Say "Registered $($swept.Count) companies in the $($prop.Name) rotation."
-}
+# Deliberately nothing. The company list is one list every account's searches
+# draw from, so a demo's invented companies on it are companies real nightly
+# runs go looking for - which is what happened once 0011 merged every account's
+# rotation into it (server/migrations/0012_demo_account.sql). The server now
+# refuses a demo account's POST /api/coverage in any case, and the demo's
+# rotation tab shows the real list.
 
 # ------------------------------------------------------------------- leads --
 

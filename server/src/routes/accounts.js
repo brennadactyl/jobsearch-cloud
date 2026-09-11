@@ -75,7 +75,7 @@ export async function handleLogout({ env, token }) {
 
 /**
  * POST /api/users - requires the ADMIN_TOKEN secret as Bearer. Body
- * `{ name, password }`.
+ * `{ name, password, demo? }` -> `{ id, name, created, demo }`.
  *
  * Creates a user, or sets an existing one's password. Gated by the ADMIN_TOKEN
  * worker secret rather than by a session: there is no self-signup here, and
@@ -99,7 +99,12 @@ export async function handleUpsertUser({ request, env }) {
   // limiting in front of it - see server/README.md.
   if (password.length < 12) return json({ error: "password must be at least 12 characters" }, 400);
 
-  const result = await upsertUser(env.DB, name, password);
+  // `demo` marks an account whose data is invented, which keeps it off the
+  // company list every account shares (migrations/0012_demo_account.sql).
+  // Anything but a boolean means "not saying", and leaves an existing account
+  // as it was.
+  const demo = typeof body.demo === "boolean" ? body.demo : undefined;
+  const result = await upsertUser(env.DB, name, password, demo);
   return json(result, result.created ? 201 : 200);
 }
 
