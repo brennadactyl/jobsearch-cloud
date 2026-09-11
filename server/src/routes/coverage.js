@@ -13,14 +13,17 @@ import { excluderFor, isoDate, today, unknownTrack } from "../validate.js";
 
 // How many companies one run covers. A whole list is more than a run can
 // verify properly, and the failure isn't that a company gets missed - it's
-// that all of them get skimmed. Twelve is the number that keeps a list the
-// size these actually are (35-60) inside a week's cycle while leaving a run's
-// budget for what it's for: opening every candidate posting and confirming it
-// renders a real job description.
+// that all of them get skimmed.
 //
-// A constant, not config: nobody has wanted a different number, and a setting
-// nobody sets is a setting that goes stale. It moves here the day someone does.
-export const COVERAGE_BATCH = 12;
+// 24 since 0011 made the list global. Twelve kept a list the size each search
+// used to hold (35-80) inside a week; the merged list is 139, which at twelve
+// is a twelve-day cycle, so the batch doubled to hold it near six. That is
+// roughly twice the work a run was doing in a night. Read run lengths and sweep
+// counts before moving it again - and read step 9e first, since its
+// replacement loop compounds on top of this number on a bad night.
+//
+// A constant, not config: a setting nobody sets is a setting that goes stale.
+export const COVERAGE_BATCH = 24;
 
 /**
  * GET /api/coverage/:key[?on=YYYY-MM-DD] - requires a Bearer token ->
@@ -172,59 +175,60 @@ export async function handleRecordSweeps({ request, db }) {
   const excluded = valid.length - allowed.length;
   if (allowed.length === 0) return json({ recorded: 0, excluded, on });
 
-  // A company the log has never seen appends after the highest position, so
-  // discovery adds to the end rather than jumping the queue or landing behind
-  // the cursor where it would wait a full cycle to be seen.
+  // The list is shared (0011_one_company_list.sql): `log` is every company on
+  // it, with this search's own record of each. Matched through normalize(), so
+  // a run that writes "Cursor Anysphere" finds the company listed as
+  // "Cursor (Anysphere)" instead of adding it a second time.
   const log = await db.getCoverage(key);
-  const known = new Map(log.map((c) => [c.company, c]));
+  const onList = new Map(log.map((c) => [normalize(c.company), c]));
 
-  // A position is assigned once, when a company joins the log, and only to
-  // companies that are actually new. Counting the batch instead - or seeding
-  // from the log's length rather than its highest position - leaves gaps where
-  // an already-known company was re-swept, and eventually two companies with
-  // the same position, at which point the cursor starts stepping over one of
-  // them.
+  // A company not on the list appends after the highest position, so discovery
+  // adds to the end rather than jumping the queue or landing behind a cursor
+  // where it would wait a full cycle.
+  //
+  // A position is assigned once, when a company joins, and only to companies
+  // that are actually new. Counting the batch instead - or seeding from the
+  // list's length rather than its highest position - leaves gaps where a known
+  // company was re-swept, and eventually two companies with one position.
   let nextPos = log.length ? Math.max(...log.map((c) => c.position)) + 1 : 0;
 
   // New companies take their places in a shuffled order, not the order they
-  // arrived in. Seeding a rotation means posting a list somebody wrote down,
-  // and a written list is almost always alphabetical or grouped by theme -
-  // which would make position, and therefore who is covered first every cycle
-  // and who is dropped when a run runs short, a function of the initial
-  // letter. That is the bias migration 0008 removed from the existing
-  // rotation; assigning in arrival order would rebuild it for the next person
-  // to set one up.
-  //
-  // Shuffled among themselves only - companies already in the log keep their
-  // place, so this never reorders a rotation that is partway through a cycle.
-  const fresh = allowed.filter((i) => !known.has(i.company));
+  // arrived in - a written list is almost always alphabetical or grouped by
+  // theme, and assigning in arrival order would rebuild the bias 0008 removed.
+  // One entry per company: a batch naming one company in two spellings adds it
+  // once, under the first.
+  const fresh = [];
+  const seenFresh = new Set();
+  for (const i of allowed) {
+    const k = normalize(i.company);
+    if (onList.has(k) || seenFresh.has(k)) continue;
+    seenFresh.add(k);
+    fresh.push(i);
+  }
   for (let i = fresh.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [fresh[i], fresh[j]] = [fresh[j], fresh[i]];
   }
-  const placement = new Map(fresh.map((i) => [i.company, nextPos++]));
-
-  const positioned = allowed.map((i) =>
-    known.has(i.company)
-      ? { ...i, position: known.get(i.company).position }
-      : { ...i, position: placement.get(i.company) }
+  const joining = new Map(
+    fresh.map((i) => [normalize(i.company), { company: i.company, position: nextPos++ }])
   );
+  const added = await db.addCompanies([...joining.values()]);
+
+  // Every report lands on the company as the list names it, so two spellings of
+  // one company are one row in this search's record.
+  const positioned = allowed.map((i) => {
+    const k = normalize(i.company);
+    const listed = onList.get(k) || joining.get(k);
+    return { ...i, company: listed.company, position: listed.position };
+  });
   const recorded = await db.recordSweeps(key, positioned, on);
 
-  // The same report, pooled. A run reporting `board` for its own rotation is
-  // reporting a fact about a website, so it may as well say it once and have
-  // every search on the deployment benefit - which is the whole reason this
-  // table exists (migrations/0010_company_fetch.sql).
+  // The same report, pooled: the fields that describe a website. `last_swept`,
+  // the cursor and `note` stay in this search's own record.
   //
-  // Deliberately not gated behind a flag or a separate call: sharing has to be
-  // the default path or it is the path nobody takes. What keeps the boundary
-  // intact is *which fields travel*, not whether the run opted in - only the
-  // website-describing ones below. `last_swept`, position, cursor and the
-  // company list itself stay in company_sweeps, where they are user-scoped.
-  //
-  // Seeding (`on: ""`) writes nothing here. A seed is a list somebody typed,
-  // not something a run confirmed, and a shared fact nobody verified is the
-  // kind this table can least afford.
+  // Seeding (`on: ""`) writes no fact here. A seed is a list somebody typed, not
+  // something a run confirmed. It still puts companies on the list - that is
+  // addCompanies above, and it is membership, not knowledge.
   const shared = on
     ? await db.upsertCompanyFetch(
         allowed.map((i) => ({
@@ -233,6 +237,7 @@ export async function handleRecordSweeps({ request, db }) {
           endpoint: typeof i.endpoint === "string" ? i.endpoint : "",
           url_shape: typeof i.url_shape === "string" ? i.url_shape : "",
           dead_signal: typeof i.dead_signal === "string" ? i.dead_signal : "",
+          wall: typeof i.wall === "string" ? i.wall : "",
           // `note` stays out. It is the one field a run writes in prose, and
           // prose is where a search's own reasoning leaks ("skipped, nothing
           // at Brenna's level here"). A shared note needs its own field a run
@@ -251,18 +256,29 @@ export async function handleRecordSweeps({ request, db }) {
   // stretch; it never advances past work nobody recorded.
   //
   // Seeding (`on: ""`) registers companies without claiming to have covered
-  // them, so it must not move the cursor.
+  // them, so it must not move the cursor. Only companies already on the list
+  // count: one that joined in this call was appended past every cursor.
   let cursor = await db.getSweepCursor(key);
   if (on !== "") {
     const positions = allowed
-      .map((i) => known.get(i.company))
+      .map((i) => onList.get(normalize(i.company)))
       .filter(Boolean)
       .map((c) => c.position);
-    // Only the ones already in the log have a meaningful position; a company
-    // discovered this run was appended past the cursor and is not something
-    // the rotation had reached.
-    if (positions.length) cursor = await db.setSweepCursor(key, Math.max(...positions) + 1);
+    if (positions.length) {
+      // "Furthest" is furthest along the rotation from where this search had
+      // read to - not the highest position number. The two differ for the one
+      // slice per cycle that runs off the end of the log and back round to the
+      // front: its highest position sits near the end, so advancing past that
+      // left the cursor past the end, the next read started at the front again,
+      // and the front half of that slice was served a second time before the
+      // rest of the cycle had been reached. The full-cycle check measured 12
+      // companies served twice early at a batch of 24.
+      const span = Math.max(cursor, Math.max(...log.map((c) => c.position)) + 1);
+      const along = (p) => (p >= cursor ? p - cursor : p + span - cursor);
+      const lastServed = positions.reduce((a, p) => (along(p) > along(a) ? p : a));
+      cursor = await db.setSweepCursor(key, lastServed + 1);
+    }
   }
 
-  return json({ recorded, excluded, on, cursor, shared: shared.written });
+  return json({ recorded, added, excluded, on, cursor, shared: shared.written });
 }

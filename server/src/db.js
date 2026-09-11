@@ -417,56 +417,69 @@ export class Db {
    * @returns {Promise<{company: string, last_swept: string, board: string, note: string}[]>}
    */
   /**
-   * The rotation in log order. Ordered by `position` - a fixed place per
-   * company, shuffled once and appended to since (see
-   * migrations/0008_sweep_cursor.sql) - never by date. Which slice a run gets
-   * is decided by the cursor, in routes/coverage.js.
-   *
-   * Returns the whole log; the caller windows it. Slicing in SQL would mean
-   * LIMIT-ing before excluded companies are filtered out, which is what would
-   * quietly hand a run a short batch.
-   * @param {string} search
-   * @returns {Promise<Array<{company: string, last_swept: string, board: string, note: string, position: number}>>}
-   */
-  /**
-   * Shared fetch facts for a set of company names, keyed by normalize().
+   * Shared facts for a set of company names, keyed by normalize().
    *
    * Not user-scoped, and that is the point - see
-   * migrations/0010_company_fetch.sql for the boundary this sits on. Nothing
-   * here is derived from any user's rows: the caller supplies names and gets
-   * back facts about websites.
+   * migrations/0010_company_fetch.sql and 0011_one_company_list.sql for the
+   * boundary it sits on. The caller supplies names and gets back facts about
+   * websites; nothing here is derived from any user's rows.
    *
    * A retracted row comes back with its fields blanked and only the retraction
-   * visible. Blanking here rather than at the caller means a reader cannot
-   * accidentally use a fact that has been withdrawn by forgetting to check one
-   * more field - the fact is simply not in the response.
+   * visible, so a reader cannot use a withdrawn fact by forgetting to check one
+   * more field.
+   *
+   * A row that knows nothing is left out. Since 0011 every company on the list
+   * has a row here, most of them bare membership, and handing a run an empty
+   * `known` would say something is known about a company nothing has looked at.
+   *
+   * A wall is served only once earned and while fresh: recorded on at least two
+   * separate dates, and last recorded within seven days. Otherwise it is left
+   * out rather than flagged, so a run meeting an expired wall simply fetches -
+   * which is the re-test, with nothing for the run to decide.
    *
    * @param {string[]} names @returns {Promise<Map<string, Object>>} by company_key
    */
   async getCompanyFetch(names) {
     const keys = [...new Set(names.map(normalizeCompany).filter(Boolean))];
     if (keys.length === 0) return new Map();
-    const rows = await this.d1
-      .prepare(
-        `SELECT * FROM company_fetch WHERE company_key IN (${keys.map(() => "?").join(",")})`
+    // Chunked by ID_CHUNK, like markVerified: D1 caps a statement at 100 bound
+    // parameters. Since 0011 `?all=1` asks for the whole list - 139 companies on
+    // the live deployment - where it used to ask for one search's rotation, which
+    // never reached the cap, so this was a limit nothing had hit yet.
+    const chunks = [];
+    for (let i = 0; i < keys.length; i += ID_CHUNK) chunks.push(keys.slice(i, i + ID_CHUNK));
+    const batches = await this.d1.batch(
+      chunks.map((chunk) =>
+        this.d1
+          .prepare(`SELECT * FROM company_fetch WHERE company_key IN (${chunk.map(() => "?").join(",")})`)
+          .bind(...chunk)
       )
-      .bind(...keys)
-      .all();
+    );
+    const found = batches.flatMap((b) => b.results);
+    const WALL_MIN_DATES = 2, WALL_SERVED_DAYS = 7;
+    const wallFreshFrom = new Date(Date.now() - WALL_SERVED_DAYS * 86400000).toISOString().slice(0, 10);
     const out = new Map();
-    for (const r of rows.results) {
-      out.set(
-        r.company_key,
-        r.retracted_on
-          ? { retracted_on: r.retracted_on, retracted_note: r.retracted_note || "" }
-          : {
-              board: r.board || "",
-              endpoint: r.endpoint || "",
-              url_shape: r.url_shape || "",
-              dead_signal: r.dead_signal || "",
-              note: r.note || "",
-              verified_on: r.verified_on || "",
-            }
-      );
+    for (const r of found) {
+      if (r.retracted_on) {
+        out.set(r.company_key, { retracted_on: r.retracted_on, retracted_note: r.retracted_note || "" });
+        continue;
+      }
+      const facts = {
+        board: r.board || "",
+        endpoint: r.endpoint || "",
+        url_shape: r.url_shape || "",
+        dead_signal: r.dead_signal || "",
+        note: r.note || "",
+        verified_on: r.verified_on || "",
+      };
+      const wallServed = !!r.wall && r.wall_dates >= WALL_MIN_DATES && r.wall_last_on >= wallFreshFrom;
+      if (wallServed) {
+        facts.wall = r.wall;
+        facts.wall_last_on = r.wall_last_on;
+      }
+      if (facts.board || facts.endpoint || facts.url_shape || facts.dead_signal || facts.note || wallServed) {
+        out.set(r.company_key, facts);
+      }
     }
     return out;
   }
@@ -474,44 +487,69 @@ export class Db {
   /**
    * Record what a run learned about reaching a company.
    *
-   * Non-empty-wins, field by field, the same rule recordSweeps already uses for
-   * `board`: a run that confirmed an endpoint but has nothing new to say about
-   * the dead signal must not wipe what an earlier run established. The failure
-   * this avoids is a shared table that degrades every time a run is terse.
+   * Non-empty-wins, field by field: a run that confirmed an endpoint but has
+   * nothing to say about the dead signal must not wipe what an earlier run
+   * established. The failure this avoids is a shared table that degrades every
+   * time a run is terse.
+   *
+   * `wall` counts separate dates, not reports - two runs meeting one wall on one
+   * day are one piece of evidence. A reported board or endpoint clears it, since
+   * a fetch that worked settles the question. And only a positive fact moves
+   * `verified_on`: meeting a wall is not confirming the row works.
    *
    * A row already retracted is left alone. Re-asserting a withdrawn fact is a
-   * decision a person makes (by clearing the retraction), not something a run
+   * decision a person makes by clearing the retraction, not something a run
    * should be able to do by rediscovering the same wrong thing.
    *
    * @param {Array<{company: string, board?: string, endpoint?: string,
-   *   url_shape?: string, dead_signal?: string, note?: string}>} rows
+   *   url_shape?: string, dead_signal?: string, note?: string, wall?: string}>} rows
    * @param {string} on YYYY-MM-DD
    */
   async upsertCompanyFetch(rows, on) {
+    const date = on || today();
     const useful = rows.filter(
       (r) =>
         normalizeCompany(r.company) &&
-        (r.board || r.endpoint || r.url_shape || r.dead_signal || r.note)
+        (r.board || r.endpoint || r.url_shape || r.dead_signal || r.note || r.wall)
     );
     if (useful.length === 0) return { written: 0 };
 
+    const works = "(excluded.board <> '' OR excluded.endpoint <> '')";
+    const positive =
+      "(excluded.board <> '' OR excluded.endpoint <> '' OR excluded.url_shape <> '' OR excluded.dead_signal <> '')";
     const stmt = this.d1.prepare(
       `INSERT INTO company_fetch
-         (company_key, display_name, board, endpoint, url_shape, dead_signal, note, verified_on)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         (company_key, display_name, board, endpoint, url_shape, dead_signal, note, verified_on,
+          wall, wall_first_on, wall_last_on, wall_dates)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(company_key) DO UPDATE SET
-         display_name = CASE WHEN company_fetch.display_name = '' THEN excluded.display_name ELSE company_fetch.display_name END,
-         board       = CASE WHEN excluded.board <> ''       THEN excluded.board       ELSE company_fetch.board END,
-         endpoint    = CASE WHEN excluded.endpoint <> ''    THEN excluded.endpoint    ELSE company_fetch.endpoint END,
-         url_shape   = CASE WHEN excluded.url_shape <> ''   THEN excluded.url_shape   ELSE company_fetch.url_shape END,
-         dead_signal = CASE WHEN excluded.dead_signal <> '' THEN excluded.dead_signal ELSE company_fetch.dead_signal END,
-         note        = CASE WHEN excluded.note <> ''        THEN excluded.note        ELSE company_fetch.note END,
-         verified_on = excluded.verified_on
+         display_name  = CASE WHEN company_fetch.display_name = '' THEN excluded.display_name ELSE company_fetch.display_name END,
+         board         = CASE WHEN excluded.board <> ''       THEN excluded.board       ELSE company_fetch.board END,
+         endpoint      = CASE WHEN excluded.endpoint <> ''    THEN excluded.endpoint    ELSE company_fetch.endpoint END,
+         url_shape     = CASE WHEN excluded.url_shape <> ''   THEN excluded.url_shape   ELSE company_fetch.url_shape END,
+         dead_signal   = CASE WHEN excluded.dead_signal <> '' THEN excluded.dead_signal ELSE company_fetch.dead_signal END,
+         note          = CASE WHEN excluded.note <> ''        THEN excluded.note        ELSE company_fetch.note END,
+         verified_on   = CASE WHEN ${positive} THEN excluded.verified_on ELSE company_fetch.verified_on END,
+         wall          = CASE WHEN ${works} THEN ''
+                              WHEN excluded.wall <> '' THEN excluded.wall
+                              ELSE company_fetch.wall END,
+         wall_first_on = CASE WHEN ${works} THEN ''
+                              WHEN excluded.wall <> '' AND company_fetch.wall_first_on = '' THEN excluded.wall_last_on
+                              ELSE company_fetch.wall_first_on END,
+         wall_last_on  = CASE WHEN ${works} THEN ''
+                              WHEN excluded.wall <> '' THEN excluded.wall_last_on
+                              ELSE company_fetch.wall_last_on END,
+         wall_dates    = CASE WHEN ${works} THEN 0
+                              WHEN excluded.wall <> '' AND company_fetch.wall_last_on = excluded.wall_last_on THEN company_fetch.wall_dates
+                              WHEN excluded.wall <> '' THEN company_fetch.wall_dates + 1
+                              ELSE company_fetch.wall_dates END
        WHERE company_fetch.retracted_on = ''`
     );
     const res = await this.d1.batch(
-      useful.map((r) =>
-        stmt.bind(
+      useful.map((r) => {
+        const isPositive = !!(r.board || r.endpoint || r.url_shape || r.dead_signal);
+        const wall = r.board || r.endpoint ? "" : r.wall || "";
+        return stmt.bind(
           normalizeCompany(r.company),
           String(r.company).trim(),
           r.board || "",
@@ -519,18 +557,82 @@ export class Db {
           r.url_shape || "",
           r.dead_signal || "",
           r.note || "",
-          on || today()
-        )
-      )
+          isPositive ? date : "",
+          wall,
+          wall ? date : "",
+          wall ? date : "",
+          wall ? 1 : 0
+        );
+      })
     );
     return { written: res.reduce((n, x) => n + (x.meta.changes || 0), 0) };
   }
 
+  /**
+   * Put companies on the list.
+   *
+   * Membership only. No fact is written, so a list somebody typed never becomes
+   * something company_fetch claims to know - 0010's rule, which still holds for
+   * facts. A company already on the list keeps its place and its name: a
+   * position is assigned once, when a company joins, and never moves, or the
+   * cursor would step over companies it had already passed.
+   *
+   * Not scoped to this.userId. It is the one write in this file that reaches
+   * every account, deliberately - see 0011_one_company_list.sql.
+   * @param {{company: string, position: number}[]} items
+   * @returns {Promise<number>} how many joined
+   */
+  async addCompanies(items) {
+    const rows = items.filter((i) => normalizeCompany(i.company));
+    if (rows.length === 0) return 0;
+    const stmt = this.d1.prepare(
+      `INSERT INTO company_fetch (company_key, display_name, position) VALUES (?, ?, ?)
+       ON CONFLICT(company_key) DO NOTHING`
+    );
+    const res = await this.d1.batch(
+      rows.map((i) => stmt.bind(normalizeCompany(i.company), String(i.company).trim(), i.position))
+    );
+    return res.reduce((n, x) => n + (x.meta.changes || 0), 0);
+  }
+
+  /**
+   * The list in log order, with this search's own record of each company.
+   *
+   * The list is global (company_fetch, 0011_one_company_list.sql); what this
+   * search did with each company - when it last tried, what it noted - is its
+   * own, in company_sweeps. Ordered by `position`, a fixed place per company,
+   * shuffled once and appended to since - never by date. Which slice a run
+   * gets is decided by the cursor, in routes/coverage.js.
+   *
+   * Where one search holds two rows for one company - spellings normalize()
+   * merges, until company_sweeps is rebuilt on company_key - the most recently
+   * swept wins, and the newest row on a tie, so the answer never depends on
+   * which row SQLite happened to read first.
+   *
+   * `board` is the shared one, blank on a retracted row: a withdrawn board is
+   * not a hint.
+   *
+   * Returns the whole list; the caller windows it. Slicing in SQL would mean
+   * LIMIT-ing before excluded companies are filtered out, which is what would
+   * quietly hand a run a short batch.
+   * @param {string} search
+   * @returns {Promise<Array<{company: string, last_swept: string, board: string, note: string, position: number}>>}
+   */
   async getCoverage(search) {
     const rows = await this.d1
       .prepare(
-        `SELECT company, last_swept, board, note, position FROM company_sweeps
-          WHERE user_id = ? AND search = ? ORDER BY position`
+        `SELECT COALESCE(NULLIF(f.display_name, ''), f.company_key) AS company,
+                f.position,
+                CASE WHEN f.retracted_on = '' THEN f.board ELSE '' END AS board,
+                COALESCE(s.last_swept, '') AS last_swept,
+                COALESCE(s.note, '') AS note
+           FROM company_fetch f
+           LEFT JOIN company_sweeps s ON s.rowid = (
+             SELECT x.rowid FROM company_sweeps x
+              WHERE x.user_id = ? AND x.search = ? AND x.company_key = f.company_key
+              ORDER BY x.last_swept DESC, x.rowid DESC
+              LIMIT 1)
+          ORDER BY f.position, f.company_key`
       )
       .bind(this.userId, search)
       .all();
@@ -572,53 +674,63 @@ export class Db {
     return value;
   }
 
-  /** @param {string} search @returns {Promise<number>} how many companies this search tracks */
-  async countCoverage(search) {
-    const row = await this.d1
-      .prepare("SELECT COUNT(*) AS n FROM company_sweeps WHERE user_id = ? AND search = ?")
-      .bind(this.userId, search)
-      .first();
+  /**
+   * How many companies are on the list - the same number for every search,
+   * since 0011 made the list global.
+   *
+   * prompt.js gives a track the rotation steps when this is above zero. Before
+   * 0011 it counted one track's own rows, and a track with none never received
+   * step 9d - the only step that creates a row - so it could never start
+   * rotating. Counting the shared list closes that for every track as soon as
+   * anything is on it.
+   * @returns {Promise<number>}
+   */
+  async countCoverage() {
+    const row = await this.d1.prepare("SELECT COUNT(*) AS n FROM company_fetch").first();
     return row ? row.n : 0;
   }
 
   /**
-   * Upsert one row per company covered. Creating on write rather than needing
-   * a separate "add this company" call is deliberate: broader discovery turns
-   * up companies that were never on any list, and the run recording that it
-   * swept one is exactly the moment the row should start existing.
+   * This search's record of the companies it covered.
    *
-   * `board`, `note` and the date itself only overwrite when non-empty - a run
-   * that stamps a date shouldn't blank the endpoint an earlier run confirmed,
-   * and an empty `on` is how a caller registers companies *without* claiming to
-   * have swept them (seeding a list, or adding one broader discovery found).
-   * Registering must never look like a sweep: a seeded row has to sort ahead
-   * of everything already covered, which is exactly what an empty date does.
+   * One row per company per search, created on write. `last_swept` and `note`
+   * only overwrite when non-empty: an empty `on` is how a caller registers
+   * companies without claiming to have swept them, and a terse run must not
+   * blank a note an earlier one wrote.
+   *
+   * Membership is not written here - that is addCompanies, on the shared list.
+   * `company_key` is what readers join on. `company`, `board` and `position` are
+   * still written, mirroring the list, so the worker from before 0011 keeps
+   * working against this table until it is rebuilt on company_key.
    * @param {string} search
    * @param {{company: string, board?: string, note?: string, position: number}[]} items
-   *   Each carries its own `position`, assigned by the caller: a company
-   *   already in the log keeps the one it has, a new one appends past the
-   *   highest. Discovery appends rather than inserting into the middle - a
-   *   company dropped in ahead of the cursor would not be seen for a whole
-   *   cycle, and one dropped in behind it would jump the queue.
+   *   `company` is the name as the list holds it, so every spelling of one
+   *   company lands on one row.
    * @param {string} on - YYYY-MM-DD
    */
   async recordSweeps(search, items, on) {
     const stmt = this.d1.prepare(
-      `INSERT INTO company_sweeps (user_id, search, company, last_swept, board, note, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO company_sweeps (user_id, search, company, company_key, last_swept, board, note, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, search, company) DO UPDATE SET
+         company_key = excluded.company_key,
          last_swept = CASE WHEN excluded.last_swept <> '' THEN excluded.last_swept ELSE company_sweeps.last_swept END,
          board = CASE WHEN excluded.board <> '' THEN excluded.board ELSE company_sweeps.board END,
-         note = CASE WHEN excluded.note <> '' THEN excluded.note ELSE company_sweeps.note END`
-      // position is deliberately absent from the DO UPDATE: it is assigned
-      // once, when a company joins the log, and never moves. Re-sweeping a
-      // company must not shuffle it, or the cursor would step over companies
-      // it had already passed.
+         note = CASE WHEN excluded.note <> '' THEN excluded.note ELSE company_sweeps.note END,
+         position = excluded.position`
     );
     await this.d1.batch(
       items.map((i) =>
-        stmt.bind(this.userId, search, i.company, on, typeof i.board === "string" ? i.board : "",
-          typeof i.note === "string" ? i.note : "", Number.isFinite(i.position) ? i.position : 0)
+        stmt.bind(
+          this.userId,
+          search,
+          i.company,
+          normalizeCompany(i.company),
+          on,
+          typeof i.board === "string" ? i.board : "",
+          typeof i.note === "string" ? i.note : "",
+          Number.isFinite(i.position) ? i.position : 0
+        )
       )
     );
     return items.length;
