@@ -5,12 +5,13 @@ description: Add an employer to a tracked search in D1 - writing it into the com
 
 # Adding a company to a track's target list
 
-**Read this first: for a track that rotates, the list the run actually reads is
-the rotation, not `target_companies`.** Step 1c hands the run its slice from
-`company_sweeps`, and step 3 searches *those* companies. A name added only to
-the config prose is never drawn, never swept, and never searched - it just sits
-in a paragraph looking added. Every searching track in this deployment rotates,
-so this is the normal case, not the exception.
+**Read this first: the list the run actually reads is the rotation, not
+`target_companies`.** Every search rotates - there is no switch and no track
+that does not. Step 1c hands the run its slice of the shared company list
+(`company_fetch`, one list for every search and every user), and step 3
+searches *those* companies. A name added only to the config prose is never
+drawn, never swept, and never searched - it just sits in a paragraph looking
+added.
 
 So the operative write is:
 
@@ -23,8 +24,8 @@ curl -s -X POST "$url/api/coverage" -H "Authorization: Bearer $tok" \
   -d '{"search":"<key>","on":"","swept":[{"company":"NFL","board":"greenhouse","note":"..."}]}'
 ```
 
-Check whether a track rotates before you choose - `GET /api/coverage/<key>?all=1`
-returns its list and `total`.
+Check the company is not already on the list first - `GET /api/coverage/<key>?all=1`
+returns the whole shared list and `total`, the same for any `<key>`.
 
 The rest of this skill is about `target_companies`, which is still where a
 track's *strategy* prose lives - which verticals to prioritise, and why. Update

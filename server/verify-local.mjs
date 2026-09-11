@@ -484,9 +484,26 @@ check("but another account's sweep date for it does not travel",
   !!bAcme && bAcme.last_swept === "", JSON.stringify(bAcme));
 check("nor does another account's note",
   !!bAcme && bAcme.note === "", JSON.stringify(bAcme));
-check("every track gets the rotation steps once anything is on the list",
+check("every track gets the rotation steps",
   (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text.includes("1c. Get this run's companies")
   && (await req("GET", "/api/prompt/SWE", { token: B_TOK })).text.includes("1c. Get this run's companies"));
+// ...and not because the list happens to be non-empty. There is no gate. A
+// deployment whose shared list is empty - one that never seeded any companies -
+// still gets 1c, 9d and 9e, because 9d is the only step that adds a company and
+// a gate withholding it until one existed could never open. The shared list is
+// never empty by this point in the script, so this composes the prompt directly
+// instead of asking the API.
+const { buildSearchPrompt } = await import("./src/prompt.js");
+const bareSteps = buildSearchPrompt({
+  user: { id: "u", name: "Nobody" },
+  track: { key: "T", label: "T", full_description: "t", target_companies: "[]", role_search_line: "r", resume_line: "x" },
+  settings: {},
+  feeds: [],
+});
+check("a deployment with an empty company list still gets every rotation step",
+  bareSteps.includes("1c. Get this run's companies")
+  && bareSteps.includes("9d. RECORD WHAT YOU COVERED")
+  && bareSteps.includes("9e. REPLACE THE COMPANIES YOU COULDN'T READ"));
 
 // ---- Every call the nightly run has to make, still reachable from the text.
 //
@@ -500,7 +517,7 @@ check("every track gets the rotation steps once anything is on the list",
 // Commands rather than endpoints since the API prose moved into
 // scripts/tracker.ps1 (see ../docs/prompt-size-plan.md): the run reaches
 // /api/leads by invoking `./tracker leads`, so that is what has to survive an
-// edit. A's SWE has coverage rows, so its prompt carries the rotation pair too.
+// edit. Every prompt carries the rotation pair too.
 const sweSteps = (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text;
 const boSteps = (await req("GET", "/api/prompt/SWE", { token: B_TOK })).text;
 for (const cmd of [
@@ -522,9 +539,9 @@ check("the prompt says where the helper is and how to run it if the shim won't e
 check("step 4 still requires every candidate URL to be opened and confirmed",
   /MANDATORY VERIFICATION: fetch every candidate URL directly and confirm it renders an actual job description/
     .test(sweSteps) && /A search-snippet URL is a lead, not a finding, until opened and confirmed/.test(sweSteps));
-// There is no track without a rotation while anything is on the list: B has
-// never swept a company and still gets both commands. Gating them on a track's
-// own rows was the loop that left a track with none unable to ever start.
+// There is no track without a rotation: B has never swept a company and still
+// gets both commands. Gating them on a track's own rows was the loop that left
+// a track with none unable to ever start.
 check("a track that has never swept anything still gets both rotation commands",
   boSteps.includes("./tracker companies") && boSteps.includes("./tracker swept"));
 // Step 9d has to name every field a run can send, or the field does not exist

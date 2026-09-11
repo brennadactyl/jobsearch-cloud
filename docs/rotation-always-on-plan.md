@@ -3,6 +3,15 @@
 Every search rotates. There is no track that does not, and no state in which the
 rotation steps are withheld.
 
+> **Status.** §1 is implemented: `prompt.js` emits 1c, 9d and 9e for every
+> search, and `db.countCoverage` is gone. §2 and §3 were overtaken by
+> [one-company-list-plan.md](one-company-list-plan.md) - there is one company
+> list for every search and every user, so no track can be without a rotation.
+> An empty list happens only on a deployment that has never added a company, and
+> `GET /api/coverage` answers it with an empty slice rather than an error, so
+> 9d can start the list. The rest of this document describes the per-track
+> `company_sweeps` design as it stood before that change.
+
 ## Context
 
 `prompt.js` gates steps 1c, 9d and 9e on whether the track already has

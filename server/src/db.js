@@ -658,22 +658,6 @@ export class Db {
   }
 
   /**
-   * How many companies are on the list - the same number for every search,
-   * since 0011 made the list global.
-   *
-   * prompt.js gives a track the rotation steps when this is above zero. Before
-   * 0011 it counted one track's own rows, and a track with none never received
-   * step 9d - the only step that creates a row - so it could never start
-   * rotating. Counting the shared list closes that for every track as soon as
-   * anything is on it.
-   * @returns {Promise<number>}
-   */
-  async countCoverage() {
-    const row = await this.d1.prepare("SELECT COUNT(*) AS n FROM company_fetch").first();
-    return row ? row.n : 0;
-  }
-
-  /**
    * This search's record of the companies it covered.
    *
    * One row per company per search, created on write. `last_swept` and `note`
