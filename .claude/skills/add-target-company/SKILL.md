@@ -7,10 +7,10 @@ description: Put an employer on the shared company list every nightly search dra
 
 **There is one company list, and every search on the deployment reads it** -
 every track, every account. Step 1c of each nightly run hands that search its
-next slice of the list, and step 3 searches those companies. A company added
-here reaches Brenna's, Brady's and Jeff's searches alike; there is no choosing a
-track, and no way to add a company to one search only. Each search's own fit
-rules (role, level, location) decide what it keeps from a company.
+next slice of the list, and step 3 searches those companies. There is no
+choosing a track, and no way to add a company to one search only. Each
+search's own fit rules (role, level, location) decide what it keeps from a
+company.
 
 Two kinds of thing get written:
 
@@ -39,7 +39,7 @@ node -e 'require("/tmp/config.json").tracks.filter(t=>!t.fed_by).forEach(t=>cons
 ```
 
 `POST /api/coverage` requires a `search` - one of this account's track keys.
-It does not choose who gets the company; step 4 says how to pick one safely.
+It does not choose who gets the company; step 3 says how to pick one safely.
 
 ## 1. Check it is not already on the list - required
 

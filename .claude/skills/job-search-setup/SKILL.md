@@ -11,23 +11,18 @@ locations matter to them. The personal part lives in the deployment, keyed by
 user id: search and page config in D1 (see `../../../server/README.md`'s
 `/api/config` section), resumes and each track's baseline doc in R2 (see
 `/api/documents`). What is left on disk is that person's credential and their
-logs (see `../../../private.example/README.md`). This skill is what fills those
-in conversationally, instead of hand-authoring JSON.
+logs (see `../../../private.example/README.md`).
 
 One deployment holds any number of people. Run this the same way for the
 first person, for a second person joining an existing deployment, and for
 adding one more track to someone who already has some - check what's already
-there (step 1) and only ask about what's missing. It also runs the same way
-whether this repo got here via `git clone` or via `/plugin install` - the one
-place that differs is step 7 (registering scheduled tasks), which needs to
-know which one it is.
+there (step 1) and only ask about what's missing.
 
 **Not for the demo account.** A request for a demo, sample or fake account is
-`../../../scripts/seed-demo-user.ps1`, not this skill: what that account needs
-is invented data and *no* private folder and *no* scheduled tasks, which is
-the opposite of steps 2, 4 and 7 below. Running this skill for it would give
-a demo a nightly search that costs real CLI time looking for jobs nobody
-wants. See the README's "The demo account" section.
+`../../../scripts/seed-demo-user.ps1`, not this skill: that account needs
+invented data and *no* private folder and *no* scheduled tasks, which is the
+opposite of steps 2, 4 and 7 below. See the README's "The demo account"
+section.
 
 ## One identifier per track
 
@@ -37,11 +32,8 @@ Pick **one lowercase-hyphenated slug per track** (e.g. `engineering`,
 value sent to `/api/leads`, and the `-Task` value passed to
 `run-search.ps1`. Track keys only have to be unique per person - two people
 can both have a `SWE`, and their leads, tabs and run history stay separate.
-(This repo's own first three tracks predate this skill and split that into
-two different values - `SWE`/`TPM`/`CPM` for the tracker vs.
-`engineering`/`technical-pm`/`product` for the files - purely for historical
-reasons. Don't replicate that split for new tracks; one slug is simpler and
-there's no reason left not to.)
+An existing track may use one value for the tracker and another for its
+files; don't replicate that split for a new one.
 
 ## Steps
 
@@ -53,9 +45,9 @@ user id. So the first question is *whose* search this is.
 - Data dir is `$JOB_SEARCH_DATA_DIR` if set, else `private/` next to this
   repo. Inside it, each person has their own folder named by their user id,
   holding `tracker.json` and `logs/` - and nothing else that matters. Their
-  documents (resumes, each track's baseline doc, reference files) live in the
-  tracker and are fetched per run into a throwaway `.run/<key>/`. See
-  `../../../docs/private-storage-plan.md`.
+  documents (resumes, each track's baseline doc, reference files) live in R2,
+  uploaded with `PUT /api/documents`, and are fetched per run into a throwaway
+  `.run/<key>/`.
 - **Existing person?** Ask for their name and find their folder (their id is
   in `tracker.json`, or `GET /api/me` with their token returns it). Read
   `GET /api/config` with their token - the tracks it returns are what they
@@ -70,9 +62,9 @@ user id. So the first question is *whose* search this is.
     -d '{"name":"Their Name","password":"<a long random password - see below>"}'
   ```
 
-  It returns their `id`. Create `<data dir>/<id>/` - just the folder; the
-  document subfolders are not used any more - then mint the long-lived token
-  their scheduled searches will use and write it alongside:
+  It returns their `id`. Create `<data dir>/<id>/` - just the folder - then
+  mint the long-lived token their scheduled searches will use and write it
+  alongside:
 
   ```
   curl -s -X POST "$TRACKER_URL/api/login" -H "Content-Type: application/json" \
@@ -89,9 +81,9 @@ user id. So the first question is *whose* search this is.
   So generate a long random one **in the same process that sends both
   requests**, never printing it - a short script that POSTs `/api/users`, then
   `/api/login`, then writes `tracker.json`, and emits only the user id. That
-  leaves an account whose password nobody knows, which is fine and is the
-  point: the scheduled searches authenticate with the token, and a reset needs
-  the admin token rather than the old password.
+  leaves an account whose password nobody knows, which is the point: the
+  scheduled searches authenticate with the token, and a reset takes the admin
+  token.
 
   Then have **them** set a real one, at a prompt, in their own terminal:
 
@@ -99,9 +91,9 @@ user id. So the first question is *whose* search this is.
   scripts\set-password.ps1 -Name "Their Name"
   ```
 
-  It reads the password with `Read-Host -AsSecureString`, confirms it, zeroes
-  the plaintext afterwards, and warns if the reply says `created: true` -
-  which means the name didn't match and a second, empty account now exists.
+  It prompts for the password, confirms it, and warns if the reply says
+  `created: true` - which means the name didn't match and a second, empty
+  account now exists.
   (`users.name` is `UNIQUE COLLATE NOCASE`, so case is safe and spelling is
   not.) Resetting only rewrites `password_hash`; sessions are a separate
   table, so the scheduled-search token keeps working and step 7 does not need
@@ -128,11 +120,10 @@ user id. So the first question is *whose* search this is.
   (step 4) at the `.txt`. Whether *you* can read the PDF here is not the
   question: the nightly run is headless and gets no interactive fallback, so a
   resume stored only as `.pdf` or `.docx` is one the search may read *nothing*
-  from. That failure is silent in the worst way - the run still completes,
-  still posts leads, and still reports success, having screened every posting
-  against an empty candidate profile. Keep the `.txt` filename stable
-  (`<Name>_Resume.txt`) so a later resume version is a content swap rather than
-  a config edit.
+  from. That failure is silent: the run completes, posts leads and reports
+  success, having screened every posting against an empty candidate profile.
+  Keep the `.txt` filename stable (`<Name>_Resume.txt`) so a later resume
+  version is a content swap rather than a config edit.
 
   ```bash
   curl -s -X PUT "$TRACKER_URL/api/documents/resumes/Their_Name_Resume.pdf" \
@@ -168,15 +159,13 @@ the resume where reasonable, then confirm):
   installer genuinely doesn't have), not a list of qualifications or role
   categories to require verbatim - the template already defaults every track
   to weighing a stated requirement against the candidate profile rather than
-  auto-disqualifying on it (see its "Fit philosophy" section). Watch for this
-  same mistake at the category level, not just the requirement level: "the
-  resume doesn't document experimentation ownership" is not the same claim as
-  "exclude experimentation-flavored roles," and it's an easy one to write
-  down as a caveat without noticing the substitution. This matters most for a
-  track that's a real stretch from the installer's resume (a title/domain
-  pivot, not a lateral match) - that's exactly where an overly literal fit
-  caveat quietly screens out real, well-fitting opportunities before the
-  installer ever sees them.
+  auto-disqualifying on it (see its "Fit philosophy" section). Watch the
+  category level too, not just the requirement level: "the resume doesn't
+  document experimentation ownership" is not the same claim as "exclude
+  experimentation-flavored roles". An over-literal caveat quietly screens out
+  real, well-fitting opportunities before the installer ever sees them, and it
+  does most damage on a track that is a real stretch from the resume (a
+  title/domain pivot, not a lateral match).
 
 - **Is this a second search, or a second tab on the same search?** Two tracks
   usually mean two different searches, each with its own daily run. But a
@@ -218,8 +207,7 @@ Once per setup (applies to every track, new and existing):
 
 ### 4. Write the per-track doc, and draft the track's config
 
-There is no prompt file to generate any more. The daily prompt is composed by
-the worker from the track's config in D1 (see
+The daily prompt is composed by the worker from the track's config in D1 (see
 `../../../server/src/prompt.js`), so this step produces *config*, posted in
 step 6 - plus one document:
 
@@ -265,17 +253,12 @@ step 6 - plus one document:
 
 **If this search fills a `fed_by` tab, say so in the doc.** One search, one
 doc - the fed tab shares the feeder's, and the template is written as though
-the track were the only tab. This used to make the template's step 1 actively
-wrong: it named `/api/dedup/<key>`, one tab's worth, while the prompt fetched
-every tab and merged them, so the doc and the prompt disagreed about what
-"already seen" meant - and the doc is what the run reads first. That
-particular trap is gone: step 1 now names `./tracker dedup`, which asks the
-config which tabs this search feeds and merges them itself, so the doc cannot
-disagree with the prompt about it any more.
+the track were the only tab. Step 1 names `./tracker dedup`, which asks the
+config which tabs this search feeds and merges them itself.
 
-What is still worth adding to that step is the part no command can supply:
-which tabs this search fills, and that a posting tracked under *either* key is
-not new whichever tab today's run would file it under.
+Add to that step the part no command can supply: which tabs this search fills,
+and that a posting tracked under *either* key is not new whichever tab today's
+run would file it under.
 
 **Write the distinction between the tabs, not a fallback tab.** The composed
 prompt already breaks a genuine tie, among the tabs the posting actually reads
@@ -283,10 +266,9 @@ as, taking whichever comes first in tab order. A doc line naming one tab as
 where ambiguous postings go reads tidier and is worse: the only tab a doc has
 to name is the feeder, and the feeder is whichever tab happens to own the
 scheduled search rather than a general-purpose one - so ambiguity lands in a
-tab the posting was never a candidate for. That is not hypothetical; it is how
-a Senior Software Engineer, Insurance role reached an Eng - Gaming tab. If the
-split needs a finer rule, write the question that separates the tabs ("ask
-what the company sells"), never a destination.
+tab the posting was never a candidate for. If the split needs a finer rule,
+write the question that separates the tabs ("ask what the company sells"),
+never a destination.
 
 Then draft the track's config fields for step 6. Most of them are **prose
 the prompt uses verbatim**, not keywords the worker expands - write them as
@@ -354,9 +336,7 @@ This is the actual text their search will run every morning, assembled from
 what you just posted. It's the fastest way to catch a `resume_line` naming a
 file that isn't there, a fit filter that reads harsher than intended, or a
 geo scope that says nothing. Read the whole of a step before judging it -
-several are long, and the qualifying clause tends to be at the end (step 1b's
-multi-tab dedup instruction is the last sentence of a paragraph, and looks
-missing if you skim the first half).
+several are long, and the qualifying clause tends to be at the end.
 
 **Scripting any of these calls? Send a `User-Agent`.** Every example here is
 curl, and curl sets one. Cloudflare's browser-integrity check rejects some
@@ -402,7 +382,7 @@ like "remote AND a US indicator", not just "remote" alone).
 for at all - plain names, or a catch-all phrase like "any other company X owns
 or leads". The prompt renders it into a single never-search sentence, so an
 exclusion is an append to a list rather than a sentence hand-written into some
-track's prose (which is how the first two ended up in two different fields).
+track's prose.
 
 Send the prose settings from step 4 in the same call: `geo_scope_line`,
 `scope_clause`, `scope_disqualifier`, `location_guidance`, `footer_note`,
@@ -471,26 +451,16 @@ gains a company can only ever re-check the names it was born with. Once every
 posting those companies have open is tracked or screened, the search reports
 zero new every night and looks broken while working exactly as configured.
 
-That is a real failure, not a caution: one track was seeded with 36 well-known
-employers and ran for eight days. Every one of its 75 leads came from 12 of
-those 36 - nothing ever entered from outside the seed - and by day six it was
-finding nothing at all. Its doc had a broader-discovery step the whole time. The
-step had nowhere to put what it found, because the doc told it to write names
-into an "Expanded net" prose section that no run reads, while the rotation sat
-untouched at exactly 36.
-
-Note what did *not* cause that. The seed being 36 is the memorable detail and
-the irrelevant one: a rotation that cannot grow goes dry at 12 names and at
-120, it just takes longer to notice, and shrinking the seed would have made
-that track go quiet sooner rather than later. What failed was the write-back -
-discovery had no route into the list a run actually reads. Fix that, and seed
-size becomes an ordinary tradeoff between how fast a cycle turns and how many
-strong names are in it, with no cliff either way.
+Seed size is not what decides this - a rotation that cannot grow goes dry at
+12 names and at 120 alike, it just takes longer to notice. The write-back is
+the part that matters: discovery needs a route into the list a run actually
+reads. With that working, seed size is an ordinary tradeoff between how fast
+a cycle turns and how many strong names are in it.
 
 So when setting a track up:
 
 - **Say the discovery step out loud in the track's doc**, including the
-  non-tech verticals - `templates/tracked-postings.template.md` now carries
+  non-tech verticals - `templates/tracked-postings.template.md` carries
   both, and the rule that a discovered company is recorded with
   `./tracker swept` rather than only written down.
 - **Make sure discovery can write back, and check that it did.** This is the
@@ -527,13 +497,6 @@ pointing at a non-default data dir). A clone is a stable location, which is
 what a scheduled task needs - it stores an absolute path and runs it unattended
 for months.
 
-This used to fork on whether the repo arrived by clone or by `/plugin install`,
-because `$env:CLAUDE_PLUGIN_ROOT` points at a cache directory that gets
-replaced when a plugin updates, so a task registered against it broke silently
-a fortnight later. This is no longer published as a plugin, so a clone is the
-only way in and that hazard is gone with it. If you find a task still pointing
-into a plugin cache from the old arrangement, re-register it from the clone.
-
 **Unless you are in a git worktree, which is not.** Check before running it:
 
 ```powershell
@@ -545,8 +508,7 @@ and agents run in one routinely - so this is the ordinary case, not an exotic
 one. The task records an absolute path to `run-search.ps1`, so registering
 from `<repo>/.claude/worktrees/<name>/scripts` produces a task that works
 today, breaks the moment the worktree is cleaned up, and fails from then on
-by running nothing at all. Exactly the `CLAUDE_PLUGIN_ROOT` hazard above,
-reached a different way.
+by running nothing at all.
 
 So register from the **main checkout**, by absolute path, without `cd`-ing
 there:
@@ -559,8 +521,8 @@ Diff the two copies first (`diff scripts/setup-scheduler.ps1
 <main>/scripts/setup-scheduler.ps1`) - if your branch changed the script,
 the main checkout's version is the one that will actually run tonight.
 
-Whichever path you take, **verify what got registered rather than trusting
-the summary**, since a wrong path fails silently months later:
+**Verify what got registered rather than trusting the summary** - a wrong
+path fails silently months later:
 
 ```powershell
 Get-ScheduledTask -TaskName "JobSearch-*" | ForEach-Object {
@@ -569,7 +531,7 @@ Get-ScheduledTask -TaskName "JobSearch-*" | ForEach-Object {
   Format-Table -AutoSize
 ```
 
-Either way, `setup-scheduler.ps1` discovers people by their
+`setup-scheduler.ps1` discovers people by their
 `<data dir>\<user id>\tracker.json` and asks each one's account what tracks
 it has - nothing to pass it about which tracks exist. Add `-User <user id>`
 to set up only this person; without it, it processes everyone on the
@@ -578,24 +540,17 @@ processed). It warns about any missing prerequisite (the `claude` CLI,
 `CLAUDE_CODE_OAUTH_TOKEN`, unreadable config) rather than failing outright,
 so it's safe to run mid-setup.
 
-Note the schedule now comes from each track's `schedule_time` in D1, not from
-this script - so a time change is a config post, not a re-registration. When
+The schedule comes from each track's `schedule_time` in D1, not from this
+script - so a time change is a config post, not a re-registration. When
 a machine runs more than one person's searches, stagger across all of them:
 they share one CLI and one Claude account (the machine owner's), and each run
 takes several minutes.
 
 One further task gets registered that isn't a search and isn't per person:
-`JobSearch-Applications`, the nightly fill for applications logged on the
-tracker page by pasting a job posting's URL and nothing else. It runs
-`run-fill.ps1` once for the whole machine - every account in one turn - and
-reads those postings to write down the company, role and location. None of it
-is visible on the page: no setting, no status, nothing to configure here, and
-nothing extra to do when you add a second person. Worth mentioning to them,
-though: it is the reason adding an application is a paste rather than nine
-fields typed out by hand.
-
-Re-run this step (the copy + `setup-scheduler.ps1`) any time after a plugin
-update, so the stable copy and the registered tasks stay current.
+`JobSearch-Applications`, the nightly application fill - one task for the
+whole machine, with nothing to configure here and nothing extra to do when
+you add a second person. See `../../../server/README.md`, "Applications added
+as nothing but a URL".
 
 ### 8. Offer a test run
 
