@@ -221,12 +221,39 @@ export async function handleRecordSweeps({ request, db }) {
   );
   const added = await db.addCompanies([...joining.values()]);
 
+  // A row reporting a `wall` beside a `board` or `endpoint` contradicts itself.
+  // A wall means no route to this company's listings worked tonight; a board or
+  // an endpoint is a route that did. Neither half can be trusted over the
+  // other, and each wrong answer costs something different:
+  //  - trust the board, and a board copied out of companies.json on a night the
+  //    fetch failed deletes a true wall for every search (upsertCompanyFetch
+  //    clears a wall whenever a working route is reported).
+  //  - trust the wall, and a careers domain that 403s beside a board that
+  //    worked becomes a wall every search skips - a reachable company nobody
+  //    fetches again, so nothing disproves it until it expires.
+  // So the row shares nothing: no wall, board, endpoint or url_shape reaches
+  // the shared list, and neither does the board mirrored onto this search's
+  // record. The sweep itself is still recorded - the company was attempted -
+  // and `withheld` counts these rows so the caller can see what was dropped.
+  //
+  // `url_shape` is deliberately not a route here. It is how one posting's URL is
+  // built, not a way to the listings, and step 9e sends a run at a specific
+  // posting when the listing is walled: a posting that loads beside a walled
+  // listing is both things true at once, and that row shares as normal.
+  //
+  // Enforced here rather than only in the ./tracker helper, so a curl or a
+  // skill writing to this route meets the same rule.
+  const contradicts = (i) =>
+    typeof i.wall === "string" && i.wall !== "" &&
+    ((typeof i.board === "string" && i.board !== "") || (typeof i.endpoint === "string" && i.endpoint !== ""));
+
   // Every report lands on the company as the list names it, so two spellings of
   // one company are one row in this search's record.
   const positioned = allowed.map((i) => {
     const k = normalize(i.company);
     const listed = onList.get(k) || joining.get(k);
-    return { ...i, company: listed.company, position: listed.position };
+    const row = { ...i, company: listed.company, position: listed.position };
+    return contradicts(i) ? { ...row, board: "" } : row;
   });
   const recorded = await db.recordSweeps(key, positioned, on);
 
@@ -236,9 +263,10 @@ export async function handleRecordSweeps({ request, db }) {
   // Seeding (`on: ""`) writes no fact here. A seed is a list somebody typed, not
   // something a run confirmed. It still puts companies on the list - that is
   // addCompanies above, and it is membership, not knowledge.
+  const withheld = on ? allowed.filter(contradicts).length : 0;
   const shared = on
     ? await db.upsertCompanyFetch(
-        allowed.map((i) => ({
+        allowed.filter((i) => !contradicts(i)).map((i) => ({
           company: i.company,
           board: typeof i.board === "string" ? i.board : "",
           endpoint: typeof i.endpoint === "string" ? i.endpoint : "",
@@ -299,5 +327,5 @@ export async function handleRecordSweeps({ request, db }) {
     if (lastServed) cursor = await db.setSweepCursor(key, lastServed.position + 1);
   }
 
-  return json({ recorded, added, excluded, on, cursor, shared: shared.written });
+  return json({ recorded, added, excluded, on, cursor, shared: shared.written, withheld });
 }
