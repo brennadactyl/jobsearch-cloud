@@ -1,13 +1,42 @@
 ---
 name: add-target-company
-description: Add an employer to a tracked search's target-company list in D1 - checking it is not already there under another name, finding whether its job board has a JSON API worth recording, and writing it through /api/config without flattening the rest of the config. Use when asked to add, track, watch or start searching a company, or to put an employer on the list for a job search.
+description: Add an employer to a tracked search in D1 - writing it into the company rotation a run actually draws from, checking it is not already there under another name in either the rotation or the config prose, finding whether its job board has a JSON API worth recording, and updating /api/config without flattening the rest of it. Use when asked to add, track, watch or start searching a company, or to put an employer on the list for a job search.
 ---
 
 # Adding a company to a track's target list
 
-The list lives in D1, on one track, as **prose** - `target_companies` in that
-track's config, reachable at `/api/config`. Three things follow from that, and
-each of them is a way to get this wrong:
+**Read this first: for a track that rotates, the list the run actually reads is
+the rotation, not `target_companies`.** Step 1c hands the run its slice from
+`company_sweeps`, and step 3 searches *those* companies. A name added only to
+the config prose is never drawn, never swept, and never searched - it just sits
+in a paragraph looking added. Every searching track in this deployment rotates,
+so this is the normal case, not the exception.
+
+So the operative write is:
+
+```bash
+# registers the company without stamping a sweep date, so nothing reads as
+# already-covered; the row appends after the last position rather than
+# jumping the queue
+curl -s -X POST "$url/api/coverage" -H "Authorization: Bearer $tok" \
+  -H "Content-Type: application/json" \
+  -d '{"search":"<key>","on":"","swept":[{"company":"NFL","board":"greenhouse","note":"..."}]}'
+```
+
+Check whether a track rotates before you choose - `GET /api/coverage/<key>?all=1`
+returns its list and `total`.
+
+The rest of this skill is about `target_companies`, which is still where a
+track's *strategy* prose lives - which verticals to prioritise, and why. Update
+it when the addition changes that. Do not treat it as the list of companies to
+search; see `docs/rotation-always-on-plan.md` for where the three jobs that
+field currently does are going.
+
+---
+
+`target_companies` lives in D1, on one track, as **prose**, reachable at
+`/api/config`. Three things follow from that, and each of them is a way to get
+this wrong:
 
 - **There is no global company list.** Every track has its own. "Add Hasbro"
   has to become "add Hasbro to *which* track", and the answer is usually more
@@ -60,8 +89,11 @@ A duplicate is not harmless. The list is prose the model reads, so the same
 employer twice pulls the run toward it, and a second entry under a different
 name gets its own fetch guidance that can contradict the first.
 
-Check **case-insensitively, across every track, and for the names the company
-is actually written under**:
+Check **case-insensitively, across every track, in both the prose *and* the
+rotation, and for the names the company is actually written under**. The two
+can disagree: a company discovery added via `./tracker swept` is in the
+rotation and was never written into the prose at all, so a prose-only check
+reports "not present" for a company being swept every cycle.
 
 ```bash
 node -e '
