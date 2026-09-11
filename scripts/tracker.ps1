@@ -442,17 +442,61 @@ switch ($Command) {
           # elsewhere. A field the API accepts and the helper drops is a field
           # that does not exist.
           #
+          # `wall` travels too: what stops a fetch at this company, pooled and
+          # expired by the server (docs/one-company-list-plan.md). It goes in
+          # this list in the same change as the server column, never before.
+          # handleRecordSweeps reads fields by name, so a `wall` sent to a
+          # server without the column is dropped silently - and because the
+          # prompt stops putting the obstacle in `note`, it would be lost
+          # outright rather than merely left unpooled.
+          #
           # `dead_signal` is deliberately still not passed - see prompt.js's
           # step 9d.
-          foreach ($f in @("board", "endpoint", "url_shape", "note")) {
+          foreach ($f in @("board", "endpoint", "url_shape", "wall", "note")) {
               $v = Field $r $f
               if ($v) { $row[$f] = $v }
+          }
+          # A row carrying a `wall` plus a `board` or `endpoint` contradicts
+          # itself: the wall says no route to this company's listings worked
+          # tonight, and a board or endpoint says one did. It is sent exactly as
+          # written, and the server decides what it shares from it.
+          #
+          # This used to strip the board and endpoint and keep the wall, on the
+          # theory that the board was an echo of companies.json. That settled
+          # the row the wrong way. It is just as often honest - "careers.x.com
+          # 403s" alongside a Greenhouse board that works - and keeping the wall
+          # gets a reachable company skipped by every search until the wall
+          # expires, because once it is served nothing fetches that company
+          # again to disprove it. A missed posting costs more than a wasted
+          # fetch. Rewriting the row here also hid the contradiction from the
+          # server: it received a clean-looking wall-only row, so no rule there
+          # could ever fire. The rule belongs in one place, where a curl or a
+          # skill writing to the API meets it too.
+          #
+          # So this only says so, and says how to fix it. url_shape is not part
+          # of the contradiction: it describes a posting page, not a route to
+          # the listings, and step 9e asks a run to record a posting page that
+          # loads while the listings stay walled.
+          if ($row.ContainsKey("wall") -and ($row.ContainsKey("board") -or $row.ContainsKey("endpoint"))) {
+              Say "WARNING: $company reports a wall and a working board/endpoint in one row, which contradicts itself. If any route to its listings worked, re-send it without the wall; if none did, re-send it without the board/endpoint."
           }
           $send += $row
       }
       if ($send.Count -eq 0) { Say "swept: nothing to record (refused=$($script:Refused))"; exit 0 }
       $res = Invoke-Tracker "POST" "/api/coverage" @{ search = $Search; on = $Today; swept = @($send) }
-      Say "swept: recorded=$($res.recorded) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
+      # `added` is how many of these companies joined the shared list on this
+      # call. Since one list serves every search, a company one run adds is
+      # swept by everyone, so it is worth a run being able to say it did that.
+      #
+      # `withheld` is the server's count of rows that reported a wall alongside
+      # a board or endpoint, from which it shared nothing. It should equal the
+      # number of WARNING lines above: both use the same test - a non-empty
+      # wall plus a non-empty board or endpoint, url_shape not counted - and
+      # this helper only puts a field in a row when it is non-empty, so a
+      # present key is a non-empty one. If the two ever disagree, the rule has
+      # drifted between here and handleRecordSweeps. Blank from a server that
+      # predates the rule.
+      Say "swept: recorded=$($res.recorded) added=$($res.added) withheld=$($res.withheld) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
       break
   }
 
