@@ -421,25 +421,35 @@ Posting `tracks` also creates each new track's `search_runs` row, so its tab
 shows "No run recorded yet" until its first scheduled run reports in. That's
 expected on a fresh setup, not a problem to chase.
 
-**Seed the track's company coverage** if its company list is long enough that
-one run can't verify all of it properly - roughly a dozen companies and up.
-Without this the search sweeps the whole list every night, which sounds
-thorough and isn't: everything gets skimmed. Registering the companies turns
-on a rotation (the composed prompt gains steps 1c and 9d for any track that
-has coverage rows - it's gated on the rows existing, so there's no flag to
-set):
+**Put the starter companies on the list.** There is one company list for the
+whole deployment: every search, every account, reads it, and a name added here
+reaches everybody's searches. Every search rotates through it - a slice per
+night, wrapping - with no switch to set.
+
+Check what is already there before seeding, so a name does not arrive twice
+under a second spelling. `GET /api/coverage/<key>?all=1` returns the whole list
+for any key; `.claude/skills/add-target-company/SKILL.md` step 1 has the
+matching check. The server matches through `normalize()`, so `Cursor
+(Anysphere)` and `Cursor Anysphere` are one company, but a parent and its brand
+are not.
+
+Seed with the new person's own token - a demo account gets 403 on this route:
 
 ```
 curl -s -X POST "$TRACKER_URL/api/coverage" \
   -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
-  -d '{"search":"<key>","on":"","swept":[{"company":"Acme","board":"greenhouse"},{"company":"Globex"}]}'
+  -d '{"search":"<key>","on":"","swept":[{"company":"Acme"},{"company":"Globex"}]}'
 ```
 
-`on: ""` means "register these, nobody has swept them" - it creates the rows
-and leaves the cursor where it is, so the first run starts at the beginning of
-the list. Never seed with today's date: that claims a sweep that didn't happen
-and, because recording a sweep is what advances the cursor, it would step the
-rotation past companies nothing has looked at.
+`on: ""` means "register these, nobody has swept them" - it adds the companies
+and leaves every cursor where it is. Names only: a `board` or `endpoint` sent
+with `on: ""` is dropped, because a seed is a list somebody typed and the shared
+fetch facts are things a run confirmed. Those go in later, with a date - see the
+`add-target-company` skill.
+
+Never seed with today's date: it claims sweeps that didn't happen, and for any
+company inside the slice that search is currently served it advances that
+search's cursor, skipping everything before it for the rest of the cycle.
 
 The order companies are covered in is not the order you seed them in. Positions
 are assigned once and shuffled, so no company is permanently first or
@@ -449,12 +459,14 @@ first to be dropped when a run runs short. `board` is the JSON-board kind where
 one is already known (`greenhouse`, `ashby`, `lever`, `workday cxs`); one fetch
 there covers discovery *and* verification, so it makes a company cheap to
 cover - it doesn't buy it a place in every run, the rotation is the rotation.
-Leave it empty where you don't know - a run fills it in when it finds one. Seed against the track that *runs* the search:
-a `fed_by` tab shares its feeder's coverage list, it doesn't get one of its
-own.
+Leave it empty here either way - a run fills it in when it finds one.
+
+`search` names the track whose record the registration is filed under, not who
+gets the companies: the list is shared. Use one of this person's own searching
+tracks; a `fed_by` tab has no search of its own.
 
 **Seed a starting point, not a finished list, and make sure discovery can grow
-it.** The rotation is the only list a run reads, so a track whose rotation never
+it.** The shared list is the only list a run reads, so a deployment whose list never
 gains a company can only ever re-check the names it was born with. Once every
 posting those companies have open is tracked or screened, the search reports
 zero new every night and looks broken while working exactly as configured.
@@ -487,24 +499,22 @@ So when setting a track up:
   it appends any company handed to it, so a discovered name joins the rotation
   without jumping the queue. A track whose `total` never moves has a broken
   discovery step no matter how good its seed was.
-- **Seed as many strong names as you have.** There is no penalty for a long
-  list beyond a longer cycle: the nightly slice is a fixed 12 either way, and
-  every company is reached once per cycle before any is reached twice. An
-  existing track in this deployment runs 57 comfortably. Prefer a name you can
-  justify over filler, and let discovery supply the rest.
-- **Check back after a few days.** `GET /api/coverage/<key>?all=1` returns
-  `total`. If that number is identical to what you seeded a week ago, discovery
-  is not reaching the rotation, whatever the doc says.
+- **Seed as many strong names as you have.** A long list costs a longer cycle,
+  nothing else: the nightly slice is a fixed 24 either way, and every company is
+  reached once per cycle before any is reached twice. This deployment runs 144
+  companies, about six nights a cycle. Prefer a name you can justify over
+  filler, and let discovery supply the rest.
+- **Check the companies arrived.** Re-run the `?all=1` check and look for the
+  names you seeded. `total` is the whole deployment's list and grows from every
+  search's discovery, so a rising total says nothing about this person's seed -
+  the names do.
 
-  Read `total` there and ignore `batch`: the `?all=1` branch returns the whole
-  table and reports `batch` as its length, so a 57-company list prints
-  `batch: 57`. The real per-run slice is `COVERAGE_BATCH` in
-  `server/src/routes/coverage.js` - a hard constant of 12, applied as
-  `Math.min(COVERAGE_BATCH, eligible.length)`. Drop `?all=1` to see the
-  actual number. This is worth knowing before sizing a seed list, because
-  reading `batch: 57` naturally suggests the slice grows with the list and it
-  does not: adding companies lengthens the *cycle* (57 at 12 a night is about
-  five nights), it does not widen the nightly batch.
+  Ignore `batch` in that branch: `?all=1` returns the whole table and reports
+  `batch` as its length, so a 144-company list prints `batch: 144`. The real
+  per-run slice is `COVERAGE_BATCH` in `server/src/routes/coverage.js` - a hard
+  constant of 24, applied as `Math.min(COVERAGE_BATCH, eligible.length)`. Drop
+  `?all=1` to see the actual slice. Adding companies lengthens the *cycle*, it
+  does not widen the nightly batch.
 
 If there's no deployment to post to yet, skip this step and tell the
 installer to come back to it (re-running this skill is fine, or they can run
