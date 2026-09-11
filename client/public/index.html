@@ -121,6 +121,20 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 input[type=search],input[type=text],input[type=url],input[type=date],input[type=password],select,textarea{
   font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
   border-radius:7px;padding:7px 10px;width:100%}
+/* A field the browser filled in for you keeps the page's own colours.
+   Chrome paints autofilled inputs with its own near-white background and dark
+   text, both !important, which on this palette is a glaring white box in the
+   middle of a dark card - and it lands on the sign-in name field, which is the
+   first thing anyone sees. background-color cannot win against it; an inset
+   shadow can, because it paints over the top. text-fill-color is the matching
+   override for the text. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active{
+  -webkit-text-fill-color:var(--ink);
+  -webkit-box-shadow:0 0 0 100px var(--surface) inset;
+  caret-color:var(--ink)}
 textarea{resize:vertical;min-height:34px}
 .btn{appearance:none;font:inherit;font-weight:500;cursor:pointer;border-radius:7px;
   border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 13px}
