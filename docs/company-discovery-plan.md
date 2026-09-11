@@ -28,7 +28,7 @@ its own numbered "broader discovery" step and a prose log of industries tried.
 A new table records every company evaluated for the list, so none is evaluated
 twice inside its retry window.
 
-**The log is shared, not per-user**, and `0013`'s own comment says so. It is the
+**The log is shared, not per-user**, and `0014`'s own comment says so. It is the
 second table after `company_fetch` with no `user_id`, for the same reason: one
 job serves the whole deployment, and a per-account log would have every account
 re-evaluating the companies another had already ruled out - the duplication this
@@ -40,6 +40,17 @@ nothing else. No `user_id`, no track key, and no role, level or location text in
 "nothing at Brenna's level". A row that named a search would leak one person's
 search behaviour into everyone's view, which is the line `company_fetch` already
 holds.
+
+One row per company, updated in place. The PK is `company_key`, so a
+`suggested` row becomes `added` or `no_match` later, keeping its `first_on` and
+moving its `last_on`. **`added` is terminal**: the company is on the list and the
+list is its record from then on. The nightly cap counts the day's `added` rows,
+which is only a stable number if nothing re-logs one.
+
+`evidence_url` is provenance - recorded once, never re-fetched, and never used
+to decide anything later. The retry windows are constants in
+`server/src/discovery.js` rather than columns: a window is policy, and a copy of
+it on every row cannot be changed without a migration.
 
 `company_discovery`
 
@@ -53,7 +64,6 @@ holds.
 | `evidence_url` | for `added`: the live posting that qualified it |
 | `note` | |
 | `first_on`, `last_on` | local dates |
-| `tries` | |
 
 | outcome | meaning | served again |
 |---|---|---|
@@ -114,7 +124,10 @@ the routes, not in the prompt.
 
 - `industries` - the `DISCOVERY_INDUSTRIES_PER_RUN` (2) industries whose most
   recent `last_on` is oldest; never-tried industries first, ties in list order.
-  The list is `DISCOVERY_INDUSTRIES`, today's step-3b industries.
+  The list is `DISCOVERY_INDUSTRIES`, today's step-3b industries. Computed over
+  rows whose `industry` is non-empty, so a suggestion or a manual add - both
+  `industry: ''` - never marks an industry as explored. Reading twice in one run
+  returns the same pair, since nothing is logged until the run reports.
 - `suggestions`, `list`, `recent` (rows inside their retry window), and
   `remaining` - `DISCOVERY_ADD_CAP` (6) minus today's `added` rows with
   `source = 'job'`.
@@ -124,24 +137,33 @@ the routes, not in the prompt.
 
 - A demo account gets 403, as on `POST /api/coverage`.
 - A company already on the list, matched through `normalize()`, is `known` and
-  writes nothing.
+  writes nothing. A retracted company still has its row, so it reads as `known`
+  too - it cannot be "added" again.
 - `added` appends to `company_fetch` after the highest position, shuffled within
   the call - the same insertion `POST /api/coverage` does today. That makes this
   route the second caller of `db.addCompanies`, which writes the one table every
   account reads; say so where it is called, since every neighbouring write in
-  `db.js` is scoped to one user. `board`,
-  `endpoint`, `url_shape` and `wall` go through `upsertCompanyFetch` under its
-  existing rules. No `company_sweeps` row is written and no cursor moves. Past
-  the cap, a `job` add is `over_cap`; a `person` add is never capped.
+  `db.js` is scoped to one user. No `company_sweeps` row is written and no
+  cursor moves. Past the cap, a `job` add is `over_cap`; a `person` add is never
+  capped.
+- **`addCompanies` runs before `upsertCompanyFetch`, and facts are written only
+  for companies that just joined or were already on the list.**
+  `upsertCompanyFetch` is an upsert, not an update: it creates a
+  `company_fetch` row for a key it doesn't find, and its INSERT sets no
+  `position`, which is `NOT NULL DEFAULT 0`. So a `board` sent with a
+  `no_match` would plant a company at position 0, on top of whatever the
+  rotation currently has at the front, and a cursor would step over one of them.
+  `handleRecordSweeps` already does it in this order; the new route must too.
 - `no_match`, `unreadable` and `not_found` are logged, and refused as
   `too_soon` inside the company's retry window. An `added` is never `too_soon`.
 - Exclusions are not consulted: each search's slice already drops its own
   account's excluded companies (`GET /api/coverage`).
 
 `POST /api/coverage` stops creating companies. A swept company that is not on
-the list is **logged as a suggestion and its sweep is not recorded**: no
-`company_fetch` row is created, and - the part that matters - no
-`company_sweeps` row either. A sweep row for a company that is not on the list
+the list is **logged as a suggestion and nothing else is written for it**: no
+`company_sweeps` row, and no shared facts either - not even when the report
+carries a `board` or a `wall`. Skipping `addCompanies` is not enough on its own,
+because `upsertCompanyFetch` would create the row itself, at position 0. A sweep row for a company that is not on the list
 would point at a `company_key` with no list entry, which breaks the invariant
 0011 established and 0012 was checked against: every sweep row joins a company
 on the list.
@@ -188,7 +210,7 @@ prompt together.
 
 ## Files
 
-- `server/migrations/0013_company_discovery.sql`
+- `server/migrations/0014_company_discovery.sql`
 - `server/src/discovery.js` - industries, cap, retry windows, industry selection
 - `server/src/routes/discovery.js`, `server/src/routes/index.js`,
   `server/src/routes/prompt.js`, `server/src/routes/coverage.js`,
@@ -208,6 +230,8 @@ prompt together.
 
 - `POST /api/coverage` naming an unknown company leaves the list total
   unchanged, records no sweep for it, and logs one `suggested` row.
+- The same call carrying a `board` and a `wall` still writes no
+  `company_fetch` row, and nothing sits at position 0 that wasn't there before.
 - After that call, no `company_sweeps` row points at a `company_key` missing
   from `company_fetch` - the check 0012 was verified against.
 - Nothing the discovery routes return, and nothing they store, carries a
@@ -222,7 +246,7 @@ prompt together.
   same two until a row is logged against one.
 - No search prompt contains step 3b, and `/api/prompt/_discovery` returns 200.
 
-`verify-migration.mjs` gains a block for 0013.
+`verify-migration.mjs` gains a block for 0014.
 
 End to end: run `run-discovery.ps1` once by hand. The list total rises by
 exactly the `added` count, every cursor is unchanged, and the log rows match the
