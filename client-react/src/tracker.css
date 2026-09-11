@@ -563,10 +563,14 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
    Kept as an appended block rather than edited into the rules above, so the
    copied stylesheet stays diffable against client/public/index.html. */
 .tab, .tile, .jumplink, .chip.drill { text-decoration: none; }
-.tile, .chip.drill { color: inherit; }
+/* Not .chip.drill: a drill chip is accent text on accent-soft (see its rule
+   above), and inheriting here - later, at the same specificity - turned it grey. */
+.tile { color: inherit; }
 /* The underline is the hover affordance on a jumplink and nowhere else. */
 .jumplink { color: inherit; }
 .jumplink:hover { text-decoration: underline; }
+/* A button's focus ring sits on its edge and a link's 1px outside it. */
+.tile:focus-visible { outline-offset: 0; }
 
 /* Grid rows expand on a click anywhere on the row, as in the original, which
    put the plain word "Details" in this cell. It is a real button here as well,

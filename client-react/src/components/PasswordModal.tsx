@@ -97,6 +97,7 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
           <input
             id="pwCurrent"
             type="password"
+            autoFocus
             autoComplete="current-password"
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
@@ -135,11 +136,11 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
           <span>Sign out my other browsers. This one stays signed in.</span>
         </label>
 
-        {msg && (
-          <div className={`pw-msg ${msg.tone}`} role="alert">
-            {msg.text}
-          </div>
-        )}
+        {/* Always there, empty or not: the line keeps its height, so the first
+            message doesn't push the buttons down under the pointer. */}
+        <div className={`pw-msg ${msg?.tone ?? ""}`} role="alert">
+          {msg?.text}
+        </div>
 
         <div className="modal-actions">
           <button className="btn" type="button" onClick={onClose}>

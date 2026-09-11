@@ -102,3 +102,17 @@ export function usePinnedLayout(active: boolean) {
 
   return { scrollRef, scrolled, onScroll };
 }
+
+/**
+ * A callback ref for a master/detail list: scrolls the selected row into view
+ * when the list mounts.
+ *
+ * Mounting is the case that needs it - switching in from Grid, where the row was
+ * picked by expanding it and can be far down a list that would otherwise open at
+ * the top, beside a detail pane showing a row you can't see. Module-level, so its
+ * identity never changes and React doesn't call it again on a re-render:
+ * selecting a row must leave the list where it is.
+ */
+export function revealSelectedRow(list: HTMLElement | null): void {
+  list?.querySelector<HTMLElement>(".md-row.sel")?.scrollIntoView?.({ block: "nearest" });
+}
