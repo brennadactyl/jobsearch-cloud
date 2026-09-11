@@ -95,7 +95,7 @@ const DEFAULT_REPORT_LINE =
  *   this one - tabs this run also fills. See migrations/0003_branched_tracks.sql.
  * @returns {string} the full prompt text
  */
-export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
+export function buildSearchPrompt({ user, track, settings, feeds }) {
   const name = user.name;
   const pn = PRONOUNS[settings.pronouns] || PRONOUNS["they/them"];
   const key = track.key;
@@ -269,19 +269,18 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
   // rewrites `search` to the track that owns the search - so the sentence was
   // asking the model to reproduce a rule it cannot get wrong any more, which
   // is the kind of prose this whole change is about deleting.
-  // Steps 1c and 9d appear only once a track has company_sweeps rows. Gating
-  // on the data rather than on a config flag keeps this off for every track
-  // that hasn't been seeded, and turns it on for one that has, with nothing to
-  // remember to set - see migrations/0005_company_sweeps.sql.
-  const rotates = Number(coverage) > 0;
+  // Steps 1c, 9d and 9e go to every search, unconditionally. They used to wait
+  // for the company list to have something on it, which could never happen
+  // for a deployment that started empty: 9d is the only step that adds a
+  // company. An empty list is not an error - step 1c gets no companies back,
+  // step 3 falls back to the track's own target_companies, and 9d starts the
+  // list from what the run covered.
   // The cursor mechanics ("a fixed list with a cursor, you get the next batch
   // from cursor, it wraps") are why re-fetching in 9e is safe and why nothing
   // has to be filtered by date. That belongs in coverage.js, which implements
   // it; what the run needs is the consequence, which 9e states in one line.
-  const coverageStep = rotates
-    ? `1c. Get this run's companies: \`./tracker companies\`. It writes \`companies.json\` - \`{companies: [{company, last_swept, board, note}], total, batch, cursor}\` - and lists them. The server picks them, capped at what one run can actually verify. **Cover exactly these, all of them**, and don't reach past them into the rest of the list in step 3: that list is longer than one run can do properly, and the failure mode isn't a company going uncovered for a day, it's every company being skimmed. They come back round - everything is reached once per cycle before anything is reached twice. \`board\` is a JSON endpoint already confirmed for that company (\`greenhouse\`, \`ashby\`, \`workday cxs\`, ...); it makes a company cheap to cover, not privileged - use it where it's there. The cap is about *this* list: "don't reach past them" means don't help yourself to the rest of the rotation early, and step 3b sends you outside it on purpose.
-`
-    : "";
+  const coverageStep = `1c. Get this run's companies: \`./tracker companies\`. It writes \`companies.json\` - \`{companies: [{company, last_swept, board, note}], total, batch, cursor}\` - and lists them. The server picks them, capped at what one run can actually verify. **Cover exactly these, all of them**, and don't reach past them into the rest of the list in step 3: that list is longer than one run can do properly, and the failure mode isn't a company going uncovered for a day, it's every company being skimmed. They come back round - everything is reached once per cycle before anything is reached twice. \`board\` is a JSON endpoint already confirmed for that company (\`greenhouse\`, \`ashby\`, \`workday cxs\`, ...); it makes a company cheap to cover, not privileged - use it where it's there. The cap is about *this* list: "don't reach past them" means don't help yourself to the rest of the rotation early, and step 3b sends you outside it on purpose.
+`;
   // ---- Why 9d asks for endpoint/url_shape but not dead_signal.
   //
   // PR #1 gave /api/coverage three shared fields - endpoint, url_shape,
@@ -315,8 +314,7 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
   //   cursor only moves when a sweep is recorded, so fetching first hands back
   //   the same companies - and a run that died in between would have taken
   //   work nothing says it attempted.
-  const sweepStep = rotates
-    ? `9d. RECORD WHAT YOU COVERED. Write every company this run actually
+  const sweepStep = `9d. RECORD WHAT YOU COVERED. Write every company this run actually
    attempted to \`swept.json\` - a JSON array of
    \`{company, board, endpoint, url_shape, wall, note}\` - and run
    \`./tracker swept swept.json\`.
@@ -386,8 +384,7 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
    stays walled is different - record its \`url_shape\` alongside the \`wall\`,
    not instead of it. One page loading does not make the listing readable, so
    it leaves the wall standing.
-`
-    : "";
+`;
 
   // Step 9c used to carry the largest and most error-prone block of text in
   // this whole prompt: a per-branch explanation of how to split the run's own
@@ -453,7 +450,7 @@ ${intro}Do the following:
 1. Read \`${doc}\` - ${docSummary}. Follow its numbered process. The doc doesn't keep a found-postings table or a screened/dead-link list of its own - dedup data comes from step 1b instead.
 1b. Fetch what this track has already seen: \`./tracker dedup\`. It writes \`dedup.json\`: \`leads[]\` as \`{url, status}\` - postings already tracked, where \`url\` is what step 8 reports back and \`status\` is context for your report (that's how you tell a stale lead nobody's touched from one ${name} has already applied to) - and \`screened[]\`, a plain list of urls already looked at and rejected, which is what stops you re-verifying the same dead or out-of-scope candidate every run.${dedupNote}
 ${coverageStep}2. ${resumeLine}
-3. Search ${rotates ? "the step-1c companies" : "target companies"}' careers sites (web search as backup) for current ${roleLine}. ${rotates ? "Step 1c is the list for today, drawn from" : "Companies"}: ${companies}.${searchNote}${exclusionNote}
+3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}. Step 1c is the list for today, drawn from: ${companies}.${searchNote}${exclusionNote}
 3b. NOW LOOK OUTSIDE THAT LIST. Step 3 is the companies already known to be worth checking; this step is how that list ever grows, and it is not optional. Search for ${roleLine} at companies **not named anywhere above** - including outside tech entirely: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities, manufacturing, and sports (leagues and the larger franchises, plus the data, streaming and betting companies built around them). All of them run real engineering orgs and all of them are easy to miss when the named list reads as big tech. Rotate through a couple of verticals per run rather than attempting all of them.
 
    Every candidate this turns up faces the same mandatory verification in step 4 - a company being new is not a reason to trust a search snippet about it.

@@ -58,12 +58,8 @@ export async function handleGetPrompt({ db, user, params }) {
   // The tabs this run fills besides its own. Passing them turns the prompt
   // multi-tab: dedup for every key, a filing step, and a run record each.
   const feeds = config.tracks.filter((t) => t.fed_by === key);
-  // Whether this search rotates through the company list, which is true for
-  // every track once the shared list has anything on it - see
-  // buildSearchPrompt and db.countCoverage.
-  const coverage = await db.countCoverage();
 
-  return text(buildSearchPrompt({ user, track, settings: config.settings, feeds, coverage }));
+  return text(buildSearchPrompt({ user, track, settings: config.settings, feeds }));
 }
 
 /**
