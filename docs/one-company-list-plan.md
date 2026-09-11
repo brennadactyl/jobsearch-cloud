@@ -179,6 +179,10 @@ erDiagram
         TEXT board "no longer also on company_sweeps"
         TEXT endpoint
         TEXT url_shape
+        TEXT wall "new - what stops a fetch here"
+        TEXT wall_first_on "new"
+        TEXT wall_last_on "new - served for 7 days from this"
+        INTEGER wall_dates "new - earned at 2"
         TEXT dead_signal
         TEXT note
         TEXT verified_on
@@ -253,7 +257,58 @@ companies in a slice were unreadable, so a bad night compounds on top of 24
 rather than 12 — CPM swept 39 across three batches on 2026-09-11 with the batch
 still at 12.
 
-### 4. Migration
+### 4. A wall is a shared fact with an expiry
+
+`company_fetch` gains `wall` — what stops a fetch at this company — plus the
+three columns that keep it from becoming permanent: `wall_first_on`,
+`wall_last_on`, `wall_dates`.
+
+The merge is what makes this urgent. 272 `(search, company)` pairs become
+139 × 4, and at a batch of 24 that is 96 company-attempts a night against 48
+now, so every wall one rotation holds gets hit by four. 74 rows already record
+an obstacle across 45 companies, and about a dozen of those were proved
+separately by two or more searches — Alaska Airlines by all four, on four
+different dates.
+
+**A wall expires.** `0010`'s own motivating example is three searches
+independently recording "Microsoft is robots-blocked", all three wrong for the
+same reason — they were testing retired 6-digit ids. Pooled without an expiry
+that becomes one confident wrong answer for everybody, which is worse than three
+hesitant ones. Google Careers is the same shape: written off as blocked while
+serving location and pay range in plain HTML.
+
+The rule is the doc template's fetch-efficiency cadence, moved from prose into
+the server:
+
+- a wall counts once it has been recorded on **two separate dates**
+  (`wall_dates >= 2`)
+- it is served for **seven days** from `wall_last_on`, then stops being served
+
+`handleGetCoverage` omits an unearned or expired wall rather than flagging it.
+The run then simply attempts the fetch, which is what a re-test is — no
+instruction, and nothing for a run to decide. Reporting a `board` or `endpoint`
+for a company clears its wall, since a fetch that worked is the only evidence
+that settles it.
+
+Runs already do this per-search and in prose: two of the four Alaska Airlines
+notes read "cadence skip — confirmed blocked, within skip window; not
+re-tested." The cadence is not new, only the sharing of it.
+
+**What is a wall and what is a note.** The test is what the sentence is about,
+not how it is worded. If it would be equally true for a stranger fetching the
+same URL, it is a wall: "careers.draftkings.com 403s a plain fetch", "renders a
+client-side shell". If it turns on this search's own subject — the role, the
+level, the location, this person — it is a note and stays on `company_sweeps`:
+"no PM-titled openings besides two Director-level reqs". Both answer "why did I
+get nothing here tonight", which is why a run cannot be left to sort them by
+feel.
+
+`tracker.ps1`'s `swept` branch whitelists the fields it forwards, so `wall` goes
+into that list and into step 9d's array in the same change. A field the API
+accepts and the helper drops is a field that does not exist — that is what left
+58 of 63 rows with no endpoint for three days.
+
+### 5. Migration
 
 Merge the four rotations into one list of 139, keyed by `normalize()`. Preserve
 every search's `last_swept` per company, so no search re-sweeps its whole list
@@ -317,11 +372,12 @@ Whether a company with a confirmed board should stop consuming a rotation slot.
 It would change the revisit rate again and is worth its own decision once the
 batch change has a week behind it.
 
-A shared field for a wall. "DraftKings 403s a plain fetch", "Sportradar renders
-a client-side shell", "NBA's Phenom site exposes no JSON endpoint", "ESPN hires
-through Disney" are facts about websites and poolable in principle, but nothing
-in `company_fetch` holds them: `board` and `endpoint` describe a board that
-works, `dead_signal` describes a dead posting, and its `note` column is never
-written. So they stay in per-search notes and every search rediscovers them —
-the expensive kind, since a negative result is what somebody already spent a
-night proving.
+Opening `dead_signal`. It is unreachable for the same reason `wall` needed a
+design — `0010` asks for a warning in the prompt that nobody has written — and
+the two warnings would be near-identical, which is an argument for doing them
+together. They are not the same risk, though. A wrong `wall` costs a skipped
+fetch, bounded by the two-date rule, the seven-day expiry, and clearing itself
+the moment a fetch succeeds. A wrong `dead_signal` feeds delisting, which
+removes rows, and delisting already has to prove itself before it deletes
+anything. Same shape, different blast radius, so they do not ship on one
+warning. `dead_signal` stays shut.
