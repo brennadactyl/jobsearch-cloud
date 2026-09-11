@@ -49,7 +49,7 @@ export default function Shell({
 
   const n = data.tracks.length;
   const sub = n
-    ? `Verified openings across ${n} tracked search${n === 1 ? "" : "es"}, refreshed daily.`
+    ? `Verified openings across ${n} tracked search${n === 1 ? "" : "es"}, refreshed daily. Edit anything — it saves for every device.`
     : "No tracked searches configured yet — run the job-search-setup skill to add one.";
 
   return (
@@ -91,7 +91,9 @@ export default function Shell({
                 aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
                 title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
               >
-                {theme === "dark" ? "🌙" : "☀️"}
+                {/* The theme this switches TO, matching its own label - it showed
+                    the current one, which contradicted the label beside it. */}
+                {theme === "dark" ? "☀️" : "🌙"}
               </button>
             </div>
           </div>

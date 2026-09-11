@@ -430,7 +430,21 @@ switch ($Command) {
           if ($r -is [string]) { $company = ([string]$r).Trim() } else { $company = Field $r "company" }
           if (-not $company) { Refuse "a sweep with no company" "there is nothing to stamp"; continue }
           $row = @{ company = $company }
-          foreach ($f in @("board", "note")) {
+          # `endpoint` and `url_shape` travel to the shared company_fetch table
+          # and benefit every search on the deployment; `board` does too; `note`
+          # stays in this search's own row (see routes/coverage.js for which
+          # fields cross that boundary and why prose does not).
+          #
+          # They were missing from this list until 2026-09-11, which is the
+          # whole reason the shared table was broad and shallow: 58 of its 63
+          # rows had a board kind and no endpoint, because the only two fields
+          # a run could send were the two that were already duplicated
+          # elsewhere. A field the API accepts and the helper drops is a field
+          # that does not exist.
+          #
+          # `dead_signal` is deliberately still not passed - see prompt.js's
+          # step 9d.
+          foreach ($f in @("board", "endpoint", "url_shape", "note")) {
               $v = Field $r $f
               if ($v) { $row[$f] = $v }
           }

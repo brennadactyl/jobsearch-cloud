@@ -266,3 +266,88 @@ describe("the XSS boundary", () => {
     expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined();
   });
 });
+
+describe("the theme toggle", () => {
+  beforeEach(signedIn);
+
+  it("shows the theme it switches to, not the one you are in", async () => {
+    // These disagreed: the icon showed the current theme while the label beside
+    // it named the destination. Caught by putting the two clients side by side
+    // on the same account, not by any test - so here is the test.
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    const toggle = screen.getByRole("button", { name: /switch to (light|dark) theme/i });
+    const label = toggle.getAttribute("aria-label")!;
+    const destination = /light/i.test(label) ? "☀️" : "🌙";
+    expect(toggle.textContent, `label says "${label}" so the icon should be ${destination}`).toBe(destination);
+  });
+
+  it("keeps icon and label agreeing after it is pressed", async () => {
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    const toggle = screen.getByRole("button", { name: /switch to (light|dark) theme/i });
+    await userEvent.click(toggle);
+
+    const after = screen.getByRole("button", { name: /switch to (light|dark) theme/i });
+    const label = after.getAttribute("aria-label")!;
+    expect(after.textContent).toBe(/light/i.test(label) ? "☀️" : "🌙");
+  });
+});
+
+describe("every input is reachable by the stylesheet", () => {
+  // tracker.css selects inputs by attribute - input[type=text] and friends.
+  // An input rendered without a `type` attribute matches none of them however
+  // it *behaves*, and falls back to a raw browser default: white box, black
+  // text, inset border. That is invisible in jsdom (no styling at all) and
+  // invisible in a unit test that only asks whether a control exists, which is
+  // how the sign-in name field shipped looking wrong on a dark card.
+  const STYLED = ["text", "search", "url", "date", "password"];
+
+  function assertAllTyped() {
+    const inputs = [...document.querySelectorAll("input")];
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const el of inputs) {
+      const type = el.getAttribute("type");
+      expect(type, `an input rendered with no type attribute: #${el.id || el.getAttribute("aria-label")}`).not.toBeNull();
+      // Checkboxes and radios are styled separately and deliberately.
+      if (["checkbox", "radio"].includes(type!)) continue;
+      expect(STYLED, `type="${type}" is not one the stylesheet targets`).toContain(type);
+    }
+  }
+
+  it("on the gate", () => {
+    renderApp();
+    assertAllTyped();
+  });
+
+  it("on a leads tab, in both views", async () => {
+    signedIn();
+    window.history.pushState({}, "", "/all-leads");
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    assertAllTyped();
+    await userEvent.click(screen.getByRole("button", { name: "Grid" }));
+    assertAllTyped();
+  });
+
+  it("on the applications tab, in both views", async () => {
+    signedIn();
+    window.history.pushState({}, "", "/applications");
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    assertAllTyped();
+    await userEvent.click(screen.getByRole("button", { name: "Grid" }));
+    assertAllTyped();
+  });
+
+  it("in the password dialog", async () => {
+    signedIn();
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
+    await screen.findByRole("dialog");
+    assertAllTyped();
+  });
+});

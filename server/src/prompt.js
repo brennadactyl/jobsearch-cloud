@@ -281,6 +281,26 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
     ? `1c. Get this run's companies: \`./tracker companies\`. It writes \`companies.json\` - \`{companies: [{company, last_swept, board, note}], total, batch, cursor}\` - and lists them. The server picks them, capped at what one run can actually verify. **Cover exactly these, all of them**, and don't reach past them into the rest of the list in step 3: that list is longer than one run can do properly, and the failure mode isn't a company going uncovered for a day, it's every company being skimmed. They come back round - everything is reached once per cycle before anything is reached twice. \`board\` is a JSON endpoint already confirmed for that company (\`greenhouse\`, \`ashby\`, \`workday cxs\`, ...); it makes a company cheap to cover, not privileged - use it where it's there. The cap is about *this* list: "don't reach past them" means don't help yourself to the rest of the rotation early, and step 3b sends you outside it on purpose.
 `
     : "";
+  // ---- Why 9d asks for endpoint/url_shape but not dead_signal.
+  //
+  // PR #1 gave /api/coverage three shared fields - endpoint, url_shape,
+  // dead_signal - and for three days no run could reach any of them: this step
+  // named `{company, board, note}` and tracker.ps1 whitelisted the same two,
+  // so the API accepted fields nothing could send. 58 of the shared table's 63
+  // rows had a board kind and no endpoint as a result. That is fixed above for
+  // the two fields that are pure fetch mechanics.
+  //
+  // dead_signal stays out on purpose. migrations/0010 says to "read the
+  // warning in the run prompt before writing this field", and that warning
+  // does not exist yet - because writing it is not a sentence, it is the
+  // careful version of what went wrong on 2026-09-08: a run compared pages it
+  // could not read, found two strings they had in common, decided those meant
+  // "closed", and delisted ten live postings on the strength of it. The
+  // strings were boilerplate every response from that host carried. A field
+  // that turns one run's pattern-match into a delisting rule every search
+  // trusts needs that warning written properly first, and it is worth nothing
+  // until then: endpoint and url_shape are where the value is.
+  //
   // Two things dropped from 9e's emitted text and kept here, because both are
   // arguments against changes someone would otherwise make to this file:
   //
@@ -296,8 +316,19 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
   //   work nothing says it attempted.
   const sweepStep = rotates
     ? `9d. RECORD WHAT YOU COVERED. Write every company this run actually
-   attempted to \`swept.json\` - a JSON array of \`{company, board, note}\` -
-   and run \`./tracker swept swept.json\`.
+   attempted to \`swept.json\` - a JSON array of
+   \`{company, board, endpoint, url_shape, note}\` - and run
+   \`./tracker swept swept.json\`.
+
+   \`endpoint\` is the reachable thing itself - a slug, host or full URL
+   (\`nflcareers\`, \`wd504\`, \`https://boards-api.greenhouse.io/v1/boards/roblox/jobs\`);
+   "workday cxs" saves nobody anything while the tenant slug still has to be
+   guessed. \`url_shape\` is how one posting's URL is built when the endpoint
+   doesn't give it (\`apply.careers.microsoft.com/careers/job/<19-digit id>\`).
+   Send both whenever you establish them, including for a company that yielded
+   nothing - what you learned about reaching it is true either way. Those two
+   and \`board\` are pooled across every search here, so saying it once spares
+   everyone the same fetch; \`note\` is not, and stays on this search's row.
 
    This is the rotation's only memory. A run that covers companies without
    recording them leaves tomorrow's run covering the same ones, and the tail of

@@ -53,7 +53,12 @@ function Gate({ onSignedIn }: { onSignedIn: () => void }) {
         <h1>Job search access</h1>
         <p>Sign in to continue.</p>
         <label htmlFor="name">Name</label>
-        <input id="name" autoComplete="username" value={name} onChange={(e) => setName(e.target.value)} />
+        {/* type="text" is not decoration. The stylesheet selects inputs by
+            attribute (`input[type=text]`), and an input with no type attribute
+            matches none of them however it behaves - so it renders as a raw
+            browser default: white box, black text, inset border, in the middle
+            of a dark card. */}
+        <input id="name" type="text" autoComplete="username" value={name} onChange={(e) => setName(e.target.value)} />
         <label htmlFor="password">Password</label>
         <input
           id="password"
