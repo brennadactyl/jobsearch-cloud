@@ -449,8 +449,11 @@ const acme = cov[at("Acme")];
 check("a later stamp keeps the board an earlier run confirmed",
   acme.board === "greenhouse" && acme.last_swept === "2026-08-28" && acme.note === "blocked",
   JSON.stringify(acme));
+// Named for this run. The list is shared and outlives a run, so a fixed name
+// would already be on it - and a company already on the list keeps its place.
+const newcomer = `Initech ${Date.now().toString(36)}`;
 await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: "",
-  swept: [{ company: "Acme" }, { company: "Initech" }] } });
+  swept: [{ company: "Acme" }, { company: newcomer }] } });
 const seeded = (await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK })).json.companies;
 check("registering with an empty date doesn't overwrite a real sweep",
   seeded.find((c) => c.company === "Acme").last_swept === "2026-08-28");
@@ -459,22 +462,31 @@ check("registering with an empty date doesn't overwrite a real sweep",
 // overall" is a fact about the whole run rather than about where a new company
 // joins.
 check("a newly registered company joins past everything already in the log",
-  seeded.find((c) => c.company === "Initech").position >
-  Math.max(...cov.filter((c) => c.company !== "Initech").map((c) => c.position)),
+  seeded.find((c) => c.company === newcomer).position > Math.max(...cov.map((c) => c.position)),
   JSON.stringify({
-    initech: seeded.find((c) => c.company === "Initech").position,
+    newcomer: seeded.find((c) => c.company === newcomer).position,
     highestBefore: Math.max(...cov.map((c) => c.position)),
   }));
 check("recording against a track you don't have 404s",
   (await req("POST", "/api/coverage", { token: A_TOK, body: { search: "GHOST", swept: [{ company: "Acme" }] } })).status === 404);
 check("an empty sweep list is refused rather than stamping nothing",
   (await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", swept: [] } })).status === 400);
-check("B's coverage for the same track key is B's own",
-  (await req("GET", "/api/coverage/SWE", { token: B_TOK })).json.companies.length === 0);
-check("the prompt gains the rotation steps once a track has rows",
-  (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text.includes("1c. Get this run's companies"));
-check("and B's, with no rows, does not",
-  !(await req("GET", "/api/prompt/SWE", { token: B_TOK })).text.includes("1c. Get this run's companies"));
+// One list for every search (0011_one_company_list.sql). What B shares with A
+// is membership: a company A put on the list is on B's too. What B must never
+// see is A's record of it - when A last tried it, and what A noted there. A's
+// Acme was swept on 2026-08-28 and noted "blocked" just above; B has never
+// swept anything.
+const bList = (await req("GET", "/api/coverage/SWE?all=1", { token: B_TOK })).json.companies;
+const bAcme = bList.find((c) => c.company.toLowerCase() === "acme");
+check("a company one account puts on the list is on every account's list",
+  !!bAcme, JSON.stringify(bList.slice(0, 5).map((c) => c.company)));
+check("but another account's sweep date for it does not travel",
+  !!bAcme && bAcme.last_swept === "", JSON.stringify(bAcme));
+check("nor does another account's note",
+  !!bAcme && bAcme.note === "", JSON.stringify(bAcme));
+check("every track gets the rotation steps once anything is on the list",
+  (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text.includes("1c. Get this run's companies")
+  && (await req("GET", "/api/prompt/SWE", { token: B_TOK })).text.includes("1c. Get this run's companies"));
 
 // ---- Every call the nightly run has to make, still reachable from the text.
 //
@@ -510,24 +522,28 @@ check("the prompt says where the helper is and how to run it if the shim won't e
 check("step 4 still requires every candidate URL to be opened and confirmed",
   /MANDATORY VERIFICATION: fetch every candidate URL directly and confirm it renders an actual job description/
     .test(sweSteps) && /A search-snippet URL is a lead, not a finding, until opened and confirmed/.test(sweSteps));
-check("a track with no rotation gets neither rotation command",
-  !boSteps.includes("./tracker companies") && !boSteps.includes("./tracker swept"));
+// There is no track without a rotation while anything is on the list: B has
+// never swept a company and still gets both commands. Gating them on a track's
+// own rows was the loop that left a track with none unable to ever start.
+check("a track that has never swept anything still gets both rotation commands",
+  boSteps.includes("./tracker companies") && boSteps.includes("./tracker swept"));
 // The cap is the whole point, and it has to hold on the night it matters most:
 // a freshly seeded list, where every row is never-swept and nothing has a date
 // to sort by. It also has to be the *server's* cap - the prompt describing one
 // is what this replaced.
-// A's list, not B's - B is the "no coverage rows" control for the check above,
-// and seeding B here is what quietly broke it the first time. Company names are
-// unique per run, and there are enough of them that stamping one batch still
-// leaves a full batch of never-swept behind: that's what makes the last check
-// below true on a re-run against a database that kept the last run's rows.
+// Seeded as A, never as B - B is the account that has never swept anything.
+// Company names are unique per run, and there are enough of them that stamping
+// one batch still leaves a full batch of never-swept behind: that's what makes
+// the last check below true on a re-run against a database that kept the last
+// run's rows.
 const runId = Date.now().toString(36);
 await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: "", swept:
   Array.from({ length: 40 }, (_, i) => ({ company: `Co-${runId}-${String(i).padStart(2, "0")}` })) } });
 const due = (await req("GET", "/api/coverage/SWE", { token: A_TOK })).json;
 const all = (await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK })).json;
+// COVERAGE_BATCH in routes/coverage.js - 24 since the list became one list.
 check("a run is handed a capped slice, not the whole list",
-  due.companies.length === 12 && due.batch === 12 && due.total > 12,
+  due.companies.length === 24 && due.batch === 24 && due.total > 24,
   JSON.stringify({ n: due.companies.length, total: due.total, batch: due.batch }));
 check("?all=1 returns the whole table, for seeding and for looking",
   all.companies.length === all.total && all.total === due.total);
@@ -540,6 +556,16 @@ check("the log is a dense sequence, so the cursor cannot skip or repeat",
   new Set(positions).size === positions.length &&
   positions.every((p, i) => i === 0 || p > positions[i - 1]),
   JSON.stringify(positions.slice(0, 15)));
+// ?all=1 looks up the shared facts for every company it returns, and D1 refuses
+// a statement with more than 100 bound parameters. One search's rotation never
+// got near that; one list does - 139 companies on the live deployment - and the
+// read returned 500 until it was chunked. Put this run past the cap first.
+await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: "", swept:
+  Array.from({ length: 100 }, (_, i) => ({ company: `Wide-${runId}-${String(i).padStart(3, "0")}` })) } });
+const wide = await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK });
+check("the whole list reads back past D1's 100-parameter cap",
+  wide.status === 200 && wide.json.total > 100 && wide.json.companies.length === wide.json.total,
+  JSON.stringify({ status: wide.status, total: wide.json && wide.json.total }));
 const today = "2026-09-01";
 await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: today,
   swept: due.companies.map((c) => ({ company: c.company })) } });
@@ -569,21 +595,26 @@ await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: "",
 // person and is nearly always alphabetical, so assigning positions in arrival
 // order would rebuild exactly the bias migration 0008 removed.
 const seedOrder = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.companies;
+// The list is shared, so this track's ?all=1 holds every company on it; the
+// fourteen seeded here are the ones named for this run.
+const seededHere = seedOrder.filter((c) => c.company.startsWith(`Rot ${rotStamp}-`));
 check("a seeded list is shuffled, not stored in the order it was posted",
-  seedOrder.map((c) => c.company).join() !==
+  seededHere.map((c) => c.company).join() !==
   Array.from({ length: rotN }, (_, i) => `Rot ${rotStamp}-${String(i).padStart(2, "0")}`).join(),
-  JSON.stringify(seedOrder.map((c) => c.company.split("-").pop()).join(",")));
+  JSON.stringify(seededHere.map((c) => c.company.split("-").pop()).join(",")));
 check("but every seeded company is present exactly once",
-  seedOrder.length === rotN && new Set(seedOrder.map((c) => c.position)).size === rotN);
+  seededHere.length === rotN && new Set(seededHere.map((c) => c.position)).size === rotN,
+  JSON.stringify({ found: seededHere.length, of: rotN }));
 
 const c0 = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
 check("seeding registers companies without moving the cursor",
-  c0.cursor === 0 && c0.total === rotN, JSON.stringify({ cursor: c0.cursor, total: c0.total }));
+  c0.cursor === 0 && c0.total >= rotN, JSON.stringify({ cursor: c0.cursor, total: c0.total }));
 const day = "2026-09-11";
 const rec1 = await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
   swept: c0.companies.map((c) => ({ company: c.company })) } });
 check("recording a slice advances the cursor past it",
-  rec1.json.cursor === 12, JSON.stringify({ cursor: rec1.json.cursor }));
+  rec1.json.cursor === Math.max(...c0.companies.map((c) => c.position)) + 1,
+  JSON.stringify({ cursor: rec1.json.cursor, highestInSlice: Math.max(...c0.companies.map((c) => c.position)) }));
 
 // The replacement case, with no date filter anywhere.
 const c1 = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
@@ -604,13 +635,40 @@ const c2 = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
 // or after it and starts again at the front. Wrapping on write instead meant
 // taking the cursor modulo the company *count* - a different quantity from a
 // position as soon as anything is excluded or a position is skipped.
+// With one shared list the end of the log is further away than a
+// fourteen-company track put it, so walk a whole cycle the way nightly runs
+// do: read a slice, record all of it, repeat, noting each company the first
+// time it is served. Every company must be reached before any is served a
+// second time - including across the slice that runs off the end of the log
+// and back round to the front, which a real rotation hits once every cycle.
+const cycleTotal = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.total;
+const reached = new Set();
+let servedTwiceEarly = 0;
+for (let guard = 0; guard < 200 && reached.size < cycleTotal; guard++) {
+  const s = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
+  for (const c of s.companies) {
+    if (reached.size === cycleTotal) break;
+    if (reached.has(c.company)) servedTwiceEarly++;
+    reached.add(c.company);
+  }
+  await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
+    swept: s.companies.map((c) => ({ company: c.company })) } });
+}
+// Wrapping happens at the read, not the write: record the company furthest
+// along the log and the cursor is left past its end; the next read finds
+// nothing at or after it and starts again at the front.
+const whole = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.companies;
+const furthest = whole.reduce((a, c) => (c.position > a.position ? c : a));
+const pastEnd = await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
+  swept: [{ company: furthest.company }] } });
+const fromFront = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
 check("once past the end, the next slice starts again at the front of the log",
-  c2.companies[0].position === Math.min(...c2.companies.map((x) => x.position)) &&
-  c2.cursor > Math.max(...c2.companies.map((x) => x.position)),
-  JSON.stringify({ cursor: c2.cursor, firstServed: c2.companies[0].position }));
+  pastEnd.json.cursor > furthest.position &&
+  fromFront.companies[0].position === Math.min(...whole.map((c) => c.position)),
+  JSON.stringify({ cursor: pastEnd.json.cursor, furthest: furthest.position, firstServed: fromFront.companies[0].position }));
 check("and a full cycle reached every company before repeating any",
-  new Set(c0.companies.concat(c1.companies).map((x) => x.company)).size === rotN,
-  JSON.stringify({ reached: new Set(c0.companies.concat(c1.companies).map((x) => x.company)).size, of: rotN }));
+  reached.size === cycleTotal && servedTwiceEarly === 0,
+  JSON.stringify({ reached: reached.size, of: cycleTotal, servedTwiceEarly }));
 
 // Resilience: a run that dies before reporting must not skip its slice.
 const before = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
@@ -652,7 +710,8 @@ await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
   swept: [{ company: found }] } });
 const rotAll = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.companies;
 check("a company found by discovery appends to the end of the log",
-  rotAll[rotAll.length - 1].company === found && rotAll.length === rotN + 1,
+  rotAll[rotAll.length - 1].company === found &&
+  rotAll[rotAll.length - 1].position > Math.max(...rotAll.slice(0, -1).map((c) => c.position)),
   JSON.stringify({ last: rotAll[rotAll.length - 1].company, total: rotAll.length }));
 check("positions stay dense and unique after an append",
   new Set(rotAll.map((c) => c.position)).size === rotAll.length,
@@ -1464,11 +1523,10 @@ console.log("\n== shared company fetch intel ==");
 // checks are the boundary: website facts pool, search facts do not.
 //
 // Two throwaway users, deliberately. Ada and Bo carry controls other sections
-// depend on - Bo's SWE track is the "no coverage rows" case a check above
-// relies on - and coverage rows outlive a DELETE FROM users, so seeding Bo
-// here passes today and breaks that check on the NEXT run against the same
-// database. Which is exactly how it broke the first time; see the comment
-// there.
+// depend on - Bo is the account that has never swept anything, which the
+// company coverage checks use to show another account's sweep dates and notes
+// do not reach it - and coverage rows outlive a DELETE FROM users, so sweeping
+// as Bo here would break that on the next run against the same database.
 const ciPw = "company-intel-long-password";
 const ciTok = {};
 for (const n of ["IntelOne", "IntelTwo"]) {
@@ -1479,16 +1537,22 @@ for (const n of ["IntelOne", "IntelTwo"]) {
 }
 const T1 = ciTok.IntelOne, T2 = ciTok.IntelTwo;
 
+// A company named for this run. The list is shared and outlives a run, so a
+// fixed name would carry the last run's sweep dates into this run's checks.
+const ciRun = Date.now().toString(36);
+const F5 = `F5 Networks ${ciRun}`;
 const ciA = await req("POST", "/api/coverage", { token: T1, body: { search: "ENG",
   on: "2026-09-08", swept: [
-    { company: "F5 Networks", board: "workday cxs", endpoint: "ffive.wd5/f5jobs",
+    { company: F5, board: "workday cxs", endpoint: "ffive.wd5/f5jobs",
       note: "private note that must not travel" } ] } });
 check("recording a sweep also writes a shared row", ciA.json.shared === 1, JSON.stringify(ciA.json));
 
 await req("POST", "/api/coverage", { token: T2, body: { search: "ENG",
-  on: "", swept: [{ company: "f5 networks" }] } });
-const bF5 = (await req("GET", "/api/coverage/ENG", { token: T2 }))
-  .json.companies.find((c) => c.company.toLowerCase() === "f5 networks");
+  on: "", swept: [{ company: F5.toLowerCase() }] } });
+// ?all=1: the list is long, and F5 need not be in the slice this search is
+// handed tonight. These checks are about what travels with it, not where it sits.
+const bF5 = (await req("GET", "/api/coverage/ENG?all=1", { token: T2 }))
+  .json.companies.find((c) => c.company.toLowerCase() === F5.toLowerCase());
 check("another user's rotation receives the shared endpoint",
   bF5 && bF5.known && bF5.known.endpoint === "ffive.wd5/f5jobs", JSON.stringify(bF5));
 check("company name matching is normalize()d, not exact",
@@ -1501,20 +1565,75 @@ check("the other user's own sweep dates stay their own",
   bF5 && bF5.last_swept === "", JSON.stringify(bF5));
 
 await req("POST", "/api/coverage", { token: T2, body: { search: "ENG",
-  on: "2026-09-09", swept: [{ company: "F5 Networks" }] } });
-const stillThere = (await req("GET", "/api/coverage/ENG", { token: T2 }))
-  .json.companies.find((c) => c.company.toLowerCase() === "f5 networks");
+  on: "2026-09-09", swept: [{ company: F5 }] } });
+const stillThere = (await req("GET", "/api/coverage/ENG?all=1", { token: T2 }))
+  .json.companies.find((c) => c.company.toLowerCase() === F5.toLowerCase());
 check("a terse later sweep does not blank an established endpoint",
   stillThere.known && stillThere.known.endpoint === "ffive.wd5/f5jobs",
   JSON.stringify(stillThere.known));
 
+// Named for this run, like F5 above: a fixed name is already on the shared list
+// from earlier runs, carrying whatever those runs left on it.
+const seededCo = `Seeded Co ${ciRun}`;
 await req("POST", "/api/coverage", { token: T1, body: { search: "ENG",
-  on: "", swept: [{ company: "Seeded Co", board: "greenhouse" }] } });
+  on: "", swept: [{ company: seededCo, board: "greenhouse" }] } });
 const allView = (await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).json.companies;
 check("seeding (on: \"\") writes no shared fact",
-  !allView.find((c) => c.company === "Seeded Co").known);
+  !allView.find((c) => c.company === seededCo).known,
+  JSON.stringify(allView.find((c) => c.company === seededCo)));
 check("the ?all=1 view carries intel too",
-  allView.find((c) => c.company === "F5 Networks").known.board === "workday cxs");
+  allView.find((c) => c.company === F5).known.board === "workday cxs");
+
+console.log("\n== one company list, and a wall that expires ==");
+// 0011_one_company_list.sql. Membership is shared across accounts; each
+// search's record of a company is not. A wall is a shared fact that has to be
+// earned on two separate dates, and goes stale seven days after the last.
+const olRun = Date.now().toString(36);
+const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+
+const sharedCo = `Shared Co ${olRun}`;
+await req("POST", "/api/coverage", { token: T1, body: { search: "ENG", on: daysAgo(0),
+  swept: [{ company: sharedCo, note: "IntelOne was here" }] } });
+const t2Shared = (await req("GET", "/api/coverage/ENG?all=1", { token: T2 })).json.companies
+  .find((c) => c.company === sharedCo);
+check("a company one account sweeps joins every account's list",
+  !!t2Shared, JSON.stringify(t2Shared));
+check("but it is not stamped as swept for any other account",
+  !!t2Shared && t2Shared.last_swept === "", JSON.stringify(t2Shared));
+check("and the sweeping account's note stays with it",
+  !!t2Shared && t2Shared.note === "", JSON.stringify(t2Shared));
+check("a company nothing is known about carries no `known`",
+  !!t2Shared && !("known" in t2Shared), JSON.stringify(t2Shared));
+
+const wallCo = `Wall Co ${olRun}`;
+const reportWall = (tok, on, extra) => req("POST", "/api/coverage", { token: tok, body: { search: "ENG", on,
+  swept: [{ company: wallCo, ...extra }] } });
+const wallRow = async () => (await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).json.companies
+  .find((c) => c.company === wallCo);
+const servedWall = async () => { const r = await wallRow(); return r && r.known ? r.known.wall : undefined; };
+
+await reportWall(T1, daysAgo(1), { wall: "403 on a plain fetch" });
+check("a wall recorded on one date is not served yet", (await servedWall()) === undefined);
+await reportWall(T2, daysAgo(1), { wall: "403 on a plain fetch" });
+check("a second report on the same date is still one date, not two", (await servedWall()) === undefined);
+await reportWall(T2, daysAgo(0), { wall: "403 on a plain fetch" });
+check("a wall recorded on two separate dates is served to every search",
+  (await servedWall()) === "403 on a plain fetch", JSON.stringify(await wallRow()));
+const earned = await wallRow();
+check("meeting a wall does not mark the row verified",
+  !!earned && !!earned.known && earned.known.verified_on === "", JSON.stringify(earned && earned.known));
+await reportWall(T1, daysAgo(0), { board: "greenhouse" });
+check("a reported board clears the wall", (await servedWall()) === undefined, JSON.stringify(await wallRow()));
+
+const staleCo = `Stale Wall ${olRun}`;
+for (const on of [daysAgo(20), daysAgo(19)]) {
+  await req("POST", "/api/coverage", { token: T1, body: { search: "ENG", on,
+    swept: [{ company: staleCo, wall: "empty JS shell" }] } });
+}
+const staleWall = (await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).json.companies
+  .find((c) => c.company === staleCo);
+check("an earned wall last seen more than seven days ago is not served, so the next run re-tests it",
+  !!staleWall && (!staleWall.known || staleWall.known.wall === undefined), JSON.stringify(staleWall));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
