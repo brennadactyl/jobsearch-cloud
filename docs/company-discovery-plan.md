@@ -40,7 +40,7 @@ describes a company, never a search.
 | `source` | `job`, `search`, `person` |
 | `evidence_url` | for `added`: the live posting that qualified it |
 | `note` | |
-| `first_on`, `last_on` | local dates |
+| `first_on`, `last_on` | UTC dates, stamped by the server |
 | `tries` | |
 
 | outcome | meaning | served again |
@@ -96,7 +96,8 @@ searches find it when their cursor reaches that company.
 ### 3. Server rules
 
 What is served and what is written is decided in `server/src/discovery.js` and
-the routes, not in the prompt.
+the routes, not in the prompt. Every date here is the server's UTC date: no
+caller sends one, and the retry windows are counted in UTC days.
 
 `GET /api/discovery` returns:
 
@@ -104,10 +105,10 @@ the routes, not in the prompt.
   recent `last_on` is oldest; never-tried industries first, ties in list order.
   The list is `DISCOVERY_INDUSTRIES`, today's step-3b industries.
 - `suggestions`, `list`, `recent` (rows inside their retry window), and
-  `remaining` - `DISCOVERY_ADD_CAP` (6) minus today's `added` rows with
+  `remaining` - `DISCOVERY_ADD_CAP` (6) minus the current UTC day's `added` rows with
   `source = 'job'`.
 
-`POST /api/discovery` takes `{on, source, found: [...]}` and returns
+`POST /api/discovery` takes `{source, found: [...]}` and returns
 `{added, logged, known, too_soon, over_cap}`:
 
 - A demo account gets 403, as on `POST /api/coverage`.
