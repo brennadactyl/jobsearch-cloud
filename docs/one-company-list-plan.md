@@ -53,10 +53,17 @@ company nothing has looked at yet. Attach it only when a fact field is populated
 
 ### 2. What stays per search
 
-`company_sweeps` keeps `(user_id, search, company_key, last_swept)` and loses
-`company`, `board` and `position`. It answers one question: when did this search
-last try this company. `tracks.sweep_cursor` stays as it is — how far this
-search has read.
+`company_sweeps` keeps `(user_id, search, company_key, last_swept, note)` and
+loses `company`, `board` and `position`. `tracks.sweep_cursor` stays as it is —
+how far this search has read.
+
+`note` stays, explicitly. It holds what a search learned about a company for
+itself — "65 reqs reconfirmed via Greenhouse board, 2 existing tracked leads
+still open", "no open backend/SWE roles, reconfirms stable no-roles state" — and
+243 of 272 rows carry one, 50,755 characters. It has no other home:
+`upsertCompanyFetch` deliberately excludes it because "prose is where a search's
+own reasoning leaks", so dropping it here deletes it. Step 9d also tells every
+run that `note` "stays on this search's row", which would stop being true.
 
 This resolves issue #2. `board` lives in `company_fetch` only.
 
@@ -68,6 +75,11 @@ This resolves issue #2. `board` lives in `company_fetch` only.
 properly". Runs currently cover 12 in 700–1500s, so 24 is roughly double the
 work in a night. Read the run lengths and the sweep counts for the first week
 and move the number if runs start finishing short.
+
+Read step 9e before the batch number takes the blame. It re-fetches when
+companies in a slice were unreadable, so a bad night compounds on top of 24
+rather than 12 — CPM swept 39 across three batches on 2026-09-11 with the batch
+still at 12.
 
 ### 4. Migration
 
@@ -93,10 +105,15 @@ the header should say what it now is rather than being left to contradict the
 schema.
 
 What becomes public is the union. Each person knows what they added, so the
-remainder is attributable to "one of the other two" — with three accounts, an
-even guess, not zero. What stays scoped is attribution: `last_swept` and the
-cursor remain per user and per search, so nobody learns who is watching what, or
-when anyone else's rotation reached a company.
+remainder is attributable to "one of the other two" — and better than an even
+guess, because the companies are characteristic: a games studio or a
+sports-betting company that someone did not add is not a coin flip between two
+strangers, and under pooled discovery its presence also says a run surfaced it
+recently. Attribution degrades rather than holding.
+
+What does stay scoped is the record of who looked and when: `last_swept`, the
+cursor and `note` remain per user and per search. Say it that way in the header.
+A rule that overstates its own protection is the kind people rely on.
 
 Amend 0010's header in the same change. A rule that no longer describes the
 schema is worse than no rule.
@@ -127,3 +144,12 @@ The response shape `{companies, total, batch, cursor}` does not change, so
 Whether a company with a confirmed board should stop consuming a rotation slot.
 It would change the revisit rate again and is worth its own decision once the
 batch change has a week behind it.
+
+A shared field for a wall. "DraftKings 403s a plain fetch", "Sportradar renders
+a client-side shell", "NBA's Phenom site exposes no JSON endpoint", "ESPN hires
+through Disney" are facts about websites and poolable in principle, but nothing
+in `company_fetch` holds them: `board` and `endpoint` describe a board that
+works, `dead_signal` describes a dead posting, and its `note` column is never
+written. So they stay in per-search notes and every search rediscovers them —
+the expensive kind, since a negative result is what somebody already spent a
+night proving.
