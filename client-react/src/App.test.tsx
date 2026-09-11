@@ -233,7 +233,9 @@ describe("the applications grid", () => {
 
     await userEvent.click(header);
 
-    expect(await screen.findByRole("button", { expanded: false })).toHaveTextContent("Couldn’t be read");
+    // By name as well as state: the grid's Details buttons are disclosure
+    // toggles too, and carry aria-expanded="false" while their rows are shut.
+    expect(await screen.findByRole("button", { name: /Couldn’t be read/, expanded: false })).toBeInTheDocument();
     expect(document.querySelectorAll("tbody tr:not(.group):not(.more-row)")).toHaveLength(before - count);
   });
 });
