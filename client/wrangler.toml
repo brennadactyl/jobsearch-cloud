@@ -1,25 +1,12 @@
 name = "job-search-tracker-client"
 compatibility_date = "2025-01-01"
 
-# Static single-file app, no build step, no server-side code - deployed as
-# a Worker whose only content is a static assets directory (Cloudflare's
-# current recommended path for a pure static site, having since superseded
-# classic "Pages" - `wrangler deploy` here uploads and serves this
-# directory directly, no `main` entry-point needed). Still a fully separate
-# deployable from ../server/ - different name, different URL, no shared
-# code - just a different Cloudflare product under the hood than the
-# "Cloudflare Pages" name implied a year ago.
+# Static assets only - no build step, no `main`. A separate deployable from
+# ../server/.
 #
-# `directory` points at ./public, NOT this folder itself - assets upload
-# publishes literally everything under `directory` with no exceptions, so
-# README.md/package.json/wrangler.toml/.wrangler (which briefly held an
-# account-identifying file) must live outside it, not be filtered out of it.
-#
-# The inverse of that is the sharper edge, and it cost a live site once: it
-# publishes *only* what's there. A deploy replaces the live file list, so a
-# file missing from this directory is deleted from the deployment rather than
-# left alone - and the one required file a healthy-looking checkout can be
-# missing is the gitignored `local-config.js`, which a git worktree never has.
-# `npm run deploy` guards against exactly that; see ./predeploy-check.mjs.
+# Everything under `directory` is published, so README.md, package.json and
+# wrangler.toml stay outside ./public. A deploy also deletes live files missing
+# from it: deploy with `npm run deploy`, whose predeploy-check.mjs refuses when
+# the gitignored local-config.js is absent, as it is in any worktree.
 [assets]
 directory = "./public"

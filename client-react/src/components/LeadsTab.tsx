@@ -1,13 +1,7 @@
 /**
- * A track's leads, or every track's for the pooled tab.
- *
- * One component draws both: `key === ALL_LEADS` is the only difference that
- * reaches the rows. Everything a single track has and a pooled list cannot
- * - its description, its run stamp, the empty state that explains why a search
- * found nothing - is skipped rather than faked.
- *
- * Every control here writes: status through its own endpoint, every other
- * field on blur. See ./writes.tsx.
+ * A track's leads, or every track's for the pooled tab. What only a single track
+ * has - its run stamp, the empty state explaining why a search found nothing -
+ * is skipped for the pooled tab rather than faked.
  */
 import { Fragment, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -89,9 +83,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
         </div>
         <ViewSwitch />
       </div>
-      {/* The controls people touch constantly stay full-weight above. Sort and
-          this row's other contents are settings you glance at, so they share
-          one quieter line. */}
+      {/* Sort sits in this quieter row: it is glanced at, not touched constantly. */}
       <div className="key">
         <SortSelect kind="leads" id="leadSort" />
         <GeoKey settings={settings} />
@@ -124,9 +116,8 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
     // turned up nothing from one whose finds have all been applied to; the run
     // record separates a real zero from a search that hasn't run in a week.
     const st = runState(track?.last_run, settings);
-    // Both states earn the warning. Parenthesised because `a || b && x` binds as
-    // `a || (b && x)`, which rendered the boolean `true` - nothing at all - for a
-    // stale search, the very case the warning exists for.
+    // Parenthesised: `a || b && x` binds as `a || (b && x)`, which renders
+    // `true` (nothing) for a stale search.
     const warn = (st === "stale" || st === "error") && (
       <div className="empty-warn">
         But this search hasn’t reported a clean run recently — check the scheduled task before reading this as a genuine
@@ -238,7 +229,6 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   );
 }
 
-/** Clearing a drill is a link back to the same tab without the query param. */
 function clearDrillTo(trackKey: string, params: URLSearchParams): string {
   const next = new URLSearchParams(params);
   next.delete("drill");
@@ -275,7 +265,6 @@ function LeadsGrid({
   const prefs = usePrefs();
   const { settings } = data;
   const cols = 6 + LEAD_GRID_FIELDS.length + (isAll ? 1 : 0);
-  // The row Detail shows is the row highlighted here, by the same rule.
   const shownId = shownRow(rows, prefs.selected[trackKey]).id;
 
   return (
@@ -417,12 +406,9 @@ function LeadDetail({ lead, data }: { lead: Lead; data: TrackerData }) {
 }
 
 /**
- * The track line of a lead's header.
- *
- * A board with one track has nowhere to move a lead to, so it stays the plain
- * label it always was; with more, it is a picker over every configured tab.
- * Options carry the track *key* rather than the label, so two tabs sharing a
- * label still move correctly and a rename does not break the control.
+ * The track line of a lead's header: a plain label with one track, a picker with
+ * more. Options carry the track *key*, so two tabs sharing a label still move
+ * correctly and a rename doesn't break the control.
  */
 function MoveLead({ lead, data }: { lead: Lead; data: TrackerData }) {
   const move = useMoveLead();
@@ -453,13 +439,7 @@ function MoveLead({ lead, data }: { lead: Lead; data: TrackerData }) {
   );
 }
 
-/**
- * Removing a posting asks for a reason rather than just confirming.
- *
- * The reason is stored on the screened row the removal leaves behind, which is
- * both the only lasting record of why it went and the thing that stops
- * tomorrow's run rediscovering the URL and adding it straight back.
- */
+/** Asks for a reason rather than just confirming - see client.ts deleteLead. */
 function RemoveLead({ lead }: { lead: Lead }) {
   const del = useDeleteLead();
   const name = `${lead.company} ${lead.title}`.trim() || "this posting";

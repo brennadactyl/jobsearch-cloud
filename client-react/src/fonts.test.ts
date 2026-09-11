@@ -1,16 +1,7 @@
 /**
- * Every font family the stylesheet names has to actually be requested.
- *
- * This exists because it went wrong. The font link in index.html was written by
- * hand rather than copied from the page the CSS came from, and it left out
- * Bricolage Grotesque - which the stylesheet asks for on every heading. The
- * failure is silent by design: the family is simply absent, the browser walks
- * to the next entry in the stack, and the page renders in a plausible wrong
- * face. It survived a build, a deploy, and a screenshot before a check of what
- * the browser had actually loaded caught it.
- *
- * The same shape as the theme test: a rule that would otherwise hold only for
- * as long as everyone remembers it.
+ * Every font family tracker.css names must be requested in index.html, and the
+ * reverse. A missing family fails silently: the browser falls back to the next
+ * in the stack and renders a plausible wrong face.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

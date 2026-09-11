@@ -1,17 +1,10 @@
 /**
- * The gate, the shell and the drill-downs, queried the way a person reaches
- * them.
+ * The gate, the shell and the drill-downs, found by role and accessible name, so
+ * a div with a click handler (no role to find) fails these.
  *
- * Everything is found by role and accessible name rather than by class or test
- * id, which is what makes "every interactive element is a real control" an
- * assertion rather than a convention: a div with a click handler has no role to
- * find, so these fail if one appears.
- *
- * The last group is the one that matters most. It walks the actual invariant
- * end to end - read the number off a tile, click it, count the rows that
- * arrive - which is the only version of that check a unit test on the domain
- * layer cannot make, because it crosses the component/route boundary the two
- * halves used to disagree across.
+ * The drill-down group reads the number off a tile, clicks it and counts the rows
+ * that arrive: the end-to-end check across the component/route boundary that
+ * domain tests can't make.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -242,8 +235,7 @@ describe("the applications grid", () => {
 
 describe("the XSS boundary", () => {
   it("renders hostile lead data as text and refuses a javascript: href", async () => {
-    // React covers the text half. safeUrl covers the half it does not: a
-    // javascript: URL is something React will render into an href quite happily.
+    // React covers the text half; safeUrl covers the href half.
     localStorage.setItem("tracker_token", "a-token");
     vi.spyOn(client, "getData").mockResolvedValue({
       ...fixture,
@@ -273,9 +265,6 @@ describe("the theme toggle", () => {
   beforeEach(signedIn);
 
   it("shows the theme it switches to, not the one you are in", async () => {
-    // These disagreed: the icon showed the current theme while the label beside
-    // it named the destination. Caught by putting the two clients side by side
-    // on the same account, not by any test - so here is the test.
     renderApp();
     await screen.findByRole("heading", { name: "Fixture Search" });
 
@@ -299,12 +288,9 @@ describe("the theme toggle", () => {
 });
 
 describe("every input is reachable by the stylesheet", () => {
-  // tracker.css selects inputs by attribute - input[type=text] and friends.
-  // An input rendered without a `type` attribute matches none of them however
-  // it *behaves*, and falls back to a raw browser default: white box, black
-  // text, inset border. That is invisible in jsdom (no styling at all) and
-  // invisible in a unit test that only asks whether a control exists, which is
-  // how the sign-in name field shipped looking wrong on a dark card.
+  // tracker.css selects inputs by attribute (input[type=text] and friends), so
+  // an input with no `type` gets the browser's default look - which jsdom,
+  // applying no styling, can't show.
   const STYLED = ["text", "search", "url", "date", "password"];
 
   function assertAllTyped() {
@@ -358,9 +344,6 @@ describe("the browser tab", () => {
   beforeEach(signedIn);
 
   it("takes its title from config once signed in, as the heading does", async () => {
-    // The old client set document.title from display_title on sign-in. The port
-    // didn't, and the tab read "Job Search Tracker" over a page headed with the
-    // account's own search - found by reading the title on the deployed site.
     document.title = "Job Search Tracker";
     renderApp();
     await screen.findByRole("heading", { name: "Fixture Search" });

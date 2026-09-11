@@ -1,8 +1,3 @@
-/**
- * Gate, then the tracker.
- *
- * See ../../docs/react-adoption-plan.md.
- */
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
@@ -11,7 +6,6 @@ import Shell from "./components/Shell";
 import { clearPrefs } from "./ui/prefs";
 import { saved } from "./ui/saved";
 
-/** How the gate was reached: opening the page, or a session ending. */
 interface GateState {
   /** Why you are here - an expired session, a revoke that didn't land. Empty for a plain sign-out. */
   notice: string;
@@ -20,8 +14,7 @@ interface GateState {
 }
 
 function Gate({ notice, focusPassword, onSignedIn }: GateState & { onSignedIn: () => void }) {
-  // Prefilled from the last sign-in on this browser - the name is remembered
-  // across sign-outs, the token is not.
+  // The name outlives a sign-out; the token doesn't.
   const [name, setName] = useState(session.name);
   const [password, setPassword] = useState("");
   // Null until a sign-in is attempted, so until then the gate shows the notice
@@ -60,18 +53,10 @@ function Gate({ notice, focusPassword, onSignedIn }: GateState & { onSignedIn: (
 
   return (
     <div id="gate">
-      {/* A real form, so Enter submits without a keydown handler saying so. */}
       <form className="card" onSubmit={submit}>
         <h1>Job search access</h1>
         <p>Sign in to continue.</p>
-        {/* Named by placeholder, as on the page this replaces, with aria-label
-            carrying the same name for assistive tech.
-
-            type="text" is not decoration. The stylesheet selects inputs by
-            attribute (`input[type=text]`), and an input with no type attribute
-            matches none of them however it behaves - so it renders as a raw
-            browser default: white box, black text, inset border, in the middle
-            of a dark card. */}
+        {/* type="text" matters: tracker.css selects inputs by attribute. */}
         <input
           type="text"
           placeholder="Name"
@@ -138,9 +123,6 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
     );
   }
 
-  // Only the Overview pins its header and tiles and scrolls the rest; the other
-  // tabs scroll as documents, with their own list panes capped inside the
-  // master/detail card.
   return <Shell data={data} isOverview={location.pathname === "/"} onSignOut={onSignOut} />;
 }
 
@@ -151,9 +133,7 @@ function Root() {
   const navigate = useNavigate();
 
   // Every way a session ends arrives here: Log out, and a 401 on any read or
-  // write once the token has been revoked somewhere else. Handling only the
-  // read's 401 left a failed write on a page that looked signed in and could
-  // no longer save anything.
+  // write, so a failed write can't leave a page that looks signed in.
   useEffect(
     () =>
       session.onEnd((reason) => {

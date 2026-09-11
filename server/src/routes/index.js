@@ -82,9 +82,8 @@ export const PUBLIC_ROUTES = [
 export const SESSION_ROUTES = [
   ["POST", "/api/logout", handleLogout],
   ["GET", "/api/me", handleGetMe],
-  // Changing your own password. A session route, not an admin one: the person
-  // it belongs to is the caller, and it takes their current password on top of
-  // their token - see the handler for why the token alone is not enough.
+  // A session route, not an admin one: the caller is the account's owner, and
+  // the handler also requires their current password.
   ["POST", "/api/password", handleChangePassword],
   ["GET", "/api/data", handleGetData],
   ["GET", "/api/config", handleGetConfig],
@@ -97,48 +96,29 @@ export const SESSION_ROUTES = [
   // tracks: which are still live, and which have come down.
   ["POST", "/api/verified", handleMarkVerified],
   ["POST", "/api/delist", handleDelistUrls],
-  // The way back from a wrong delist or a wrong screening - the only route
-  // that makes a posting rediscoverable again. Not in any prompt: see
-  // handleUnscreen.
+  // Not in any prompt - see handleUnscreen.
   ["POST", "/api/unscreen", handleUnscreen],
   ["POST", /^\/api\/leads\/(\d+)\/status$/, handleSetLeadStatus],
   ["POST", /^\/api\/applications\/(\d+)\/status$/, handleSetApplicationStatus],
-  // The overnight fill of an application added as nothing but a URL: which
-  // postings tonight's run should read, and what it read off them. A row is
-  // read once (see ../../migrations/0009_application_autofill.sql), so nothing
-  // a run calls puts one back in the queue - requeue, below, is a person's
-  // tool. `pending` can't collide with the numeric-id route above - an id is
-  // \d+ - so this needs no ordering care, unlike the prompt pair below.
+  // The overnight fill (./applications.js). `pending` needs no ordering care:
+  // the numeric-id route above only matches \d+.
   ["GET", "/api/applications/pending", handleGetAutofillQueue],
   ["POST", "/api/applications/autofill", handleReportAutofill],
-  // Not a retry - see the handler. Nothing on the page or on a schedule calls
-  // this; it is how a person who has just improved the reader gives rows that
-  // failed under the old one a real first read.
+  // Not a retry, and nothing on a schedule calls it - see the handler.
   ["POST", "/api/applications/requeue", handleRequeueAutofill],
   ["GET", /^\/api\/dedup\/([^/]+)$/, handleGetDedup],
   ["GET", /^\/api\/coverage\/([^/]+)$/, handleGetCoverage],
   ["POST", "/api/coverage", handleRecordSweeps],
-  // `_applications` is a reserved key under /api/prompt, not a track: it is
-  // the nightly fill's prompt, and it sits above the track route because
-  // matchRoute takes the first match and the pattern below would otherwise
-  // swallow it and 404 on a track nobody configured. The leading underscore
-  // is what keeps it out of the space installers actually name tracks in -
-  // run-search.ps1 fetches it like any other, as `-Task _applications`.
+  // Above the track pattern, which would otherwise match `_applications` first
+  // and 404. The leading underscore keeps it out of the names installers give
+  // tracks.
   ["GET", "/api/prompt/_applications", handleGetAutofillPrompt],
   ["GET", /^\/api\/prompt\/([^/]+)$/, handleGetPrompt],
   ["POST", "/api/delete-application", handleDeleteApplication],
   ["POST", "/api/delete-leads", handleDeleteLeads],
-  // The resumes and per-track baseline docs that used to live only in a folder
-  // on whichever machine ran the searches. The only resource here addressed by
-  // its own URI, so the only one whose verb carries the operation - hence the
-  // PUT and DELETE, which are this table's first, and the matching entries in
-  // http.js's CORS_HEADERS. matchRoute compares the method string, so nothing
-  // about dispatch changes.
-  //
-  // `(.+)` rather than the `[^/]+` above: a document path has a slash in it
-  // (`docs/x.md`), because it is the path the file occupies in the person's
-  // folder. See ./documents.js, and validate.js's isDocumentPath for what stops
-  // that meaning "any depth".
+  // The one resource addressed by its own URI, so the verb carries the
+  // operation (PUT and DELETE are also listed in ../http.js's CORS_HEADERS).
+  // `(.+)` because a document path contains a slash - see ./documents.js.
   ["GET", "/api/documents", handleListDocuments],
   ["GET", /^\/api\/documents\/(.+)$/, handleGetDocument],
   ["PUT", /^\/api\/documents\/(.+)$/, handlePutDocument],

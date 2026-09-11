@@ -1,16 +1,6 @@
 /**
- * The deployed Worker's routing, checked in the repo rather than discovered live.
- *
- * Tabs are real URLs here - /applications, /all-leads, /t/<track> - and none of
- * them is a file in dist/. A static-assets Worker serves only files that exist,
- * so without single-page-application fallback every one of those answers 404
- * the moment it is reloaded, bookmarked or opened from a shared link. Only /
- * works, which is why clicking around from the Overview never showed it.
- *
- * No local run can see this either: `vite dev` and `vite preview` both fall back
- * to index.html by themselves. It shipped, and was found by loading
- * /applications on the deployed site. Reading wrangler.toml is the only check
- * available before a deploy, so here it is.
+ * Pins wrangler.toml's [assets] settings: the SPA fallback that keeps tab URLs
+ * from 404ing on reload (why: wrangler.toml), and serving the build output.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -29,18 +29,13 @@ import { json, readJson, unauthorized } from "../http.js";
 
 /**
  * POST /api/login - public. Body `{ name, password, label? }` ->
- * `{ token, user }` or 401.
+ * `{ token, user }`; 400 for a missing field, 401 for a wrong name or password.
  *
- * Exchanges a name and password for a session token. The only handler a
- * password reaches besides handleUpsertUser, and the only place the name
- * means anything - every other route identifies the caller by token alone.
- *
- * One message for both "no such name" and "wrong password", on purpose: told
- * apart, they turn this into a way to enumerate who has an account here.
- * `label` is where the caller says what the token is for ('browser', or
- * 'scheduled-search' for the long-lived one a headless run keeps on disk), so
- * it can be revoked later by what it is rather than by guessing which opaque
- * string is which.
+ * The only place a name identifies anyone; every other route goes by token.
+ * One message for an unknown name and a wrong password, so this can't be used
+ * to find out who has an account. `label` says what the token is for
+ * ('browser', or 'scheduled-search' for a headless run's long-lived one), so it
+ * can be revoked by purpose later.
  */
 export async function handleLogin({ request, env }) {
   const body = await readJson(request);
@@ -60,13 +55,11 @@ export async function handleLogin({ request, env }) {
 }
 
 /**
- * POST /api/logout - requires a Bearer token.
+ * POST /api/logout - requires a Bearer token -> `{ ok }`.
  *
- * Revokes exactly the token that made the request - not every session the
- * person holds, so logging out of a browser never kills the scheduled search's
- * credential. Reaching this handler at all means the token still resolved;
- * logging out twice 401s at the routing layer, which is the same answer by a
- * different route.
+ * Revokes only the token that made the request, so signing out of a browser
+ * leaves the scheduled search's credential alone. A second logout 401s at
+ * routing, since the token no longer resolves.
  */
 export async function handleLogout({ env, token }) {
   await deleteSession(env.DB, token);
@@ -75,15 +68,13 @@ export async function handleLogout({ env, token }) {
 
 /**
  * POST /api/users - requires the ADMIN_TOKEN secret as Bearer. Body
- * `{ name, password, demo? }` -> `{ id, name, created, demo }`.
+ * `{ name, password, demo? }` -> `{ id, name, created, demo }`, 201 when
+ * created and 200 when an existing account's password was set; 400 for a
+ * missing name or a password under 12 characters, 401 without the admin token.
  *
- * Creates a user, or sets an existing one's password. Gated by the ADMIN_TOKEN
- * worker secret rather than by a session: there is no self-signup here, and
- * whoever operates the deployment provisions people by hand.
- *
- * It doubles as password reset because nothing else in the system can run
- * PBKDF2 - without this, a forgotten password would mean deriving a hash
- * offline and hand-writing it into D1.
+ * Gated by the ADMIN_TOKEN rather than a session: there is no self-signup, and
+ * whoever operates the deployment provisions people. It is also the reset for
+ * a forgotten password, which /api/password can't do without the current one.
  */
 export async function handleUpsertUser({ request, env }) {
   const admin = env.ADMIN_TOKEN;
@@ -115,43 +106,18 @@ export function handleGetMe({ user }) {
 
 /**
  * POST /api/password - requires a Bearer token. Body
- * `{ currentPassword, newPassword, signOutOthers? }` -> `{ ok, signedOut }`.
+ * `{ currentPassword, newPassword, signOutOthers? }` -> `{ ok, signedOut }`;
+ * 400 for a missing field or a new password under 12 characters or equal to
+ * the current one, 403 for a wrong current password.
  *
- * Lets a person change their own password, which until now nothing could do.
- * The only route that could set one was POST /api/users, which takes the
- * deployment's ADMIN_TOKEN - so changing a password meant asking the operator,
- * or having the repo, the admin secret and a terminal (scripts/set-password.ps1).
- * Neither is a thing to need in order to rotate your own credential, and the
- * second hands out a secret that can rewrite *any* account's password to
- * someone who only wanted to change their own.
+ * The current password is required as well as the session, so a copied token
+ * can't take over the account. The 400s and the 403 are told apart, unlike
+ * /api/login's refusal: the caller is already authenticated as this person.
  *
- * ---- The current password is required, and that is the point of the route.
- *
- * The session token alone is not enough. A token that has been copied off a
- * shared machine already reads and writes this person's data, which is bad and
- * recoverable - they can log out everywhere. If that same token could also set
- * the password, it would be an upgrade from "someone has your data" to
- * "someone has your account and you don't", which is not. So this asks for
- * something the token holder is not assumed to have.
- *
- * Told apart from the 12-character rule in the reply, unlike /api/login's
- * deliberately ambiguous refusal: there is nothing to withhold from a caller
- * who is already authenticated as this person, and "wrong current password"
- * and "new one is too short" need different corrections.
- *
- * ---- What survives it.
- *
- * Sessions, by default - the same promise POST /api/users makes. The one that
- * matters is the long-lived token a scheduled search keeps on disk: a password
- * change that killed it would stop that person's nightly search silently, and
- * a search that never fired is indistinguishable from one that found nothing.
- * They would find out weeks later from an empty tab.
- *
- * `signOutOthers` is the opt-in for the case where that isn't what you want -
- * you are changing it *because* something is wrong - and it takes only
- * sessions labelled 'browser' (see deleteOtherBrowserSessions). It defaults to
- * false when the field is absent, so a scripted caller never gets a
- * revocation it did not ask for; the page sends it explicitly either way.
+ * Sessions survive by default, because revoking the scheduled search's token
+ * would silently stop its runs. `signOutOthers: true` revokes only the caller's
+ * other 'browser' sessions (deleteOtherBrowserSessions). The reasoning at
+ * length: server/README.md, "Changing your own password".
  */
 export async function handleChangePassword({ request, env, user, token }) {
   const body = await readJson(request);
@@ -163,10 +129,9 @@ export async function handleChangePassword({ request, env, user, token }) {
   if (!currentPassword || !newPassword) {
     return json({ error: "currentPassword and newPassword are both required" }, 400);
   }
-  // The same rule /api/users and the signup path enforce, and for the same
-  // reason: /api/login has no rate limiting in front of it, so length is the
-  // defence. Checked before the current password is verified so the two
-  // messages can't be read as one another.
+  // The same minimum as /api/users, for the same reason: /api/login has no
+  // rate limiting, so length is the defence. Checked before the current
+  // password is verified so the two refusals can't be read as one another.
   if (newPassword.length < 12) {
     return json({ error: "your new password must be at least 12 characters" }, 400);
   }
@@ -176,8 +141,8 @@ export async function handleChangePassword({ request, env, user, token }) {
     return json({ error: "that's the password you already have" }, 400);
   }
 
-  // By id, from the session. Re-looking-up by name would work today and would
-  // be a lookup that can miss the moment a name becomes editable.
+  // By the session's id, not by name, so the lookup can't miss if a name
+  // changes.
   const stored = await getUserById(env.DB, user.id);
   if (!(await verifyPassword(currentPassword, stored))) {
     return json({ error: "that isn't your current password" }, 403);

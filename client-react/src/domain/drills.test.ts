@@ -1,11 +1,7 @@
 /**
- * The drill invariant, as an executable spec.
- *
- * `parity` below is the one that matters and the reason this file exists: for
- * every drill, the number shown equals the rows the tab opens. It passed
- * trivially the day it was written - the interesting property is that it
- * *keeps* passing when someone edits a rule, which `it("moves the number with
- * the rule")` is what actually proves.
+ * The drill invariant: for every drill, the number shown equals the rows the tab
+ * opens. "moves the number with the rule" proves it keeps holding after a rule
+ * is edited.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
@@ -48,9 +44,7 @@ describe("drill parity", () => {
   });
 
   it("moves the number with the rule, not alongside it", () => {
-    // The regression this whole design exists to prevent: edit one predicate
-    // and nothing else. In the page this was ported from, the tile kept its own
-    // copy and went on reporting the old figure.
+    // Edit one predicate and nothing else: the count has to follow it.
     const before = drillCount({ tab: "applications", drill: "gone-quiet" }, src);
     const original = DRILLS["gone-quiet"];
     try {

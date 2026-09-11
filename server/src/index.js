@@ -1,51 +1,11 @@
 /**
- * Job Search Tracker - API worker
+ * The worker's entry point: the CORS preflight, resolving who is calling,
+ * building the `Db` and `Docs` scoped to them, and dispatching to the route
+ * table in ./routes/index.js.
  *
- * API-only Cloudflare Worker backed by D1 (SQLite). No dependency on any
- * particular AI tool - just HTTP + D1, so the headless search CLI can update it
- * with a plain `curl` call and the client can edit it with `fetch`. The client
- * (the tracker webpage) is a separate deployable - see ../../client/ - served
- * from its own origin (Cloudflare Pages) and talking to this worker
- * cross-origin, hence the CORS handling in ./http.js. Server and client are
- * versioned, deployed, and updated independently; see each one's own README for
- * its deploy flow.
- *
- * This file is the entry point and nothing else: the CORS preflight, resolving
- * who is calling, building the one `Db` instance their request's handlers
- * share, and dispatching to the table in ./routes/index.js. It has no knowledge
- * of any individual endpoint.
- *
- *   ./routes/           one module per resource; each endpoint's contract and
- *                       reasoning is documented on its own handler
- *   ./routes/index.js   the route table - path/method -> handler
- *   ./http.js           every Response in the worker, plus CORS headers
- *   ./validate.js       the checks more than one route makes
- *   ./db.js             all D1 access for a user's own data
- *   ./r2.js             all R2 access for their documents - resumes and the
- *                       per-track baseline docs the nightly run reads and edits
- *   ./auth.js           passwords, session tokens, who a token belongs to
- *   ./prompt.js         composes a track's daily search prompt
- *   ../migrations/      the schema
- *
- * Nothing here talks to `env.DB` directly, and neither does any route module -
- * it goes through `Db` (or, for the three routes with no session to scope one
- * from, a `Db` they construct themselves). `env.DOCS` is the same: only ./r2.js
- * touches the bucket.
- *
- * ---- Auth, in one place. Every route outside PUBLIC_ROUTES resolves its
- * bearer token to a person first, and the handlers are handed a `Db` already
- * scoped to them:
- *
- *     const user = await getSessionUser(env.DB, bearer(request));
- *     const db = new Db(env.DB, user.id);
- *     const docs = new Docs(env.DOCS, user.id);
- *
- * Those lines are the entire access-control story. No handler checks
- * ownership, because none can see anything to check: another user's lead id
- * doesn't resolve, their track key reads as unconfigured, their settings aren't
- * in the result set, and their document path names an object outside the only
- * key prefix this `Docs` can address. A route added later inherits this by
- * default rather than by remembering to.
+ * Access control is that scoped construction (see ./db.js): a handler reaches
+ * a user's data only through the `Db` and `Docs` it is handed. Never hand a
+ * handler an unscoped binding in their place.
  */
 
 import { bearer, getSessionUser } from "./auth.js";
@@ -55,13 +15,12 @@ import { Docs } from "./r2.js";
 import { matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./routes/index.js";
 
 /**
- * What every handler receives. One object rather than a per-route argument
- * list, so the table in ./routes/index.js can be a flat list of rows instead of
- * a call site per endpoint.
+ * What every handler receives - one shape for all of them, so ./routes/index.js
+ * stays a flat table.
  *
  * @typedef {Object} Ctx
  * @property {Request} request the incoming request
- * @property {Object} env worker bindings - `env.DB` (D1) and `env.ADMIN_TOKEN`
+ * @property {Object} env worker bindings - `env.DB` (D1), `env.DOCS` (R2) and `env.ADMIN_TOKEN`
  * @property {URL} url the parsed request URL, for query parameters
  * @property {string[]} params the path captures, in order, already decoded
  * @property {string} token the caller's bearer token ("" on a public route)
@@ -76,8 +35,6 @@ export default {
 
     const url = new URL(request.url);
 
-    // The routes that run before anyone is known. Everything past this point
-    // has a resolved session.
     const open = matchRoute(PUBLIC_ROUTES, request.method, url.pathname);
     if (open) {
       return open.handler({
@@ -85,11 +42,8 @@ export default {
       });
     }
 
-    // Resolved before the path is matched, not after, so an unknown path
-    // answers 401 rather than 404 to a caller who isn't logged in. Which routes
-    // exist is not a secret worth much, but there is no reason to hand the list
-    // out to someone holding no credential, and this is the ordering the worker
-    // has always had.
+    // Resolve the session before matching the path, so an unauthenticated
+    // caller gets 401 for every path and learns nothing about which exist.
     const token = bearer(request);
     const user = await getSessionUser(env.DB, token);
     if (!user) return unauthorized();

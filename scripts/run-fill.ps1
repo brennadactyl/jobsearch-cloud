@@ -4,43 +4,20 @@
   for every account on this machine.
 
 .DESCRIPTION
-  Generic runner - contains no personal data itself. It discovers every person
-  under <DataDir> the same way setup-scheduler.ps1 does (a
-  <DataDir>\<user-id>\tracker.json holding their tracker URL and token),
-  fetches the fill prompt from the tracker (`GET /api/prompt/_applications`),
-  and runs it non-interactively via `claude -p` in a single turn that covers
-  all of them.
+  Runs the tracker's fill
+  prompt (`GET /api/prompt/_applications`, composed by ../server/src/prompt.js's
+  buildAutofillPrompt) headless via `claude -p`, in one turn covering every
+  account under <DataDir>, and logs to <DataDir>\logs\applications.log.
 
-  That turn pulls every account's outstanding rows first and then fans the slow
-  part out: one subagent per posting, in batches, reading pages in parallel.
-  Subagents get a URL and nothing else - no token, no account, no row id - so
-  every write stays in the main turn with the right account's credential (see
-  ../server/src/prompt.js's buildAutofillPrompt).
+  One run rather than one per person: unlike a search, the job is the same for
+  everyone and most accounts' queues are empty most nights, so a task per
+  account would mostly pay for CLI startups that find nothing to do. Scoping is
+  unchanged - every request uses one person's session token, and the API has no
+  cross-user route.
 
-  ---- Why one run and not one per person, unlike run-search.ps1.
-  A search is a different job for each person: different companies, resume,
-  scope, doc and schedule. This is the same job however many people there are -
-  open a posting, write down what it says - and the queue is empty on most
-  nights for most accounts. A task per account would mean N headless CLI
-  startups a night, nearly all of them to discover there is nothing to do.
-
-  ---- How it stays scoped to one account at a time anyway.
-  The API has no cross-user route and this doesn't add one: every request is
-  still made with one person's session token and answered from their rows
-  alone (see ../server/src/db.js - a `Db` is bound to one user id at
-  construction, so no query can forget to filter). What changes is only that
-  one CLI turn makes those requests for several accounts in sequence.
-
-  Tokens are passed as TRACKER_TOKEN_1..N environment variables and the prompt
-  uses them by name, so the values are expanded by the shell inside curl and
-  never enter the model's context or this log - the same handling run-search.ps1
-  gives its single TRACKER_API_TOKEN.
-
-  Every account must be on the same tracker deployment; an account pointing at
-  a different URL is skipped and named, since one run has one TRACKER_URL.
-
-  Logs to <DataDir>\logs\applications.log - the machine's log, not any one
-  person's, because the run isn't any one person's either.
+  Tokens are passed as TRACKER_TOKEN_1..N environment variables that the prompt
+  names, so the shell expands them inside curl and they never enter the model's
+  context or this log.
 
 .PARAMETER DataDir
   Path to the private data folder (the "silo"), holding one folder per person.
@@ -73,9 +50,7 @@ $logDir = Join-Path $DataDir "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $logFile = Join-Path $logDir "applications.log"
 
-# -Encoding utf8 is not optional - see the same note in run-search.ps1. Windows
-# PowerShell 5.1's Out-File defaults to UTF-16LE, and appending that to a file
-# already started as UTF-8 produces one file with two encodings in it.
+# -Encoding utf8 on every writer to this log - see Log in run-search.ps1.
 function Log($msg) {
     "$(Get-Date -Format o) - $msg" | Out-File -Append -Encoding utf8 -FilePath $logFile
 }
@@ -84,8 +59,8 @@ Log "===== starting applications fill ====="
 Log "data dir:         $DataDir"
 
 # Same discovery as setup-scheduler.ps1: a person is a folder with a
-# tracker.json in it. The pre-multi-user layout (no per-user folders,
-# credentials in the environment) is still supported as one unnamed account.
+# tracker.json in it. A single-user machine (no per-user folders, credentials in
+# the environment) counts as one unnamed account.
 $accounts = @()
 foreach ($dir in (Get-ChildItem $DataDir -Directory | Sort-Object Name)) {
     $trackerFile = Join-Path $dir.FullName "tracker.json"
@@ -131,10 +106,9 @@ if (-not $claude) {
 }
 $claudePath = if ($claude -is [System.Management.Automation.CommandInfo]) { $claude.Source } else { $claude }
 
-# The prompt is the same text for every account (see ../server/src/prompt.js's
-# buildAutofillPrompt), so any account's token can fetch it. A failure here is
-# fatal and loud rather than skipped: running no prompt would look exactly like
-# a night where every queue happened to be empty.
+# The prompt is the same text for every account, so any account's token can
+# fetch it. A failure here is fatal: running no prompt would look like a night
+# where every queue was empty.
 try {
     $promptBody = Invoke-RestMethod -Uri "$trackerUrl/api/prompt/_applications" `
         -Headers @{ Authorization = "Bearer $($accounts[0].Token)" } -ErrorAction Stop
@@ -151,14 +125,8 @@ if (-not $promptBody) {
     exit 1
 }
 
-# Which accounts tonight's run covers, and where each one's token is. This is
-# machine-specific knowledge - the composed prompt has no idea how many people
-# are set up here - which is why it is assembled at this end, the same reason
-# the headless preamble below lives here rather than in the tracker's copy.
-#
-# The variable names go in; the tokens do not. The model writes
-# `-H "Authorization: Bearer $TRACKER_TOKEN_1"` and the shell fills it in, so
-# no token reaches the model's context or this log.
+# Which accounts this machine has is known only here, so the account list is
+# added at this end rather than by the tracker. Only the variable names go in.
 $accountLines = @()
 for ($i = 0; $i -lt $accounts.Count; $i++) {
     $accountLines += "  - account $($i + 1): token is in the environment variable TRACKER_TOKEN_$($i + 1)"
@@ -173,16 +141,9 @@ all of them. Never print a token, and never reuse one account's ids or token
 against another account.
 "@
 
-# This runs as a single headless, non-interactive `claude -p` turn - the same
-# constraint run-search.ps1 documents at length, and for the same reason: this
-# process exits as soon as the turn ends, so anything backgrounded is killed
-# mid-flight and nothing gets written back.
-#
-# The line this one has to walk that run-search.ps1 doesn't: the prompt asks
-# for subagents on purpose (one per posting, see buildAutofillPrompt's step 2),
-# so "don't use subagents" would be the wrong instruction. What kills a headless
-# run is not a subagent, it is *ending the turn while work is still outstanding*
-# - so the rule below is about waiting for them, not about avoiding them.
+# Headless preamble - see run-search.ps1 for why it exists. This prompt asks
+# for subagents on purpose (one per posting, buildAutofillPrompt's step 2), so
+# the rule here is to wait for them before ending the turn, not to avoid them.
 $prompt = @"
 IMPORTANT: this is one single non-interactive headless run. This process
 exits as soon as your turn ends, and nobody reads any message after that -
@@ -219,19 +180,9 @@ $job = Start-Job -ScriptBlock {
     for ($i = 0; $i -lt $tokens.Count; $i++) {
         Set-Item -Path "env:TRACKER_TOKEN_$($i + 1)" -Value $tokens[$i]
     }
-    # The claude CLI writes UTF-8; without this PowerShell decodes its stdout
-    # using the console's OEM codepage and mangles every non-ASCII character
-    # before it reaches the log.
+    # Output encoding and the prompt on stdin: see the same lines in
+    # run-search.ps1.
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    # The prompt goes in on stdin rather than as an argument, for the reason
-    # run-search.ps1 documents at length: Windows caps a command line at ~32k
-    # characters, and going over it is not a prompt error but
-    # `Program 'claude.exe' failed to run: The filename or extension is too
-    # long` from the npm shim - the CLI never starts, the job still completes,
-    # and the task records a success. This prompt is shorter than a search's
-    # and has not hit that ceiling; it is piped anyway so that prompt length
-    # stops being something either runner can die of, rather than something
-    # one of them is currently under.
     $prompt | & $claudePath -p --allowedTools $allowedTools 2>&1
 } -ArgumentList $claudePath, $prompt, $allowedTools, $DataDir, $trackerUrl, @($accounts | ForEach-Object { $_.Token })
 
@@ -252,21 +203,10 @@ Log "----- claude output -----"
 if ($output) { $output | Out-String | Out-File -Append -Encoding utf8 -FilePath $logFile }
 Log "----- end output -----"
 
-# The CLI exiting cleanly is not the same as the CLI having done anything.
-# An unauthenticated run prints "Not logged in - Please run /login" and exits
-# 0, which is what this script did on its first real invocation: job state
-# Completed, exit code 0, twenty seconds, nothing filled in. Task Scheduler
-# recorded a success.
-#
-# That matters more here than it would elsewhere, because this job deliberately
-# writes no run record (see ../server/src/prompt.js) - the evidence it stopped
-# is supposed to be a row that stayed blank, which is indistinguishable from a
-# posting nobody could read. So the one signal that exists, the task's Last Run
-# Result, has to be honest.
-#
-# Checked against the output rather than by pre-flighting the credential: the
-# token is read by the CLI in a child process, and what matters is whether that
-# process could use it, not whether this one can see it.
+# A clean CLI exit is not proof of work - see the output checks in
+# run-search.ps1. It matters more here: this job writes no run record (see
+# ../server/src/prompt.js), and a row left blank looks like a posting nobody
+# could read, so the task's Last Run Result is the only signal it stopped.
 $exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
 $outputText = if ($output) { ($output | Out-String).Trim() } else { "" }
 if (-not $outputText) {
@@ -277,11 +217,8 @@ if (-not $outputText) {
     Log "       Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
     $exitCode = 1
 } elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
-    # The CLI never started - the launcher failed above it. Same silence and
-    # same false success as the case above, but from a source the authentication
-    # patterns do not match, so it needs saying separately. run-search.ps1 grew
-    # this branch after 2026-09-10; this script has the same exposure and, with
-    # no run record of its own, even less to fall back on.
+    # The launcher failed and the CLI never started; the authentication
+    # patterns do not match its message.
     Log "ERROR: the CLI failed to start - nothing was filled in."
     Log "       See the output above; a launcher failure is not an empty queue."
     $exitCode = 1

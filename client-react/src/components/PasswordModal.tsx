@@ -1,11 +1,7 @@
 /**
- * Changing your own password, without needing the operator or the admin secret.
- *
- * Deliberately not a mutation over the `["data"]` cache like everything in
- * mutations.ts: this writes no row, so there is nothing to update optimistically
- * and nothing to roll back. It also must not touch the shared save indicator -
- * "Saved" in the header would be a strange thing to say about a password, and
- * the outcome is worth stating in full where it happened.
+ * Not a mutation over the `["data"]` cache: it writes no row, so there is
+ * nothing to patch or roll back. It leaves the header's save indicator alone
+ * and states the outcome in full in the dialog.
  */
 import { useEffect, useState, type FormEvent } from "react";
 import { changePassword, UnauthorizedError } from "../api/client";
@@ -13,9 +9,7 @@ import { changePassword, UnauthorizedError } from "../api/client";
 type Msg = { text: string; tone: "good" | "bad" | "" } | null;
 
 export default function PasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  // Mounts per opening, so the fields are empty every time rather than being
-  // cleared by hand - a dialog that reopens holding a password is a dialog
-  // holding a password.
+  // Mounts per opening, so the fields never reopen holding a password.
   if (!open) return null;
   return <PasswordDialog onClose={onClose} />;
 }
@@ -52,9 +46,6 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
     setMsg({ text: "Changing…", tone: "" });
     try {
       const r = await changePassword(current, next, signOutOthers);
-      // Said out loud rather than just closing. A password change is a thing
-      // people want confirmed, and the count is the only evidence the checkbox
-      // did anything.
       let note = "Password changed.";
       if (signOutOthers) {
         note +=
@@ -131,13 +122,10 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
             checked={signOutOthers}
             onChange={(e) => setSignOutOthers(e.target.checked)}
           />
-          {/* Leaves this browser signed in, and never touches the long-lived
-              session a scheduled search holds. */}
           <span>Sign out my other browsers. This one stays signed in.</span>
         </label>
 
-        {/* Always there, empty or not: the line keeps its height, so the first
-            message doesn't push the buttons down under the pointer. */}
+        {/* Always rendered, so the first message doesn't push the buttons down. */}
         <div className={`pw-msg ${msg?.tone ?? ""}`} role="alert">
           {msg?.text}
         </div>

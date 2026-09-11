@@ -5,33 +5,30 @@ description: Add or change an endpoint on this repo's tracker API (server/src/ro
 
 # Adding or changing an API route
 
-The shape is deliberately small: **one line in the route table, one exported
-function in the module beside it.** Everything that makes a route safe -
-knowing who is calling, scoping to their rows, getting CORS onto the error
-replies - has already happened by the time a handler runs, and happens by
-default rather than by remembering to.
+A route is **one line in the route table and one exported function in the
+module beside it.** Authentication, row scoping and CORS on error replies have
+already happened by the time a handler runs.
 
 Read `server/README.md`'s "Code layout" section and the header comment on
-`server/src/routes/index.js` before writing anything. Most of what follows is
-there; this is the order to do it in and what is easy to get wrong.
+`server/src/routes/index.js` before writing anything.
 
 ## 1. Decide which list it goes in
 
 `server/src/routes/index.js` holds two arrays, and the split is the whole
 access-control story:
 
-- `PUBLIC_ROUTES` runs before anyone is known. **Three entries, and it should
-  stay three** - exchanging a password for a token, provisioning a user with
-  the admin secret, and purging a retired search with the same secret. The
-  last two name their subject in the body rather than being the caller, which
-  is why a session would be the wrong credential. Adding a fourth is a
-  decision to justify in the comment above the array, not a default.
+- `PUBLIC_ROUTES` runs before anyone is known. **Three entries; keep it
+  three** - exchanging a password for a token, provisioning a user with the
+  admin secret, and purging a retired search with the same secret. The last
+  two name their subject in the body rather than being the caller, so a
+  session is the wrong credential for them. A fourth needs its justification
+  in the comment above the array.
 - `SESSION_ROUTES` is everything else. By the time one of these runs,
   `ctx.user` is the person the bearer token resolved to and `ctx.db` is a `Db`
   that can only see their rows.
 
-It is a list rather than a flag on each row precisely so a new route inherits
-authentication by omission rather than losing it.
+A route not in `PUBLIC_ROUTES` is authenticated by default; never add a
+per-route auth flag.
 
 ## 2. Write the handler
 
@@ -39,33 +36,23 @@ One exported function per endpoint, in the module for its resource
 (`leads.js`, `applications.js`, `config.js`, ...). It takes one context object
 and returns a `Response`.
 
-Three rules, each of which exists because it was broken once:
+Three rules:
 
 - **Never construct a `Response`.** Use `json()`, `text()`, `unauthorized()`
-  from `../http.js`. That is what keeps `CORS_HEADERS` on the error replies
-  too - a 404 without them reaches the browser as an opaque network failure
-  with no status to read.
+  from `../http.js`. That keeps `CORS_HEADERS` on error replies - a 404
+  without them reaches the browser as an opaque network failure.
 - **Never touch `env.DB`.** Every read and write of a person's own data goes
   through a method on `Db` (`../db.js`). Add a method there if none fits.
-- **Never check ownership.** You cannot: `ctx.db` was bound to one user id at
+- **Never check ownership.** `ctx.db` is bound to one user id at
   construction, so another user's lead id does not resolve, their track key
   reads as unconfigured, their rows are not in the result set. The handler's
-  ordinary "not found" path *is* the cross-user access check. Writing an
-  explicit `if (row.user_id !== ...)` means you have reached around `Db`.
+  ordinary "not found" path *is* the cross-user check; an explicit
+  `if (row.user_id !== ...)` means you have reached around `Db`.
 
-  `ctx.docs` (`src/r2.js`) works the same way for documents and for the same
-  reason: every key is prefixed with the owner's id in a private method, so a
-  handler cannot name an object outside its caller's own space. A new store
-  gets this property deliberately or it does not have it.
-
-## When a convention has to bend
-
-`routes/documents.js` is the one module that does not return `json()` or
-`text()`: its body is raw bytes in both directions, and it is the only place
-with `PUT` and `DELETE`. Both are commented in place with why. If a new route
-needs the same, say so at the call site rather than quietly diverging - the
-value of "every response goes through `http.js`" is that the exceptions are
-countable.
+  `ctx.docs` (`src/r2.js`) works the same way for documents: every key is
+  prefixed with the owner's id in a private method, so a handler cannot name
+  an object outside its caller's space. A new store must get the same
+  property.
 
 Open with the parse-or-400 preamble if it takes a body:
 
@@ -74,19 +61,20 @@ const body = await readJson(request);
 if (body instanceof Response) return body;
 ```
 
-Reuse `../validate.js` rather than re-deriving a check: `isoDate` for a
+Reuse `../validate.js`; don't hand-copy a check: `isoDate` for a
 caller-supplied date, `unknownTrack` / `unknownTrackResponse` for a track key,
-`excluderFor` for any write path that can introduce a company. Each of those
-lives there because the same rule had drifted into two slightly different
-rules across handlers - a stricter date on one route than another, or a track
-check on the routes that read by key and none on the two that wrote by it.
-That second one is how 145 leads came to sit under a retired track key,
-invisible on the page, with nothing erroring on either side.
+`excluderFor` for any write path that can introduce a company. A copied check
+drifts into a second, slightly different rule.
 
 **Document the contract on the handler itself**, in the house style: what it
 takes, what it answers, and *why* it refuses what it refuses. The route table
 carries only a line or two of orientation; `server/README.md` has the prose
 version.
+
+`routes/documents.js` is the one module that does not return `json()` or
+`text()` (raw bytes in both directions) and the only place with `PUT` and
+`DELETE`; both are commented in place. If a new route needs to diverge the
+same way, say why at the call site.
 
 ## 3. Add the route table line
 
@@ -95,10 +83,9 @@ in order.
 
 - Numeric ids are matched strictly (`/^\/api\/leads\/(\d+)\/status$/`); track
   keys accept any single path segment (`([^/]+)`) and 404 through
-  `unknownTrack` if it is not one of this caller's configured tracks. An id is
-  a row this database assigned; a track key is an installer-chosen slug.
-- **`matchRoute` takes the first match.** A literal path that could be
-  swallowed by a pattern below it has to sit above it - the reason
+  `unknownTrack` if it is not one of this caller's configured tracks.
+- **`matchRoute` takes the first match.** A literal path that a pattern below
+  it could swallow has to sit above it - which is why
   `/api/prompt/_applications` precedes `/api/prompt/([^/]+)`. If you add a
   literal segment under a path that already has a pattern route, check the
   order and say in a comment why it is where it is.
@@ -109,11 +96,9 @@ in order.
 
 In `server/src/db.js`, following what is there: filter on `this.userId` in
 every statement, add or extend the `@typedef` for any row shape you change,
-and keep the "why" comment with it. If the route writes, ask whether a partial
-write is possible - the convention here is to refuse the whole request rather
-than drop the bad rows, because a partial insert leaves a nightly run
-believing it filed rows it did not, and it treats those postings as ones it
-never has to find again.
+and keep the "why" comment with it. If the route writes, refuse the whole
+request rather than drop bad rows - a partial insert makes a nightly run
+believe it filed rows it did not, and it never looks for those postings again.
 
 ## 5. Add checks to `verify-local.mjs` - this is not optional
 
@@ -126,17 +111,15 @@ Every new route owes it at least:
 - and, if it writes, that the write is idempotent or deduped the way you
   claimed.
 
-Write them in the existing voice: `check("B cannot fill A's row", ...)`. The
-name is what someone reads when it fails at 3am. Follow the file's fixtures -
-users Ada and Bo, `example.com` URLs, tolerating a re-run against the same
-local database.
+Write them in the existing voice: `check("B cannot fill A's row", ...)`.
+Follow the file's fixtures - users Ada and Bo, `example.com` URLs, tolerating a
+re-run against the same local database.
 
-Then run it, per the `verify-and-deploy` skill. A route added without these
-checks is a route that is only ever tested by the person whose data leaks.
+Then run it, per the `verify-and-deploy` skill.
 
 ## 6. Update the docs that describe the API
 
-- `server/README.md`'s API reference section.
+- `server/README.md`'s API section.
 - `server/src/routes/index.js`'s header comment, if the shape of the table
   changed.
 - The client, if it will call the route - `client/public/index.html`, see the
@@ -147,11 +130,8 @@ checks is a route that is only ever tested by the person whose data leaks.
 
 ## Removing or changing an existing route
 
-The callers are not all in this repo. A route is potentially called by the
-page, by `scripts/*.ps1`, by a composed prompt in `prompt.js`, and by prose in
-each track's baseline doc - which now lives in the tracker rather than on
-somebody's machine, so it can at least be read: `GET /api/documents` per
-account, then fetch each `docs/` entry. Grep the first three and check the
-fourth rather than assuming; `change-search-prompt` has the procedure. A
-scheduled run that confidently published through a retired mechanism is a
-thing that has actually happened here.
+Check every caller before changing a route: the pages
+(`client/public/index.html`, `client-react/src/`), `scripts/*.ps1`,
+`server/src/prompt.js`, and every track doc. Grep the code; read the docs
+through the tracker - `GET /api/documents` per account, then each `docs/`
+entry. `change-search-prompt` has the procedure for updating the docs.

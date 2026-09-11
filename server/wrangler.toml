@@ -6,41 +6,29 @@ compatibility_date = "2025-01-01"
 # client at ../client/ is a separate deployable, see its own wrangler.toml).
 
 # Created by: wrangler d1 create job-search-tracker-db
-# Paste the database_id it prints below.
 #
-# This is the live tracker's worker and the live tracker's database, and that
-# is deliberate: this repo took over the running deployment rather than
-# standing up a second one beside it. The names are load-bearing for that.
-# `wrangler deploy` does not rename a worker - a changed `name` publishes a
-# NEW worker on a NEW URL and leaves the old one serving, which would strand
-# every bookmark, the client's local-config.js, and the scheduled runner on
-# the old origin while this repo talked to an empty copy.
+# Never change `name`: `wrangler deploy` does not rename a worker, it publishes
+# a new one on a new URL and leaves the old one serving, stranding every
+# bookmark, the client's local-config.js and the scheduled runner on it.
 #
-# What that costs: `npm run deploy` from here runs
-# `wrangler d1 migrations apply DB --remote` against real users' data, and the
-# block-remote-d1-writes hook deliberately allows migrations. So an unfinished
-# migration in this tree is one deploy away from production. That is the price
-# of the productization work living in the same repo that owns the deployment.
-# Verify with verify-migration.mjs and take a `wrangler d1 export` first.
+# `npm run deploy` applies pending migrations to production. Run
+# verify-migration.mjs and take a backup first (add-d1-migration skill).
 [[d1_databases]]
 binding = "DB"
 database_name = "job-search-tracker-db"
 database_id = "104f139f-bc84-4e72-8034-8541ef563ae4"
 migrations_dir = "./migrations"
 
-# Resumes and the per-track baseline docs the nightly run reads and edits -
-# everything that used to live only in an installer's private/ folder on one
-# Windows machine. See ../docs/private-storage-plan.md and src/r2.js.
+# Resumes and the per-track baseline docs the nightly run reads and edits
+# (src/r2.js).
 #
 # Created by: wrangler r2 bucket create job-search-tracker-docs
 #
-# There is no matching D1 table: an object's key is <user-id>/<relative path>,
-# and R2's own list() returns the size, etag, upload time and content type a
-# table would have duplicated. Nothing here needs a migration.
+# No D1 table: an object's key is <user-id>/<relative path>, and R2's list()
+# returns the size, etag, upload time and content type a table would duplicate.
 #
-# `wrangler d1 export` does not cover this bucket. scripts/backup-tracker.ps1
-# pulls the objects down separately - a deploy that skips that step leaves the
-# resumes as the one thing with no backup at all.
+# `wrangler d1 export` does not cover this bucket; scripts/backup-tracker.ps1
+# backs it up.
 [[r2_buckets]]
 binding = "DOCS"
 bucket_name = "job-search-tracker-docs"

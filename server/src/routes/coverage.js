@@ -14,14 +14,11 @@ import { excluderFor, isoDate, today, unknownTrack } from "../validate.js";
 
 // How many companies one run covers. A whole list is more than a run can
 // verify properly, and the failure isn't that a company gets missed - it's
-// that all of them get skimmed.
+// that all of them get skimmed. The list's length divided by this is how many
+// nights a full cycle takes.
 //
-// 24 since 0011 made the list global. Twelve kept a list the size each search
-// used to hold (35-80) inside a week; the merged list is 139, which at twelve
-// is a twelve-day cycle, so the batch doubled to hold it near six. That is
-// roughly twice the work a run was doing in a night. Read run lengths and sweep
-// counts before moving it again - and read step 9e first, since its
-// replacement loop compounds on top of this number on a bad night.
+// Before changing it, read run lengths and sweep counts, and step 9e of the
+// prompt, whose replacement loop adds to this number on a bad night.
 //
 // A constant, not config: a setting nobody sets is a setting that goes stale.
 export const COVERAGE_BATCH = 24;
@@ -41,42 +38,31 @@ function sliceAt(eligible, cursor) {
 /**
  * GET /api/coverage/:key[?all=1] - requires a Bearer token ->
  * `{ companies: [{company, position, last_swept, board, note, known?}], total,
- * batch, cursor }`.
+ * batch, cursor }`; 404 for an unknown track.
  *
- * Which companies this run covers, chosen by the server: the next
- * COVERAGE_BATCH along the shared list from this search's cursor. The run is
- * told what to sweep rather than how to choose, because a cap in prose is a
- * cap a run can talk itself out of on a night when the list looks short.
- * `?all=1` returns the whole list instead, for seeding and for looking at it.
+ * The server picks tonight's slice - the next COVERAGE_BATCH along the shared
+ * list from this search's cursor - because a cap stated in prose is one a run
+ * can talk itself out of when the list looks short. `?all=1` returns the whole
+ * list instead.
  *
- * Same 404-on-unknown-track reasoning as the dedup route (see ./screened.js):
- * an empty list from a mistyped key would read as "nothing to sweep", and a
- * run would quietly search nothing at all.
+ * 404 rather than an empty list for an unknown key: empty would read as
+ * "nothing to sweep", and the run would search nothing.
  */
 export async function handleGetCoverage({ db, params, url }) {
   const key = params[0];
   const all = url.searchParams.get("all") === "1";
   if (!(await db.trackExists(key))) return unknownTrack(key);
-  // Filtered on the way out as well as on the way in, because the two catch
-  // different things. recordSweeps refuses to *add* an excluded company; this
-  // refuses to hand back one that is already in the table - which is the
-  // ordinary case, not the exotic one. An exclusion usually gets added because
-  // the person saw a posting and decided never again, so the company is
-  // already in the rotation by the time it lands on the list. Guarding only
-  // the write would leave it being served as a company to cover, every cycle,
-  // for as long as the row exists.
-  //
-  // Filtered rather than deleted: the row is the rotation's memory of when
-  // that company was last looked at, the exclusion list is editable, and
-  // reading is the wrong moment to destroy data.
+  // Excluded companies are filtered on read as well as on write: recordSweeps
+  // refuses to add one, but a company is usually already in the rotation by the
+  // time someone excludes it. Filtered rather than deleted, because the row
+  // records when the company was last looked at and the exclusion list is
+  // editable.
   const [log, cursor] = await Promise.all([db.getCoverage(key), db.getSweepCursor(key)]);
   const isExcluded = await excluderFor(db);
   const eligible = log.filter((c) => !isExcluded(c.company));
   if (all) {
-    // Intel here too. This branch is what a person reads when they want to see
-    // the table, and a view that silently omits the shared facts is one that
-    // makes them look absent - which is how someone concludes the pooling
-    // isn't working and goes back to writing endpoints into a doc.
+    // `known` here too, so a person reading the whole table sees the shared
+    // facts rather than concluding there are none.
     const allIntel = await db.getCompanyFetch(eligible.map((c) => c.company));
     return json({
       companies: eligible.map((c) => {
@@ -84,46 +70,26 @@ export async function handleGetCoverage({ db, params, url }) {
         return known ? { ...c, known } : c;
       }),
       total: eligible.length,
-      // Reports the whole table, because that is what this branch returns. Not
-      // the per-run cap - that is COVERAGE_BATCH, and reading `batch` from this
-      // branch as the nightly slice is a mistake that has already been made.
+      // The whole table's size, not the nightly slice (that is COVERAGE_BATCH).
       batch: eligible.length,
       cursor,
     });
   }
 
-  // Read forward from the cursor, wrapping at the end - the whole selection
-  // rule, with no date in it.
+  // Read forward from the cursor, wrapping at the end. Only position decides
+  // the slice; `last_swept` records when a company was attempted and takes no
+  // part in choosing. Excluded companies are filtered out before slicing, so
+  // they don't use up slots.
   //
-  // Dates used to decide this (`ORDER BY last_swept, company`), which made the
-  // same column record when a company was attempted and choose who went next.
-  // Both rotation bugs came from the second job: a run asking for replacements
-  // got back companies it had just covered, and the alphabetical tiebreak put
-  // the same 31 companies last every cycle. Reading further along a fixed log
-  // is inherently fresh, so neither is expressible any more.
-  //
-  // Excluded companies are stepped over without consuming a slot. Filtering
-  // before the window rather than after is what stops a run being handed nine
-  // companies because three in its stretch of the log are excluded.
-  //
-  // The cursor is compared against `position`, never used as an array index. Those are not
-  // the same number the moment any company is excluded: with the company at
-  // position 0 excluded, eligible[4] is position 5, so treating the cursor as
-  // an index skipped position 4 entirely and silently. Positions are the unit
-  // the cursor is stored in, so they have to be the unit it is read in.
-  //
-  // Wrapping falls out of the concatenation: once the cursor passes the last
-  // position, nothing is at or after it and the whole slice comes from the
-  // front of the log.
+  // The cursor is compared against `position`, never used as an array index:
+  // once any company is excluded, eligible[i] is no longer position i, and
+  // indexing would skip a company silently.
   const companies = sliceAt(eligible, cursor);
 
-  // What is already known about reaching each of these, pooled across the
-  // whole deployment (migrations/0010_company_fetch.sql). Attached to the
-  // companies a run is already being handed rather than served from a route of
-  // its own: a run that has to remember a second call is a run that will skip
-  // it on a busy night, and this is exactly the knowledge whose absence made
-  // three separate searches independently conclude that a live domain was
-  // walled. Per company, so nothing about anyone's rotation travels with it.
+  // What is known about reaching each company, pooled across the deployment
+  // (migrations/0010_company_fetch.sql). Attached here rather than served by a
+  // route of its own, because a run skips a second call on a busy night. Keyed
+  // by company, so nothing about anyone's rotation travels with it.
   const intel = await db.getCompanyFetch(companies.map((c) => c.company));
   const withIntel = companies.map((c) => {
     const known = intel.get(normalize(c.company));
@@ -134,33 +100,29 @@ export async function handleGetCoverage({ db, params, url }) {
     companies: withIntel,
     total: eligible.length,
     batch: companies.length,
-    // Where this search has read up to, as a position rather than an index.
-    // Progress through the rotation is a number now rather than something
-    // inferred from dates - "24 of 55" is answerable, and so is "when does a
-    // given company come round".
     cursor,
   });
 }
 
 /**
  * POST /api/coverage - requires a Bearer token. Body
- * `{ search, on?, swept: [{company, board?, endpoint?, url_shape?, wall?,
- * note?}] }` -> `{ recorded, added, excluded, on, cursor, shared, withheld }`.
+ * `{ search, on?, swept: [{company, board?, endpoint?, url_shape?,
+ * dead_signal?, wall?, note?}] }` -> `{ recorded, added, excluded, on, cursor,
+ * shared, withheld }`, or `{ recorded: 0, excluded, on }` when every company is
+ * excluded; 400 for a missing search or no companies, 403 for a demo account,
+ * 404 for an unknown track.
  *
- * Records what a run actually attempted. Attempted, not found: a company whose
- * board was blocked today still gets stamped, or the rotation retries it every
- * run forever and the rest of the list starves. A company not yet on the shared
- * list joins it, so one that broader discovery turned up is in every search's
- * rotation from then on.
+ * Records what a run attempted, not what it found: a company whose board was
+ * blocked still gets stamped, or the rotation retries it every run and the rest
+ * of the list starves. A company not yet on the shared list joins it, so it is
+ * in every search's rotation from then on.
  */
 export async function handleRecordSweeps({ request, db, user }) {
-  // A demo account's companies are invented, and this route is the only thing
-  // that writes the list every account's searches are served from - membership
-  // through addCompanies, facts through upsertCompanyFetch. 0011 merged a demo
-  // account's seeded rotation into that list and put 21 companies that do not
-  // exist in front of real nightly runs (migrations/0012_demo_account.sql).
-  // Refused whole rather than filtered, so a seed or a run that thinks it wrote
-  // something hears that it didn't. Reading the list is unaffected.
+  // A demo account's companies are invented, and this route writes the list
+  // every account's searches are served from (membership via addCompanies,
+  // facts via upsertCompanyFetch; migrations/0012_demo_account.sql). Refused
+  // whole rather than filtered, so the caller hears that nothing was written.
+  // Reading the list is unaffected.
   if (user.demo) {
     return json(
       { error: "a demo account cannot write to the company list - every account shares it, and a demo's companies are invented" },
@@ -180,19 +142,14 @@ export async function handleRecordSweeps({ request, db, user }) {
     .map((i) => ({ ...i, company: i.company.trim() }));
   if (valid.length === 0) return json({ error: "no companies provided" }, 400);
 
-  // Same reasoning as /api/runs: the worker only knows UTC, and a 01:00 local
-  // run is already the next UTC day - a date derived here would stamp tomorrow.
-  // An explicit "" is not a malformed date, it's "register these companies,
-  // I haven't swept them" - the seeding case, which must not stamp anything
-  // (see db.recordSweeps).
+  // The run's own date: the worker only knows UTC, and a 01:00 local run is
+  // already the next UTC day. An explicit "" means "register these companies,
+  // I haven't swept them" - seeding, which stamps nothing (see
+  // db.recordSweeps).
   const on = body.on === "" ? "" : isoDate(body.on) || today();
 
-  // The rotation is the surface where an exclusion would become permanent.
-  // This route creates a row for any company it is handed - that is how a
-  // company broader discovery turned up joins the rotation - so an excluded
-  // company swept once would be stored, then handed back by
-  // GET /api/coverage as a company to cover, every cycle, forever. Every other
-  // exclusion leak is one row; this one is self-renewing.
+  // This route adds any company it's handed to the rotation, so an excluded
+  // company reported once would otherwise be served every cycle.
   const isExcluded = await excluderFor(db);
   const allowed = valid.filter((i) => !isExcluded(i.company));
   const excluded = valid.length - allowed.length;
@@ -205,20 +162,16 @@ export async function handleRecordSweeps({ request, db, user }) {
   const log = await db.getCoverage(key);
   const onList = new Map(log.map((c) => [normalize(c.company), c]));
 
-  // A company not on the list appends after the highest position, so discovery
-  // adds to the end rather than jumping the queue or landing behind a cursor
-  // where it would wait a full cycle.
-  //
-  // A position is assigned once, when a company joins, and only to companies
-  // that are actually new. Counting the batch instead - or seeding from the
-  // list's length rather than its highest position - leaves gaps where a known
-  // company was re-swept, and eventually two companies with one position.
+  // A new company appends past the highest position, so it neither jumps the
+  // queue nor lands behind a cursor and waits a full cycle. Positions go only
+  // to companies that are actually new: counting the batch, or starting from
+  // the list's length, leaves gaps and eventually two companies with one
+  // position.
   let nextPos = log.length ? Math.max(...log.map((c) => c.position)) + 1 : 0;
 
-  // New companies take their places in a shuffled order, not the order they
-  // arrived in - a written list is almost always alphabetical or grouped by
-  // theme, and assigning in arrival order would rebuild the bias 0008 removed.
-  // One entry per company: a batch naming one company in two spellings adds it
+  // New companies are positioned in shuffled order: a written list is usually
+  // alphabetical or grouped by theme, and arrival order would carry that bias
+  // into the rotation. A batch naming one company in two spellings adds it
   // once, under the first.
   const fresh = [];
   const seenFresh = new Set();
@@ -237,28 +190,19 @@ export async function handleRecordSweeps({ request, db, user }) {
   );
   const added = await db.addCompanies([...joining.values()]);
 
-  // A row reporting a `wall` beside a `board` or `endpoint` contradicts itself.
-  // A wall means no route to this company's listings worked tonight; a board or
-  // an endpoint is a route that did. Neither half can be trusted over the
-  // other, and each wrong answer costs something different:
-  //  - trust the board, and a board copied out of companies.json on a night the
-  //    fetch failed deletes a true wall for every search (upsertCompanyFetch
-  //    clears a wall whenever a working route is reported).
-  //  - trust the wall, and a careers domain that 403s beside a board that
-  //    worked becomes a wall every search skips - a reachable company nobody
-  //    fetches again, so nothing disproves it until it expires.
-  // So the row shares nothing: no wall, board, endpoint or url_shape reaches
-  // the shared list, and neither does the board mirrored onto this search's
-  // record. The sweep itself is still recorded - the company was attempted -
-  // and `withheld` counts these rows so the caller can see what was dropped.
+  // A row reporting a `wall` beside a `board` or `endpoint` contradicts itself:
+  // a wall means no route to the listings worked, a board or endpoint is one
+  // that did. Trusting the board lets a failed fetch erase a true wall for
+  // every search (upsertCompanyFetch clears a wall when a route is reported);
+  // trusting the wall makes a reachable company one every search skips until
+  // the wall expires. So the row shares nothing - no wall, board, endpoint or
+  // url_shape, and no board on this search's record either. The sweep is still
+  // recorded, and `withheld` counts these rows.
   //
-  // `url_shape` is deliberately not a route here. It is how one posting's URL is
-  // built, not a way to the listings, and step 9e sends a run at a specific
-  // posting when the listing is walled: a posting that loads beside a walled
-  // listing is both things true at once, and that row shares as normal.
+  // `url_shape` is not a route: it builds one posting's URL, and a posting can
+  // load while its listing is walled, so that row shares as normal.
   //
-  // Enforced here rather than only in the ./tracker helper, so a curl or a
-  // skill writing to this route meets the same rule.
+  // Enforced here, not only in scripts/tracker.ps1, so every caller meets it.
   const contradicts = (i) =>
     typeof i.wall === "string" && i.wall !== "" &&
     ((typeof i.board === "string" && i.board !== "") || (typeof i.endpoint === "string" && i.endpoint !== ""));
@@ -276,9 +220,8 @@ export async function handleRecordSweeps({ request, db, user }) {
   // The same report, pooled: the fields that describe a website. `last_swept`,
   // the cursor and `note` stay in this search's own record.
   //
-  // Seeding (`on: ""`) writes no fact here. A seed is a list somebody typed, not
-  // something a run confirmed. It still puts companies on the list - that is
-  // addCompanies above, and it is membership, not knowledge.
+  // Seeding (`on: ""`) writes no shared fact: a typed list isn't something a
+  // run confirmed. It still adds companies to the list, via addCompanies above.
   const withheld = on ? allowed.filter(contradicts).length : 0;
   const shared = on
     ? await db.upsertCompanyFetch(
@@ -289,52 +232,34 @@ export async function handleRecordSweeps({ request, db, user }) {
           url_shape: typeof i.url_shape === "string" ? i.url_shape : "",
           dead_signal: typeof i.dead_signal === "string" ? i.dead_signal : "",
           wall: typeof i.wall === "string" ? i.wall : "",
-          // `note` stays out. It is the one field a run writes in prose, and
-          // prose is where a search's own reasoning leaks ("skipped, nothing
-          // at Brenna's level here"). A shared note needs its own field a run
-          // fills deliberately, not a repurposed private one.
+          // `note` stays out: it is prose, and prose carries a search's own
+          // reasoning ("skipped, nothing at my level here"). A shared note
+          // needs its own field, not this private one.
         })),
         on
       )
     : { written: 0 };
 
   // Advance the cursor past the last company reported from the slice this
-  // search was served, so the next read starts after it - including within the
-  // same run, which is what lets a run come back for replacements without a
-  // date filter.
+  // search was served, so the next read - including a replacements read in the
+  // same run - starts after it.
   //
-  // Committed only now, after the sweep is recorded. A run that dies before
-  // reporting leaves the cursor where it was and tomorrow re-reads the same
-  // stretch; it never advances past work nobody recorded.
+  // Committed only after the sweep is recorded, so a run that dies before
+  // reporting leaves the cursor where it was. Seeding (`on: ""`) claims no
+  // coverage, so it doesn't move the cursor.
   //
-  // Seeding (`on: ""`) registers companies without claiming to have covered
-  // them, so it must not move the cursor.
+  // The served slice is rebuilt with sliceAt, as GET built it. Companies outside
+  // it are recorded but don't move the cursor: one already on the list can sit
+  // anywhere along it, a re-sent one sits behind the cursor, and a newly joined
+  // one is past every cursor, so advancing to any of them would move the cursor
+  // further than the run read. The slice is in rotation order, wrap included,
+  // so the last one reported is the furthest along - not the highest position,
+  // which is wrong for a slice that wraps.
   //
-  // Only the served slice counts, rebuilt here by the function GET served it
-  // with. A report routinely names companies outside it, and each of those is
-  // recorded, but none of them moves the cursor:
-  //  - a company discovery turned up that is already on the list. On one shared
-  //    list that is the ordinary case - another search's run added it - and it
-  //    can sit anywhere along the log. Counting it moved the cursor past it,
-  //    and everything between the slice and that company went unswept for the
-  //    rest of the cycle.
-  //  - a company re-sent after it was already recorded, which sits behind the
-  //    cursor. Measured along the rotation that is nearly a whole lap, so it
-  //    outranked the replacements reported beside it.
-  //  - a company that joined in this call, appended past every cursor.
-  // The slice is in rotation order, wrap included, so the last one reported is
-  // the furthest along. That also settles the slice that runs off the end of
-  // the log and back round to the front: the highest position in it is not the
-  // last one served, and advancing past the highest re-served the front of that
-  // slice early - 12 companies a cycle at a batch of 24.
-  //
-  // The rebuild matches what the run was served because reading never moves the
-  // cursor, so a run cannot be handed a second slice without reporting the
-  // first. The list can still change between the read and the report - another
-  // run appending while a slice wraps, an exclusion edited mid-run - and the
-  // worst either does is stop the cursor short, so a company is served twice.
-  // A company is never skipped: the cursor only passes companies this report
-  // named.
+  // Reading never moves the cursor, so the rebuild matches what the run was
+  // served. If the list changes between read and report, the worst case is the
+  // cursor stopping short and a company being served twice; the cursor only
+  // passes companies this report named.
   let cursor = await db.getSweepCursor(key);
   if (on !== "") {
     const reported = new Set(allowed.map((i) => normalize(i.company)));

@@ -1,7 +1,6 @@
 /**
  * The daily search prompt for one track, composed from that track's D1 config
- * (see ../prompt.js) - what run-search.ps1 fetches instead of reading a prompt
- * file off whichever machine it happens to be running on.
+ * (see ../prompt.js) - what scripts/run-search.ps1 fetches and runs.
  */
 
 import { json, text } from "../http.js";
@@ -9,24 +8,22 @@ import { buildAutofillPrompt, buildSearchPrompt } from "../prompt.js";
 import { unknownTrack } from "../validate.js";
 
 /**
- * GET /api/prompt/:key - requires a Bearer token -> text/plain.
+ * GET /api/prompt/:key - requires a Bearer token -> text/plain; 404 for an
+ * unknown track, 409 for a track with `fed_by` set (the error names the one to
+ * run) or with no search config.
  *
- * text/plain because its consumer pipes it straight into the CLI. 409s for a
- * track with `fed_by` set: that tab has no search of its own, and the error
- * names the one to run.
+ * text/plain because its consumer pipes it straight into the CLI.
  */
 export async function handleGetPrompt({ db, user, params }) {
   const key = params[0];
   const [track, config] = await Promise.all([db.getTrack(key), db.getTracksAndSettings()]);
   if (!track) return unknownTrack(key);
 
-  // A track with `fed_by` set is a tab, not a search: a sibling's run finds
-  // its postings and files them here (see migrations/0003_branched_tracks.sql).
-  // Composing a prompt for it would produce a second, near-identical search of
-  // the same job boards - exactly what the arrangement exists to avoid - so
-  // refuse and name the track to run instead. setup-scheduler.ps1 registers no
-  // task for one of these, so reaching this is either a hand-run or a
-  // scheduled task left over from before the split.
+  // A track with `fed_by` set is a tab, not a search: a sibling's run fills it
+  // (migrations/0003_branched_tracks.sql), and a prompt for it would be a
+  // second, near-identical search of the same job boards.
+  // setup-scheduler.ps1 registers no task for one, so this is reached by a
+  // hand-run or by a task registered before the track was fed.
   if (track.fed_by) {
     return json(
       {
@@ -36,16 +33,10 @@ export async function handleGetPrompt({ db, user, params }) {
     );
   }
 
-  // A track that exists but has no search config at all would still compose a
-  // perfectly well-formed prompt - out of the generic fallbacks. "Companies:
-  // ." and "Read the resume." and no geographic scope, followed by the same
-  // instructions to verify postings and POST them as leads. A scheduled run
-  // would carry that out and report success.
-  //
-  // That state is reachable, and not hypothetically: it's exactly what a
-  // track looks like between the multi-user migration (which copies no search
-  // config) and the config being posted for it. Refuse instead, so the run
-  // fails loudly and visibly rather than quietly doing a hollow search.
+  // A track with no search config would still compose a well-formed prompt
+  // from the generic fallbacks, and a run would carry out that hollow search
+  // and report success. A track is in this state until its config is posted,
+  // so refuse and let the run fail visibly.
   if (!track.role_search_line && !track.resume_line && !track.target_companies) {
     return json(
       {
@@ -65,21 +56,16 @@ export async function handleGetPrompt({ db, user, params }) {
 /**
  * GET /api/prompt/_applications - requires a Bearer token -> text/plain.
  *
- * The nightly fill for applications added as nothing but a URL. A reserved key
- * rather than a track (see ./index.js for how it's kept out of the track
- * pattern's way): it isn't one search's prompt, or even one person's.
+ * The nightly fill for applications added as nothing but a URL, under a
+ * reserved key rather than a track (see ./index.js for the route order).
  *
- * The only route here whose body doesn't depend on who asked. That is the
- * point of it: one nightly task covers every account on a machine, so the
- * prompt is written for "each account you were given" and scripts/run-fill.ps1
- * supplies the accounts. It still needs a session to read - you have to be
- * somebody - it just doesn't matter which somebody.
+ * Its body doesn't depend on who asks: one nightly task covers every account
+ * on a machine, so the prompt is written for "each account you were given" and
+ * scripts/run-fill.ps1 supplies the accounts. A session is still required.
  *
- * Composed unconditionally, including for a machine whose queues are all empty
- * tonight, which is most nights. The prompt's first step is to fetch a queue
- * and move on if it's empty, so that costs one API call rather than a refusal
- * here - and a 409 for "nothing to do" would look exactly like the two real
- * 409s next door, which mean a track is misconfigured.
+ * Composed even when every queue is empty; the prompt's first step checks, and
+ * a 409 for "nothing to do" would look like handleGetPrompt's 409s, which mean
+ * a track is misconfigured.
  */
 export async function handleGetAutofillPrompt() {
   return text(buildAutofillPrompt());

@@ -5,33 +5,22 @@ Thumbs.db
 # Personal data silo — never committed. See private.example/README.md.
 /private/
 
-# Wrangler local cache/build output - never commit. Unanchored so it catches
-# any depth, not just the two dirs that have a wrangler.toml today: a stray
-# worker/.wrangler/ survived the server/ rename and sat untracked in every
-# git status, holding a cached wrangler-account.json.
+# Wrangler local cache/build output, which can hold a cached
+# wrangler-account.json. Unanchored so it catches any depth, not just the dirs
+# that have a wrangler.toml today.
 .wrangler/
 
 # npm install output, if anyone runs it locally (server/package.json and
 # client/package.json are mainly for the Deploy to Cloudflare button, which
 # installs its own copy)
 node_modules/
-# The lockfile that install writes goes with it. Committing one would pin
-# wrangler for every installer who forks this - off a version that only ever
-# got there because somebody ran `npm install` locally to test a migration -
-# and the Deploy button resolves its own copy regardless. Unanchored, same
-# reason as .wrangler/ above: it appears next to whichever package.json was
-# installed, and both of them can be.
+# The lockfile that install writes goes with it. client/ and server/ depend on
+# little but wrangler, so a lockfile would pin every forker to whatever version
+# was installed locally, and the Deploy button resolves its own copy regardless.
+# Unanchored: it appears next to whichever package.json was installed.
 package-lock.json
-# ...except client-react/'s, which IS committed. The rule above exists because
-# client/ and server/ have wrangler as effectively their only dependency, so a
-# lockfile there would hand every forker a version that only got pinned because
-# somebody ran `npm install` locally. client-react/ is a real application with a
-# real dependency tree behind it: unpinned, it resolves differently on every
-# machine and in CI, which is the thing a lockfile exists to stop. Deciding this
-# per-directory rather than repo-wide is the point - see
-# docs/react-adoption-plan.md, which named the lockfile as a cost of the React
-# client and put it at the wrong phase (it arrives at Phase 1, not Phase 5,
-# because Phase 1 already ships a build).
+# ...except client-react/'s, which is committed: it has a real dependency tree,
+# and unpinned that resolves differently on every machine and in CI.
 !client-react/package-lock.json
 
 # This installer's own API URL - treated like private/ data (see

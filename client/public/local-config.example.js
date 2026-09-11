@@ -1,6 +1,5 @@
-// Copy this file to local-config.js (gitignored, never committed) and set
-// your own ../server/ deploy's URL below. Gets the token-only gate in your
-// own browser instead of having to type the API URL every time too.
+// Copy this file to local-config.js (gitignored) and set your server/ API
+// Worker's URL below.
 //
 //   cd client/public
 //   copy local-config.example.js local-config.js      (Windows)

@@ -1,38 +1,22 @@
 <#
 .SYNOPSIS
   Uploads a private data folder's documents - baseline docs, resumes, reference
-  files - into the tracker, where the nightly runs now read them from.
+  files - into the tracker, where the nightly runs read them from.
 
 .DESCRIPTION
-  Generic script - contains no personal data. For each account under -DataDir
-  that has a tracker.json, it walks docs\, resumes\ and reference\ and PUTs
-  each file to `/api/documents/<folder>/<filename>`.
-
-  This is the one-time lift for a folder that predates the document store, and
-  it is also what a new machine or a restored backup uses, so it is a tool
-  rather than a throwaway. Re-runnable: every write is a PUT at a fixed path,
-  so running it twice stores the same bytes at the same key rather than
-  duplicating anything.
-
-  Nothing here guesses. A file's content type comes from a literal table of
-  extensions, and an extension not in that table is refused by name rather than
-  sent as application/octet-stream - a wrong type is not a visible failure, it
-  is a document the browser offers to download instead of showing and that a
-  later reader has to work out for itself. The same goes for a name the API
-  will not accept: it is reported, not quietly skipped.
-
-  What it does NOT do: delete anything, locally or in the tracker. A file
-  removed from the folder stays in the bucket until somebody removes it
-  deliberately.
+  Use it to load a data folder's documents on a new machine or after restoring a
+  backup. Safe to re-run: a PUT to a fixed path overwrites rather than
+  duplicates. A file the API would refuse, or whose extension has no known
+  content type, is reported and skipped. Nothing is deleted, locally or in the
+  tracker.
 
   Exit codes: 0 everything uploaded; 1 nothing could be attempted (no accounts,
   or the deployment has no document store); 2 finished with files skipped or
   failed - read the summary.
 
 .PARAMETER DataDir
-  The private data folder. With per-user subfolders, each one holding a
-  tracker.json. Defaults to JOB_SEARCH_DATA_DIR, then to a "private" folder
-  next to this repo.
+  The private data folder, one subfolder per account holding a tracker.json.
+  Defaults to JOB_SEARCH_DATA_DIR, then <repo>\private.
 
 .PARAMETER User
   Import only this account (a user id / folder name). Default is every account
@@ -58,15 +42,12 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"   # PS 5.1 renders a progress bar per request
 
-# The three folders the API stores, which are also the three values of a
-# document's `kind`. Kept in step with server/src/validate.js by hand, because
-# a PowerShell script cannot import a JS constant - so a mismatch shows up as
-# the API refusing a path this script offered, which is at least loud.
+# Kept in step with server/src/validate.js by hand; a mismatch surfaces as the
+# API refusing a path.
 $FOLDERS = @("docs", "resumes", "reference")
 
-# Content type by extension, deliberately a closed list. An extension not here
-# is refused and named rather than defaulted: octet-stream is what a browser
-# downloads instead of displaying, and it tells a later reader nothing.
+# A closed list: an unknown extension is refused rather than sent as
+# application/octet-stream, which a browser downloads instead of displaying.
 $CONTENT_TYPES = @{
     ".md"   = "text/markdown"
     ".txt"  = "text/plain"
@@ -75,11 +56,9 @@ $CONTENT_TYPES = @{
     ".xlsx" = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 }
 
-# The API's own rules, mirrored so this can say what is wrong with a file
-# before spending a request finding out. Both come from
-# server/src/validate.js: one folder deep, a filename that starts and ends with
-# a word character (Windows silently drops a trailing space or dot), and never
-# a DOS device name (CON, PRN.md and aux.txt resolve to devices, not files).
+# Mirrors server/src/validate.js so a bad name is reported before a request is
+# spent. A name must end in a word character because Windows drops a trailing
+# space or dot, and DOS device names (CON, PRN.md) resolve to devices.
 $NAME_OK     = "^\w([\w .-]*\w)?$"
 $DOS_DEVICE  = "^(con|prn|aux|nul|com[0-9]|lpt[0-9])$"
 $MAX_BYTES   = 8 * 1024 * 1024
@@ -111,9 +90,8 @@ foreach ($acct in $accounts) {
     Write-Host ""
     Write-Host "== $($acct.Name) -> $url"
 
-    # Fail fast on a deployment with no document store rather than reporting a
-    # failure per file: it is one condition with one fix (see server/README.md's
-    # "First: turn on R2"), and 20 copies of it buries the sentence that matters.
+    # Checked once up front: a missing document store is one condition with one
+    # fix, and a failure per file would bury it.
     try {
         $null = Invoke-RestMethod -Uri "$url/api/documents" -Headers $headers -ErrorAction Stop
     } catch {
@@ -132,8 +110,8 @@ foreach ($acct in $accounts) {
         $dir = Join-Path $acct.FullName $folder
         if (-not (Test-Path $dir)) { continue }
 
-        # Top level only. The API stores one folder deep, so anything nested is
-        # named as skipped rather than flattened into a colliding key.
+        # The API stores one folder deep; nested folders are skipped rather than
+        # flattened into colliding keys.
         foreach ($nested in (Get-ChildItem $dir -Directory -ErrorAction SilentlyContinue)) {
             Write-Host "  SKIP  $folder/$($nested.Name)/ - nested folders are not stored (one level only)"
             $skipped++
@@ -161,9 +139,8 @@ foreach ($acct in $accounts) {
                 $skipped++; continue
             }
             if ($file.Length -eq 0) {
-                # Uploaded anyway - the folder is the source of truth and
-                # refusing to move a file somebody put there is surprising - but
-                # said out loud, because an empty resume reads as a present one.
+                # Uploaded, since the folder is the source of truth, but warned
+                # about because an empty resume looks like a present one.
                 Write-Host "  WARN  $rel is empty (0 bytes)"
             }
 
@@ -175,9 +152,8 @@ foreach ($acct in $accounts) {
 
             try {
                 $body = [System.IO.File]::ReadAllBytes($file.FullName)
-                # -UseBasicParsing: PS 5.1 otherwise hands a *successful*
-                # response to the IE engine, which prompts and throws with no
-                # HTTP status when nobody is there to answer.
+                # -UseBasicParsing: PS 5.1 otherwise parses with the IE engine,
+                # which prompts and throws when nobody is there to answer.
                 $r = Invoke-WebRequest -Uri "$url/api/documents/$rel" -Method Put `
                         -Headers $headers -Body $body -ContentType $CONTENT_TYPES[$ext] `
                         -UseBasicParsing -ErrorAction Stop
@@ -196,10 +172,8 @@ foreach ($acct in $accounts) {
         }
     }
 
-    # What the search will actually try to open. `resume_line` and `doc_file`
-    # are free prose, so this only reports paths written in backticks and says
-    # so - an exact-match extraction with a stated blind spot, rather than a
-    # guess at what a sentence meant.
+    # Notes documents a track names that aren't uploaded. `doc_file` and
+    # `resume_line` are prose, so only backticked paths are checked.
     if (-not $WhatIf) {
         try {
             $cfgNow  = Invoke-RestMethod -Uri "$url/api/config" -Headers $headers -ErrorAction Stop

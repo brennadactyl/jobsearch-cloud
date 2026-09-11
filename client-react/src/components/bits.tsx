@@ -1,7 +1,3 @@
-/**
- * The small shared pieces every panel uses. Each emits the class names
- * src/tracker.css already targets - none of this is new design.
- */
 import { Link } from "react-router-dom";
 import type { Settings, Track } from "../api/schema";
 import { APP_SORTS, LEAD_SORTS, pillFor } from "../domain/constants";
@@ -11,23 +7,17 @@ import { geo } from "../domain/geo";
 import { runState, runSummary } from "../domain/runs";
 import { setPrefs, usePrefs } from "../ui/prefs";
 
-/** Status as a coloured pill. */
 export function Pill({ status }: { status: string }) {
   return <span className={`pill ${pillFor(status)}`}>{status}</span>;
 }
 
-/** The location tier badge. Nothing when the location matches no configured rule. */
 export function GeoBadge({ location, settings }: { location: string; settings: Settings }) {
   const g = geo(location, settings.priority_locations);
   if (!g) return null;
   return <span className={`geo ${g.p}`}>{g.label}</span>;
 }
 
-/**
- * The ranking legend, shared by every tab that colours a row by tier. Numbered
- * so the ranking reads as a ranking - with more than two tiers, colour alone
- * stops saying which outranks which.
- */
+/** Numbered, because past two tiers colour alone doesn't say which outranks which. */
 export function GeoKey({ settings }: { settings: Settings }) {
   return (
     <>
@@ -41,7 +31,6 @@ export function GeoKey({ settings }: { settings: Settings }) {
   );
 }
 
-/** "when did this search last run", above a track's list and in the Overview. */
 export function RunStamp({ track, settings }: { track: Track | undefined; settings: Settings }) {
   if (!track) return null;
   const run = track.last_run;
@@ -65,7 +54,6 @@ export function RunStamp({ track, settings }: { track: Track | undefined; settin
   );
 }
 
-/** Detail / Grid. One switch drives both panels. */
 export function ViewSwitch() {
   const { view } = usePrefs();
   return (
@@ -110,12 +98,9 @@ export function SortSelect({ kind, id }: { kind: "leads" | "applications"; id: s
 }
 
 /**
- * The chip saying a drill-down is on, and taking it off again.
- *
- * Rendered only in the tab that owns it: the Overview sends you here with a
- * filter applied, and an applied filter you cannot see is a page lying about
- * what it is showing. Clearing it is a link back to the same tab without the
- * query param, so the back button works and the state is shareable.
+ * An applied filter you can't see is a page misreporting what it shows, so a
+ * drill always gets this chip. Clearing is a link without the query param, so
+ * Back restores it.
  */
 export function DrillChip({
   drill,
@@ -139,7 +124,6 @@ export function DrillChip({
   );
 }
 
-/** A posting link, or plain text when there is nothing safe to open. */
 export function PostingLink({ url, children }: { url: string; children: React.ReactNode }) {
   const safe = safeUrl(url);
   if (!safe) return <>{children}</>;
@@ -150,11 +134,7 @@ export function PostingLink({ url, children }: { url: string; children: React.Re
   );
 }
 
-/**
- * The remove glyph, drawn from primitive shapes rather than one hand-authored
- * path so it reads as a bin at a glance. stroke is currentColor, so the button's
- * own colour (.icon-btn.danger) is what colours it.
- */
+/** stroke is currentColor, so the button's colour (.icon-btn.danger) colours the icon. */
 export function TrashIcon() {
   return (
     <svg

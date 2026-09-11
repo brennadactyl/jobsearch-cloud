@@ -1,22 +1,15 @@
 /**
- * Who is calling, and are they allowed to. Everything that touches a password
- * or a session token lives here; the route modules and index.js only ever
- * call the four functions at the bottom.
+ * Everything that touches a password or a session token.
  *
- * The model: a person has a name and a password (users), and holds zero or
- * more bearer tokens (sessions). Passwords are only ever seen by POST
- * /api/login and POST /api/users - every other request carries a token, which
- * is a random 32 bytes with no relationship to the password at all. That's
- * what lets the scheduled searches keep a long-lived credential on disk
- * without that credential being the human's password, and what makes "log this
- * browser out" a row delete instead of a password change.
+ * A person has a name and a password (users) and holds zero or more bearer
+ * tokens (sessions). Only POST /api/login, /api/users and /api/password see a
+ * password; every other request carries a token of 32 random bytes unrelated
+ * to it. That lets a scheduled search keep a long-lived credential on disk that
+ * isn't the human's password, and makes "log this browser out" a row delete
+ * rather than a password change.
  *
- * Replaces the old single API_TOKEN worker secret, which was one constant
- * shared by the webpage, every scheduled search, and anyone who had ever been
- * told it - unrevocable except by rotating it everywhere at once.
- *
- * No dependencies: PBKDF2 and getRandomValues are both native to Workers via
- * Web Crypto, so this file adds nothing to install or audit.
+ * No dependencies: PBKDF2 and getRandomValues are native to Workers via Web
+ * Crypto.
  */
 
 // 100k rather than the ~600k OWASP suggests for PBKDF2-SHA256, deliberately:
@@ -90,15 +83,12 @@ function timingSafeEqual(a, b) {
  * @returns {Promise<boolean>}
  */
 export async function verifyPassword(password, user) {
-  // An empty stored hash means login is disabled (the state the migration's
-  // backfill row starts in, before POST /api/users sets a real password). Fail
-  // closed rather than treating "no password" as "any password".
+  // An empty stored hash means login is disabled until POST /api/users sets a
+  // password. Fail closed rather than treating "no password" as "any password".
   //
-  // Derive anyway before failing. Returning early here would make a login for
-  // a name that doesn't exist measurably faster than one with a wrong
-  // password - ~15ms against ~48ms, trivially separable over the network -
-  // which hands out exactly the "does this person have an account here?"
-  // answer that the identical error message is there to withhold.
+  // Derive anyway before returning, so an unknown name isn't measurably faster
+  // than a wrong password - the identical error message is there to withhold
+  // whether the account exists.
   if (!user || !user.password_hash || !user.password_salt) {
     await hashPassword(password, DUMMY_SALT, PBKDF2_ITERATIONS);
     return false;
@@ -127,7 +117,6 @@ export async function hashToken(token) {
   return toBase64(new Uint8Array(digest));
 }
 
-/** Pulls the bearer token out of a request, or "" if there isn't one. */
 export function bearer(request) {
   const header = request.headers.get("Authorization") || "";
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -135,14 +124,14 @@ export function bearer(request) {
 
 /**
  * Resolves a bearer token to the person holding it. This is the whole access
- * check for every route except login and user provisioning - there is no
- * separate "is this token valid" step, because a token that doesn't join to a
- * user simply isn't one.
- * @param {D1Database} d1
- * @param {string} token
- * `demo` rides along because a route has to refuse a demo account before it
+ * check for every route outside PUBLIC_ROUTES: a token that doesn't join to a
+ * user isn't one.
+ *
+ * `demo` is included because a route has to refuse a demo account before it
  * writes anything shared (migrations/0012_demo_account.sql), and this is the
  * one lookup every request already makes.
+ * @param {D1Database} d1
+ * @param {string} token
  * @returns {Promise<{id: string, name: string, demo: number, session_id: string}|null>}
  */
 export async function getSessionUser(d1, token) {
@@ -190,11 +179,10 @@ export async function deleteSession(d1, token) {
 }
 
 /**
- * Creates a user, or sets an existing one's password. Both halves are the same
- * operation on purpose: nothing else in the system can run PBKDF2, so if this
- * route couldn't overwrite a password there would be no way to reset one
- * short of hand-deriving a hash offline. Creating never touches an existing
- * id, so a password change leaves every row that references the user alone.
+ * Creates a user, or sets an existing one's password. One operation on purpose:
+ * the admin route this serves is the only way to reset a password its owner
+ * can't supply. An existing account keeps its id, so a reset leaves every row
+ * that references the user alone.
  * @param {D1Database} d1
  * @param {string} name
  * @param {string} password
@@ -227,15 +215,8 @@ export async function upsertUser(d1, name, password, demo) {
 }
 
 /**
- * The user row behind a session, by id.
- *
- * getUserByName exists for login, where a name is all there is to go on. This
- * is for the routes that already know who is calling and need the stored
- * credential itself - verifying a password before changing it, so far. By id
- * rather than by the session's name, because a name is a display value that a
- * later feature could let someone edit, and re-looking-up by it would then be
- * a lookup that can miss.
- *
+ * The full user row, stored credential included, for a caller already known by
+ * session.
  * @param {D1Database} d1
  * @param {string} id
  * @returns {Promise<User|null>}
@@ -246,20 +227,11 @@ export async function getUserById(d1, id) {
 }
 
 /**
- * Sets a password for an account that already exists, by id.
+ * Sets the password of an account that already exists, by id. Never use
+ * upsertUser here: it creates an account on a name miss.
  *
- * Deliberately not upsertUser. That one takes a *name* and creates the account
- * if the name doesn't match, which is right for the admin route it serves and
- * badly wrong here: this is called by someone who is already signed in, and
- * "your password change quietly created a second empty account" is exactly the
- * failure set-password.ps1 has to warn about at length. By id, there is no
- * such branch to take - the row either exists or the caller has no session.
- *
- * Rewrites the credential columns and nothing else, so sessions survive. That
- * is the same promise POST /api/users makes, and it is what keeps a password
- * change from silently killing the long-lived token a scheduled search holds
- * on disk.
- *
+ * Rewrites only the credential columns, so sessions survive - including the
+ * long-lived token a scheduled search holds on disk.
  * @param {D1Database} d1
  * @param {string} userId
  * @param {string} password
@@ -276,21 +248,11 @@ export async function setUserPassword(d1, userId, password) {
  * Signs this person's *other browsers* out, leaving the caller's own session
  * and every non-browser credential alone.
  *
- * The filter is `label = 'browser'` - an allowlist of what may be revoked,
- * not a denylist of what must be spared - and the direction matters. A
- * scheduled search holds a token labelled 'scheduled-search' and its failure
- * mode is the worst one this system has: nothing errors, the nightly run just
- * stops, and a search that never fired looks exactly like a search that found
- * nothing. Written as "delete everything except 'scheduled-search'", any
- * credential someone later labels something else - a second machine, a
- * script, a phone - dies the first time anybody changes their password. This
- * way an unrecognised label is kept, and the worst case is a session that
- * should have gone and didn't, which the person can see and log out of.
- *
- * `label` was added to sessions so a credential could be revoked by what it is
- * rather than by guessing which opaque string is which. This is the first
- * thing to actually use it that way.
- *
+ * The filter is an allowlist, `label = 'browser'`, never "everything except
+ * 'scheduled-search'", because an unrecognised label must survive: a revoked
+ * search token fails silently - the nightly run just stops, looking like a
+ * search that found nothing - while a session wrongly kept is visible and can
+ * be logged out.
  * @param {D1Database} d1
  * @param {string} userId
  * @param {string} keepToken the raw token of the session doing the revoking

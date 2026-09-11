@@ -4,84 +4,53 @@
   task that fills it. Must be run from an Administrator PowerShell.
 
 .DESCRIPTION
-  Generic script - contains no personal data. Everything here needs elevation,
-  which is exactly the point: the protection is only worth something because
-  the everyday account cannot undo it.
+  Elevation is the boundary. The everyday account is an Administrators member
+  but runs unelevated with a filtered token (Administrators deny-only, no
+  take-ownership privilege), so rights granted to Administrators are out of its
+  reach without a UAC prompt, and it can't undo what this sets up.
 
-  Why elevation is the boundary. This account is a member of Administrators but
-  does not run elevated day to day, and Windows hands an unelevated process a
-  filtered token: the Administrators membership is present but marked deny-only,
-  and the privileges that would let it take ownership or restore files are
-  stripped. So permissions granted to Administrators are genuinely unavailable
-  to an unelevated process, and getting them back requires a UAC consent dialog
-  that only a person sitting at the machine can answer. That gap is the whole
-  mechanism.
+  It sets up:
 
-  What it sets up:
+  1. An archive folder outside the repository, owned by Administrators with
+     inheritance removed: Administrators and SYSTEM full control, Authenticated
+     Users read. Unelevated processes can read the backups but not change or
+     delete them. Ownership matters as much as the entries: an owner always
+     holds WRITE_DAC and could grant the rights back.
 
-  1. An archive folder outside the repository, owned by Administrators, with
-     inheritance broken and exactly three entries - Administrators and SYSTEM
-     full control, Authenticated Users read. An unelevated process can list and
-     read the backups (so restoring one needs no ceremony) but cannot write,
-     truncate, rename or delete them. Ownership matters as much as the
-     permissions: an owner always holds WRITE_DAC and could simply grant the
-     rights back, so leaving this account as owner would make the whole thing
-     decorative.
+  2. A copy of archive-backups.ps1 inside that folder, and a daily task running
+     that copy as SYSTEM, because SYSTEM must never run a script the everyday
+     account can edit. Re-run this script after changing the repo copy.
 
-  2. A copy of archive-backups.ps1 inside that folder, and a daily scheduled
-     task running **that copy** as SYSTEM. The copy is not fussiness. A task
-     that runs as SYSTEM must not execute a script the everyday account can
-     edit, or the task becomes a way to run arbitrary code as SYSTEM - a
-     privilege escalation handed over for free. The repo copy stays the source
-     of truth; re-run this script after changing it.
+  3. The nightly export task (backup-tracker.ps1), registered as the invoking
+     user rather than SYSTEM, since it only writes to the repo's own folder.
 
-  3. The nightly export task itself (backup-tracker.ps1), registered as the
-     person running this rather than as SYSTEM - it only writes to the repo's
-     own folder and has no business holding SYSTEM's rights. That half needs no
-     elevation; it's here so one command sets up the whole chain instead of
-     leaving the other half as something to remember.
+  It does not protect the D1 database itself; see README.md, "Backups".
 
-  Deliberately left alone: the repo's own private\backups folder. The daily
-  export has to be able to write there, and anything that can write can delete.
-  It is the working copy; the archive is the safeguard.
-
-  What this does NOT protect against, stated plainly:
-
-  - Someone deleting the D1 database itself. That capability comes from
-    wrangler's stored credential, and no filesystem permission touches it. The
-    PreToolUse hook refuses the obvious commands, but a hook is a guardrail, not
-    a boundary. What this setup guarantees is that if the database does go, the
-    data is still here.
-  - Anyone who elevates. That is the person at the keyboard, by design.
-
-  Safe to re-run: it refreshes the permissions, the script copy, and the task.
+  Safe to re-run: it refreshes the permissions, the script copy, and the tasks.
 
 .PARAMETER SourceDir
   Where backup-tracker.ps1 writes its exports. Defaults to
   <repo>\private\backups.
 
 .PARAMETER ArchiveDir
-  The protected destination. Defaults to a folder under ProgramData - outside
-  the repository on purpose.
+  The protected destination. Defaults to a folder under ProgramData, outside the
+  repository, so nothing aimed at the project reaches it.
 
 .PARAMETER At
-  When the daily archive task runs. Defaults to 03:45, meant to sit clear of the
-  nightly searches and the export that follows them, rather than racing either.
+  When the daily archive task runs. Defaults to 03:45, after the export.
 
 .PARAMETER TaskName
   Name of the archive task.
 
 .PARAMETER ExportAt
-  When the nightly export runs. Defaults to 03:15 - after the searches, before
-  the archive picks its output up.
+  When the nightly export runs. Defaults to 03:15, after the searches.
 
 .PARAMETER ExportTaskName
   Name of the export task.
 
 .EXAMPLE
-  # From an Administrator PowerShell. The -ExecutionPolicy flag is needed
-  # because the machine policy is Undefined, i.e. Restricted for an
-  # interactive shell - calling the script by path alone just fails.
+  # From an Administrator PowerShell. -ExecutionPolicy Bypass because the
+  # machine policy is Undefined, which is Restricted for an interactive shell.
   powershell -NoProfile -ExecutionPolicy Bypass -File "C:\VibeCoding\scripts\protect-backups.ps1"
 #>
 param(
@@ -93,10 +62,8 @@ param(
     [string]$ExportTaskName = "JobSearchTracker-Backup"
 )
 
-# Note the task names: neither matches "JobSearch-*", which is what
-# setup-scheduler.ps1 sweeps for stale search tasks. A backup job quietly
-# unregistered by the next scheduler run would be the worst kind of failure -
-# invisible until you needed it.
+# Neither task name may match "JobSearch-*": setup-scheduler.ps1 unregisters
+# tasks matching that as stale searches.
 
 $ErrorActionPreference = "Stop"
 
@@ -143,11 +110,8 @@ Copy-Item $srcScript (Join-Path $binDir "archive-backups.ps1") -Force
 $runScript = Join-Path $binDir "archive-backups.ps1"
 
 # ---- 3. The nightly export, running as the person who set this up ---------
-# This half needs no elevation - it only writes to the repo's own folder - but
-# it belongs here so one command sets up the whole chain rather than leaving
-# half of it as something to remember. Registered as the invoking user with the
-# same Interactive logon the search tasks use, so it inherits their behaviour:
-# runs while that person is logged in, no stored password.
+# Interactive logon, like the search tasks: no stored password, so it runs only
+# while that user is logged in.
 Step "Registering '$ExportTaskName' to run as $env:USERNAME daily at $ExportAt"
 $exportScript = Join-Path $PSScriptRoot "backup-tracker.ps1"
 if (-not (Test-Path $exportScript)) { throw "backup-tracker.ps1 not found next to this script." }
@@ -175,7 +139,7 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Force `
     -Description "Copies job-search tracker database exports into an archive the everyday account cannot modify or delete." | Out-Null
 
-# ---- 5. Prove it works now, not tomorrow at 3am ---------------------------
+# ---- 5. Run it once, so a broken setup shows now --------------------------
 Step "Running it once"
 Start-ScheduledTask -TaskName $TaskName
 $deadline = (Get-Date).AddSeconds(60)

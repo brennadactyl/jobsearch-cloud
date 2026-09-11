@@ -1,16 +1,7 @@
 /**
- * View preferences: what you are looking at rather than what the data says.
- *
- * The split is the one the old page draws between `state` (from /api/data) and
- * `ui` (per browser, in localStorage), and it is worth keeping: these are
- * per-device choices, they must survive a reload, and none of them belong to the
- * account. A second browser is allowed to disagree about sort order.
- *
- * What is NOT here: the current tab, the active drill and the status filter.
- * Those became the URL (see tabs.ts's pathForTab and the `drill`/`filter` query
- * params), which is the one behavioural upgrade this rebuild makes over the page
- * it replaces - a filtered view is now something you can link to, and the back
- * button undoes a drill.
+ * View preferences: per-browser choices that survive a reload and don't belong
+ * to the account. The tab, drill and status filter live in the URL instead, so a
+ * filtered view can be linked to.
  */
 import { useCallback, useSyncExternalStore } from "react";
 
@@ -35,18 +26,14 @@ const DEFAULTS: Prefs = {
   expanded: {},
 };
 
-/** The keys the old page used, so a browser that has used both keeps its choices. */
+/** Shared with client/public/index.html, so a browser using both keeps its choices. */
 const KEYS: Partial<Record<keyof Prefs, string>> = {
   view: "bjs.view",
   leadSort: "bjs.leadSort",
   appSort: "bjs.appSort",
 };
 
-/**
- * Reading localStorage *throws* where site data is blocked rather than
- * returning null, so every access is guarded. Preferences are a convenience:
- * losing them is a worse experience, not a broken one.
- */
+/** Guarded like client.ts's readStored: losing preferences is a worse experience, not a broken one. */
 function read<K extends keyof Prefs>(key: K): Prefs[K] | undefined {
   const storageKey = KEYS[key];
   if (!storageKey) return undefined;
@@ -71,11 +58,7 @@ function emit() {
   for (const l of listeners) l();
 }
 
-/**
- * A module-level store rather than a context, because these are genuinely
- * global and every panel reads them. useSyncExternalStore keeps the subscription
- * correct under concurrent rendering without a provider in the tree.
- */
+/** A module-level store rather than a context: these are global and every panel reads them. */
 export function setPrefs(patch: Partial<Prefs>): void {
   current = { ...current, ...patch };
   for (const [k, v] of Object.entries(patch)) {
@@ -118,30 +101,21 @@ export function usePrefs(): Prefs {
   );
 }
 
-/** `const [view, setView] = usePref("view")` for the single-value cases. */
 export function usePref<K extends keyof Prefs>(key: K): [Prefs[K], (v: Prefs[K]) => void] {
   const prefs = usePrefs();
   const set = useCallback((v: Prefs[K]) => setPrefs({ [key]: v } as Partial<Prefs>), [key]);
   return [prefs[key], set];
 }
 
-/**
- * Selects a row in one scope without disturbing the others' selections. Reads
- * the store rather than a render's copy of it, because it is also called from a
- * mutation's onSuccess - by which point that copy can be a render or two old.
- */
+/** Reads the store, not a render's copy: it is also called from onSuccess, when that copy can be stale. */
 export function selectRow(scope: string, id: string): void {
   setPrefs({ selected: { ...current.selected, [scope]: id } });
 }
 
 /**
- * The row a master/detail tab shows: the selected one while it is in the list,
- * otherwise the first. Grid highlights by the same rule, so switching views lands
- * on the same row either way.
- *
- * Worked out on every render and never stored. Storing the fallback raced adding
- * an application: a render could see the new row's selection before it saw the
- * new row, fall back to the first, and write that over the selection.
+ * The selected row while it is in the list, otherwise the first; Detail shows it
+ * and Grid highlights it. Never stored: a render can see a new row's selection
+ * before the row, and storing the fallback would overwrite that selection.
  */
 export function shownRow<T extends { id: number }>(rows: readonly T[], selected: string | undefined): T {
   return rows.find((r) => String(r.id) === String(selected)) ?? rows[0];

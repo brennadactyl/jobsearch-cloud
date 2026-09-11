@@ -1,14 +1,3 @@
-/**
- * What sits under a row's header: role details, stage history, notes, and the
- * one thing the overnight fill says.
- *
- * The markup is the old client's, class for class - `facts-card` > `mf-label`
- * > `more-grid` > `mf`, and `stage-hist` - because tracker.css is a copy of its
- * stylesheet and those are the selectors it targets. The first version of this
- * invented its own names (`facts`, `fcard`, `fgrid`), matched none of them, and
- * rendered all three cards unstyled. Keep the names; change the stylesheet if
- * the look has to change.
- */
 import type { Application, Lead } from "../api/schema";
 import { APP_ROLE_FIELDS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "../domain/constants";
 import { safeUrl } from "../domain/format";
@@ -18,9 +7,8 @@ import { EditableField, EditableNotes } from "./writes";
 type Fields = readonly (readonly [field: string, label: string])[];
 
 /**
- * The field grid. The Link field stays an editable input - it is how a posting
- * URL gets typed in or corrected - so the way to open it is an anchor beside its
- * label rather than turning the field itself into a link.
+ * The Link field stays an editable input - it is how a posting URL gets typed in
+ * or corrected - so it opens from an anchor beside its label.
  */
 export function RoleFields({
   item,
@@ -56,11 +44,7 @@ export function RoleFields({
   );
 }
 
-/**
- * Every stage, not only the ones reached. Each date is stamped once when the
- * status first gets there, and stays editable so a missed day can be corrected
- * or a skipped stage backfilled - which is the reason for showing the blank rows.
- */
+/** Every stage, blank ones included, so a missed date can be corrected or a skipped stage backfilled. */
 export function StageHistory({ app }: { app: Application }) {
   return (
     <div className="stage-hist">
@@ -80,10 +64,7 @@ export function StageHistory({ app }: { app: Application }) {
   );
 }
 
-/**
- * An application's cards: role details, then stage history. `compact` drops the
- * first card's top margin, for use inside a grid's expanded row.
- */
+/** `compact` drops the top margin, for a grid's expanded row. */
 export function AppFactsCards({ app, compact }: { app: Application; compact?: boolean }) {
   return (
     <>
@@ -99,7 +80,6 @@ export function AppFactsCards({ app, compact }: { app: Application; compact?: bo
   );
 }
 
-/** A lead's role details: the grid alone with no heading, which is how the old client draws a lead - unlike an application. */
 export function LeadFactsCard({ lead, compact }: { lead: Lead; compact?: boolean }) {
   return (
     <div className="facts-card" style={compact ? { marginTop: 0 } : undefined}>
@@ -108,7 +88,6 @@ export function LeadFactsCard({ lead, compact }: { lead: Lead; compact?: boolean
   );
 }
 
-/** Notes, as their own block below the facts rather than a card among them. */
 export function NotesBlock({
   row,
   kind,
@@ -127,16 +106,13 @@ export function NotesBlock({
 }
 
 /**
- * The only thing the overnight fill says on this page, and only when the run
- * left a note: a posting it could not read at all, or one it read part of. A
- * plainly filled row says nothing, and neither does a row still waiting - there
- * is nothing to do about that but wait.
+ * Shown only when the run left a note: a posting it couldn't read, or read only
+ * part of. Those rows still need something from you; a filled or waiting row
+ * doesn't.
  */
 export function AutofillNote({ app }: { app: Application }) {
   const note = app.autofill_note || "";
   if (!note) return null;
-  // Asks fillState() rather than re-testing `autofill === "failed"`. The old
-  // client writes that rule out in four places; this is where a fifth would go.
   const failed = fillState(app) === "stuck";
   return (
     <div className={`af${failed ? " bad" : ""}`}>

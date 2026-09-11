@@ -1,17 +1,8 @@
 /**
- * The only path to the server, and the analogue of the old client's `api()`
- * (client/public/index.html). It attaches the bearer token and turns a 401 into
- * a session reset, which is what makes a token revoked in another browser show
- * a sign-in prompt rather than a confusing empty page.
- *
- * Nothing else in this app calls `fetch`, with the two exceptions that
- * genuinely sit outside a session: `login` below (there is no token yet) and
- * `logout` (the token is being discarded). The old client has exactly the same
- * three call sites, deliberately.
- *
- * The API base is baked at build time from VITE_API_BASE - see vite.config.ts,
- * which refuses to build without it. There is no runtime field for it: one
- * deployed client always talks to one server.
+ * The only path to the server. `request` attaches the bearer token and turns a
+ * 401 into a session reset, so a token revoked in another browser shows the
+ * gate rather than an empty page. `logout` is the one other caller of `fetch`,
+ * because the token it carries is the one being discarded.
  */
 import { z } from "zod";
 import {
@@ -30,10 +21,8 @@ const TOKEN_KEY = "tracker_token";
 const NAME_KEY = "tracker_name";
 
 /**
- * Reading localStorage *throws* where site data is blocked (a private window, a
- * browser set to refuse it) rather than returning null, and an uncaught throw
- * here would take the app down before it rendered anything. Signing in still
- * works in that state; it just is not remembered.
+ * localStorage *throws* where site data is blocked, which uncaught would take
+ * the app down before it rendered. Signing in still works; it isn't remembered.
  */
 function readStored(key: string): string {
   try {
@@ -68,20 +57,17 @@ export const session = {
     writeStored(NAME_KEY, name);
   },
   /**
-   * Forgets the token but keeps the name, so the gate can prefill it next time,
-   * and tells the app - which is what takes the page back to the gate, from Log
-   * out and from a 401 on any request once the token has been revoked somewhere
-   * else. `reason` is what the gate says; "" for a plain sign-out.
+   * Forgets the token but keeps the name for the gate to prefill, and notifies
+   * the `onEnd` listeners, which take the page to the gate. `reason` is what the
+   * gate says; "" for a plain sign-out.
    *
-   * It tells on every call, not only when there was a token to forget: another
-   * browser tab signing out clears the same storage, and this tab's next 401
-   * still has to reach the gate.
+   * Notifies even with no token to forget: another tab signing out clears the
+   * same storage, and this tab's next 401 still has to reach the gate.
    */
   end(reason = "") {
     clearStored(TOKEN_KEY);
     for (const fn of endListeners) fn(reason);
   },
-  /** Subscribes to `end`. Returns the unsubscribe. */
   onEnd(fn: (reason: string) => void): () => void {
     endListeners.add(fn);
     return () => {
@@ -100,9 +86,8 @@ export class UnauthorizedError extends Error {
 
 /** Thrown when the payload did not match schema.ts. Distinct from a transport failure. */
 export class SchemaError extends Error {
-  // Declared and assigned rather than a constructor parameter property:
-  // `erasableSyntaxOnly` is on (see tsconfig.app.json), which rules out the
-  // shorthand because it emits code rather than erasing to nothing.
+  // Not a constructor parameter property: `erasableSyntaxOnly` (tsconfig.app.json)
+  // rules that shorthand out because it emits code.
   readonly detail: string;
   constructor(detail: string) {
     super("The server sent something this page did not understand.");
@@ -155,7 +140,6 @@ async function request<T>(
   return parsed.data;
 }
 
-/** Everything this person has, in one request. */
 export function getData(): Promise<TrackerData> {
   return request("/api/data", dataSchema);
 }
@@ -177,14 +161,10 @@ export async function login(name: string, password: string) {
 }
 
 /**
- * Revokes the token server-side, not just locally, so signing out here does not
- * leave a working token behind. Best-effort: the local session is cleared
- * regardless, because a failure to reach the server must not strand someone
- * signed in on a shared browser.
- *
- * Resolves false when the revoke did not land. This browser has forgotten the
- * token either way, but it is still live on the server, which on a shared
- * machine is worth saying.
+ * Revokes the token server-side as well as locally. The local session is
+ * cleared first regardless, so an unreachable server can't strand someone
+ * signed in on a shared browser. Resolves false when the revoke did not land:
+ * the token is still live on the server.
  */
 export async function logout(): Promise<boolean> {
   const token = session.token();
@@ -202,16 +182,13 @@ export async function logout(): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Writes.
+// Writes. Each returns the server's row, which mutations.ts puts in place of
+// its optimistic guess.
 //
-// Status is the exception to the generic field write, on both kinds of row: the
-// server validates the value and owns side effects a plain field patch cannot
-// do - creating a lead's application atomically, stamping a stage date. If a
-// new field ever needs a side effect it needs a route, not a special case here.
-//
-// Every one of these returns the server's authoritative row rather than the
-// caller guessing what changed, which is what lets an optimistic update be
-// replaced rather than merely confirmed.
+// Status has its own routes on both kinds of row: the server validates it and
+// owns its side effects (creating a lead's application, stamping a stage
+// date). A new field that needs a side effect needs a route, not a special
+// case here.
 
 const updateLeadSchema = z.object({ ok: z.boolean().optional(), lead: leadSchema });
 const updateAppSchema = z.object({ ok: z.boolean().optional(), application: applicationSchema });
@@ -238,8 +215,7 @@ export function setLeadStatus(id: number, status: string) {
 }
 
 /**
- * Files a lead under a different tab. The one field with failures worth reading
- * rather than a generic "couldn't save": an unknown track key, and a
+ * Refused, with a message worth showing, for an unknown track key or a
  * destination that already holds this posting (409 from the UNIQUE constraint).
  */
 export function moveLead(id: number, search: string): Promise<Lead> {
@@ -258,20 +234,15 @@ export function setApplicationStatus(id: number, status: string, date?: string):
 }
 
 /**
- * A row created with a link and nothing else is the entire handoff to the
- * overnight fill: it becomes a candidate because of what is in it (a link, and
- * no company/role/location), not because anything here said so. Nothing is
- * flagged or tracked from this side, so there is no state this page can get
- * wrong or leave stale.
+ * Nothing here marks the row for the overnight fill: a link with blank
+ * company/role/location is what queues it (see domain/rows.ts fillState).
  */
 export function addApplication(link: string): Promise<Application> {
   return request("/api/update", updateAppSchema, {
     method: "POST",
-    // The same body the old client sends, field for field. A row created here
-    // and a row created there have to be indistinguishable, or the cutover
-    // quietly changes what "Applied" and "days since" mean for new rows.
-    // Today is the UTC date, as domain/format's today() is - inlined so the
-    // API layer imports nothing from the UI's domain code.
+    // Field for field the body client/public/index.html sends, so a row from
+    // either client means the same thing. The UTC date is inlined, as
+    // domain/format's today() computes it, so this layer imports no domain code.
     body: {
       type: "application",
       company: "",
@@ -292,13 +263,9 @@ export function addApplication(link: string): Promise<Application> {
 }
 
 /**
- * Removing a posting takes a reason, which is stored on the screened row the
- * removal leaves behind. That row is both the only lasting record of why it
- * went and the thing that stops tomorrow's run rediscovering the URL and adding
- * it straight back.
- *
- * `kept` comes back non-empty when an application still points at the lead, in
- * which case nothing was deleted.
+ * `reason` is stored on the screened row the removal leaves behind, which is
+ * what stops tomorrow's run rediscovering the URL. `kept` comes back non-empty
+ * when an application still points at the lead, and then nothing was deleted.
  */
 export function deleteLead(id: number, reason: string) {
   return request("/api/delete-leads", z.object({ kept: z.array(z.unknown()).default([]) }), {
@@ -315,16 +282,9 @@ export function deleteApplication(id: number) {
 }
 
 /**
- * Changes your own password.
- *
- * A session route rather than an admin one: the person it belongs to is the
- * caller. It takes the current password on top of the token deliberately - the
- * session alone is not enough, so a borrowed browser cannot lock its owner out.
- *
- * `signOutOthers` revokes every *other* browser session and leaves this one,
- * and never touches the long-lived credential a scheduled search holds.
- * `signedOut` is the count, which is the only evidence the checkbox did
- * anything.
+ * Needs the current password as well as the token, so a borrowed browser can't
+ * lock its owner out. `signOutOthers` never revokes this session or a scheduled
+ * search's credential; `signedOut` is how many it revoked.
  */
 export function changePassword(currentPassword: string, newPassword: string, signOutOthers: boolean) {
   return request("/api/password", z.object({ ok: z.boolean().optional(), signedOut: z.number().default(0) }), {

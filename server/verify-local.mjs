@@ -10,7 +10,7 @@
  *
  * Point it elsewhere with `node verify-local.mjs <base-url> <admin-token>`.
  *
- * What it's actually for: this repo has no test suite, and the one property
+ * What it's for: server/ has no unit tests, and the one property
  * that most needs checking before a deploy is that two people's data cannot
  * reach each other. Most of the checks below are one user trying to read or
  * write another's rows by id and getting a 404 - the thing that would be
@@ -25,7 +25,6 @@ let pass = 0, fail = 0;
 
 // `raw`, `type`, `ifMatch` and `bytes` are for /api/documents, the one resource
 // whose body is not JSON in either direction (see src/routes/documents.js).
-// Everything else ignores them and behaves exactly as it always did.
 const req = async (method, path, { token, body, admin, raw, type, ifMatch, bytes } = {}) => {
   const headers = {};
   if (body) headers["content-type"] = "application/json";
@@ -109,9 +108,8 @@ const aDupe = await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
 check("the same user re-posting the same url is deduped", aDupe.json.added === 0);
 
 // The variant cases - a posting arriving under a URL that isn't byte-identical
-// to the one already stored. This is what actually happened in production: 8
-// leads filed in one night that were already tracked, each differing only by a
-// ?gh_jid= suffix or a slug. The UNIQUE constraint cannot see any of these.
+// to the one already stored, such as a ?gh_jid= suffix or a slug. The UNIQUE
+// constraint cannot see any of these.
 const aVariant = await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
   { search: "SWE", company: "Acme", title: "Senior Backend", url: `${sharedUrl}?gh_src=search-snippet` }] } });
 check("a tracking parameter doesn't make it a new posting",
@@ -136,10 +134,10 @@ const aTwoJobs = await req("POST", "/api/leads", { token: A_TOK, body: { leads: 
 check("two postings sharing a path but not an id stay two leads",
   aTwoJobs.json.added === 2, JSON.stringify(aTwoJobs.json));
 
-// The multi-user version of the variant case. Dedup widened from "same string"
-// to "same posting", and the whole point of doing that lookup in db.js is that
-// it can only ever see the calling user's rows - so B posting a variant of a
-// url A already tracks must still be a new lead for B.
+// The multi-user version of the variant case. Dedup matches "same posting",
+// not "same string", and that lookup in db.js must only ever see the calling
+// user's rows - so B posting a variant of a url A already tracks must still be
+// a new lead for B.
 // A url only A holds - `sharedUrl` above is deliberately tracked by BOTH
 // users, so a variant of it is B's own duplicate and would pass this check
 // while proving nothing about scoping.
@@ -155,11 +153,8 @@ const bVariant = await req("POST", "/api/leads", { token: B_TOK, body: { leads: 
 check("but is new for a user who does not - dedup never reaches across users",
   bVariant.json.added === 1, JSON.stringify(bVariant.json));
 
-// Excluded companies. The list has been structured config for a while; until
-// now the only thing acting on it was a sentence in the prompt, and both
-// directions leaked in production - a lead got filed for an excluded company,
-// and two screened rows were written for one the prompt says to drop without
-// recording at all.
+// Excluded companies are enforced by the API rather than left to a sentence in
+// the prompt, which lets them through both as leads and as screened rows.
 await req("POST", "/api/config", { token: A_TOK, body: {
   excluded_companies: ["Quillwork / Quill Industries", "Vela", "Q (formerly Quantex)"] } });
 const exLead = await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
@@ -283,9 +278,8 @@ check("a URL-only application is picked up automatically, with the link and noth
   aQueue.json.applications.some((x) => x.id === urlApp.id && x.link === urlApp.link) &&
   Object.keys(aQueue.json.applications[0]).sort().join() === "id,link",
   JSON.stringify(aQueue.json.applications));
-// aApp came from a lead, so it already has company, title and location. Opening
-// its posting could only confirm what is there, and this is also what stops
-// deploying the feature from sending a run at every application ever logged.
+// aApp came from a lead, so it already has company, title and location, and
+// opening its posting could only confirm what is there.
 check("an application that came from a lead is left alone - nothing to fill",
   !aQueue.json.applications.some((x) => x.id === aApp.id));
 check("B's queue can't see A's row",
@@ -414,13 +408,7 @@ check("A's run is recorded against A only",
 check("a track key nobody configured 404s",
   (await req("POST", "/api/runs", { token: A_TOK, body: { search: "GHOST", on: "2026-08-31" } })).status === 404);
 
-// One search, several tabs: a track with fed_by is a tab the named sibling's
-// run fills. The failure this guards against is a tab nothing ever fills or
-// records a run against - which looks like a working, quiet search.
-// The rotation's memory. What matters here is the ordering (least-recently-
-// swept first, never-swept before that) and that a stamp doesn't wipe the
-// board endpoint an earlier run confirmed - both are what stop the rotation
-// from restarting at the top of the list every night.
+// A later stamp must not wipe a board an earlier run confirmed.
 console.log("\n== company coverage ==");
 check("an unconfigured track key 404s rather than reading as 'never swept'",
   (await req("GET", "/api/coverage/GHOST", { token: A_TOK })).status === 404);
@@ -431,17 +419,12 @@ await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: "2
   swept: [{ company: "Acme", board: "greenhouse" }, { company: "Globex" }] } });
 await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: "2026-08-28",
   swept: [{ company: "Acme", note: "blocked" }] } });
-// By name, not by index: this file is meant to be re-run against a database
-// that still holds the last run's fixtures, and every check that assumed a
-// position broke the moment a later one added a row.
+// By name, not by index: this file is re-run against a database that still
+// holds the last run's fixtures, and later checks add rows of their own.
 // ?all=1: these two are about what the table holds, not about the slice a run
 // is handed, and the default response is capped.
 const cov = (await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK })).json.companies;
 const at = (name) => cov.findIndex((c) => c.company === name);
-// Ordering is the log's, not the dates'. Selection used to sort by
-// (last_swept, company), which made one column both record when a company was
-// attempted and decide who went next; a company's place in the cycle now comes
-// from `position` and nothing else.
 check("the table comes back in log order, whatever the sweep dates say",
   cov.every((c, i) => i === 0 || c.position > cov[i - 1].position),
   JSON.stringify(cov.map((c) => `${c.company}@${c.position}:${c.last_swept || "never"}`).slice(0, 5)));
@@ -514,9 +497,8 @@ check("a deployment with an empty company list still gets every rotation step",
 // notices weeks of nothing, which is why the shape of the prompt is asserted
 // here rather than left to a reading of the diff.
 //
-// Commands rather than endpoints since the API prose moved into
-// scripts/tracker.ps1 (see ../docs/prompt-size-plan.md): the run reaches
-// /api/leads by invoking `./tracker leads`, so that is what has to survive an
+// Commands rather than endpoints: the run reaches /api/leads by invoking
+// `./tracker leads` (scripts/tracker.ps1), so that is what has to survive an
 // edit. Every prompt carries the rotation pair too.
 const sweSteps = (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text;
 const boSteps = (await req("GET", "/api/prompt/SWE", { token: B_TOK })).text;
@@ -540,15 +522,13 @@ check("step 4 still requires every candidate URL to be opened and confirmed",
   /MANDATORY VERIFICATION: fetch every candidate URL directly and confirm it renders an actual job description/
     .test(sweSteps) && /A search-snippet URL is a lead, not a finding, until opened and confirmed/.test(sweSteps));
 // There is no track without a rotation: B has never swept a company and still
-// gets both commands. Gating them on a track's own rows was the loop that left
-// a track with none unable to ever start.
+// gets both commands. Gating them on a track's own rows would leave a track
+// with none unable to ever start.
 check("a track that has never swept anything still gets both rotation commands",
   boSteps.includes("./tracker companies") && boSteps.includes("./tracker swept"));
-// Step 9d has to name every field a run can send, or the field does not exist
-// in practice: until 2026-09-11 it named {company, board, note}, so endpoint
-// and url_shape reached no run and 58 of company_fetch's 63 rows had no
-// endpoint. `wall` is the newest, and the one whose absence would cost most -
-// an obstacle with nowhere shared to go is rediscovered by every search.
+// Step 9d has to name every field a run can send, or the field reaches no run.
+// `wall` is the one whose absence costs most: an obstacle with nowhere shared
+// to go is rediscovered by every search.
 check("step 9d names every field a sweep can carry, wall included",
   sweSteps.includes("{company, board, endpoint, url_shape, wall, note}"));
 // A reported board or endpoint clears a company's wall for every search
@@ -559,10 +539,8 @@ check("step 9d names every field a sweep can carry, wall included",
 // fetch failed deletes a true wall, and nothing downstream can tell.
 check("step 9d forbids echoing a known board or endpoint back from companies.json",
   /Never copy `board`, `endpoint` or `url_shape` out of `companies\.json`/.test(sweSteps));
-// The cap is the whole point, and it has to hold on the night it matters most:
-// a freshly seeded list, where every row is never-swept and nothing has a date
-// to sort by. It also has to be the *server's* cap - the prompt describing one
-// is what this replaced.
+// The cap has to hold on a freshly seeded list, where every row is
+// never-swept, and it has to be the *server's* cap, not one the prompt describes.
 // Seeded as A, never as B - B is the account that has never swept anything.
 // Company names are unique per run, and there are enough of them that stamping
 // one batch still leaves a full batch of never-swept behind: that's what makes
@@ -573,25 +551,20 @@ await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: ""
   Array.from({ length: 40 }, (_, i) => ({ company: `Co-${runId}-${String(i).padStart(2, "0")}` })) } });
 const due = (await req("GET", "/api/coverage/SWE", { token: A_TOK })).json;
 const all = (await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK })).json;
-// COVERAGE_BATCH in routes/coverage.js - 24 since the list became one list.
+// COVERAGE_BATCH in routes/coverage.js.
 check("a run is handed a capped slice, not the whole list",
   due.companies.length === 24 && due.batch === 24 && due.total > 24,
   JSON.stringify({ n: due.companies.length, total: due.total, batch: due.batch }));
 check("?all=1 returns the whole table, for seeding and for looking",
   all.companies.length === all.total && all.total === due.total);
-// The ordering contract the cap rests on. It used to be about dates - nothing
-// covered outranking anything never covered - which is what made the same
-// alphabetical tail last every cycle. It is now about the log: positions are a
-// dense sequence, so the cursor reaches every company once before any twice.
 const positions = all.companies.map((c) => c.position);
 check("the log is a dense sequence, so the cursor cannot skip or repeat",
   new Set(positions).size === positions.length &&
   positions.every((p, i) => i === 0 || p > positions[i - 1]),
   JSON.stringify(positions.slice(0, 15)));
 // ?all=1 looks up the shared facts for every company it returns, and D1 refuses
-// a statement with more than 100 bound parameters. One search's rotation never
-// got near that; one list does - 139 companies on the live deployment - and the
-// read returned 500 until it was chunked. Put this run past the cap first.
+// a statement with more than 100 bound parameters, so the read has to chunk.
+// Put this run past the cap first.
 await req("POST", "/api/coverage", { token: A_TOK, body: { search: "SWE", on: "", swept:
   Array.from({ length: 100 }, (_, i) => ({ company: `Wide-${runId}-${String(i).padStart(3, "0")}` })) } });
 const wide = await req("GET", "/api/coverage/SWE?all=1", { token: A_TOK });
@@ -607,12 +580,7 @@ check("what a run covers goes to the back of the queue, not round again",
   JSON.stringify(next.map((c) => `${c.company}:${c.last_swept}`).slice(0, 4)));
 
 console.log("\n== the rotation is a log with a cursor ==");
-// Selection used to be ORDER BY last_swept, company - which made one column
-// both record when a company was attempted and decide who went next. Both
-// rotation bugs came from the second job: a run asking for replacements got
-// back companies it had just covered, and the alphabetical tiebreak put the
-// same 31 of 55 companies last every cycle, so none of them were reached in
-// the rotation's first two days.
+// Why selection is by position and cursor: migrations/0008_sweep_cursor.sql.
 await req("POST", "/api/users", { admin: true, body: { name: "Cursor", password: "cursor-long-password" } });
 const C_TOK = (await req("POST", "/api/login", { body: { name: "Cursor", password: "cursor-long-password" } })).json.token;
 // A per-run track: these rows persist, and re-running against the same
@@ -624,8 +592,8 @@ await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: "",
   swept: Array.from({ length: rotN }, (_, i) => ({ company: `Rot ${rotStamp}-${String(i).padStart(2, "0")}` })) } });
 
 // Seeding order must not become cycle order. A seeded list is written by a
-// person and is nearly always alphabetical, so assigning positions in arrival
-// order would rebuild exactly the bias migration 0008 removed.
+// person and is nearly always alphabetical, so positions in arrival order would
+// put the same tail last every cycle.
 const seedOrder = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.companies;
 // The list is shared, so this track's ?all=1 holds every company on it; the
 // fourteen seeded here are the ones named for this run.
@@ -648,7 +616,7 @@ check("recording a slice advances the cursor past it",
   rec1.json.cursor === Math.max(...c0.companies.map((c) => c.position)) + 1,
   JSON.stringify({ cursor: rec1.json.cursor, highestInSlice: Math.max(...c0.companies.map((c) => c.position)) }));
 
-// The replacement case, with no date filter anywhere.
+// The replacement case: a run reading again after recording its slice.
 const c1 = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
 check("reading again continues along the log instead of round again",
   c1.companies.every((c) => !c0.companies.some((p) => p.company === c.company)) === false ||
@@ -662,15 +630,8 @@ check("and the two companies left in this cycle come first",
 await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
   swept: c1.companies.slice(0, 2).map((c) => ({ company: c.company })) } });
 const c2 = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
-// Wrapping happens at the read, not the write. The stored cursor is a
-// position and is left past the end of the log; the read then finds nothing at
-// or after it and starts again at the front. Wrapping on write instead meant
-// taking the cursor modulo the company *count* - a different quantity from a
-// position as soon as anything is excluded or a position is skipped.
-// With one shared list the end of the log is further away than a
-// fourteen-company track put it, so walk a whole cycle the way nightly runs
-// do: read a slice, record all of it, repeat, noting each company the first
-// time it is served. Every company must be reached before any is served a
+// Walk a whole cycle of the shared list the way nightly runs do: read a slice,
+// record all of it, repeat, noting each company the first time it is served. Every company must be reached before any is served a
 // second time - including across the slice that runs off the end of the log
 // and back round to the front, which a real rotation hits once every cycle.
 const cycleTotal = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.total;
@@ -720,11 +681,9 @@ check("reading never moves the cursor, so a run that dies re-reads its slice",
   JSON.stringify(before.companies.map((c) => c.company)) === JSON.stringify(again.companies.map((c) => c.company)));
 
 // The cursor is a position, not an index into the filtered list. Those differ
-// the moment a company is excluded, and treating one as the other skipped a
-// company silently: with position 0 excluded, eligible[4] is position 5, so a
-// cursor of 4 stepped straight over position 4. Only shows up when an excluded
-// company sits before the cursor, which is why it survived the first round of
-// tests - they happened to exclude one that sat after it.
+// the moment a company is excluded: with position 0 excluded, eligible[4] is
+// position 5, so reading a cursor of 4 as an index steps over position 4. The
+// skip needs the excluded company before the cursor, so that is where it goes.
 const EX = ROT + "X";
 await req("POST", "/api/config", { token: C_TOK, body: {
   tracks: [{ key: ROT, label: "Rot" }, { key: EX, label: "Ex" }], excluded_companies: [] } });
@@ -748,8 +707,8 @@ await req("POST", "/api/config", { token: C_TOK, body: { excluded_companies: [] 
 
 // Only the served slice moves the cursor. On one shared list the company
 // discovery turns up is usually one another search's run already added, and it
-// can sit anywhere along the log: counting it moved the cursor past it, and
-// everything between the slice and that company went unswept for the cycle.
+// can sit anywhere along the log: counting it would move the cursor past it,
+// leaving everything between the slice and that company unswept for the cycle.
 const bSlice = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
 const outsideSlice = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.companies
   .filter((c) => !bSlice.companies.some((s) => s.company === c.company));
@@ -764,8 +723,8 @@ check("a listed company outside the served slice is recorded but does not move t
   JSON.stringify({ cursor: recAhead.json.cursor, expected: bSlice.companies[0].position + 1,
     farAhead: farAhead.position, last_swept: farRow.last_swept }));
 // A company re-sent after it was recorded sits just behind the cursor, nearly a
-// whole lap along from it - so it outranked the replacements reported beside
-// it, and they were served again the next day.
+// whole lap along from it - counted, it would outrank the replacements reported
+// beside it, and they would be served again the next day.
 const nextSlice = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json.companies;
 const resentRec = await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: dayAfter,
   swept: [bSlice.companies[0], nextSlice[0], nextSlice[1]].map((c) => ({ company: c.company })) } });
@@ -787,6 +746,9 @@ check("positions stay dense and unique after an append",
   JSON.stringify(rotAll.map((c) => c.position).slice(-4)));
 
 console.log("\n== branched tracks ==");
+// One search, several tabs: a track with fed_by is a tab the named sibling's
+// run fills. The failure this guards against is a tab nothing ever fills or
+// records a run against - which looks like a working, quiet search.
 check("fed_by naming a track that isn't in the list is refused",
   (await req("POST", "/api/config", { token: A_TOK, body: { tracks: [
     { key: "SWE", label: "Ada Eng" },
@@ -818,7 +780,7 @@ const across = await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
 check("one posting cannot land in two tabs of the same branched search",
   across.json.added === 1 && across.json.duplicates === 1, JSON.stringify(across.json));
 // ...while two genuinely separate searches tracking one posting stay two rows,
-// which is what UNIQUE(user_id, search, url) has always said.
+// as UNIQUE(user_id, search, url) allows.
 const indieUrl = `https://boards.example.com/jobs/${Date.now()}32`;
 const indie = await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
   { search: "SWE", company: "Acme", title: "Shared", url: indieUrl },
@@ -829,16 +791,8 @@ const fedPrompt = await req("GET", "/api/prompt/LEAD", { token: A_TOK });
 check("a fed track has no prompt of its own, and the refusal names the one to run",
   fedPrompt.status === 409 && /"SWE"/.test(fedPrompt.json.error), fedPrompt.text.slice(0, 120));
 const feedPrompt = (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text;
-// The third clause used to look for `"search":"LEAD"`, which only ever
-// appeared in the per-tab run-record instruction. The server fans that out
-// now, so the literal is gone by design; what still has to be true is that the
-// fed tab is a place step 9 can file a posting under.
-//
-// The first used to look for `/api/dedup/LEAD`, from the days when the prompt
-// listed one dedup call per tab. `./tracker dedup` asks the config which
-// tracks this one feeds and merges them itself, so no per-tab call is named
-// any more - the fed tab has to appear in the header and in the filing step
-// instead, which is where a run learns the tab exists at all.
+// `./tracker dedup` merges the fed tabs itself, so a run learns the fed tab
+// exists only from the header and the filing step.
 check("the feeding track's prompt covers both tabs",
   /# Also fills: LEAD /.test(feedPrompt) &&
   feedPrompt.includes("a role leading a team") &&
@@ -846,23 +800,17 @@ check("the feeding track's prompt covers both tabs",
 check("and says its one dedup command covers them together",
   /covers all 2 tabs this run fills/.test(feedPrompt) &&
   !/\/api\/dedup\//.test(feedPrompt));
-// The filing step's tie-break. It used to send an ambiguous posting to the
-// feeding track, which is whichever tab happens to own the scheduled search
-// and not a general-purpose one: on the deployment this came from it was the
-// narrowest tab on the board, and a Senior SWE role at an insurance company
-// landed in Eng - Gaming citing exactly this rule while its own note said the
-// tabs it read as were the other two. So a tie has to resolve among the tabs
-// it does read as, and the feeding key has to be named as not being a default.
+// The filing step's tie-break. The feeding track is whichever tab owns the
+// scheduled search, not a general-purpose one, so a tie has to resolve among
+// the tabs a posting reads as, and the feeding key is named as not a default.
 check("a tie in the filing step resolves among the tabs a posting reads as, not to the feeding tab",
   feedPrompt.includes("whichever of *those* tabs comes first in the list above") &&
   /already ruled out is never the answer/.test(feedPrompt) &&
   !/reads more than one way after checking, file it under `SWE`/.test(feedPrompt));
 // The fan-out is one transaction, so a run record either exists for every tab
-// the run fills or for none. The failure it replaced was a half-written
-// fan-out leaving a tab that had just been searched reading as never-run - the
-// exact state search_runs exists to make visible. A batch that violates the
-// table's primary key fails as a whole, which is how this gets to observe
-// all-or-nothing from outside: nothing should have moved.
+// the run fills or for none. A half-written fan-out would leave a tab that had
+// just been searched reading as never-run - the exact state search_runs exists
+// to make visible.
 const fanDay = "2026-12-01";
 await req("POST", "/api/runs", { token: A_TOK, body: { search: "SWE", status: "ok", on: fanDay, note: "before" } });
 const beforeFan = (await req("GET", "/api/config", { token: A_TOK })).json.tracks
@@ -877,11 +825,9 @@ check("a fed track still accepts a run record - that's what keeps its tab from r
   (await req("POST", "/api/runs", { token: A_TOK, body: { search: "LEAD", on: "2026-08-31", note: "filed by SWE" } })).status === 200);
 
 console.log("\n== leads and screened must name a configured track ==");
-// The orphan-row failure, from the write side. /api/runs has 404'd an
-// unconfigured key for a while; /api/leads and /api/screened took any string,
-// and 145 leads plus 185 screened rows spent months under a retired "TPM" key
-// - stored, invisible, and un-erroring. Ada's tracks here are SWE, LEAD (fed
-// by SWE) and DATA.
+// The orphan-row failure, from the write side: a row under an unconfigured key
+// is stored, invisible, and raises no error. Ada's tracks here are SWE, LEAD
+// (fed by SWE) and DATA.
 const ghostLead = await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
   { search: "GHOST", company: "Acme", title: "Nowhere", url: `https://boards.example.com/jobs/${Date.now()}41` }] } });
 check("a lead naming an unconfigured track is refused, and the error names the key",
@@ -976,7 +922,7 @@ check("a screened row cannot claim the reason that means 'delisted'",
   JSON.stringify(reasoned.json.run));
 
 console.log("\n== url-keyed routes ==");
-// These are the first routes that find a lead by url rather than by id, so
+// These routes find a lead by url rather than by id, so
 // they do not inherit the protection every other cross-user check in this file
 // relies on - an id that simply doesn't resolve for the wrong user. A
 // `WHERE url IN (...)` missing its user_id would match the other person's row
@@ -1030,7 +976,7 @@ check("B cannot move A's lead into one of B's tabs",
 // quietly break the "A's leads survive their track being removed" count below.
 //
 // The destination is DATA, an independent track, not LEAD. Since dedup follows
-// the search rather than the tab, one posting can no longer be filed into two
+// the search rather than the tab, one posting cannot be filed into two
 // tabs of the same branched search at all - so a genuine UNIQUE collision on
 // move can only be built out of two separate searches.
 const conflictUrl = `https://example.com/in-both-tabs-${Date.now()}`;
@@ -1086,8 +1032,8 @@ const rmStamp = Date.now();
 const rmUrl = (n) => `https://example.com/remove-me-${rmStamp + n}`;
 const rmUrls = [rmUrl(1), rmUrl(2), rmUrl(3)];
 // Whatever track A has right now, not a hard-coded "SWE": the replaceTracks
-// section just above swaps A's track list out, so assuming a key here made
-// this section depend on the order the file happens to run in.
+// section just above swaps A's track list out, so assuming a key here would
+// make this section depend on the order the file happens to run in.
 const rmTrack = (await req("GET", "/api/config", { token: rmTok })).json.tracks[0].key;
 const rmAdd = await req("POST", "/api/leads", { token: rmTok, body: { leads: rmUrls.map((u, i) => (
   { search: rmTrack, company: `Removable ${i}`, title: "Engineer", location: "Austin, TX", url: u })) } });
@@ -1154,11 +1100,9 @@ check("and no screened row was invented in B's data",
   !(await req("GET", "/api/data", { token: B_TOK })).json.screened.some((sc) => sc.reason === "should not work"));
 
 console.log("\n== a person's pruning is not the search's work ==");
-// Two changes that are each right alone: run counts derive from rows, and a
-// person removing a posting writes a screened row so it isn't rediscovered.
-// Together they let one person's pruning be reported as the night's search
-// work. Measured before the fix: one hand-deletion moved a run record from
-// {leads:3, screened:2} to {leads:2, screened:3}.
+// Run counts derive from rows, and a person removing a posting writes a
+// screened row so it isn't rediscovered. Without added_by, that pruning would
+// be reported as the night's search work.
 const attrDay = new Date().toISOString().slice(0, 10);
 const aStamp = Date.now();
 const amk = (n) => ({ search: "SWE", company: "Acme", title: "Attr" + n, url: `https://attr.example.com/jobs/${aStamp}${n}` });
@@ -1193,12 +1137,7 @@ check("the search's row is 'run' and the person's is 'hand'",
   attrRows.some((s) => s.added_by === "hand" && s.reason === "not interested"),
   JSON.stringify(attrRows.map((s) => s.added_by + ":" + s.reason.slice(0, 20))));
 
-// The refusal that keeps the column honest. `addedBy` is a required parameter,
-// and the tempting way to write that - a ternary picking a fallback - IS a
-// default, and would default to 'run': a caller that forgot the argument would
-// have its rows counted as the night's search work, which is the exact bug
-// this whole change exists to fix. JavaScript gives a missing argument as
-// `undefined` rather than an error, so the check has to be explicit.
+// Why addedBy is refused rather than defaulted: deleteLeadAndScreen in src/db.js.
 const attrDb = await import("./src/db.js");
 let threw = "";
 try {
@@ -1271,19 +1210,8 @@ check("purging again is a no-op, not an error",
   twice.status === 200 && twice.json.purged.leads === 0, twice.text.slice(0, 120));
 
 
-// ---------------------------------------------------------------------------
-// Changing your own password.
-//
-// Two properties carry this, and both fail quietly if they break.
-//
-// The current password has to be required. A session token that could set the
-// password would turn "someone copied your token" into "someone owns your
-// account", and nothing about the code would look wrong.
-//
-// And the scheduled search's credential has to survive. Its failure mode is
-// the worst one here: the nightly run just stops, and a search that never
-// fired is indistinguishable from one that found nothing, so the person finds
-// out weeks later from an empty tab.
+// Why the current password is required and the scheduled search's session
+// survives: POST /api/password in src/routes/accounts.js.
 console.log("\n== changing your own password ==");
 const PW_RUN = Date.now().toString(36);
 const pwName = `Pip ${PW_RUN}`;
@@ -1350,7 +1278,7 @@ check("and Pip's password is untouched by that attempt",
   (await req("POST", "/api/login", { body: { name: pwName, password: "pip-third-password" } })).status === 200);
 
 console.log("\n== unscreening: the way back from a wrong delist ==");
-// Runs last, and against B, whose SWE track the purge section just proved is
+// Runs against B, whose SWE track the purge section just proved is
 // untouched. A screened row is a standing instruction to skip a url forever -
 // dropKnownUrls honours it for leads too - so a lead delisted by mistake is
 // not merely off the board, it is unrediscoverable. This is the undo.
@@ -1441,11 +1369,9 @@ console.log("\n== documents ==");
 // The resumes and per-track baseline docs, which live in R2 rather than D1 (see
 // src/r2.js). `wrangler dev --local` gives these a local bucket, so this needs
 // no cloud R2 and no account with R2 enabled.
-// A_TOK was spent by the logout check in the sessions section above, so this
-// mints a fresh one. Worth doing explicitly rather than moving this section
-// higher: an expired token here fails as `{"error":"unauthorized"}` on the
-// writes while the "is it gone?" reads pass anyway, which looks like a partial
-// feature rather than a dead credential.
+// A_TOK was revoked by the logout check in the sessions section, and a dead
+// token here fails the writes while the "is it gone?" reads still pass - which
+// looks like a partial feature rather than a dead credential.
 const D_TOK = (await req("POST", "/api/login", {
   body: { name: "Ada", password: "ada-new-password-1" } })).json.token;
 check("a fresh session for the document checks", !!D_TOK);
@@ -1578,8 +1504,8 @@ check("deleting it again is 404",
 check("the other user's copy survived that delete",
   (await req("GET", `/api/documents/${DOC}`, { token: B_TOK })).text === "BO");
 
-// PUT and DELETE are this API's first non-GET/POST verbs, so the preflight has
-// to advertise them or a browser refuses the call before it is ever routed.
+// The preflight has to advertise PUT and DELETE, or a browser refuses the call
+// before it is ever routed.
 const preflight = await req("OPTIONS", "/api/documents");
 const allowed = preflight.headers.get("access-control-allow-methods") || "";
 check("the preflight advertises PUT and DELETE",
@@ -1588,7 +1514,7 @@ check("and allows the If-Match header",
   (preflight.headers.get("access-control-allow-headers") || "").includes("If-Match"));
 
 console.log("\n== shared company fetch intel ==");
-// The one table with no user_id (migrations/0010_company_fetch.sql). These
+// The shared table with no user_id (migrations/0010_company_fetch.sql). These
 // checks are the boundary: website facts pool, search facts do not.
 //
 // Two throwaway users, deliberately. Ada and Bo carry controls other sections
@@ -1729,10 +1655,9 @@ check("a wall beside a url_shape is not a contradiction, and both are shared",
   shapeRow.known.wall === "listing renders client-side" && shapeRow.known.url_shape === "shapeco.example/jobs/<id>",
   JSON.stringify({ withheld: shapeRes.json.withheld, row: shapeRow }));
 
-// A demo account's companies are invented, and the list is shared: 0011 merged
-// a seeded demo rotation into it and put 21 companies that do not exist in
-// front of real searches. So the account is marked when it is provisioned, and
-// the one route that writes the list refuses it - swept or seeded.
+// A demo account's companies are invented, and the list is shared, so the
+// account is marked when it is provisioned, and the one route that writes the
+// list refuses it - swept or seeded.
 check("an account created without saying is a person", aCreate.json.demo === false, JSON.stringify(aCreate.json));
 const demoName = `Demo ${olRun}`;
 const demoCreate = await req("POST", "/api/users", { admin: true, body: { name: demoName, password: "demo-long-password", demo: true } });

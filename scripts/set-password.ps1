@@ -3,39 +3,18 @@
   Sets or resets a tracker account's password, interactively.
 
 .DESCRIPTION
-  POST /api/users with the deployment's ADMIN_TOKEN both creates an account and
-  resets an existing one's password - nothing else in the system can hash a
-  password. This wraps that call so the password is typed at a prompt instead
-  of being passed as an argument: an argument lands in shell history, in a
-  scrollback, and in the transcript of any agent that runs it, and the one
-  thing this value must not do is persist anywhere.
+  Calls POST /api/users (create-or-reset, with the ADMIN_TOKEN) with a password
+  typed at a prompt, because an argument would persist in shell history,
+  scrollback and agent transcripts. Only password_hash changes, so existing
+  sessions, including the scheduled-search token in tracker.json, keep working.
 
-  It updates password_hash only, so existing sessions survive - including the
-  long-lived scheduled-search token in <data dir>/<user id>/tracker.json. A
-  reset does not require knowing the old password, which means an account can
-  be created with a random one nobody ever sees (see the job-search-setup
-  skill, step 1) and given a real password here afterwards.
-
-  ---- This is the reset path, not the change path.
-
-  Someone who knows their current password and simply wants a different one
-  does it themselves on the tracker page (click "Signed in as ..." in the
-  header; POST /api/password). That needs no admin secret, no terminal and no repo, which
-  is why it is the right route for the ordinary case - handing out a
-  credential that can rewrite any account's password, to someone who only
-  wanted to change their own, is not.
-
-  What is left here is what that route cannot do by design: it requires the
-  current password, so it is no help to an account whose password nobody
-  knows. That is this script - a new account created with a random one, or a
-  genuinely forgotten password.
+  This is the reset path only: for an account created with a random password or
+  a forgotten one. A user who knows their password changes it on the tracker
+  page (POST /api/password), which needs no admin token.
 
 .PARAMETER Name
-  The account name, exactly as stored. users.name is UNIQUE COLLATE NOCASE, so
-  case does not matter but spelling does: a name that does not match an
-  existing account creates a NEW empty one, and the person then signs in to an
-  empty tracker while their data sits behind the original. The script says so
-  loudly if that happens.
+  The account name. Case does not matter but spelling does: a name matching no
+  account creates a new, empty one, and the script warns when that happens.
 
 .EXAMPLE
   .\set-password.ps1 -Name "Jordan Lee"
@@ -67,8 +46,8 @@ try {
   $p2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto($b2)
 
   if ($p1 -cne $p2) { throw "The two entries did not match. Nothing was changed." }
-  # Enforced server-side too; checked here so a typo fails before the request.
-  # /api/login has no rate limiting in front of it, so length is the defence.
+  # Matches the server's rule; /api/login has no rate limiting, so length is the
+  # defence.
   if ($p1.Length -lt 12) { throw "Too short: $($p1.Length) characters. The server requires 12+." }
 
   $body = @{ name = $Name; password = $p1 } | ConvertTo-Json -Compress
@@ -88,7 +67,6 @@ try {
   }
 }
 finally {
-  # Zero both plaintext copies whether or not the request succeeded.
   [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b1)
   [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b2)
   Remove-Variable p1, p2 -ErrorAction SilentlyContinue

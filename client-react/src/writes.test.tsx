@@ -1,13 +1,7 @@
 /**
- * The write paths.
- *
- * What these are really testing is the optimistic layer, because that is the
- * part with a failure mode the old page did not have. There, a write either
- * happened or the row stayed as it was. Here the row changes *first* and the
- * server's answer decides whether it stays changed - so "does a failure put it
- * back" is a question worth asking of every mutation, and "does the indicator
- * say which of the two happened" is the thing that makes a rollback legible
- * rather than a mystery.
+ * The write paths. The row changes first and the server's answer decides whether
+ * it stays changed, so these ask whether a failure puts it back and whether the
+ * indicator says which happened.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -88,7 +82,6 @@ describe("editing a field", () => {
 
 describe("lead status", () => {
   it("goes through its own endpoint, not the generic field write", async () => {
-    // The server owns side effects a plain field patch cannot do.
     const setStatus = vi
       .spyOn(client, "setLeadStatus")
       .mockResolvedValue({ lead: { ...FIRST_LEAD, status: "Reviewing" }, application: null });
@@ -103,7 +96,6 @@ describe("lead status", () => {
   });
 
   it("takes the application the server creates when a lead is marked Applied", async () => {
-    // Not guessed optimistically - it has no id until the server assigns one.
     const created = { ...fixture.applications[0], id: 9001, company: "Acme", leadId: String(FIRST_LEAD.id) };
     vi.spyOn(client, "setLeadStatus").mockResolvedValue({
       lead: { ...FIRST_LEAD, status: "Applied" },
@@ -123,8 +115,6 @@ describe("lead status", () => {
 
 describe("moving a lead to another tab", () => {
   it("reports the reason it was refused, rather than a generic failure", async () => {
-    // Both of this call's failures are worth reading: an unknown track key, and
-    // a destination that already holds the posting.
     vi.spyOn(client, "moveLead").mockRejectedValue(new Error('"beta" already has a lead for that url'));
     await openLeads();
 
@@ -181,8 +171,7 @@ describe("application status and the stage-date dialog", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
 
     expect(setStatus).not.toHaveBeenCalled();
-    // The select is controlled, so it shows the row's real status again with no
-    // reverting needed - the old page had to reset the element by hand.
+    // The select is controlled, so it shows the row's real status again unaided.
     await waitFor(() => expect(select).toHaveValue(fixture.applications[2].status));
   });
 
@@ -224,9 +213,6 @@ describe("removing a posting", () => {
   });
 
   it("puts the row back when the server kept it", async () => {
-    // `kept` non-empty means an application still points at the lead and
-    // nothing was deleted - so the optimistic removal has to be undone on a
-    // *successful* response, not only on an error.
     vi.spyOn(client, "deleteLead").mockResolvedValue({ kept: [{ id: FIRST_LEAD.id }] });
     vi.spyOn(window, "prompt").mockReturnValue("changed my mind");
     await openLeads();
@@ -266,11 +252,8 @@ describe("adding an application", () => {
 
 describe("what a field shows while its save is in flight", () => {
   it("never falls back to the old value between blur and the save landing", async () => {
-    // The bug this guards: blur cleared the local draft immediately, but the
-    // optimistic cache patch lands a tick later (onMutate awaits
-    // cancelQueries). In between, the field fell back to the server value -
-    // which for a blank field means the placeholder flashes back up behind
-    // what you just typed.
+    // The optimistic patch lands a tick after blur, so the draft has to be held
+    // until the write settles (see EditableField).
     let settle!: (l: typeof FIRST_LEAD) => void;
     vi.spyOn(client, "updateLeadField").mockReturnValue(
       new Promise((r) => {
@@ -323,7 +306,6 @@ describe("changing your own password", () => {
   });
 
   it("reports how many other browsers were signed out", async () => {
-    // The count is the only evidence the checkbox did anything.
     vi.spyOn(client, "changePassword").mockResolvedValue({ ok: true, signedOut: 2 });
     await openLeads();
     await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
@@ -370,8 +352,6 @@ describe("changing your own password", () => {
   });
 
   it("does not touch the header's save indicator", async () => {
-    // "Saved" in the header would be a strange thing to say about a password,
-    // and this write has no row behind it.
     vi.spyOn(client, "changePassword").mockResolvedValue({ ok: true, signedOut: 0 });
     await openLeads();
     const before = screen.getByRole("status").textContent;
