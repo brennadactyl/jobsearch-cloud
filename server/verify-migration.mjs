@@ -357,6 +357,82 @@ INSERT INTO company_sweeps (user_id, search, company, company_key, position) VAL
   db.close();
 }
 
+const STOP13 = MIGRATIONS.find((f) => f.startsWith("0013_"));
+const OTHER_ID = "49732752-0000-4000-8000-000000000000";
+
+console.log("\n== 0013: company_sweeps rebuilt on company_key ==");
+{
+  // Two spellings of one company in one search - the case 0011 left behind and
+  // getCoverage papered over at read time - plus another account's row for a
+  // company the first also holds, and a name that normalizes to nothing.
+  const db = migratedThrough(STOP13, `
+INSERT INTO users (id, name) VALUES ('${OWNER}', 'Brenna'), ('${OTHER_ID}', 'Brady');
+INSERT INTO tracks (user_id, key, label, sweep_cursor) VALUES
+  ('${OWNER}', 'SWE', 'SWE', 24), ('${OTHER_ID}', 'CPM', 'CPM', 3);
+INSERT INTO company_fetch (company_key, display_name, position, board) VALUES
+  ('cursor anysphere', 'Cursor (Anysphere)', 0, 'ashby'), ('acme', 'Acme', 1, 'greenhouse');
+INSERT INTO company_sweeps (user_id, search, company, company_key, last_swept, board, note, position) VALUES
+  ('${OWNER}', 'SWE', 'Cursor (Anysphere)', 'cursor anysphere', '2026-09-01', 'ashby', 'the older note', 0),
+  ('${OWNER}', 'SWE', 'Cursor Anysphere', 'cursor anysphere', '2026-09-05', '', '', 0),
+  ('${OWNER}', 'SWE', 'Acme', 'acme', '2026-09-03', 'greenhouse', 'acme note', 1),
+  ('${OTHER_ID}', 'CPM', 'Acme', 'acme', '2026-09-02', '', 'brady note', 1),
+  ('${OWNER}', 'SWE', '!!!', '', '2026-09-04', '', 'punctuation only', 0);
+`);
+  const cols = db.prepare("SELECT name FROM pragma_table_info('company_sweeps') ORDER BY cid").all().map((c) => c.name);
+  check("the mirrored columns are gone, and the row is user, search, key, date, note",
+    JSON.stringify(cols) === JSON.stringify(["user_id", "search", "company_key", "last_swept", "note"]),
+    JSON.stringify(cols));
+
+  const rows = db.prepare("SELECT user_id, search, company_key, last_swept, note FROM company_sweeps ORDER BY user_id, search, company_key").all();
+  check("two spellings of one company become one row, keeping the later date",
+    rows.filter((r) => r.company_key === "cursor anysphere" && r.user_id === OWNER).length === 1 &&
+    rows.find((r) => r.company_key === "cursor anysphere").last_swept === "2026-09-05",
+    JSON.stringify(rows));
+  check("and the note from the most recently swept row that had one",
+    rows.find((r) => r.company_key === "cursor anysphere").note === "the older note",
+    JSON.stringify(rows.find((r) => r.company_key === "cursor anysphere")));
+  check("each account keeps its own record of a company they both hold",
+    rows.filter((r) => r.company_key === "acme").length === 2 &&
+    rows.find((r) => r.user_id === OTHER_ID).note === "brady note", JSON.stringify(rows));
+  check("a name that normalizes to nothing is dropped, since it can join no company",
+    !rows.some((r) => r.company_key === ""), JSON.stringify(rows));
+  check("no cursor moves",
+    JSON.stringify(db.prepare("SELECT key, sweep_cursor c FROM tracks ORDER BY key").all()) ===
+    JSON.stringify([{ key: "CPM", c: 3 }, { key: "SWE", c: 24 }]));
+  check("the key itself is the index a rotation reads, so no separate one is left",
+    db.prepare("SELECT COUNT(*) c FROM pragma_index_list('company_sweeps') WHERE origin = 'pk'").get().c === 1 &&
+    !db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_company_sweeps_key'").get());
+  check("no scratch table is left behind",
+    !db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='company_sweeps_by_key'").get());
+
+  // db.getCoverage's read, verbatim, against the schema this leaves behind.
+  const served = db.prepare(
+    `SELECT COALESCE(NULLIF(f.display_name, ''), f.company_key) AS company,
+            f.position,
+            CASE WHEN f.retracted_on = '' THEN f.board ELSE '' END AS board,
+            COALESCE(s.last_swept, '') AS last_swept,
+            COALESCE(s.note, '') AS note
+       FROM company_fetch f
+       LEFT JOIN company_sweeps s
+         ON s.user_id = ? AND s.search = ? AND s.company_key = f.company_key
+      ORDER BY f.position, f.company_key`).all(OWNER, "SWE");
+  check("the rotation read serves one row per company, with the list's name and board",
+    served.length === 2 && served[0].company === "Cursor (Anysphere)" && served[0].board === "ashby" &&
+    served[0].last_swept === "2026-09-05" && served[1].company === "Acme",
+    JSON.stringify(served));
+  db.close();
+}
+
+console.log("\n== 0013 against an empty database ==");
+{
+  const db = migratedThrough(STOP13, null);
+  check("the table exists and is empty",
+    db.prepare("SELECT COUNT(*) c FROM company_sweeps").get().c === 0);
+  check("no scratch table is left behind",
+    !db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='company_sweeps_by_key'").get());
+  db.close();
+}
+
 console.log("\n== 0012 against an empty database ==");
 {
   const db = migratedThrough(STOP12, null);

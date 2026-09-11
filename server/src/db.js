@@ -534,9 +534,8 @@ export class Db {
    * own, in company_sweeps. Ordered by `position`, a fixed place per company,
    * never by date. routes/coverage.js picks a run's slice from the cursor.
    *
-   * company_sweeps is keyed by the name a run wrote, so one search can hold two
-   * rows for spellings normalize() merges. The most recently swept wins, then
-   * the newest row, so the answer never depends on SQLite's read order.
+   * company_sweeps is keyed by `company_key` (0013_company_sweeps_by_key.sql),
+   * so a search has exactly one row per company, however a run spelled it.
    *
    * `board` is the shared one, blank on a retracted row: a withdrawn board is
    * not a hint.
@@ -556,11 +555,8 @@ export class Db {
                 COALESCE(s.last_swept, '') AS last_swept,
                 COALESCE(s.note, '') AS note
            FROM company_fetch f
-           LEFT JOIN company_sweeps s ON s.rowid = (
-             SELECT x.rowid FROM company_sweeps x
-              WHERE x.user_id = ? AND x.search = ? AND x.company_key = f.company_key
-              ORDER BY x.last_swept DESC, x.rowid DESC
-              LIMIT 1)
+           LEFT JOIN company_sweeps s
+             ON s.user_id = ? AND s.search = ? AND s.company_key = f.company_key
           ORDER BY f.position, f.company_key`
       )
       .bind(this.userId, search)
@@ -607,36 +603,30 @@ export class Db {
    * blank a note an earlier one wrote.
    *
    * Membership is not written here - that is addCompanies, on the shared list.
-   * Readers join on `company_key`; `board` and `position` mirror the list only
-   * for rollback compatibility (see 0011_one_company_list.sql).
+   * The row holds nothing the list already knows: the name, the board and the
+   * position all live on company_fetch (0013_company_sweeps_by_key.sql).
    * @param {string} search
-   * @param {{company: string, board?: string, note?: string, position: number}[]} items
-   *   `company` is the name as the list holds it, so every spelling of one
-   *   company lands on one row.
+   * @param {{company: string, note?: string}[]} items
+   *   `company` is read for its key alone, so every spelling of one company
+   *   lands on one row.
    * @param {string} on - YYYY-MM-DD
    */
   async recordSweeps(search, items, on) {
     const stmt = this.d1.prepare(
-      `INSERT INTO company_sweeps (user_id, search, company, company_key, last_swept, board, note, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(user_id, search, company) DO UPDATE SET
-         company_key = excluded.company_key,
+      `INSERT INTO company_sweeps (user_id, search, company_key, last_swept, note)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, search, company_key) DO UPDATE SET
          last_swept = CASE WHEN excluded.last_swept <> '' THEN excluded.last_swept ELSE company_sweeps.last_swept END,
-         board = CASE WHEN excluded.board <> '' THEN excluded.board ELSE company_sweeps.board END,
-         note = CASE WHEN excluded.note <> '' THEN excluded.note ELSE company_sweeps.note END,
-         position = excluded.position`
+         note = CASE WHEN excluded.note <> '' THEN excluded.note ELSE company_sweeps.note END`
     );
     await this.d1.batch(
       items.map((i) =>
         stmt.bind(
           this.userId,
           search,
-          i.company,
           normalizeCompany(i.company),
           on,
-          typeof i.board === "string" ? i.board : "",
-          typeof i.note === "string" ? i.note : "",
-          Number.isFinite(i.position) ? i.position : 0
+          typeof i.note === "string" ? i.note : ""
         )
       )
     );
