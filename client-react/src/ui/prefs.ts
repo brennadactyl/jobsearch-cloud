@@ -12,7 +12,7 @@
  * it replaces - a filtered view is now something you can link to, and the back
  * button undoes a drill.
  */
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 export interface Prefs {
   view: "detail" | "grid";
@@ -132,4 +132,15 @@ export function usePref<K extends keyof Prefs>(key: K): [Prefs[K], (v: Prefs[K])
  */
 export function selectRow(scope: string, id: string): void {
   setPrefs({ selected: { ...current.selected, [scope]: id } });
+}
+
+/**
+ * Writes down the row a detail pane is showing when nothing picked it - the
+ * first row, by default - so switching to Grid highlights the row Detail was
+ * showing rather than none at all.
+ */
+export function useRememberSelection(scope: string, id: string): void {
+  useEffect(() => {
+    if (String(current.selected[scope]) !== id) selectRow(scope, id);
+  }, [scope, id]);
 }

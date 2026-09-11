@@ -54,3 +54,20 @@ describe("class names", () => {
     });
   }
 });
+
+describe("the drill chip", () => {
+  it("keeps its accent text - no later rule of the same weight overrides the colour", () => {
+    // `.tile, .chip.drill { color: inherit }`, appended for the tiles that became
+    // links, came after `.chip.drill { color: var(--accent) }` and won, so the
+    // chip read as grey or white text in a teal pill. Found side by side with
+    // the old client, not by any test.
+    // Comments out first: they sit in front of selectors and hold commas.
+    const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const colours = [...rules.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter(([, selectors, body]) =>
+        selectors.split(",").some((s) => s.trim() === ".chip.drill") && /(^|;|\s)color\s*:/.test(body),
+      )
+      .map(([, , body]) => body.match(/(?:^|;|\s)color\s*:\s*([^;]+)/)![1].trim());
+    expect(colours.at(-1)).toBe("var(--accent)");
+  });
+});

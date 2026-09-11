@@ -57,6 +57,8 @@ function clearStored(key: string): void {
   }
 }
 
+const endListeners = new Set<(reason: string) => void>();
+
 export const session = {
   token: () => readStored(TOKEN_KEY),
   /** Display only. The server decides whose data this is, from the token alone. */
@@ -65,9 +67,26 @@ export const session = {
     writeStored(TOKEN_KEY, token);
     writeStored(NAME_KEY, name);
   },
-  /** Forgets the token but keeps the name, so the gate can prefill it next time. */
-  end() {
+  /**
+   * Forgets the token but keeps the name, so the gate can prefill it next time,
+   * and tells the app - which is what takes the page back to the gate, from Log
+   * out and from a 401 on any request once the token has been revoked somewhere
+   * else. `reason` is what the gate says; "" for a plain sign-out.
+   *
+   * It tells on every call, not only when there was a token to forget: another
+   * browser tab signing out clears the same storage, and this tab's next 401
+   * still has to reach the gate.
+   */
+  end(reason = "") {
     clearStored(TOKEN_KEY);
+    for (const fn of endListeners) fn(reason);
+  },
+  /** Subscribes to `end`. Returns the unsubscribe. */
+  onEnd(fn: (reason: string) => void): () => void {
+    endListeners.add(fn);
+    return () => {
+      endListeners.delete(fn);
+    };
   },
 };
 
@@ -116,8 +135,9 @@ async function request<T>(
 
   if (res.status === 401) {
     // Revoked elsewhere, or never valid. Same handling either way.
-    session.end();
-    throw new UnauthorizedError();
+    const err = new UnauthorizedError();
+    session.end(err.message);
+    throw err;
   }
 
   const payload: unknown = await res.json().catch(() => null);
@@ -161,18 +181,23 @@ export async function login(name: string, password: string) {
  * leave a working token behind. Best-effort: the local session is cleared
  * regardless, because a failure to reach the server must not strand someone
  * signed in on a shared browser.
+ *
+ * Resolves false when the revoke did not land. This browser has forgotten the
+ * token either way, but it is still live on the server, which on a shared
+ * machine is worth saying.
  */
-export async function logout(): Promise<void> {
+export async function logout(): Promise<boolean> {
   const token = session.token();
   session.end();
-  if (!token) return;
+  if (!token) return true;
   try {
-    await fetch(`${API_BASE}/api/logout`, {
+    const res = await fetch(`${API_BASE}/api/logout`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
+    return res.ok;
   } catch {
-    /* already forgotten locally */
+    return false;
   }
 }
 

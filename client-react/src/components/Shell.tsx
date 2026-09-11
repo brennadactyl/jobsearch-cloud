@@ -97,6 +97,7 @@ export default function Shell({
                 Log out
               </button>
               <button
+                id="themeToggle"
                 className="btn ghost"
                 type="button"
                 onClick={toggleTheme}

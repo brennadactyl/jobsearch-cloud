@@ -19,8 +19,9 @@ import { daysSince, hostOf, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { appComparator, fillState, type FillState } from "../domain/rows";
 import { buildTracks, pathForTab } from "../domain/tabs";
+import { revealSelectedRow } from "../ui/hooks";
 import { saved } from "../ui/saved";
-import { selectRow, setPrefs, usePrefs } from "../ui/prefs";
+import { selectRow, setPrefs, usePrefs, useRememberSelection } from "../ui/prefs";
 import { DrillChip, GeoBadge, GeoKey, Pill, SortSelect, TrashIcon, ViewSwitch } from "./bits";
 import { AppFactsCards, AutofillNote, NotesBlock } from "./facts";
 import { AppStatusSelect, EditableField, StageDateModal, type PendingStage } from "./writes";
@@ -44,12 +45,15 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
   // The duplicate check is exact-match and deliberately shallow: it catches
   // pasting the same URL twice, which is the mistake a one-box form invites, and
   // does not try to be the canonical-URL matching the server does for leads.
+  //
+  // The box empties once there is a row to show for it, not on the click: if
+  // the save fails, the link is still there to try again.
   const add = () => {
     const url = link.trim();
-    setLink("");
     if (url) {
       const same = data.applications.find((a) => String(a.link || "").trim().toLowerCase() === url.toLowerCase());
       if (same) {
+        setLink("");
         selectRow("applications", String(same.id));
         saved.note("Already in your applications");
         return;
@@ -59,6 +63,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
       { link: url },
       {
         onSuccess: (app) => {
+          setLink("");
           selectRow("applications", String(app.id));
           saved.note(url ? "Added — it fills in overnight" : "Saved");
         },
@@ -88,7 +93,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
             aria-describedby="addhint"
             // "Straight to" is the constraint: the run opens exactly this URL,
             // so a search page or a careers index produces a row nothing can fill.
-            title="The posting's own page, not a search or a careers index."
+            title="The posting’s own page, not a search or a careers index — that page is what tonight’s run opens and reads. Greenhouse, Lever, Workday and company careers pages all work."
             value={link}
             onChange={(e) => setLink(e.target.value)}
             onKeyDown={(e) => {
@@ -105,7 +110,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
         </button>
         <span className="hint" id="addhint">
           {link.trim()
-            ? "Tonight's run opens the posting and fills in the company, role and location."
+            ? "Tonight’s run opens the posting and fills in the company, role and location."
             : "Adds a row for you to fill in yourself."}
         </span>
         <ViewSwitch />
@@ -157,9 +162,10 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
     return (
       <>
         {toolbar}
-        <AppsGrid rows={rows} data={data} setPending={setPending} />
+        <AppsGrid rows={rows} data={data} pending={pending} setPending={setPending} />
         <div className="note">
-          Quick-scan columns only — referral, notes and the rest are in Detail view. {rows.length} of {all.length} shown.
+          Quick-scan columns only — referral, notes, team, setup, comp, and the rest are in Detail view (click a row to open
+          them). Edits save when you click away. Days counts from the applied date.
         </div>
         {modal}
       </>
@@ -172,7 +178,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
     <>
       {toolbar}
       <div className="md">
-        <div className="md-list">
+        <div className="md-list" ref={revealSelectedRow}>
           {rows.map((a) => {
             const g = geo(a.location, settings.priority_locations);
             const d = daysSince(a.dateApplied);
@@ -198,15 +204,25 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
                   <span className="co">{label}</span>
                   <Pill status={a.status} />
                 </div>
-                <div className="md-row-ttl">{a.title}</div>
+                {/* A row that is still nothing but a link has no role yet; the
+                    placeholder says whether a run tried to read one and failed. */}
+                <div className="md-row-ttl">
+                  {a.title || (a.autofill === "failed" ? "Couldn’t read the posting" : "—")}
+                </div>
                 <div className="md-row-loc">
                   <span className="md-row-place">{a.location}</span>
                   <GeoBadge location={a.location} settings={settings} />
-                  {a.dateApplied && (
-                    <span className="md-row-found" title="Date applied">
-                      Applied <span className="mono">{a.dateApplied}</span>
-                      {d !== null && ` · ${d}d`}
-                    </span>
+                  {/* A "To Apply" row has no applied date to count from, so it
+                      says so rather than leave the slot blank. */}
+                  {a.status === "To Apply" ? (
+                    <span className="md-row-found">Not applied yet</span>
+                  ) : (
+                    a.dateApplied && (
+                      <span className="md-row-found" title="Date applied">
+                        Applied <span className="mono">{a.dateApplied}</span>
+                        {d !== null && ` · ${d}d`}
+                      </span>
+                    )
                   )}
                 </div>
               </div>
@@ -214,12 +230,10 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
           })}
         </div>
         <div className="md-detail">
-          <AppDetail app={sel} data={data} onNeedsDate={setPending} />
+          <AppDetail app={sel} data={data} pending={pending} onNeedsDate={setPending} />
         </div>
       </div>
-      <div className="note">
-        {rows.length} of {all.length} shown.
-      </div>
+      <div className="note">Edits save when you click away. Days counts from the applied date.</div>
       {modal}
     </>
   );
@@ -280,10 +294,12 @@ function isControl(e: MouseEvent) {
 function AppsGrid({
   rows,
   data,
+  pending,
   setPending,
 }: {
   rows: Application[];
   data: TrackerData;
+  pending: PendingStage | null;
   setPending: (p: PendingStage) => void;
 }) {
   const prefs = usePrefs();
@@ -394,14 +410,14 @@ function AppsGrid({
                           <td className="lk">
                             {link ? (
                               <a href={link} target="_blank" rel="noopener noreferrer" title={link}>
-                                {hostOf(a.link)}
+                                {hostOf(a.link)} ↗
                               </a>
                             ) : (
                               <span className="lk-none">—</span>
                             )}
                           </td>
                           <td>
-                            <AppStatusSelect app={a} onNeedsDate={setPending} />
+                            <AppStatusSelect app={a} pending={pending} onNeedsDate={setPending} />
                           </td>
                           <td>
                             <EditableField row={a} kind="application" field="dateApplied" type="date" ariaLabel="Date applied" />
@@ -463,12 +479,15 @@ function AppsGrid({
 function AppDetail({
   app,
   data,
+  pending,
   onNeedsDate,
 }: {
   app: Application;
   data: TrackerData;
+  pending: PendingStage | null;
   onNeedsDate: (p: PendingStage) => void;
 }) {
+  useRememberSelection("applications", String(app.id));
   const { settings } = data;
   const d = daysSince(app.dateApplied);
   const g = geo(app.location, settings.priority_locations);
@@ -524,7 +543,7 @@ function AppDetail({
       </div>
 
       <div className="dh-status">
-        <AppStatusSelect app={app} onNeedsDate={onNeedsDate} />
+        <AppStatusSelect app={app} pending={pending} onNeedsDate={onNeedsDate} />
         <span className="dh-dates">
           Applied <EditableField row={app} kind="application" field="dateApplied" type="date" ariaLabel="Date applied" />
           {d !== null && ` · ${d} days`}

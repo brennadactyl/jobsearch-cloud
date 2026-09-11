@@ -37,6 +37,24 @@ function patch(qc: QueryClient, fn: (d: TrackerData) => TrackerData) {
 }
 
 /**
+ * A write refused for a revoked token is not a failed save to retry: nothing
+ * will save until someone signs in again. Ends the session, which takes the page
+ * to the gate, rather than leaving a page that looks signed in and rolls back
+ * every edit. The request that got the 401 has usually ended it already; ending
+ * it twice lands on the same gate.
+ */
+function signedOut(err: Error): boolean {
+  if (!(err instanceof api.UnauthorizedError)) return false;
+  api.session.end(err.message);
+  return true;
+}
+
+/** A refusal the server put into words, as opposed to no answer at all or one this page could not read. */
+function serverSaid(err: Error): boolean {
+  return err.constructor === Error && !/^Request failed [(]/.test(err.message);
+}
+
+/**
  * Shared wiring. `optimistic` may be omitted where there is nothing sensible to
  * guess - adding a row has no id until the server assigns one.
  */
@@ -46,12 +64,16 @@ function useWrite<TVars, TResult>(opts: {
   onResult?: (d: TrackerData, result: TResult, v: TVars) => TrackerData;
   /** A failure worth reading rather than the generic one. */
   message?: (err: Error) => string | undefined;
+  /** What the indicator says while this is in flight, when "Saving…" is not the verb. */
+  pending?: string;
+  /** A success worth saying more precisely than "Saved", read once the result is in the cache. */
+  done?: (result: TResult, d: TrackerData | undefined) => string;
 }) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: opts.mutationFn,
     async onMutate(vars: TVars) {
-      saved.saving();
+      saved.saving(opts.pending);
       // An in-flight read would otherwise land after the optimistic patch and
       // silently undo it.
       await qc.cancelQueries({ queryKey: DATA_KEY });
@@ -63,13 +85,16 @@ function useWrite<TVars, TResult>(opts: {
       // Put it back. With an optimistic update the row has already changed on
       // screen, so leaving it there would show a save that did not happen.
       if (ctx?.snapshot) qc.setQueryData(DATA_KEY, ctx.snapshot);
+      if (signedOut(err)) return;
       const specific = opts.message?.(err);
       if (specific) saved.message(specific);
       else saved.failed();
     },
     onSuccess(result: TResult, vars) {
       if (opts.onResult) patch(qc, (d) => opts.onResult!(d, result, vars));
-      saved.ok();
+      const text = opts.done?.(result, qc.getQueryData<TrackerData>(DATA_KEY));
+      if (text) saved.note(text);
+      else saved.ok();
     },
   });
 }
@@ -135,9 +160,14 @@ export function useMoveLead() {
       leads: d.leads.map((l) => (l.id === id ? { ...l, search } : l)),
     }),
     onResult: (d, lead) => ({ ...d, leads: replaceById(d.leads, lead) }),
-    // Both of this call's failures are worth reading: an unknown track key, and
-    // a destination that already holds this posting.
-    message: (err) => err.message,
+    // Named for what it does and where the row went: it has just left the list
+    // you are looking at, and this line is the only thing on screen saying which
+    // tab it is under now.
+    pending: "Moving…",
+    done: (lead, d) => `Moved to ${d?.tracks.find((t) => t.key === lead.search)?.label || lead.search}`,
+    // Both of this call's refusals are worth reading: an unknown track key, and
+    // a destination that already holds this posting. No answer at all is not.
+    message: (err) => (serverSaid(err) ? err.message : "Couldn't move it — try again"),
   });
 }
 
@@ -182,8 +212,9 @@ export function useDeleteLead() {
       patch(qc, (d) => ({ ...d, leads: d.leads.filter((l) => l.id !== id) }));
       return { snapshot };
     },
-    onError(_err, _vars, ctx) {
+    onError(err, _vars, ctx) {
       if (ctx?.snapshot) qc.setQueryData(DATA_KEY, ctx.snapshot);
+      if (signedOut(err)) return;
       saved.failed();
     },
     onSuccess(res, _vars, ctx) {
