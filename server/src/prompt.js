@@ -326,10 +326,17 @@ export function buildSearchPrompt({ user, track, settings, feeds, coverage }) {
    "workday cxs" saves nobody anything while the tenant slug still has to be
    guessed. \`url_shape\` is how one posting's URL is built when the endpoint
    doesn't give it (\`apply.careers.microsoft.com/careers/job/<19-digit id>\`).
-   Send both whenever you establish them, including for a company that yielded
-   nothing - what you learned about reaching it is true either way. Those two
-   and \`board\` are pooled across every search here, so saying it once spares
-   everyone the same fetch; \`note\` is not, and stays on this search's row.
+   Send both whenever this run's own fetch established them - including for a
+   company with no matching roles, since a fetch that worked is true either way.
+   Those two and \`board\` are pooled across every search here, so saying it once
+   spares everyone the same fetch; \`note\` is not, and stays on this search's row.
+
+   **Never copy \`board\`, \`endpoint\` or \`url_shape\` out of \`companies.json\`.**
+   Report one only when your own fetch against it worked tonight. A reported
+   board or endpoint is taken as proof the company is reachable and clears its
+   \`wall\` for every search, so echoing a known board on a night the fetch
+   failed silently deletes a true wall - and the tracker cannot tell an echo
+   from a confirmation.
 
    This is the rotation's only memory. A run that covers companies without
    recording them leaves tomorrow's run covering the same ones, and the tail of

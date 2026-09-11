@@ -456,6 +456,29 @@ switch ($Command) {
               $v = Field $r $f
               if ($v) { $row[$f] = $v }
           }
+          # A row that records a wall is a fetch that failed; board, endpoint
+          # and url_shape each assert one that worked. They cannot both be true
+          # of tonight, so the worked-fields go and the wall stays.
+          #
+          # This is not stricter than the server - it is the only way the wall
+          # survives at all. upsertCompanyFetch clears a company's wall whenever
+          # a board or endpoint is reported (db.js, `works`), so a row carrying
+          # both erases the wall it records in the same write. And the board on
+          # such a row is almost always an echo: companies.json hands every run
+          # the board it already knows, which is exactly the report that would
+          # delete a true wall. The server cannot tell an echo from a
+          # confirmation, and neither can this - but a row that also says the
+          # fetch failed has answered the question itself.
+          #
+          # url_shape does not clear a wall, but it does move verified_on, so an
+          # echoed one would claim a freshness nobody established.
+          if ($row.ContainsKey("wall")) {
+              $echoed = @("board", "endpoint", "url_shape") | Where-Object { $row.ContainsKey($_) }
+              if ($echoed) {
+                  foreach ($f in $echoed) { $row.Remove($f) }
+                  Say "dropped $($echoed -join '/') from $company - that row also reports a wall, and a reported board or endpoint would clear the wall in the same write"
+              }
+          }
           $send += $row
       }
       if ($send.Count -eq 0) { Say "swept: nothing to record (refused=$($script:Refused))"; exit 0 }
