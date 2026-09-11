@@ -51,15 +51,35 @@ Applications 10, All leads 12, Engineering 6, Eng Leadership 3, Data Science 3.
 | 1.15 Tooltip and hint | **Fixed** | Full tooltip text; curly apostrophes in the tooltip and the hint |
 | 1.16 Select while stage dialog open | **Fixed** | Reads "Offer" while the dialog is open, "Onsite / Loop" after Escape |
 | 1.17 Logout revoke failure | **Fixed** | With `/api/logout` rejected: "Signed out here, but couldn't reach the server to revoke this session.", focus in the password field, URL `/`. The token left live was then revoked by hand |
-| 1.18 Loading and load failure | **Fixed** (copy); placement kept | A rejected `/api/data` retries twice, then shows "Couldn't load: Failed to fetch (test)" in the page body; "Loading…" is kept. **Still open:** that text is `rgb(233, 235, 244)`, not red, because `.err` is only coloured under `#gate` |
+| 1.18 Loading and load failure | **Fixed** (copy and colour); placement kept | A rejected `/api/data` retries twice, then shows "Couldn't load: Failed to fetch (test)" in the page body; "Loading…" is kept. On the second re-check the message is `.load-err` with `role="alert"`, `rgb(232, 117, 106)` (`--crit` in dark) and padding 40px 0 |
 | 1.19 Favicon | Kept on purpose | — |
 | 1.20 Tile focus ring offset | **Fixed** | Live stylesheet has `.tile:focus-visible { outline-offset: 0px; }`. Checked as a rule; the keyboard walk wasn't repeated |
 
-Still open after the re-check:
+### Second re-check
 
-- **1.18's error text isn't red.** Give the page-body `.err` the `--crit` colour, or scope the rule wider than `#gate`.
-- **Seen once, not reproduced.** In the first add-from-link of this round, the selection still read Stonebridge right after "Added — it fills in overnight". Three later adds selected the new row in the same frame. My read most likely raced the render; it's noted here so it isn't lost.
-- **The `--sbw` gutter bug in both clients** is tracked separately.
+Re-checked the same day against worker version
+`e17bc003-a1d9-4f5f-937d-eee3809cbb41`, bundle `index-DzWkOpcZ.js` and
+`index-CftxD3P9.css`, from `origin/main` `09f7b1d`. The old client is still
+byte-identical.
+
+- **1.18 colour: fixed.** See the table row above.
+- **Selecting the new row after add-from-link: fixed.** The first re-check had seen the selection left on Stonebridge once; the handler traced it to a real race caused by 1.8's write-back. This time four adds (three in Detail, one in Grid) were sampled every 16ms for 2 seconds:
+  - The new row was selected in the same sample that "Added — it fills in overnight" appeared, 150–183ms after the click.
+  - No later sample showed any other row selected.
+  - In Grid the new row carried `gr-sel`, and switching to Detail showed it.
+- **1.8 still holds.** On a fresh load Grid highlights Stonebridge, Detail's default row. An explicit Harborline selection carries over.
+- **Neighbours of the selection change still hold:**
+  - 1.7 still scrolls Fernbrook Robotics into view (`scrollTop` 1722).
+  - A lead moved to Data Science says "Moved to Data Science" and arrives selected in that tab. The source tab falls back to its first row (Lumenwave).
+
+This round created and deleted five test applications, and moved one lead to
+Data Science and back. Demo ends at tiles 12 / 10 / 24 / 9 / 2 / 2 and badges
+Applications 10, All leads 12, Engineering 6, Eng Leadership 3, Data Science 3.
+
+**Nothing from this report is open now.** The `--sbw` gutter bug in both
+clients is tracked separately.
+
+Testing note: `requestAnimationFrame` never fires in the hidden Browser pane, so a check that waits on it hangs. Sample with timers instead.
 
 Testing note: the in-app Browser pane reports `document.visibilityState` as `hidden` even with the tab in front. TanStack Query v5 parks retries while hidden, so a failed load sits on "Loading…" in this pane indefinitely. To exercise 1.18, the check overrode `visibilityState` to `visible`.
 
