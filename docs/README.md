@@ -25,6 +25,7 @@ reference docs above are the authority.
 - [`react-adoption-plan.md`](react-adoption-plan.md) — the tracker page rebuilt in React, beside the one that ships
 - [`rotation-always-on-plan.md`](rotation-always-on-plan.md) — every search rotates through its companies
 - [`one-company-list-plan.md`](one-company-list-plan.md) — one global company list that every search indexes into
+- [`company-discovery-plan.md`](company-discovery-plan.md) — one nightly job grows the company list; searches stop discovering
 
 ## Adding a document
 
