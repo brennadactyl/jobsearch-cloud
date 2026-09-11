@@ -649,15 +649,13 @@ export class Db {
   }
 
   /**
-   * Moves the cursor to just past the furthest company a run attempted, then
-   * wraps at the end of the log.
+   * Moves the cursor to just past the last company a run reported from the
+   * slice it was served - routes/coverage.js decides which company that is.
    *
-   * Set rather than incremented, and from the positions actually reported: a
+   * Set rather than incremented, and from the companies actually reported: a
    * run that covered fewer companies than it was handed must not advance the
-   * cursor past the ones it skipped, or they wait a whole cycle. Wrapping here
-   * rather than at read time keeps the stored value inside the log, so
-   * "position 24 of 55" is readable without knowing the rule.
-   * @param {string} key @param {number} next @param {number} total
+   * cursor past the ones it skipped, or they wait a whole cycle.
+   * @param {string} key @param {number} next
    */
   async setSweepCursor(key, next) {
     // Stored as given, with no wrap. It used to be taken modulo the company
