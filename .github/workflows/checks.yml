@@ -2,13 +2,16 @@
 # manual, from a main checkout, through each package's own npm script (see
 # .claude/skills/verify-and-deploy/SKILL.md).
 #
-# Only client-react/ is covered. client/ and server/ deliberately carry no
+# client-react/ is covered in full. client/ and server/ deliberately carry no
 # unit tests - client/ is a single no-build file that may yet be retired
 # (docs/react-adoption-plan.md), and server/'s checks are verify-local.mjs,
 # which needs a running `wrangler dev --local` with D1 migrations applied.
-# Adding that as a second job is worth doing and is independent of this one;
-# it would need its wrangler version pinned here, since this repo commits no
-# lockfile for server/.
+# Adding that as a job is worth doing and is independent of these; it would
+# need its wrangler version pinned here, since this repo commits no lockfile
+# for server/.
+#
+# The one server/ check that does run here is verify-schema-doc.mjs, which
+# needs no wrangler and no running worker - see the schema-doc job.
 name: checks
 
 on:
@@ -27,9 +30,9 @@ jobs:
       run:
         working-directory: client-react
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -59,3 +62,17 @@ jobs:
         run: npm run build
         env:
           VITE_API_BASE: https://example.invalid
+
+  # Fails when docs/schema.md no longer matches what server/migrations/ builds.
+  # Plain Node and in-process SQLite, so there is nothing to install.
+  schema-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: docs/schema.md matches the migrations
+        run: node server/verify-schema-doc.mjs

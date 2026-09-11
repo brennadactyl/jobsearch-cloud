@@ -32,6 +32,8 @@ export const saved = {
   failed: () => set({ text: "Couldn't save — try again", tone: "bad" }),
   /** For a failure worth reading rather than the generic one - an unknown track, a duplicate posting. */
   message: (text: string) => set({ text, tone: "bad" }),
+  /** A success worth saying more precisely than "Saved" - "Added — it fills in overnight". */
+  note: (text: string) => set({ text, tone: "ok" }),
   loading: () => set({ text: "Loading", tone: "" }),
 };
 
