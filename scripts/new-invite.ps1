@@ -88,11 +88,17 @@ function Invoke-Api([string]$Method, [string]$Path, $Body) {
         $message = $_.Exception.Message
         if ($_.Exception.Response) {
             $status = [int]$_.Exception.Response.StatusCode
-            try {
-                $raw = (New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())).ReadToEnd()
-                $parsed = $raw | ConvertFrom-Json
-                if ($parsed.error) { $message = [string]$parsed.error } elseif ($raw) { $message = $raw }
-            } catch { }
+            # Invoke-RestMethod has usually drained the response stream by the
+            # time it throws, and keeps the body in ErrorDetails instead.
+            $raw = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else {
+                try { (New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())).ReadToEnd() } catch { "" }
+            }
+            if ($raw) {
+                try {
+                    $parsed = $raw | ConvertFrom-Json
+                    $message = if ($parsed.error) { [string]$parsed.error } else { $raw }
+                } catch { $message = $raw }
+            }
         }
         if ($null -eq $status) {
             throw "Couldn't reach $api`: $message"
