@@ -358,6 +358,26 @@ export class Db {
     return { leads: leads.results, screened: screened.results };
   }
 
+  /**
+   * Every lead in a search family - a track and the tabs it fills - with what
+   * choosing tonight's re-checks needs (routes/screened.js). The family is one
+   * set because one run re-checks for all of it.
+   * @param {string} rootKey a track that runs its own search
+   * @returns {Promise<Array<{id: number, status: string, verified: string}>>}
+   */
+  async getFamilyLeadsForRecheck(rootKey) {
+    const rows = await this.d1
+      .prepare(
+        `SELECT id, status, verified FROM leads
+          WHERE user_id = ?
+            AND search IN (SELECT key FROM tracks WHERE user_id = ? AND (key = ? OR fed_by = ?))
+          ORDER BY id`
+      )
+      .bind(this.userId, this.userId, rootKey, rootKey)
+      .all();
+    return rows.results;
+  }
+
   // ---------------------------------------------------- company sweeps --
 
   /**

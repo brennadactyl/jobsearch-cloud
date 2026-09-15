@@ -410,6 +410,12 @@ const SC = "SC" + scStamp, SCF = SC + "F";
 await req("POST", "/api/config", { token: S_TOK, body: { tracks: [
   { key: SC, label: "Scope", full_description: "the feeder", sort_order: 0 },
   { key: SCF, label: "Scope fed", full_description: "the fed tab", sort_order: 1, fed_by: SC } ] } });
+// Companies of its own, enough that the far end of the list is always past the
+// window. The list is shared and outlives a run, so on a database that has seen
+// earlier runs it is long already - but on a freshly migrated one it can hold
+// 48 companies or fewer, and then every company is inside the window.
+await req("POST", "/api/coverage", { token: S_TOK, body: { search: SC, on: "",
+  swept: Array.from({ length: 2 * 24 + 12 }, (_, i) => ({ company: `Scope Co ${scStamp}-${i}` })) } });
 const scSlice = (await req("GET", `/api/coverage/${SC}`, { token: S_TOK })).json.companies;
 const scAll = (await req("GET", `/api/coverage/${SC}?all=1`, { token: S_TOK })).json.companies;
 const scUrl = (n) => `https://example.com/scope/${scStamp}/${n}`;
@@ -456,6 +462,82 @@ check("another account's scoped read of this track 404s",
 const aScoped = (await req("GET", "/api/dedup/SWE?scope=batch", { token: A_TOK })).json;
 check("and its own scoped read never carries this account's rows",
   !!aScoped.screened && !aScoped.screened.some((u) => u.startsWith(`https://example.com/scope/${scStamp}/`)));
+
+console.log("\n== tonight's re-checks, chosen by the tracker ==");
+// A search family re-checks an even share of its open leads each night -
+// min(20, ceil(open / 14)) - longest-unconfirmed first, New and Reviewing only.
+// Its own account and per-run tracks, so nothing earlier in this file counts.
+const rcPw = "recheck-long-password";
+await req("POST", "/api/users", { admin: true, body: { name: "Recheck", password: rcPw } });
+const RC_TOK = (await req("POST", "/api/login", { body: { name: "Recheck", password: rcPw } })).json.token;
+const rcStamp = Date.now().toString(36);
+const RC = "RC" + rcStamp, RCF = RC + "F", RCC = RC + "C";
+await req("POST", "/api/config", { token: RC_TOK, body: { tracks: [
+  { key: RC, label: "Recheck", full_description: "the feeder", sort_order: 0 },
+  { key: RCF, label: "Recheck fed", full_description: "the fed tab", sort_order: 1, fed_by: RC },
+  { key: RCC, label: "Recheck cap", full_description: "a large family", sort_order: 2 } ] } });
+const rcUrl = (n) => `https://example.com/recheck/${rcStamp}/${n}`;
+const rcToday = new Date().toISOString().slice(0, 10);
+// Fifteen open leads, so a budget of ceil(15/14) = 2. Three are due; the second
+// oldest sits on the fed tab and is Reviewing, and the third loses on date. Two
+// older than all of them are Applied and Not a fit, so only their status keeps
+// them out. The other twelve were confirmed today.
+await req("POST", "/api/leads", { token: RC_TOK, body: { leads: [
+  { search: RC, url: rcUrl("oldest"), company: "Rc A", title: "Engineer", verified: "2026-01-01" },
+  { search: RCF, url: rcUrl("second"), company: "Rc B", title: "Engineer", verified: "2026-01-02" },
+  { search: RC, url: rcUrl("third"), company: "Rc C", title: "Engineer", verified: "2026-01-03" },
+  { search: RC, url: rcUrl("applied"), company: "Rc D", title: "Engineer", verified: "2025-12-01" },
+  { search: RC, url: rcUrl("notafit"), company: "Rc E", title: "Engineer", verified: "2025-12-01" },
+  ...Array.from({ length: 12 }, (_, i) => ({ search: RC, url: rcUrl(`fresh${i}`), company: `Rc F${i}`, title: "Engineer", verified: rcToday })),
+] } });
+const rcIdOf = Object.fromEntries([
+  ...(await req("GET", `/api/dedup/${RC}`, { token: RC_TOK })).json.leads,
+  ...(await req("GET", `/api/dedup/${RCF}`, { token: RC_TOK })).json.leads,
+].map((l) => [l.url, l.id]));
+const rcSetStatus = (n, status) => req("POST", `/api/leads/${rcIdOf[rcUrl(n)]}/status`, { token: RC_TOK, body: { status } });
+await rcSetStatus("applied", "Applied");
+await rcSetStatus("notafit", "Not a fit");
+await rcSetStatus("second", "Reviewing");
+
+const rcFeed = (await req("GET", `/api/dedup/${RC}?scope=batch`, { token: RC_TOK })).json;
+const rcFed = (await req("GET", `/api/dedup/${RCF}?scope=batch`, { token: RC_TOK })).json;
+const rcFlagged = [...rcFeed.leads, ...rcFed.leads].filter((l) => l.recheck).map((l) => l.url).sort();
+check("the tracker flags the longest-unconfirmed open leads, up to the family's budget",
+  JSON.stringify(rcFlagged) === JSON.stringify([rcUrl("oldest"), rcUrl("second")].sort()), JSON.stringify(rcFlagged));
+check("the budget is an even share of the family's open leads over fourteen nights",
+  !!rcFeed.scope && rcFeed.scope?.recheck?.eligible === 15 && rcFeed.scope?.recheck?.budget === 2 &&
+  rcFeed.scope?.recheck?.after_days === 7, JSON.stringify(rcFeed.scope && rcFeed.scope.recheck));
+check("each tab flags its own share of one family-wide choice",
+  rcFeed.scope?.recheck?.flagged === 1 && rcFed.scope?.recheck?.flagged === 1 &&
+  rcFed.scope?.recheck?.eligible === 15 && rcFed.scope?.recheck?.budget === 2,
+  JSON.stringify({ feeder: rcFeed.scope?.recheck, fed: rcFed.scope?.recheck }));
+check("an Applied or Not a fit lead is never flagged, however long since it was confirmed",
+  !rcFeed.leads.some((l) => l.recheck && (l.url === rcUrl("applied") || l.url === rcUrl("notafit"))));
+check("a lead confirmed within the week is not due",
+  !rcFeed.leads.some((l) => l.recheck && l.url.includes("/fresh")));
+const rcPlain = (await req("GET", `/api/dedup/${RC}`, { token: RC_TOK })).json;
+check("an unscoped read carries no re-check flags",
+  !rcPlain.leads.some((l) => "recheck" in l) && !("scope" in rcPlain));
+
+// Confirming a flagged lead live sends it to the back of the queue.
+await req("POST", "/api/verified", { token: RC_TOK, body: { search: RC, urls: [rcUrl("oldest")] } });
+const rcAfter = (await req("GET", `/api/dedup/${RC}?scope=batch`, { token: RC_TOK })).json;
+check("a lead confirmed live gives its place to the next one due",
+  !rcAfter.leads.find((l) => l.url === rcUrl("oldest")).recheck &&
+  !!rcAfter.leads.find((l) => l.url === rcUrl("third")).recheck,
+  JSON.stringify(rcAfter.leads.filter((l) => l.recheck).map((l) => l.url)));
+
+// Past 280 open leads the budget stops at the cap, and the cycle stretches.
+for (let i = 0; i < 281; i += 90) {
+  await req("POST", "/api/leads", { token: RC_TOK, body: { leads: Array.from({ length: Math.min(90, 281 - i) }, (_, j) => ({
+    search: RCC, url: rcUrl(`cap${i + j}`), company: `Rc Cap ${i + j}`, title: "Engineer", verified: "2026-01-01" })) } });
+}
+const rcCap = (await req("GET", `/api/dedup/${RCC}?scope=batch`, { token: RC_TOK })).json;
+check("past 280 open leads a run's re-checks stop at twenty",
+  !!rcCap.scope && rcCap.scope?.recheck?.eligible === 281 && rcCap.scope?.recheck?.budget === 20 &&
+  rcCap.leads.filter((l) => l.recheck).length === 20, JSON.stringify(rcCap.scope && rcCap.scope.recheck));
+check("another account cannot read this family's re-check choice",
+  (await req("GET", `/api/dedup/${RC}?scope=batch`, { token: A_TOK })).status === 404);
 
 console.log("\n== runs ==");
 check("recording a run works for your own track",
