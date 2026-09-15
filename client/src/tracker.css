@@ -492,14 +492,18 @@ a.seglabel:hover{color:var(--accent)}
 .ch-table a:hover{border-bottom-color:var(--accent)}
 .ch-table a.jumplink{color:inherit;border-bottom:0;font-weight:600}
 .payoff tr.total td{font-weight:600;border-top:1px solid var(--line)}
-/* The run stamp wraps under the name, so a phone sees the first figures
-   without scrolling. */
-.ch-table .payoff td:first-child{white-space:normal;min-width:10em}
+/* Headers wrap to two lines and the run stamp wraps under the name, so the
+   whole table fits a mid-width window and a phone sees the first figures
+   without scrolling. The name column is wide enough that a stamp breaks once,
+   not at every part. */
+.ch-table .payoff th{white-space:normal;vertical-align:bottom;line-height:1.3}
+.ch-table .payoff td:first-child{white-space:normal;min-width:13em}
 .payoff-run{margin-top:3px}
 .payoff-run .runstamp{font-size:11.5px;flex-wrap:wrap;column-gap:4px}
+@media (max-width:640px){.ch-table .payoff td:first-child{min-width:10em}}
 .cnt.plain{cursor:help;border-bottom:1px dotted var(--ink3)}
 .rate{display:inline-flex;align-items:center;gap:8px;cursor:help}
-.rate-meter{display:inline-block;width:44px;height:5px;border-radius:99px;background:var(--surface2);overflow:hidden}
+.rate-meter{display:inline-block;width:32px;height:5px;border-radius:99px;background:var(--surface2);overflow:hidden}
 .rate-meter i{display:block;height:100%;background:var(--accent)}
 
 .waitlist{list-style:none;margin:0;padding:0}

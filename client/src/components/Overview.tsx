@@ -368,7 +368,8 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
                 <th>{LABELS.search}</th>
                 <th className="num">{LABELS.found}</th>
                 <th className="num">{LABELS.open}</th>
-                <th className="num">{LABELS.notAFit}</th>
+                {/* Headers wrap in a narrow window; "a fit" stays together so this one breaks once. */}
+                <th className="num">{LABELS.notAFit.replace(/ a /i, (m) => `${m.trimEnd()} `)}</th>
                 <th className="num">{LABELS.applied}</th>
                 <th className="num">{LABELS.responded}</th>
                 <th>{LABELS.applyRate}</th>
