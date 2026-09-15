@@ -7,7 +7,7 @@ unattended run builds their search, and in the morning they have a tracker.
 Adding someone takes one operator step: sending the link.
 
 Screens: [Tracker Onboarding Screens](https://claude.ai/artifact/Jsm3mxExvm7jLiXMhrZCz4)
-(mockup, version 7). Artboard numbers below refer to it.
+(mockup, version 8). Artboard numbers below refer to it.
 
 This touches `server/` (two migrations, new routes), `client/` (two screens),
 `scripts/` (the nightly onboarding run and the invite script) and the
@@ -37,7 +37,7 @@ field:
 A used or expired invite falls back to normal sign-in with the reason. The
 invite code leaves the address bar once it has been spent.
 
-**Setup (2–2g).** An account with no tracks, and no finished setup, sees the
+**Setup (2–2h).** An account with no tracks, and no finished setup, sees the
 setup form instead of an empty tracker:
 
 | Field | Shape |
@@ -46,7 +46,7 @@ setup form instead of an empty tracker:
 | Pronouns (optional) | she/her · he/him · they/them; unset means they/them |
 | Resume | attach files, paste text, or both |
 | Anywhere you can't take a job? | free text |
-| Which locations should come first? | comma-separated, in order of preference, read back as the ranked location key |
+| Which locations should come first? | comma-separated, in order of preference, e.g. "Seattle, Bellevue, Remote US, Portland OR"; read back as what each entry matches, and an entry too short to match reliably is flagged (2g, 2h) |
 | Per role: Call it | text |
 | Per role: What roles? | titles and seniority only |
 | Per role: Kinds of companies you'd like (optional) | free text; named companies are welcome |
@@ -152,12 +152,14 @@ components.
     since the answers check needs a resume already under `resumes/`.
   - Send status goes through `saved`.
   - The stale banner compares `sent_at` with `stale_run_hours`.
+- **Locations.** `domain/locations.ts` turns each entry into a `priority_locations` rule, with a fixed synonym table: a city matches its name, adding state spellings for a shared name such as Portland; Remote with a country is `allOf remote` plus that country's spellings; bare Remote is remote anywhere; nothing reduces to a bare token of three letters or fewer. The read-back and the rules sent with the answers both come from it. Tests use real location strings from leads.
 - **Constants.** New labels go in `LABELS`. The readable-format list is one
   constant, shared by the check and its message.
 - **Tests.**
   - signup modes and their errors
   - invite removed from the URL
   - the unreadable-resume refusal
+  - location expansion and the too-short flag
   - filename sanitising
   - role add and remove
   - each banner
@@ -188,7 +190,7 @@ needs judgement.
 | Pronouns | `settings.pronouns` |
 | Resume | the readable file in `resumes/`, named in each track's `resume_line` |
 | Anywhere you can't take a job? | `geo_scope_line` (a full numbered step with examples), `scope_clause`, `scope_disqualifier` |
-| Locations first | `priority_locations`: one rule per entry, in order, each with the spellings postings use (e.g. Remote → `remote` plus US variants) |
+| Locations first | `priority_locations`, as the rules the page computed, unchanged |
 | Call it | track `label`, and a slug `key` unique in the account |
 | What roles? | `role_search_line` (a noun phrase of titles) and `full_description` |
 | Kinds of companies | `target_companies`, as strategy prose |
