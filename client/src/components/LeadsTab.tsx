@@ -57,10 +57,16 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
 
   // A status change that hides its row from the chip on screen moves the
   // selection to the row that followed it, rather than back to the top.
-  // Applied leaves the leads tabs altogether, so it gets no "hidden from" note.
+  // Applied takes the row out of every leads tab, so its note names the tab it
+  // went to rather than the chip it left.
   const onLeave = (lead: Lead, status: string): LeavingView | undefined => {
     if (status !== "Applied" && leadFilterKeeps(filter, { ...lead, status })) return undefined;
-    const leaving: LeavingView = status === "Applied" ? {} : { note: `Marked ${status} — hidden from ${filter}` };
+    const leaving: LeavingView = {
+      note:
+        status === "Applied"
+          ? `Moved to ${settings.applications_label || "Applications"}`
+          : `Marked ${status} — hidden from ${filter}`,
+    };
     if (shownRow(rows, prefs.selected[trackKey]).id === lead.id) {
       const i = rows.findIndex((r) => r.id === lead.id);
       const next = rows[i + 1] ?? rows[i - 1];

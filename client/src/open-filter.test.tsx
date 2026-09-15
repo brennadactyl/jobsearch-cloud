@@ -122,6 +122,22 @@ describe("marking a lead so it leaves the chip on screen", () => {
     expect(selected()).toBe("Echo");
   });
 
+  it("says the tab a lead set to Applied went to", async () => {
+    setPrefs({ leadSort: "company-asc", selected: { allleads: String(lead("Echo").id) } });
+    await renderAt("/all-leads?filter=All");
+    const applied = { ...lead("Echo"), status: "Applied" };
+    vi.spyOn(client, "setLeadStatus").mockResolvedValue({
+      lead: applied,
+      application: { ...fixture.applications[0], id: 9200, leadId: String(applied.id), company: "Echo" },
+    });
+
+    await userEvent.selectOptions(within(document.querySelector(".md-detail") as HTMLElement).getByLabelText("Status"), "Applied");
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Moved to Applications"));
+    expect(listed()).not.toContain("Echo");
+    expect(selected()).toBe("Fox");
+  });
+
   it("keeps the row, and just saves, under All", async () => {
     setPrefs({ selected: { alpha: String(lead("Acme").id) } });
     await renderAt("/t/alpha?filter=All");

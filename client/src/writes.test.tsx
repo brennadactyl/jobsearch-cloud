@@ -105,7 +105,7 @@ describe("lead status", () => {
 
     const detail = document.querySelector(".md-detail")!;
     await userEvent.selectOptions(within(detail as HTMLElement).getByLabelText("Status"), "Applied");
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved"));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Moved to Applications"));
 
     // The Applications tab badge counts the new row.
     const tab = screen.getAllByRole("tab").find((t) => t.textContent?.startsWith("Applications"))!;
