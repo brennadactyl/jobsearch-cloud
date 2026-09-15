@@ -651,6 +651,16 @@ const bareSteps = buildSearchPrompt({
   settings: {},
   feeds: [],
 });
+const listed = buildSearchPrompt({
+  user: { id: "u", name: "Nobody" },
+  track: { key: "T", label: "T", full_description: "t", target_companies: '["Zyqfold Robotics","Quennet Labs"]', role_search_line: "r", resume_line: "x" },
+  settings: {},
+  feeds: [],
+});
+check("a company list stored on a track never reaches the prompt",
+  !listed.includes("Zyqfold Robotics") && !listed.includes("Quennet Labs") && !listed.includes("drawn from"));
+check("the default doc-update step never asks a run to keep company groups",
+  !/expanded net|"core"/i.test(listed));
 check("a deployment with an empty company list still gets every rotation step",
   bareSteps.includes("1c. Get this run's companies")
   && bareSteps.includes("9d. RECORD WHAT YOU COVERED")

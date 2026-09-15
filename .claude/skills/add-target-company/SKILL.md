@@ -167,17 +167,19 @@ Read the response: `{recorded, added, excluded, on, cursor, shared, withheld}`.
 Re-run step 1's check. The company appears exactly once, `known` shows the
 fields you sent, and the total rose by `added`.
 
-## When `target_companies` does change
+## Never on the search itself
 
-`target_companies` is a search's strategy prose - which kinds of employer to
-favour, and why. Edit it only when an addition changes that strategy, never to
-record the company itself.
+No search keeps a company list. Don't write the company into a track's
+`target_companies` or into its doc: the prompt doesn't read `target_companies`,
+and a list in a doc becomes a set a run sweeps every night on top of its batch.
+The shared list is the only place a company is searched from.
 
-`POST /api/config` with a `tracks` array **replaces every track**, and any
-field missing from a track object is stored as `''`. Posting one track with
-only `target_companies` deletes the other tracks and blanks the kept one's role
-line, resume line and schedule, with a `200`. **GET the whole config, change
-one string, POST the whole object back**, then diff what came back:
+If you change any other track field, `POST /api/config` with a `tracks` array
+**replaces every track**, and any field missing from a track object is stored
+as `''`. Posting one track with one field deletes the other tracks and blanks
+the kept one's role line, resume line and schedule, with a `200`. **GET the
+whole config, change one string, POST the whole object back**, then diff what
+came back, leaving out the field you meant to change:
 
 ```bash
 node -e '
@@ -187,7 +189,7 @@ for (const t of a.tracks) {
   const u = b.tracks.find(x => x.key === t.key);
   if (!u) { console.log("LOST TRACK: " + t.key); continue; }
   for (const k of Object.keys(t))
-    if (k !== "last_run" && k !== "target_companies" && (t[k] || "") !== (u[k] || ""))
+    if (k !== "last_run" && k !== "<the field you changed>" && (t[k] || "") !== (u[k] || ""))
       console.log("CHANGED unexpectedly on " + t.key + ": " + k);
 }'
 ```

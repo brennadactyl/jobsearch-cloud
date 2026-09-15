@@ -12,7 +12,7 @@
  * whole system rests on it.
  *
  * Only fields the app reads are structured (key, label, sort_order,
- * schedule_time, target_companies); everything only the model reads is stored
+ * schedule_time); everything only the model reads is stored
  * prose, interpolated verbatim - see server/README.md, "Config fields are
  * mostly prose, on purpose".
  */
@@ -69,7 +69,7 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
   const doc = track.doc_file || `docs/tracked_${key}_postings.md`;
   const docSummary =
     track.doc_summary ||
-    "candidate profile, target companies, verification requirement, and per-company fetch-reliability notes";
+    "candidate profile, verification requirement, and per-company fetch-reliability notes";
   // Runs into "Do the following:" as one paragraph: a track's note reads as
   // preamble, not as a heading.
   const intro = track.intro_note ? `${track.intro_note} ` : "";
@@ -84,22 +84,17 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
 
   const docUpdateLine =
     track.doc_update_line ||
-    'If you learned something worth keeping about this search - a company ' +
-      'worth promoting from "expanded net" to "core" - update the relevant ' +
+    'If you learned something worth keeping about this search - a refinement ' +
+      'to the fit filter or the scope rules - update the relevant ' +
       `section of \`${doc}\`. A blocked domain or a working URL format is not a ` +
       "doc edit: it is a `wall`, `endpoint` or `url_shape` in step 9d, where every " +
       "search reads it. Do not add a found-postings table or a screened/dead-link " +
       "list to the doc; those live in the tracker only.";
 
-  let companies = "";
-  try {
-    const parsed = JSON.parse(track.target_companies || "[]");
-    companies = Array.isArray(parsed) ? parsed.join(", ") : String(track.target_companies || "");
-  } catch {
-    // Stored by hand as a plain string: use it as written rather than lose the
-    // list to a parse error.
-    companies = String(track.target_companies || "");
-  }
+  // A search has no company list of its own. It covers the step-1c slice of the
+  // one shared list and finds new employers in step 3b; a list kept per search
+  // becomes a fixed set swept every night on top of the slice, which is what
+  // makes a run long. target_companies may still hold one in D1; it is not read.
   const searchNote = track.search_note ? ` ${track.search_note}` : "";
 
   // A settings list rather than track prose, so "is this company excluded?" is
@@ -290,7 +285,7 @@ ${intro}Do the following:
 1. Read \`${doc}\` - ${docSummary}. Follow its numbered process. The doc doesn't keep a found-postings table or a screened/dead-link list - dedup data comes from step 1b instead.
 1b. Fetch what this track has already seen: \`./tracker dedup\`. It writes \`dedup.json\`: \`leads[]\` as \`{url, status}\`, with \`recheck: true\` on the ones due a re-check tonight - postings already tracked, where \`url\` is what step 8 reports back and \`status\` is context for your report (that's how you tell a stale lead nobody's touched from one ${name} has already applied to) - and \`screened[]\`, urls already looked at and rejected at tonight's companies or in the last few days, which is what stops you re-verifying the same dead or out-of-scope candidate. Older rejections at other companies aren't in it; if you verify one of those and report it, the tracker recognises it, so it costs a check and never a duplicate.${dedupNote}
 ${coverageStep}2. ${resumeLine}
-3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}. Step 1c is the list for today, drawn from: ${companies}.${searchNote}${exclusionNote}
+3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}.${searchNote}${exclusionNote}
 3b. NOW LOOK OUTSIDE THAT LIST. Step 3 is the companies already known to be worth checking; this step is how that list ever grows, and it is not optional. Search for ${roleLine} at companies **not already on the shared list** - including outside tech entirely: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities, manufacturing, and sports (leagues and the larger franchises, plus the data, streaming and betting companies built around them). All of them run real engineering orgs and all of them are easy to miss when the named list reads as big tech. Rotate through a couple of verticals per run rather than attempting all of them.
 
    **Check each company before you spend anything on it: \`./tracker known "<company>"\`.** Tonight's slice is a small part of the list, and another search may have added a company earlier tonight. If it says the company is on the list, skip it - its turn comes in the rotation.

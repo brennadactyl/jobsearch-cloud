@@ -232,12 +232,14 @@ itself.
 finished sentence the search should read:
 
 - `role_search_line` - as it reads mid-sentence.
-- `target_companies` - this search's *strategy*: which kinds of employer it
-  favours and why ("gaming first, then creator platforms"). It is context
-  beside the companies step 1c hands the run, not a list to search; names
-  written here are never searched. Empty when there's no preference.
-- `search_note` - anything qualifying how those companies are searched ("none
-  of these are industry-only searches").
+- `target_companies` - leave it empty. No search keeps a company list: each
+  covers its batch of the shared list (step 1c) and finds new employers in
+  step 3b, and the prompt doesn't read this field. The kinds of employer
+  someone favours go in the track doc's candidate profile, as guidance for
+  discovery. A company they name goes on the shared list
+  (`../add-target-company/SKILL.md`), never on the search.
+- `search_note` - anything qualifying how the step-1c companies are searched
+  ("surface any matching role, not only ones in a particular product area").
 - `resume_line` - the whole "read the resume" instruction: the `.txt` to read,
   that the `.pdf`/`.docx` beside it isn't readable headless, and how this track
   frames the resume.
