@@ -1,0 +1,13 @@
+-- Keeps the date a posting was found on the `screened` row it leaves behind.
+--
+-- A lead removed by a person (POST /api/delete-leads) or delisted as taken down
+-- is deleted and becomes a `screened` row, and without this its `found` date is
+-- gone. The Overview's weekly "positions found" chart counts leads by found
+-- week, so every week a posting was later removed from would read low.
+--
+-- `found` is the removed lead's `leads.found`, YYYY-MM-DD. '' means the row
+-- never was a lead (a search screened the posting out before adding it) or it
+-- was removed before this column existed.
+--
+-- Don't backfill it: the date no longer exists anywhere to copy from.
+ALTER TABLE screened ADD COLUMN found TEXT NOT NULL DEFAULT '';

@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: ten tables, from
-`0001_schema.sql` through `0013_company_sweeps_by_key.sql` applied in order. This is the
+`0001_schema.sql` through `0014_screened_found.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -149,6 +149,7 @@ erDiagram
         TEXT reason
         TEXT date
         TEXT added_by
+        TEXT found
     }
     applications {
         INTEGER id PK
@@ -296,6 +297,9 @@ Unique on `(user_id, search, url)`, as `leads` is.
 - `added_by` is `run` for a row a search wrote, `hand` for a posting a person
   removed from their board, and `''` for older rows that could not be
   attributed (`0007_screened_added_by.sql`). Run records count only `run`.
+- `found` is the `leads.found` date of a lead that was removed or delisted into
+  this row, and `''` for a posting that never was a lead or was removed before
+  the column existed (`0014_screened_found.sql`).
 
 ### applications
 

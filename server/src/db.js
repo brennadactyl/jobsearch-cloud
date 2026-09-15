@@ -90,6 +90,8 @@
  * @property {string} location
  * @property {string} reason
  * @property {string} date - YYYY-MM-DD, date screened
+ * @property {string} added_by - 'run', 'hand', or '' (migrations/0007_screened_added_by.sql)
+ * @property {string} found - YYYY-MM-DD the removed lead was found, or '' (migrations/0014_screened_found.sql)
  */
 
 /**
@@ -1175,7 +1177,8 @@ export class Db {
   /**
    * Every lead this user tracks, in the columns URL matching and delisting
    * need: `id` and `url` to match on, `status` for the applied-to check, and
-   * the company/title/location deleteLeadAndScreen copies onto its screened row.
+   * the company/title/location/found deleteLeadAndScreen copies onto its
+   * screened row.
    *
    * Whole table, not `WHERE url IN (...)`: matching uses canonicalUrl
    * (./url.js), in JS. A raw SQL string match would miss URL variants and
@@ -1184,12 +1187,12 @@ export class Db {
    * Not scoped to the caller's track: a multi-tab run treats all its tabs'
    * dedup data as one set, so the postings it re-checks aren't all in the tab
    * it reports under, and narrowing would wrongly report them as unmatched.
-   * @returns {Promise<Array<{id: number, search: string, url: string, status: string, company: string, title: string, location: string}>>}
+   * @returns {Promise<Array<{id: number, search: string, url: string, status: string, company: string, title: string, location: string, found: string}>>}
    */
   async getLeadsForUrlMatch() {
     const res = await this.d1
       .prepare(
-        `SELECT id, search, url, status, company, title, location
+        `SELECT id, search, url, status, company, title, location, found
            FROM leads WHERE user_id = ? ORDER BY id`
       )
       .bind(this.userId)
@@ -1578,8 +1581,8 @@ export class Db {
    * URL as a new lead, and the screened row alone hides a lead still in its tab.
    *
    * INSERT OR IGNORE because (user, search, url) is unique and a re-reported
-   * posting is a no-op. The screened row carries company/title/location
-   * because it is all that remains of the lead.
+   * posting is a no-op. The screened row carries company/title/location and
+   * the found date because it is all that remains of the lead.
    *
    * Never pass a lead an application points at: deleting it would strand that
    * row. Both callers check for an application row first, not just for status
@@ -1601,8 +1604,8 @@ export class Db {
     const results = await this.d1.batch([
       this.d1
         .prepare(
-          `INSERT OR IGNORE INTO screened (user_id, search, url, company, title, location, reason, date, added_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT OR IGNORE INTO screened (user_id, search, url, company, title, location, reason, date, added_by, found)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           this.userId,
@@ -1613,7 +1616,8 @@ export class Db {
           lead.location || "",
           reason,
           date || today(),
-          addedBy
+          addedBy,
+          lead.found || ""
         ),
       this.d1
         .prepare("DELETE FROM leads WHERE id = ? AND user_id = ?")

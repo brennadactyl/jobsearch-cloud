@@ -1164,6 +1164,12 @@ check("the search's row is 'run' and the person's is 'hand'",
   attrRows.some((s) => s.added_by === "run" && s.reason === "below target level") &&
   attrRows.some((s) => s.added_by === "hand" && s.reason === "not interested"),
   JSON.stringify(attrRows.map((s) => s.added_by + ":" + s.reason.slice(0, 20))));
+// The Overview's weekly found chart counts removed postings by this date
+// (migrations/0014_screened_found.sql).
+check("a hand removal keeps the lead's found date; a screened-out posting has none",
+  attrRows.some((s) => s.added_by === "hand" && s.found === attrLeads[0].found && s.found === attrDay) &&
+  attrRows.some((s) => s.added_by === "run" && s.found === ""),
+  JSON.stringify(attrRows.map((s) => s.added_by + ":" + s.found)));
 
 // Why addedBy is refused rather than defaulted: deleteLeadAndScreen in src/db.js.
 const attrDb = await import("./src/db.js");
@@ -1189,6 +1195,9 @@ const attrDelisted = (await req("POST", "/api/runs", { token: B_TOK, body: { sea
 check("a delisting reported by the search still counts as delisted",
   attrDelisted.delisted === attrBase.delisted + 1,
   JSON.stringify({ before: attrBase.delisted, after: attrDelisted.delisted }));
+const delRow = (await req("GET", "/api/data", { token: B_TOK })).json.screened.find((s) => s.url === delUrl);
+check("a delisted lead's screened row keeps its found date",
+  !!delRow && delRow.found === attrDay, JSON.stringify(delRow && { found: delRow.found }));
 
 console.log("\n== purging a retired search ==");
 // A's track list is now just DATA (above), so SWE is retired for A and its
