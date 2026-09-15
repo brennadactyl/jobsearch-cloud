@@ -248,8 +248,9 @@ which can never resolve to a real job posting.
 It has three tracks including a `fed_by` pair (one search filling two tabs),
 leads across every status and every location tier, twenty screened postings,
 and nine applications walked through the pipeline from "To Apply" to an offer.
-Dates are stored as day offsets; re-run with `-Force` to move them forward to
-today.
+Dates are stored as day offsets spread over the last twelve weeks, so the
+Overview's weekly charts have something to show; re-run with `-Force` to move
+them forward to today.
 
 **It never writes to the shared company list.** The seed marks the account
 `demo`, and the server refuses a demo account's `POST /api/coverage` - an
