@@ -101,7 +101,7 @@ export function parseLocation(raw: string): LocationEntry {
 
   // "Portland OR", "Austin Texas": a city with its state or province after it.
   // Only a shared name needs the region to match; any other city matches by
-  // name alone, so "Austin TX" still ranks "Austin/Bay Area".
+  // name alone, so "Austin TX" still ranks "Austin/Denver".
   const words = lower.split(" ");
   for (const n of [2, 1]) {
     if (words.length <= n) continue;

@@ -4,8 +4,8 @@ import { locationRules, parseLocation, parseLocations, tooManyLocations } from "
 
 /** Location strings in the shapes postings write them. A rule is right when it ranks these. */
 const REMOTE_US = [
-  "Remote (U.S.)", "USA - Remote", "Remote-Friendly, United States", "Remote (U.S./Canada)",
-  "US - Remote", "Remote (US/Canada)", "Remote, Texas, USA", "Denver, CO / remote US", "Remote-US (per listing)",
+  "Remote (U.S.)", "USA - Remote", "Remote-friendly (United States)", "Remote (U.S./Canada)",
+  "US - Remote (hybrid)", "Remote (US/Canada)", "Remote, Colorado, USA", "Denver, CO / remote US", "Remote-US eligible",
 ];
 const MULTI_CITY = "Seattle, WA / Denver, CO / Austin, TX";
 
