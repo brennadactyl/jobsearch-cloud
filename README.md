@@ -233,7 +233,9 @@ It prints a link that works once, for 14 days. Send it to them. They:
 
 That night the onboarding run creates their folder under `private\<their id>\`,
 posts their search config and track docs, and schedules their searches in a
-free slot later the same night. In the morning their tracker has leads.
+free slot later the same night. In the morning their tracker has leads. When
+the machine has no free overnight slot left, their setup is marked failed and
+the page tells them why, rather than stacking a search on top of another.
 
 `.\scripts\new-invite.ps1 -List` shows each invite's state (waiting, used or
 expired) and, once used, the account's name and user id, which names their
