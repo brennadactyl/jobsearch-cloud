@@ -37,7 +37,7 @@ export async function handleGetPrompt({ db, user, params }) {
   // from the generic fallbacks, and a run would carry out that hollow search
   // and report success. A track is in this state until its config is posted,
   // so refuse and let the run fail visibly.
-  if (!track.role_search_line && !track.resume_line && !track.target_companies) {
+  if (!track.role_search_line && !track.resume_line) {
     return json(
       {
         error: `track "${key}" has no search config yet - post it to /api/config before running this search`,

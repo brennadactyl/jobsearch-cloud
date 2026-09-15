@@ -71,7 +71,7 @@ unreachable, which tab a finding belongs in, what a run must report.
   candidate URL be opened. Add to that list when you add a step - a prompt
   that loses one does not error.
 - Structure only what the *app* reads (`key`, `label`, `sort_order`,
-  `schedule_time`, `target_companies`); store what the model reads verbatim,
+  `schedule_time`); store what the model reads verbatim,
   never as a keyword the prompt regenerates into a sentence.
 - The multi-tab pieces are each the empty string when they do not apply. A new
   optional step follows that shape rather than becoming another config flag.
@@ -101,9 +101,11 @@ looking for*, it belongs in `prompt.js` instead.
 
 ## Changing a track doc, and reconciling the rest
 
-The run edits the doc as it goes. It holds fit reasoning, the target-company
-list with why each is there, the expanded net and what came of each attempt,
-and the per-company fetch-reliability notes. It lives in the tracker: a run
+The run edits the doc as it goes. It holds fit reasoning, the candidate
+profile (including the kinds of employer to favour in discovery), and the
+per-company fetch-reliability notes. It holds no company list: a search covers
+its batch of the shared list, and a list in a doc becomes a set swept every
+night. It lives in the tracker: a run
 fetches every document into a throwaway directory and writes back the ones it
 changed with `If-Match` (see `scripts/run-search.ps1`).
 
@@ -128,8 +130,8 @@ means runs read instructions their prompt doesn't know.
    Every person, every track - not just the one you were iterating on. Each
    account has its own token, so this is once per account.
 3. For each, `GET /api/documents/docs/<file>`, edit, and `PUT` it back. Do not
-   paste the template over it: the track's own knowledge - reliability notes,
-   expanded net, target companies - is not recoverable.
+   paste the template over it: the track's own knowledge - fit reasoning,
+   reliability notes - is not recoverable.
 4. **Send `If-Match` with the etag the GET returned**, or a run finishing
    after you silently erases your edit (or you erase its). A 412 means a run
    landed while you were editing - re-fetch and redo the edit on top.
