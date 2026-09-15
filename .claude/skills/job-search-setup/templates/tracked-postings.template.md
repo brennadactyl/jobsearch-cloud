@@ -6,7 +6,7 @@ This doc is the running knowledge base for the daily "{{SEARCH_GOAL_SENTENCE}}" 
 
 Each run should:
 1. Fetch the tracker's current leads AND screened data (step 1b of the daily prompt: `./tracker dedup`, which writes `dedup.json` with `leads[]` and `screened[]`) to see what is already found or already ruled out (compare by URL).
-2. Re-search the companies step 1c hands this run (\`./tracker companies\`) for {{ROLE_SEARCH_LINE}} matching the Candidate Profile below.
+2. Re-search the companies step 1c hands this run (`./tracker companies`) for {{ROLE_SEARCH_LINE}} matching the Candidate Profile below.
 3. **Also run a broader discovery search beyond that slice**: search generally for other companies currently hiring for these roles, plus targeted searches on companies with a strong fit that are not on the shared list at all (see "Companies tried" below for ones this track has already looked at; add more each run). Apply the same mandatory verification - a new company is not exempt.
 
    **This explicitly includes companies outside tech**: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities, manufacturing and sports (leagues and the larger franchises, plus the data, streaming and betting companies built around them) all run large engineering orgs, and they are the easiest thing to miss when the named list reads as big tech. Rotate through a couple of those verticals per run rather than all of them.

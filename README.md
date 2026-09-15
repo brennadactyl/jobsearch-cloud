@@ -157,8 +157,10 @@ cover the CLI path.
      [private.example/README.md](private.example/README.md).
 
    Either way, point at the resulting folder with
-   `setx JOB_SEARCH_DATA_DIR "C:\path\to\private"`, or just place it at
-   `private\` next to this repo (already gitignored).
+   `setx JOB_SEARCH_DATA_DIR "C:\path\to\private"`, or use the default,
+   `private\` at the repo root (already gitignored). Keep the path short: a
+   run writes files about 100 characters deeper than it, and Windows' 260-character
+   limit fails as "Could not find a part of the path".
 6. **Register the scheduled tasks** (the setup skill does this for you; run
    it yourself if you set up by hand or are adding a track):
    ```powershell

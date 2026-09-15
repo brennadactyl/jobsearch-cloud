@@ -19,8 +19,10 @@ environment variable:
 setx JOB_SEARCH_DATA_DIR "C:\path\to\your\private\data"
 ```
 
-If you don't set one, `scripts\run-search.ps1` and `scripts\setup-scheduler.ps1`
-default to a `private\` folder next to this repo (gitignored).
+If you don't set one, the scripts default to `private\` at the repo root
+(gitignored). Keep whichever path you use short: a run writes
+`<user-id>\.run\<key>\docs\tracked_<key>_postings.md` beneath it, and past
+Windows' 260-character limit that fails as "Could not find a part of the path".
 
 ## Required structure
 
