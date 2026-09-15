@@ -168,10 +168,13 @@ Once per person:
 - **Geographic scope** - the hard filter on what's in scope ("US only", "no
   restriction"). It becomes `geo_scope_line`, a full paragraph with worked
   examples of what's excluded. Leave it empty for no restriction.
-- **Priority locations** - one or two tiers that sort first within that scope
-  ("Seattle metro, or remote in the US"; "Portland"). They become
+- **Priority locations** - places in order of preference, the most wanted
+  first, that sort ahead of everywhere else within that scope ("Seattle,
+  Bellevue, remote in the US, Portland OR"). Any number works; the page gives
+  the first five their own colour and ranks the rest without one. They become
   `priority_locations` (step 6) *and* every track doc's tier table (step 4);
-  keep the two identical, or runs write location text the page can't rank.
+  keep the two in the same order, or runs write location text the page can't
+  rank.
 - **Display title** for the page ("Jordan's Job Search").
 - **Pronouns** - the `pronouns` setting the prompt uses when it writes about
   them. Ask; never infer from a name or resume. Empty keeps the prompt generic.
@@ -298,10 +301,22 @@ curl -s -X POST "$TRACKER_URL/api/config" -H "Authorization: Bearer $TOKEN" \
 
 In the same call, as this run sets them:
 
-- `priority_locations` - an ordered list of `{tier: "p-high"|"p-med", label,
-  anyOf: [substrings], allOf?: [substrings]}`. The first rule whose `anyOf`
-  (one substring) and `allOf` (every substring) match the lowercased location
-  wins. The page ranks by position in the list, not by `tier`.
+- `priority_locations` - an ordered list of `{label, anyOf: [substrings],
+  allOf?: [substrings]}`, one rule per place, most wanted first. The page tries
+  rules in order against the lowercased location, and the first whose `anyOf`
+  (any one substring) and `allOf` (every substring) match wins; its position
+  is the rank. A `tier` field is accepted and ignored.
+
+  Write the substrings the way postings spell locations, because a run copies
+  the posting's own location text. Postings write remote-in-the-US as
+  "Remote (U.S.)", "USA - Remote" or "Remote-Friendly, United States", so a rule
+  for it is `allOf: ["remote"]` with `anyOf: ["u.s.", "usa", "united states"]`,
+  while the literal "remote us" matches almost none of them. **Never use a
+  bare substring of three letters or fewer** ("us", "ca", "or", "wa"): "us"
+  matches inside "Austin" and "ca" inside "Chicago". A city is `anyOf: [its name]`.
+  A city whose name is shared (Portland, Vancouver, Cambridge) puts the name in
+  `allOf` and its state or province spellings in `anyOf`:
+  `allOf: ["portland"]`, `anyOf: ["oregon", ", or"]`.
 - `excluded_companies` - companies this person won't work for: names, or a
   phrase like "any other company X owns". The prompt turns it into one
   never-search sentence.
