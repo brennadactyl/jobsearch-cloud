@@ -23,6 +23,7 @@
 
     tracker dedup                 GET  /api/dedup/<key>     -> dedup.json
     tracker companies             GET  /api/coverage/<key>  -> companies.json
+    tracker known     "<company>" GET  /api/coverage/<key>?all=1
     tracker leads     <file>      POST /api/leads
     tracker screened  <file>      POST /api/screened
     tracker verified  <file>      POST /api/verified
@@ -94,7 +95,7 @@ for ($i = 0; $i -lt $rest.Count; $i++) {
 if ($Opts.ContainsKey("search") -and $Opts["search"]) { $Search = $Opts["search"] }
 
 if (-not $Command) {
-    Fail "no command given - one of: dedup, companies, leads, screened, verified, delist, swept, run"
+    Fail "no command given - one of: dedup, companies, known, leads, screened, verified, delist, swept, run"
 }
 if (-not $Base -or -not $Token) {
     Fail "TRACKER_URL and TRACKER_API_TOKEN are not both set in this environment - nothing can be synced"
@@ -305,6 +306,27 @@ switch ($Command) {
       break
   }
 
+  "known" {
+      # Whether a company is already on the shared list, decided here rather than
+      # by the run reading names. A run only sees tonight's slice, so on its own it
+      # cannot tell that another search added a company earlier the same night.
+      # The match is normalize() in server/src/exclude.js - lowercase, every run of
+      # characters outside a-z and 0-9 collapsed to one space, trimmed - so it
+      # agrees with how the list itself tells two names apart. Change both together.
+      if (-not $File) { Fail "known needs a company name - usage: tracker known ""<company>""" }
+      $norm = { param($s) (([string]$s).ToLowerInvariant() -creplace "[^a-z0-9]+", " ").Trim() }
+      $want = & $norm $File
+      if (-not $want) { Fail "'$File' has no letters or digits to match on" }
+      $c = Invoke-Tracker "GET" "/api/coverage/${Search}?all=1" $null
+      $hit = @($c.companies | Where-Object { $_ -and ((& $norm $_.company) -eq $want) }) | Select-Object -First 1
+      if ($hit) {
+          Say "known: $File is on the list as '$($hit.company)' - skip it, its turn comes in the rotation"
+      } else {
+          Say "known: $File is not on the list"
+      }
+      break
+  }
+
   "leads" {
       $rows = Read-Rows $File "leads"
       $send = @()
@@ -441,7 +463,7 @@ switch ($Command) {
   }
 
   default {
-      Fail "unknown command '$Command' - one of: dedup, companies, leads, screened, verified, delist, swept, run"
+      Fail "unknown command '$Command' - one of: dedup, companies, known, leads, screened, verified, delist, swept, run"
   }
 }
 

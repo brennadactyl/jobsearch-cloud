@@ -537,6 +537,7 @@ for (const cmd of [
   "./tracker screened screened.json",
   "./tracker run --status ok",
   "./tracker companies",
+  "./tracker known",
   "./tracker swept swept.json",
 ]) {
   check(`the prompt still reaches the tracker via \`${cmd}\``, sweSteps.includes(cmd));
