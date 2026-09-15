@@ -70,12 +70,11 @@ server/                        API only - Cloudflare Worker + D1, no HTML served
   wrangler.toml                  deploy config
   package.json                   lets the Deploy to Cloudflare button chain migrations + deploy
   README.md                      one-time deploy instructions + API reference
-client/                        the tracker webpage - static, no build step
-  public/index.html             standalone HTML+CSS+JS, calls server/'s API cross-origin (only public/ is served)
-  wrangler.toml                  deploy config (Worker serving public/ as static assets)
-  package.json                   lets the Deploy to Cloudflare button deploy it
+client/                        the tracker webpage - React + TypeScript, built with Vite
+  src/                          components, domain rules, the API layer, tests
+  wrangler.toml                  deploy config (Worker serving the built dist/ as static assets)
+  package.json                   build, test and deploy scripts
   README.md                      one-time deploy instructions
-client-react/                  a second, unfinished client for the same API - see its README.md
 private.example/
   README.md                    expected layout for your own private data folder
 ```
@@ -131,13 +130,13 @@ cover the CLI path.
 
    [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/brennadactyl/JobSearchTracker/tree/main/client)
 
-   Same flow - it forks the client into your own GitHub and deploys it as a
-   Worker serving a static page.
+   Same flow - it forks the client into your own GitHub, builds it and deploys
+   it as a Worker serving a static page.
 
-   **Required before it will work:** in your fork, create
-   `client/public/local-config.js` (copy `local-config.example.js`) with your
-   API Worker's URL, and redeploy. Without it the page says "This deployment
-   has no API URL configured". See [client/README.md](client/README.md).
+   **Required before it will build:** on the setup page, set the deploy command
+   to `npm run deploy` and add a build variable `VITE_API_BASE` with your API
+   Worker's URL. Without it the build refuses with "VITE_API_BASE is not set".
+   See [client/README.md](client/README.md#quick-deploy).
 
    Now open the client's URL and sign in with the name and password of the
    account you created. It remembers you in that browser until you log out.

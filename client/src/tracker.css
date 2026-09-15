@@ -1,5 +1,5 @@
-/* Rules copied from client/public/index.html's <style>. Components emit these
-   class names, so change a rule rather than a name (src/classes.test.ts).
+/* Components emit these class names, so change a rule rather than a name
+   (src/classes.test.ts).
 
    A theme token needs a value in all three palette blocks below
    (src/theme.test.ts). --sbw is set by usePinnedLayout (src/ui/hooks.ts). */
@@ -418,8 +418,7 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 
 /* ---------------------------------------------------------------------------
    These controls render as links, and the rules above assume no link colour or
-   underline. Appended rather than edited in, so the rules above stay diffable
-   against client/public/index.html. */
+   underline. */
 .tab, .tile, .jumplink, .chip.drill { text-decoration: none; }
 .tile { color: inherit; }
 /* The underline is the hover affordance on a jumplink and nowhere else. */

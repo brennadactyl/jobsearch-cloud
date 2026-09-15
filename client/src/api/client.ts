@@ -240,8 +240,9 @@ export function setApplicationStatus(id: number, status: string, date?: string):
 export function addApplication(link: string): Promise<Application> {
   return request("/api/update", updateAppSchema, {
     method: "POST",
-    // Field for field the body client/public/index.html sends, so a row from
-    // either client means the same thing. The UTC date is inlined, as
+    // Every column blank but the link, status and applied date: a link with no
+    // company, role or location is what queues the overnight fill. The UTC date
+    // is inlined, as
     // domain/format's today() computes it, so this layer imports no domain code.
     body: {
       type: "application",

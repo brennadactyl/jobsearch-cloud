@@ -272,9 +272,9 @@
           <rect x="1100" y="310" width="300" height="110" rx="9" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="1.3" />
           <text x="1120" y="337" font-family="Archivo, sans-serif" font-weight="700" font-size="15" fill="currentColor">client/ — static Worker</text>
           <text x="1120" y="357" font-family="Space Mono, monospace" font-size="11" fill="currentColor" opacity="0.75">job-search-tracker-client</text>
-          <text x="1120" y="376" font-family="Source Sans 3, sans-serif" font-size="12" fill="currentColor" opacity="0.65">one HTML file, no build step</text>
-          <text x="1120" y="391" font-family="Source Sans 3, sans-serif" font-size="12" fill="currentColor" opacity="0.65">API URL from local-config.js</text>
-          <text x="1120" y="406" font-family="Source Sans 3, sans-serif" font-size="12" fill="currentColor" opacity="0.65">client-react/ beside it, unfinished</text>
+          <text x="1120" y="376" font-family="Source Sans 3, sans-serif" font-size="12" fill="currentColor" opacity="0.65">React app, built with Vite</text>
+          <text x="1120" y="391" font-family="Source Sans 3, sans-serif" font-size="12" fill="currentColor" opacity="0.65">API URL baked in at build</text>
+          <text x="1120" y="406" font-family="Source Sans 3, sans-serif" font-size="12" fill="currentColor" opacity="0.65">tab URLs fall back to index.html</text>
         </g>
 
       </svg>
@@ -294,9 +294,8 @@
       </div>
       <div class="card">
         <p class="k">02 · Page and API</p>
-        <p><code class="mono">server/</code> is the API Worker: JSON only, CORS-enabled, and every request is served from a database handle scoped to the person whose token made it. <code class="mono">client/</code> is a separate static-assets Worker serving one HTML file with no build step. It calls the API cross-origin, and the API's URL comes from its gitignored <code class="mono">local-config.js</code>. Either half redeploys without the other.</p>
+        <p><code class="mono">server/</code> is the API Worker: JSON only, CORS-enabled, and every request is served from a database handle scoped to the person whose token made it. <code class="mono">client/</code> is a React app, built with Vite and served by a separate static-assets Worker. It calls the API cross-origin, at a URL baked in at build time from its gitignored <code class="mono">.env.local</code>. Either half redeploys without the other.</p>
         <p>Signing in exchanges a name and password at <code class="mono">/api/login</code> for a session token, which the page keeps in <code class="mono">localStorage</code>. Accounts are created through <code class="mono">/api/users</code> with the <code class="mono">ADMIN_TOKEN</code> secret; there is no sign-up page. Edits are row writes, not a shared blob, so a browser edit and a run landing at the same moment don't overwrite each other.</p>
-        <p><code class="mono">client-react/</code> is a React rebuild of the page, deployed as its own Worker (<code class="mono">job-search-tracker-client-react</code>). It isn't finished and nothing depends on it; <code class="mono">client/</code> is the tracker. See <a href="react-adoption-plan.md">react-adoption-plan.md</a>.</p>
       </div>
       <div class="card private">
         <p class="k">03 · Data boundary</p>

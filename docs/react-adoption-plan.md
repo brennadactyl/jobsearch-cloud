@@ -1,6 +1,9 @@
 # Build the tracker page a second time, in React
 
-> Status: **phases 0-5 built** (2026-09-10); **side-by-side review closed** (2026-09-11). A `client-react/` deployable — React,
+> Status: **cut over** (2026-09-15). The React build is `client/`, deployed as
+> `job-search-tracker-client` at the tracker's existing URL; the ES5 page and the
+> `job-search-tracker-client-react` Worker are gone. Phases 0-5 built
+> (2026-09-10); side-by-side review closed (2026-09-11). A `client-react/` deployable — React,
 > Vite, TypeScript, TanStack Query, Vitest — built alongside the page that ships
 > today rather than converting it. The existing `client/` keeps working and keeps
 > deploying throughout, and the two only ever meet at a cutover decision that is

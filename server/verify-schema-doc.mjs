@@ -230,7 +230,7 @@ console.log("\n== what the doc cites ==");
   const missing = mentioned.filter((r) => !allCols.some((c) => c.ref === r));
   check(`${mentioned.length} table.column mentions are all real columns`, missing.length === 0, `missing: ${missing.join(", ")}`);
 
-  const paths = sorted(spans.filter((s) => /^(server|scripts|docs|client|client-react)\/[\w./-]+\.\w+$/.test(s)));
+  const paths = sorted(spans.filter((s) => /^(server|scripts|docs|client)\/[\w./-]+\.\w+$/.test(s)));
   const noFile = paths.filter((p) => !existsSync(join(ROOT, p)));
   check(`${paths.length} cited paths exist`, noFile.length === 0, `missing: ${noFile.join(", ")}`);
 

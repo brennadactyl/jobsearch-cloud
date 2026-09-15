@@ -9,8 +9,8 @@
 import { json, readJson } from "../http.js";
 import { isoDate } from "../validate.js";
 
-// Duplicated from client/public/index.html's APP_STATUS: no build step ties
-// client and server together.
+// Duplicated in client/src/domain/constants.ts's APP_STATUS: client and server
+// share no code.
 //
 // "To Apply" is a posting logged before applying to it - a row in the
 // Applications tab that hasn't been sent yet, so it has no dateApplied until
@@ -21,7 +21,7 @@ export const APP_STATUS = [
 ];
 
 // Which column holds the date an application first reached each stage;
-// mirrors client/public/index.html's STAGE_DATE_FIELDS. The stamp only fills a
+// mirrors client/src/domain/constants.ts's STAGE_DATE_FIELDS. The stamp only fills a
 // blank column, so a "To Apply" row gets dateApplied the day it's applied to.
 export const STAGE_DATE_MAP = {
   "Applied": "dateApplied",

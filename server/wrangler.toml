@@ -9,7 +9,7 @@ compatibility_date = "2025-01-01"
 #
 # Never change `name`: `wrangler deploy` does not rename a worker, it publishes
 # a new one on a new URL and leaves the old one serving, stranding every
-# bookmark, the client's local-config.js and the scheduled runner on it.
+# bookmark, the client's VITE_API_BASE and the scheduled runner on it.
 #
 # `npm run deploy` applies pending migrations to production. Run
 # verify-migration.mjs and take a backup first (add-d1-migration skill).

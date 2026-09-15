@@ -1,12 +1,21 @@
 name = "job-search-tracker-client"
 compatibility_date = "2025-01-01"
 
-# Static assets only - no build step, no `main`. A separate deployable from
-# ../server/.
+# The tracker page, served as static assets. A separate deployable from
+# ../server/, which it calls cross-origin.
 #
-# Everything under `directory` is published, so README.md, package.json and
-# wrangler.toml stay outside ./public. A deploy also deletes live files missing
-# from it: deploy with `npm run deploy`, whose predeploy-check.mjs refuses when
-# the gitignored local-config.js is absent, as it is in any worktree.
+# Never change `name`: a deploy under a new name publishes a second Worker on a
+# new URL and leaves the old one serving, stranding every bookmark and every
+# browser's stored session on it.
+#
+# dist/ is built, so a deploy can't drop a gitignored file: `npm run deploy`
+# builds first, and vite.config.ts refuses to build without VITE_API_BASE.
+#
+# Deploy from the main checkout on main, never a worktree - see
+# ../.claude/skills/verify-and-deploy/SKILL.md.
 [assets]
-directory = "./public"
+directory = "./dist"
+# Tab routes (/applications, /all-leads, /t/<track>) aren't files in dist/, so
+# without the SPA fallback they 404 on reload. vite dev and preview fall back on
+# their own, so no local run shows it; src/deploy-config.test.ts pins it.
+not_found_handling = "single-page-application"

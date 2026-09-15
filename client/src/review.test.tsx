@@ -1,6 +1,6 @@
 /**
- * One describe per finding in docs/react-ux-comparison.md, numbered to match,
- * so none of them regresses unnoticed.
+ * Copy, focus, selection and save-indicator details of the page that no other
+ * test would notice going missing.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,7 +55,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("the Applications foot note (1.1)", () => {
+describe("the Applications foot note", () => {
   it("says how edits save and what Days counts from, in Detail", async () => {
     await renderAt("/applications");
     const note = document.querySelector(".note");
@@ -72,7 +72,7 @@ describe("the Applications foot note (1.1)", () => {
   });
 });
 
-describe("an application list row (1.2)", () => {
+describe("an application list row", () => {
   const rowFor = (company: string) =>
     [...document.querySelectorAll<HTMLElement>(".md-row")].find((r) => r.querySelector(".co")?.textContent === company)!;
 
@@ -93,7 +93,7 @@ describe("an application list row (1.2)", () => {
   });
 });
 
-describe("a session revoked elsewhere (1.4)", () => {
+describe("a session revoked elsewhere", () => {
   it("goes back to the gate on a failed write, saying why, with the name kept and the password focused", async () => {
     localStorage.setItem("tracker_name", "Demo");
     setPrefs({ selected: { applications: "13" } });
@@ -111,7 +111,7 @@ describe("a session revoked elsewhere (1.4)", () => {
   });
 });
 
-describe("the save indicator (1.5)", () => {
+describe("the save indicator", () => {
   it("greys its dot while a write is in flight", async () => {
     setPrefs({ selected: { applications: "13" } });
     await renderAt("/applications");
@@ -129,7 +129,7 @@ describe("the save indicator (1.5)", () => {
   });
 });
 
-describe("moving a lead (1.6)", () => {
+describe("moving a lead", () => {
   it("says Moving…, then names the tab it went to", async () => {
     setPrefs({ selected: { alpha: "1" } });
     await renderAt("/t/alpha");
@@ -154,7 +154,7 @@ describe("moving a lead (1.6)", () => {
   });
 });
 
-describe("switching from Grid to Detail (1.7)", () => {
+describe("switching from Grid to Detail", () => {
   it("scrolls the row picked in Grid into view, and leaves the list alone after that", async () => {
     const scrolled: Element[] = [];
     const original = Element.prototype.scrollIntoView;
@@ -183,7 +183,7 @@ describe("switching from Grid to Detail (1.7)", () => {
   });
 });
 
-describe("the row Detail shows by default (1.8)", () => {
+describe("the row Detail shows by default", () => {
   it("is the row Grid highlights, before anything has been clicked", async () => {
     await renderAt("/applications");
     const company = (within(detail()).getByLabelText("Company") as HTMLInputElement).value;
@@ -219,7 +219,7 @@ describe("the row Detail shows by default (1.8)", () => {
   });
 });
 
-describe("adding from a link that fails to save (1.9)", () => {
+describe("adding from a link that fails to save", () => {
   it("keeps the link in the box, so it can be tried again", async () => {
     vi.spyOn(client, "addApplication").mockRejectedValue(new Error("boom"));
     await renderAt("/applications");
@@ -232,7 +232,7 @@ describe("adding from a link that fails to save (1.9)", () => {
   });
 });
 
-describe("the password dialog (1.10)", () => {
+describe("the password dialog", () => {
   it("puts focus in Current password when it opens", async () => {
     await renderAt("/");
     await userEvent.click(screen.getByRole("button", { name: /Signed in as/ }));
@@ -246,7 +246,7 @@ describe("the password dialog (1.10)", () => {
   });
 });
 
-describe("logging out (1.11, 1.17)", () => {
+describe("logging out", () => {
   it("lands on the Overview's URL, at a gate named by placeholders, with the password focused", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true } as Response);
     await renderAt("/applications");
@@ -272,7 +272,7 @@ describe("logging out (1.11, 1.17)", () => {
   });
 });
 
-describe("the theme toggle (1.13)", () => {
+describe("the theme toggle", () => {
   it("carries the id the stylesheet sizes it by", async () => {
     // `#themeToggle { line-height: 1 }` - without the id the header row is 7.5px taller.
     await renderAt("/");
@@ -280,7 +280,7 @@ describe("the theme toggle (1.13)", () => {
   });
 });
 
-describe("the Applications grid's link cell (1.14)", () => {
+describe("the Applications grid's link cell", () => {
   it("marks the link as opening elsewhere", async () => {
     setPrefs({ view: "grid" });
     await renderAt("/applications");
@@ -288,7 +288,7 @@ describe("the Applications grid's link cell (1.14)", () => {
   });
 });
 
-describe("the add-from-link box (1.15)", () => {
+describe("the add-from-link box", () => {
   it("explains in full which page to paste", async () => {
     await renderAt("/applications");
     expect(screen.getByLabelText("Link to a job posting")).toHaveAttribute(
@@ -306,7 +306,7 @@ describe("the add-from-link box (1.15)", () => {
   });
 });
 
-describe("the stage-date dialog (1.16)", () => {
+describe("the stage-date dialog", () => {
   it("shows the stage being dated in the status select while it asks, and the real status after Cancel", async () => {
     setPrefs({ selected: { applications: "17" } });
     await renderAt("/applications");
@@ -321,7 +321,7 @@ describe("the stage-date dialog (1.16)", () => {
   });
 });
 
-describe("a load that fails (1.18)", () => {
+describe("a load that fails", () => {
   it("says it couldn't load, and why", async () => {
     vi.spyOn(client, "getData").mockRejectedValue(new Error("boom"));
     window.history.pushState({}, "", "/");

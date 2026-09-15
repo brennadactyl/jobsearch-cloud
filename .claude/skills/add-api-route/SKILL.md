@@ -122,8 +122,9 @@ Then run it, per the `verify-and-deploy` skill.
 - `server/README.md`'s API section.
 - `server/src/routes/index.js`'s header comment, if the shape of the table
   changed.
-- The client, if it will call the route - `client/public/index.html`, see the
-  `edit-tracker-page` skill.
+- The client, if it will call the route - `client/src/api/client.ts`, its
+  schema in `client/src/api/schema.ts`, and a hook in `mutations.ts` for a
+  write. See the `edit-tracker-page` skill.
 - The prompts, if a nightly run is meant to call it - `server/src/prompt.js`
   *and* every track's doc, see `change-search-prompt`. A route no prompt
   mentions is a route no run will ever call.
@@ -131,7 +132,7 @@ Then run it, per the `verify-and-deploy` skill.
 ## Removing or changing an existing route
 
 Check every caller before changing a route: the pages
-(`client/public/index.html`, `client-react/src/`), `scripts/*.ps1`,
+(`client/src/`), `scripts/*.ps1`,
 `server/src/prompt.js`, and every track doc. Grep the code; read the docs
 through the tracker - `GET /api/documents` per account, then each `docs/`
 entry. `change-search-prompt` has the procedure for updating the docs.

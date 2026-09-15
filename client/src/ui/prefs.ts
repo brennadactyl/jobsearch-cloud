@@ -26,7 +26,7 @@ const DEFAULTS: Prefs = {
   expanded: {},
 };
 
-/** Shared with client/public/index.html, so a browser using both keeps its choices. */
+/** The keys browsers already hold; renaming one resets everyone's saved view. */
 const KEYS: Partial<Record<keyof Prefs, string>> = {
   view: "bjs.view",
   leadSort: "bjs.leadSort",

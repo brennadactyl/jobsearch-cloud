@@ -1,7 +1,7 @@
 # Checks only. Deploys stay manual, from a main checkout, through each
 # package's own npm script (.claude/skills/verify-and-deploy/SKILL.md).
 #
-# client-react/ is covered in full. Of server/, only verify-schema-doc.mjs runs
+# client/ is covered in full. Of server/, only verify-schema-doc.mjs runs
 # here: verify-local.mjs needs a running `wrangler dev --local`, and server/
 # commits no lockfile to pin wrangler with.
 name: checks
@@ -16,11 +16,11 @@ permissions:
   contents: read
 
 jobs:
-  client-react:
+  client:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: client-react
+        working-directory: client
     steps:
       - uses: actions/checkout@v7
 
@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: client-react/package-lock.json
+          cache-dependency-path: client/package-lock.json
 
       # `ci`: install exactly the committed lockfile, and fail if package.json
       # has drifted from it.

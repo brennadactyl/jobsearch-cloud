@@ -13,8 +13,8 @@ import { excludedCompanyMatcher } from "../exclude.js";
 import { json, readJson } from "../http.js";
 import { isoDate, today, unknownTrackResponse } from "../validate.js";
 
-// Duplicated from client/public/index.html's LEAD_STATUS: no build step ties
-// client and server together. Only handleSetLeadStatus validates against it;
+// Duplicated in client/src/domain/constants.ts's LEAD_STATUS: client and server
+// share no code. Only handleSetLeadStatus validates against it;
 // /api/update (./update.js) writes `status` unvalidated.
 export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"];
 

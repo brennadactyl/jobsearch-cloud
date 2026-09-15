@@ -10,23 +10,20 @@ Thumbs.db
 # that have a wrangler.toml today.
 .wrangler/
 
-# npm install output, if anyone runs it locally (server/package.json and
-# client/package.json are mainly for the Deploy to Cloudflare button, which
-# installs its own copy)
+# npm install output
 node_modules/
-# The lockfile that install writes goes with it. client/ and server/ depend on
-# little but wrangler, so a lockfile would pin every forker to whatever version
-# was installed locally, and the Deploy button resolves its own copy regardless.
-# Unanchored: it appears next to whichever package.json was installed.
+# server/ depends on little but wrangler, so a lockfile would pin every forker
+# to whatever version was installed locally, and the Deploy button resolves its
+# own copy regardless. Unanchored: it appears next to whichever package.json was
+# installed.
 package-lock.json
-# ...except client-react/'s, which is committed: it has a real dependency tree,
-# and unpinned that resolves differently on every machine and in CI.
-!client-react/package-lock.json
+# ...except client/'s, which is committed: it has a real dependency tree, and
+# unpinned that resolves differently on every machine and in CI.
+!client/package-lock.json
 
-# This installer's own API URL - treated like private/ data (see
-# client/public/local-config.example.js). Never commit a real deployment's
-# URL into the tracked template that other installers fork.
-client/public/local-config.js
+# This installer's own API URL is client/.env.local, ignored by client/.gitignore
+# (see client/.env.example). Never commit a real deployment's URL into the
+# template other installers fork.
 
 # Wrangler local dev secrets (ADMIN_TOKEN etc.) - never commit
 server/.dev.vars

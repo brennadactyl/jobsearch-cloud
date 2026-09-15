@@ -1,16 +1,16 @@
 ---
 name: verify-and-deploy
-description: Verify a change to this repo's tracker code and ship it - picking a free port for a local dev worker, running verify-local.mjs and verify-migration.mjs, and deploying server/ and client/ independently through their npm scripts. Use when asked to deploy, publish, release or ship the tracker, or to run the checks/tests/verification on a change to server/ or client/.
+description: Verify a change to this repo's tracker code and ship it - picking a free port for a local dev worker, running verify-local.mjs and verify-migration.mjs, and running the client's typecheck, tests and lint, and deploying server/ and client/ independently through their npm scripts. Use when asked to deploy, publish, release or ship the tracker, or to run the checks/tests/verification on a change to server/ or client/.
 ---
 
 # Verifying and deploying a change
 
 Two independent deployables, `server/` (Worker + D1 API) and `client/`
-(Worker serving `public/` as static assets). They are versioned and deployed
+(a React app, built to `dist/` and served by a Worker as static assets). They are versioned and deployed
 separately: **deploy only the half you changed.** A client UI change never
 needs a server deploy, and vice versa.
 
-CI (`.github/workflows/checks.yml`) covers `client-react/` and checks
+CI (`.github/workflows/checks.yml`) covers `client/` and checks
 `docs/schema.md` against the migrations; it deploys nothing and does not run
 `server/verify-local.mjs`. The server has no test suite - run
 `verify-local.mjs` yourself.
@@ -22,11 +22,9 @@ live rather than merging into it, so anything the deploying checkout lacks
 comes *down* off the live site.
 
 1. **Never deploy from a git worktree.** Worktrees never carry gitignored
-   files, and `client/public/local-config.js` - which tells the page which API
-   to call - is gitignored. A worktree deploy of `client/` deletes it from the
-   live site, and sign-in shows "This deployment has no API URL configured".
-   `client/predeploy-check.mjs` refuses that deploy only when it goes through
-   `npm run deploy`.
+   files. `client/.env.local`, which sets the API URL the build bakes in, is one:
+   a worktree's client build refuses without it, and an API URL set any other
+   way there is a guess at which API the live page should call.
 2. **Deploy only from `main`, in the main checkout, with a clean tree and up
    to date with origin.** Confirm all four before you start:
 
@@ -179,8 +177,12 @@ though this session's shells run with the policy bypassed. Detail:
 
 ## Verifying a `client/` change
 
-No build step, no test harness - it is one HTML file. Verification is opening
-it; see the `edit-tracker-page` skill for driving it against the live API.
+```bash
+cd client && npm run typecheck && npm test && npm run lint
+```
+
+Then look at it: `npm run dev` against the live API, both themes and a narrow
+viewport - see the `edit-tracker-page` skill.
 
 Deploy through the npm script, never a bare `wrangler deploy`:
 
@@ -188,8 +190,11 @@ Deploy through the npm script, never a bare `wrangler deploy`:
 cd client && npm run deploy
 ```
 
-The `predeploy` hook runs `predeploy-check.mjs`, which refuses the deploy if
-`public/local-config.js` is missing. A bare `wrangler deploy` skips that hook.
+That builds and then deploys `dist/`. A bare `wrangler deploy` publishes whatever
+`dist/` last held, which may not be the tree you verified.
+
+Check what is live first, as for the server: `npx wrangler deployments status`
+from `client/`.
 
 ## What a deploy does not cover
 
