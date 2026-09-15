@@ -50,6 +50,17 @@ export function furthestStage(a: Application): number | null {
 export const FLOW_SEGMENTS = ["moved-on", "waiting", "rejected", "withdrew"] as const;
 export type FlowSegment = (typeof FLOW_SEGMENTS)[number];
 
+/**
+ * The one name for each segment: the bar's labels, tooltips and table headers
+ * use it as written, and the drill chip lower-cased after the stage name.
+ */
+export const FLOW_SEGMENT_LABELS: Record<FlowSegment, string> = {
+  "moved-on": "Moved on",
+  waiting: "Still waiting",
+  rejected: "Rejected at this stage",
+  withdrew: "Withdrew at this stage",
+};
+
 /** Where an application sits in one stage's bar, or null if it never reached that stage. */
 export function flowSegment(a: Application, stage: number): FlowSegment | null {
   const f = furthestStage(a);

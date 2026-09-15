@@ -127,6 +127,19 @@ describe("furthestStage", () => {
     expect(flowSegment(data.applications.find((a) => a.id === 33)!, 0)).toBe("withdrew");
   });
 
+  it("names each segment once, for the bar and for the chip it opens", () => {
+    const { bars } = flow(data);
+    const rejected = bars[1].segments.find((s) => s.key === "rejected")!;
+    expect(rejected.label).toBe("Rejected at this stage");
+    expect(drillLabel(rejected.target.drill!, data)).toBe("Recruiter Screen · rejected at this stage");
+    expect(bars[0].segments.map((s) => s.label)).toEqual([
+      "Moved on",
+      "Still waiting",
+      "Rejected at this stage",
+      "Withdrew at this stage",
+    ]);
+  });
+
   it("counts a skipped stage as reached", () => {
     expect(stageOf(31)).toBe("Tech Screen");
     expect(flowSegment(data.applications.find((a) => a.id === 31)!, 1)).toBe("moved-on");

@@ -14,6 +14,7 @@ import { ACTIVE, ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
 import { daysSince, localDay, shortDate, weekOf } from "./format";
 import { geo } from "./geo";
 import {
+  FLOW_SEGMENT_LABELS,
   FLOW_SEGMENTS,
   FORWARD_STAGES,
   OFFER_INDEX,
@@ -126,12 +127,6 @@ for (const [label, field] of STAGE_DATE_FIELDS) {
 
 export const DRILLS: Readonly<Record<string, Drill>> = base;
 
-const SEGMENT_LABELS: Record<FlowSegment, string> = {
-  "moved-on": "moved on",
-  waiting: "waiting",
-  rejected: "rejected here",
-  withdrew: "withdrew here",
-};
 
 const TIER_SEGMENTS = ["applied", "open", "not-a-fit"] as const;
 
@@ -208,7 +203,7 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
     }
     if (!(FLOW_SEGMENTS as readonly string[]).includes(segment) || stage === OFFER_INDEX) return undefined;
     const seg = segment as FlowSegment;
-    return { scope: "apps", label: () => `${label} · ${SEGMENT_LABELS[seg]}`, test: (a) => flowSegment(a, stage) === seg };
+    return { scope: "apps", label: () => `${label} · ${FLOW_SEGMENT_LABELS[seg].toLowerCase()}`, test: (a) => flowSegment(a, stage) === seg };
   },
   "response-days": (bin) => {
     const b = RESPONSE_BINS.find((r) => r.key === bin);

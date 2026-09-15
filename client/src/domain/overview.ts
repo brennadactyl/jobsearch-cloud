@@ -9,6 +9,7 @@ import { ALL_LEADS, DELISTED_REASON, LEAD_STATUS } from "./constants";
 import { ALL_FILTER, drillCount, drillRows, foundInWeek, isOpen, type DrillTarget, type RowSource } from "./drills";
 import { lastWeeks, localToday } from "./format";
 import {
+  FLOW_SEGMENT_LABELS,
   FLOW_SEGMENTS,
   FLOW_STAGES,
   FORWARD_STAGES,
@@ -18,7 +19,6 @@ import {
   daysToFirstResponse,
   isWaiting,
   median,
-  type FlowSegment,
 } from "./stages";
 import { buildTracks } from "./tabs";
 
@@ -207,13 +207,6 @@ export function tierBars(data: TrackerData): TierBar[] {
     ].map((s) => ({ ...s, n: drillCount(s.target, data) })),
   }));
 }
-
-export const FLOW_SEGMENT_LABELS: Record<FlowSegment, string> = {
-  "moved-on": "Moved on",
-  waiting: "Waiting",
-  rejected: "Rejected here",
-  withdrew: "Withdrew here",
-};
 
 export interface FlowBar {
   slug: string;
