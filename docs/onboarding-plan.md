@@ -193,8 +193,8 @@ needs judgement.
 | Locations first | `priority_locations`, as the rules the page computed, unchanged |
 | Call it | track `label`, and a slug `key` unique in the account |
 | What roles? | `role_search_line` (a noun phrase of titles) and `full_description` |
-| Kinds of companies | `target_companies`, as strategy prose |
-| Named companies | added to the shared company list once the tracks exist, with `/api/coverage` under one of the new track keys and `on: ""` |
+| Kinds of companies | the track doc's candidate profile, as guidance for discovery. It never becomes a list of employers the search sweeps |
+| Named companies | added to the shared company list once the tracks exist, with `/api/coverage` under one of the new track keys and `on: ""`. Never kept on the search |
 | Rules a job out | `fit_clause`, `fit_disqualifier`, `fit_filter_step` |
 | Lowest acceptable pay | added to the fit filter step: a stated lower pay screens a posting out; no stated pay keeps it |
 | Companies never to work for | `excluded_companies` |
@@ -203,6 +203,10 @@ needs judgement.
 Defaults cover everything else: `doc_file`, `doc_summary`,
 `doc_update_line`, `report_line`, `screened_examples`, notes,
 `location_guidance`, `stale_run_hours` and tab labels.
+
+A search has no company list of its own. It covers its nightly batch from the
+shared list, plus discovery, so `target_companies` stays empty and neither the
+config nor the track doc names companies to sweep.
 
 **Skill.** `job-search-setup` gains an intake mode that works from stored
 answers. Its `priority_locations` wording drops the two-tier `p-high`/`p-med`
