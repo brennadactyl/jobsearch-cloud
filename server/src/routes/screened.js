@@ -22,6 +22,41 @@ import { COVERAGE_BATCH, upcomingCompanies } from "./coverage.js";
 // POST /api/screened and /api/leads refuse duplicates on the way in.
 export const DEDUP_RECENT_DAYS = 3;
 
+// Which tracked leads a run re-checks tonight (step 8). A search family re-checks
+// an even share of its open leads each night, so every one comes round within
+// RECHECK_CYCLE_NIGHTS. RECHECK_MAX_PER_RUN caps what that costs a run: past it,
+// the cycle stretches instead of the run growing. A lead confirmed live within
+// RECHECK_AFTER_DAYS is not due, which is what keeps a small family from
+// re-checking the same few leads every night.
+//
+// Open means New or Reviewing. A re-check of anything else changes nothing
+// anyone uses: delisting keeps an Applied lead, or one with an application,
+// whatever the check finds, and a Not a fit lead is one the person has already
+// dismissed.
+export const RECHECK_CYCLE_NIGHTS = 14;
+export const RECHECK_MAX_PER_RUN = 20;
+export const RECHECK_AFTER_DAYS = 7;
+const RECHECK_STATUSES = ["New", "Reviewing"];
+
+/**
+ * Tonight's re-checks for one search family: open leads not confirmed within
+ * RECHECK_AFTER_DAYS, longest-unconfirmed first and then by id, at most the
+ * family's budget. The same leads in give the same choice out, which is what
+ * lets each tab's own read flag its share of one family-wide choice.
+ * @param {Array<{id: number, status: string, verified: string}>} familyLeads
+ * @returns {{eligible: number, budget: number, ids: Set<number>}}
+ */
+function chooseRechecks(familyLeads) {
+  const open = familyLeads.filter((l) => RECHECK_STATUSES.includes(l.status));
+  const budget = Math.min(RECHECK_MAX_PER_RUN, Math.ceil(open.length / RECHECK_CYCLE_NIGHTS));
+  const dueBy = new Date(Date.now() - RECHECK_AFTER_DAYS * 86400000).toISOString().slice(0, 10);
+  const chosen = open
+    .filter((l) => !l.verified || l.verified <= dueBy)
+    .sort((a, b) => (a.verified || "").localeCompare(b.verified || "") || a.id - b.id)
+    .slice(0, budget);
+  return { eligible: open.length, budget, ids: new Set(chosen.map((l) => l.id)) };
+}
+
 /**
  * GET /api/dedup/:key[?scope=batch] - requires a Bearer token ->
  * `{ leads: [{id, url, status}], screened: [url] }`, plus `scope` when scoped;
@@ -39,13 +74,17 @@ export const DEDUP_RECENT_DAYS = 3;
  * arrived with no history would be verified again. A fed tab takes the window
  * from the track whose search fills it, since that is the cursor its run reads;
  * its rows are still its own, because a delisted lead leaves its screened row
- * under the lead's tab. `leads` is never trimmed: step 8 re-checks every one.
+ * under the lead's tab. `leads` is never trimmed, since dedup needs every URL a
+ * search tracks; a scoped read marks the ones due a re-check tonight with
+ * `recheck: true`, chosen family-wide by chooseRechecks.
  *
  * The cutoff is the server's date, compared with dates runs stamp in their own
  * local time, so it can keep a day more than it says - the safe direction.
  *
- * `scope` is `{cursor, companies, since, kept, of}`, so a run's log can say what
- * it was given. Without the parameter the response is exactly the unscoped one.
+ * `scope` is `{cursor, companies, since, kept, of, recheck}`, so a run's log can
+ * say what it was given. `recheck` is `{eligible, budget, flagged, after_days}`:
+ * `eligible` and `budget` for the whole family, `flagged` for this tab. Without
+ * the parameter the response is exactly the unscoped one, with no flags.
  */
 export async function handleGetDedup({ db, params, url }) {
   const key = params[0];
@@ -56,12 +95,29 @@ export async function handleGetDedup({ db, params, url }) {
   const upcoming = await upcomingCompanies(db, track.fed_by || key, 2 * COVERAGE_BATCH);
   const inWindow = new Set(upcoming.companies.map((c) => normalize(c.company)));
   const since = new Date(Date.now() - DEDUP_RECENT_DAYS * 86400000).toISOString().slice(0, 10);
-  const { leads, screened: rows } = await db.getDedupRows(key);
+  const [{ leads, screened: rows }, familyLeads] = await Promise.all([
+    db.getDedupRows(key),
+    db.getFamilyLeadsForRecheck(track.fed_by || key),
+  ]);
   const kept = rows.filter((r) => inWindow.has(normalize(r.company)) || r.date >= since);
+  const recheck = chooseRechecks(familyLeads);
+  const marked = leads.map((l) => (recheck.ids.has(l.id) ? { ...l, recheck: true } : l));
   return json({
-    leads,
+    leads: marked,
     screened: kept.map((r) => r.url),
-    scope: { cursor: upcoming.cursor, companies: upcoming.companies.length, since, kept: kept.length, of: rows.length },
+    scope: {
+      cursor: upcoming.cursor,
+      companies: upcoming.companies.length,
+      since,
+      kept: kept.length,
+      of: rows.length,
+      recheck: {
+        eligible: recheck.eligible,
+        budget: recheck.budget,
+        flagged: marked.filter((l) => l.recheck).length,
+        after_days: RECHECK_AFTER_DAYS,
+      },
+    },
   });
 }
 
