@@ -579,7 +579,6 @@ input[aria-invalid="true"],textarea[aria-invalid="true"]{border-color:var(--crit
 .setup-rm{appearance:none;border:0;background:none;padding:0;font:inherit;color:var(--crit);cursor:pointer}
 .setup-rm:hover{text-decoration:underline}
 .setup-readback{padding:2px 0 0}
-.setup-readback-problem{color:var(--crit)}
 .setup-role{border:1px solid var(--line);border-radius:10px;padding:16px 16px 2px;margin-bottom:14px;background:var(--surface2)}
 .setup-role input[type=text],.setup-role textarea{background:var(--surface)}
 .setup-role-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}

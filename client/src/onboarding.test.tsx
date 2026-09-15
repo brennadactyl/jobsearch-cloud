@@ -186,7 +186,8 @@ describe("the setup form", () => {
     const readback = document.querySelector(".setup-readback") as HTMLElement;
     expect(readback).toHaveTextContent("1. Seattle");
     expect(readback).toHaveTextContent("2. Remote US — remote postings in the United States");
-    expect(readback).toHaveTextContent("“WA” is too short to match reliably");
+    expect(readback).not.toHaveTextContent("WA");
+    expect(screen.getByText(/“WA” is too short to match reliably/)).toHaveClass("field-err");
   });
 
   it("adds and removes role blocks, and the first has no Remove", async () => {

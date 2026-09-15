@@ -11,6 +11,7 @@ type Problems = { name?: string; password?: string; confirm?: string; form?: str
 
 function PasswordField({
   label,
+  placeholder,
   value,
   onChange,
   problem,
@@ -18,6 +19,8 @@ function PasswordField({
   hint,
 }: {
   label: string;
+  /** Shorter than the label when the label wouldn't fit beside Show. */
+  placeholder?: string;
   value: string;
   onChange: (v: string) => void;
   problem?: string;
@@ -30,7 +33,7 @@ function PasswordField({
       <div className="pw-input">
         <input
           type={shown ? "text" : "password"}
-          placeholder={label}
+          placeholder={placeholder ?? label}
           aria-label={label}
           aria-invalid={problem ? true : undefined}
           autoComplete={autoComplete}
@@ -142,6 +145,7 @@ export default function InviteGate({
             </div>
             <PasswordField
               label={`Password (${MIN_PASSWORD} characters or more)`}
+              placeholder={`Password (${MIN_PASSWORD}+ characters)`}
               value={password}
               onChange={setPassword}
               problem={problems.password}

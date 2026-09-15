@@ -62,28 +62,27 @@ function Section({ title, children }: { title: string; children?: ReactNode }) {
 
 /** Each entry as it will rank, and what it matches - or why it can't. */
 function LocationReadback({ entries }: { entries: LocationEntry[] }) {
-  if (!entries.length) return null;
-  let rank = 0;
+  const ranked = entries.flatMap((e) => ("rule" in e ? [e] : []));
+  const flagged = entries.flatMap((e) => ("problem" in e ? [e] : []));
   return (
-    <div className="key setup-readback">
-      {entries.map((e, i) => {
-        if ("problem" in e) {
-          return (
-            <span key={i} className="setup-readback-problem">
-              {e.problem}
+    <>
+      {ranked.length > 0 && (
+        <div className="key setup-readback">
+          {ranked.map((e, r) => (
+            <span key={`${r}-${e.text}`}>
+              <i style={{ background: r < 5 ? TIER_COLOURS[r] : "var(--ink3)" }} />
+              {r + 1}. {e.text}
+              {e.means && ` — ${e.means}`}
             </span>
-          );
-        }
-        const r = rank++;
-        return (
-          <span key={i}>
-            <i style={{ background: r < 5 ? TIER_COLOURS[r] : "var(--ink3)" }} />
-            {r + 1}. {e.text}
-            {e.means && ` — ${e.means}`}
-          </span>
-        );
-      })}
-    </div>
+          ))}
+        </div>
+      )}
+      {flagged.map((e, i) => (
+        <p key={`flag-${i}`} className="field-err">
+          {e.problem}
+        </p>
+      ))}
+    </>
   );
 }
 
