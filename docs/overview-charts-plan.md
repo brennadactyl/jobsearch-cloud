@@ -44,7 +44,7 @@ Weeks start on Monday, local time.
 
 | Chart | Counts, per week | Opens |
 |---|---|---|
-| Positions found | leads with `found` in that week, plus removed postings with their original found date (§4) | All leads, drill `found-week:<monday>` |
+| Positions found | leads with `found` in that week, plus removed postings with their original found date (§4) | All leads, `filter=All`, drill `found-week:<monday>` |
 | Applications sent | applications with `dateApplied` in that week, `To Apply` excluded | Applications, drill `applied-week:<monday>` |
 
 - The current week is drawn at reduced opacity and labelled "so far".
@@ -72,7 +72,7 @@ A table with one row per search, plus a row for applications added by hand
 |---|---|---|
 | Search | label, with its run stamp beneath | its tab |
 | Found | every posting the search ever filed: its leads in any status, plus its removed postings | nothing: plain text |
-| Open | leads in `New` or `Reviewing` | its tab, drill `open` |
+| Open | leads in `New` or `Reviewing` | its tab, default `Open` view ([hide-not-a-fit-plan.md](hide-not-a-fit-plan.md)) |
 | Not a fit | leads in `Not a fit` | its tab, filter `Not a fit` |
 | Applied | applications whose `leadId` is a lead in this search, `To Apply` excluded | Applications, drill `search-applied:<key>` |
 | Responded | of those, applications with any response date (same rule as the pipeline) | Applications, drill `search-responded:<key>` |
