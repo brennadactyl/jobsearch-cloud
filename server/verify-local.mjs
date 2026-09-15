@@ -398,6 +398,65 @@ check("B cannot read dedup data for a track key B doesn't have",
 check("an unconfigured key 404s rather than returning an empty list",
   (await req("GET", "/api/dedup/GHOST", { token: A_TOK })).status === 404);
 
+console.log("\n== dedup scoped to what a run can meet tonight ==");
+// ?scope=batch trims screened[] to URLs at companies in the next two batches
+// along the rotation, plus anything screened in the last few days. Its own
+// account and a per-run track, so the cursor starts at 0 on every run.
+const scopePw = "scope-long-password";
+await req("POST", "/api/users", { admin: true, body: { name: "Scope", password: scopePw } });
+const S_TOK = (await req("POST", "/api/login", { body: { name: "Scope", password: scopePw } })).json.token;
+const scStamp = Date.now().toString(36);
+const SC = "SC" + scStamp, SCF = SC + "F";
+await req("POST", "/api/config", { token: S_TOK, body: { tracks: [
+  { key: SC, label: "Scope", full_description: "the feeder", sort_order: 0 },
+  { key: SCF, label: "Scope fed", full_description: "the fed tab", sort_order: 1, fed_by: SC } ] } });
+const scSlice = (await req("GET", `/api/coverage/${SC}`, { token: S_TOK })).json.companies;
+const scAll = (await req("GET", `/api/coverage/${SC}?all=1`, { token: S_TOK })).json.companies;
+const scUrl = (n) => `https://example.com/scope/${scStamp}/${n}`;
+const scOld = "2026-01-01";
+await req("POST", "/api/screened", { token: S_TOK, body: { screened: [
+  { search: SC, url: scUrl("window-old"), company: scSlice[0].company, reason: "x", date: scOld },
+  { search: SC, url: scUrl("far-old"), company: scAll[scAll.length - 1].company, reason: "x", date: scOld },
+  { search: SC, url: scUrl("far-new"), company: scAll[scAll.length - 1].company, reason: "x" } ] } });
+
+const scoped = await req("GET", `/api/dedup/${SC}?scope=batch`, { token: S_TOK });
+const full = await req("GET", `/api/dedup/${SC}`, { token: S_TOK });
+check("a scoped read keeps a screened url at a company in the window, however old it is",
+  scoped.status === 200 && scoped.json.screened.includes(scUrl("window-old")), JSON.stringify(scoped.json && scoped.json.scope));
+check("and a url screened in the last few days, wherever its company sits",
+  scoped.json.screened.includes(scUrl("far-new")));
+check("but drops an old url at a company outside the window",
+  !scoped.json.screened.includes(scUrl("far-old")), JSON.stringify(scoped.json.screened));
+check("scope says what it trimmed by",
+  !!scoped.json.scope && scoped.json.scope.cursor === 0 &&
+  scoped.json.scope.companies === Math.min(48, scAll.length) &&
+  /^\d{4}-\d{2}-\d{2}$/.test(scoped.json.scope.since) &&
+  scoped.json.scope.kept === scoped.json.screened.length && scoped.json.scope.of === full.json.screened.length,
+  JSON.stringify(scoped.json.scope));
+check("without the parameter the response is the whole list, shaped exactly as before",
+  full.json.screened.includes(scUrl("far-old")) &&
+  JSON.stringify(Object.keys(full.json)) === JSON.stringify(["leads", "screened"]),
+  JSON.stringify(Object.keys(full.json)));
+check("leads are never trimmed", JSON.stringify(scoped.json.leads) === JSON.stringify(full.json.leads));
+
+// A fed tab's run reads the filling track's cursor, so the window comes from
+// there. Moving only the feeder's cursor is what tells the two apart: the fed
+// tab's own stays at 0.
+const scRec = await req("POST", "/api/coverage", { token: S_TOK, body: { search: SC, on: "2026-09-10",
+  swept: scSlice.map((c) => ({ company: c.company })) } });
+const fedScoped = (await req("GET", `/api/dedup/${SCF}?scope=batch`, { token: S_TOK })).json;
+check("a fed tab takes its window from the cursor of the track that fills it",
+  scRec.json.cursor > 0 && !!fedScoped.scope && fedScoped.scope.cursor === scRec.json.cursor,
+  JSON.stringify({ fed: fedScoped.scope, feeder: scRec.json.cursor }));
+
+check("a scoped read of an unconfigured key still 404s",
+  (await req("GET", "/api/dedup/GHOST?scope=batch", { token: S_TOK })).status === 404);
+check("another account's scoped read of this track 404s",
+  (await req("GET", `/api/dedup/${SC}?scope=batch`, { token: A_TOK })).status === 404);
+const aScoped = (await req("GET", "/api/dedup/SWE?scope=batch", { token: A_TOK })).json;
+check("and its own scoped read never carries this account's rows",
+  !!aScoped.screened && !aScoped.screened.some((u) => u.startsWith(`https://example.com/scope/${scStamp}/`)));
+
 console.log("\n== runs ==");
 check("recording a run works for your own track",
   (await req("POST", "/api/runs", { token: A_TOK, body: { search: "SWE", status: "ok", leadsAdded: 1, on: "2026-08-31", note: "ok" } })).status === 200);
