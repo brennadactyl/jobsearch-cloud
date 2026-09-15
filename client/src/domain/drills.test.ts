@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-/** Every target the Overview offers: the six tiles and every funnel row. */
+/** The tiles and the reached-* drills. The charts' targets are checked in charts.test.ts. */
 const targets: DrillTarget[] = [
   { tab: ALL_LEADS, filter: "New" },
   { tab: ALL_LEADS, drill: "top-geo-open" },
