@@ -7,8 +7,13 @@
   For each person with a
   <DataDir>\<user-id>\tracker.json (see private.example/README.md), reads their
   tracks from GET /api/config and registers one daily task per track at its
-  configured time. Also registers one machine-wide task,
-  "JobSearch-Applications", that runs run-fill.ps1 for every account.
+  configured time. Also registers two machine-wide tasks:
+    - "JobSearch-Applications" runs run-fill.ps1 for every account.
+    - "JobSearch-Onboarding" runs run-onboarding.ps1, which builds the search of
+      anyone who signed up from an invite (docs/onboarding-plan.md). It needs
+      the ADMIN_TOKEN, so it is registered only while <DataDir>\deployment.json
+      holds one, even on a machine with nobody set up yet, and removed when it
+      doesn't.
 
   A track with `fed_by` set gets no task: its tab is filled by that sibling
   track's search (see server/migrations/0003_branched_tracks.sql).
@@ -50,6 +55,8 @@ param(
 $ErrorActionPreference = "Stop"
 $runScript = Join-Path $PSScriptRoot "run-search.ps1"
 $fillScript = Join-Path $PSScriptRoot "run-fill.ps1"
+$onboardingScript = Join-Path $PSScriptRoot "run-onboarding.ps1"
+$ONBOARDING_TASK = "JobSearch-Onboarding"
 
 # "technical-pm" -> "TechnicalPm". Never emits a hyphen; stale-task cleanup
 # below relies on that.
@@ -144,11 +151,26 @@ if ($people.Count -eq 0 -and -not $User -and $env:TRACKER_URL -and $env:TRACKER_
     $people += [pscustomobject]@{ Id = ""; Url = $env:TRACKER_URL.TrimEnd("/"); Token = $env:TRACKER_API_TOKEN }
 }
 
-if ($people.Count -eq 0) {
-    Write-Warning "No people found. Each person needs <DataDir>\<user-id>\tracker.json with their tracker URL and token - see private.example/README.md."
-    exit 1
+# Onboarding reads the ADMIN_TOKEN from here. Only its presence is checked; the
+# run reads the file itself.
+$deploymentFile = Join-Path $DataDir "deployment.json"
+$canOnboard = $false
+if (Test-Path $deploymentFile) {
+    try { $canOnboard = [bool](Get-Content -Raw -Path $deploymentFile | ConvertFrom-Json).admin_token } catch {
+        Write-Warning "$deploymentFile isn't valid JSON - the onboarding task can't be registered until it is."
+    }
 }
-Write-Host "Found $($people.Count) $(if ($people.Count -eq 1) {'person'} else {'people'}): $(($people | ForEach-Object { if ($_.Id) { $_.Id } else { '(single-user)' } }) -join ', ')"
+
+if ($people.Count -eq 0) {
+    if (-not $canOnboard) {
+        Write-Warning "No people found. Each person needs <DataDir>\<user-id>\tracker.json with their tracker URL and token - see private.example/README.md."
+        Write-Warning "Or add deployment.json with the ADMIN_TOKEN, and people who sign up from an invite are set up overnight."
+        exit 1
+    }
+    Write-Host "No people set up yet - registering only the onboarding task, which sets up whoever signs up from an invite."
+} else {
+    Write-Host "Found $($people.Count) $(if ($people.Count -eq 1) {'person'} else {'people'}): $(($people | ForEach-Object { if ($_.Id) { $_.Id } else { '(single-user)' } }) -join ', ')"
+}
 
 Write-Host "`n== Registering scheduled tasks ==" -ForegroundColor Cyan
 
@@ -166,6 +188,10 @@ $auto = [datetime]"08:00"
 # yesterday is filled in before anyone next looks at the tracker, and off the
 # searches' stagger so it doesn't drift as tracks are added.
 $FILL_TIME = "06:30"
+
+# When onboarding runs: before the night's first search, so run-onboarding.ps1
+# can give a new person a slot later the same night and they wake to leads.
+$ONBOARDING_TIME = "00:00"
 
 foreach ($person in $people) {
     $label = if ($person.Id) { $person.Id } else { "single-user" }
@@ -236,6 +262,23 @@ if ($people.Count -gt 0) {
         Write-Host "  $fillName - daily at $FILL_TIME (every account under $DataDir, applications added by URL)"
         $registered += $fillName
     }
+}
+
+# Machine-wide like the fill, so it goes into $registered for the same reason.
+# Without an ADMIN_TOKEN every run would fail, so the task is removed instead.
+Write-Host "`n== Onboarding (one task, anyone who signed up from an invite) ==" -ForegroundColor Cyan
+if (-not $canOnboard) {
+    if (Get-ScheduledTask -TaskName $ONBOARDING_TASK -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName $ONBOARDING_TASK -Confirm:$false
+        Write-Host "  removed $ONBOARDING_TASK - $deploymentFile has no admin_token"
+    } else {
+        Write-Host "  skipped - $deploymentFile has no admin_token, so invites can't be set up on this machine"
+    }
+} elseif (-not (Test-Path $onboardingScript)) {
+    Write-Warning "  $onboardingScript not found - $ONBOARDING_TASK not registered."
+} elseif (Register-JobSearchTask -Name $ONBOARDING_TASK -Script $onboardingScript -Arguments "-DataDir `"$DataDir`"" -Time $ONBOARDING_TIME) {
+    Write-Host "  $ONBOARDING_TASK - daily at $ONBOARDING_TIME (sets up new signups before the night's searches)"
+    $registered += $ONBOARDING_TASK
 }
 
 if ($ownedPrefixes.Count -gt 0) {

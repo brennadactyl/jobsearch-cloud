@@ -87,13 +87,22 @@ itself as that user's folder.
 
 ### deployment.json
 
-Optional, and machine-wide rather than per-person: `{"url": "...",
-"admin_token": "..."}` at the top of the data dir. Only `scripts\set-password.ps1`
-reads it.
+Optional, and machine-wide rather than per-person, at the top of the data dir:
 
-`admin_token` is the `ADMIN_TOKEN` worker secret, which creates accounts and
-resets **anyone's** password. Leave this file off any machine that does not
-provision people.
+```json
+{ "url": "https://<api worker>", "client_url": "https://<tracker page>", "admin_token": "..." }
+```
+
+- `url` is the API worker, and `admin_token` is its `ADMIN_TOKEN` secret.
+- `client_url` is the tracker page. `scripts\new-invite.ps1` uses it to print a
+  whole invite link; without it the script prints the bare code.
+
+Read by `scripts\new-invite.ps1`, `scripts\set-password.ps1` and the nightly
+`scripts\run-onboarding.ps1`. `setup-scheduler.ps1` registers the onboarding
+task only while this file holds an `admin_token`.
+
+`admin_token` creates accounts, mints invites and resets **anyone's** password.
+Leave this file off any machine that does not provision people.
 
 ## Prompts are not stored here
 
