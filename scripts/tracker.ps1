@@ -279,8 +279,24 @@ switch ($Command) {
       $leads = @()
       $screened = @()
       $seen = @{}
+      # Screened history scoped to what this run can reach: the companies around its
+      # cursor, plus anything rejected in the last few days wherever it was. A run
+      # only meets the rest by chance, and reporting one again costs a check, not a
+      # row - the tracker refuses the duplicate. Leads always come back whole.
+      $scopedTabs = 0
+      $kept = 0
+      $of = 0
+      $companies = $null
+      $since = $null
       foreach ($k in $keys) {
-          $d = Invoke-Tracker "GET" "/api/dedup/$k" $null
+          $d = Invoke-Tracker "GET" "/api/dedup/${k}?scope=batch" $null
+          if ($d.scope) {
+              $scopedTabs++
+              $kept += [int]$d.scope.kept
+              $of += [int]$d.scope.of
+              $companies = $d.scope.companies
+              $since = $d.scope.since
+          }
           foreach ($l in @($d.leads | Where-Object { $_ })) {
               # No `id`. Nothing a run posts back is keyed by one, and a lead id
               # in front of a model is an invitation to report by it.
@@ -293,7 +309,15 @@ switch ($Command) {
 
       $out = OutPath "dedup.json"
       Write-Json $out ([pscustomobject]@{ leads = @($leads); screened = @($screened) })
-      Say "dedup: $($leads.Count) tracked lead(s), $($screened.Count) screened url(s) across $($keys.Count) tab(s) -> $out"
+      # A server that doesn't know `scope` sends every row and no `scope` key.
+      if ($scopedTabs -eq $keys.Count) {
+          $scopeNote = "screened scoped to $companies companies from the cursor plus since $since ($kept of $of kept)"
+      } elseif ($scopedTabs -eq 0) {
+          $scopeNote = "unscoped - the tracker sent full history"
+      } else {
+          $scopeNote = "scoped on $scopedTabs of $($keys.Count) tab(s)"
+      }
+      Say "dedup: $($leads.Count) tracked lead(s), $($screened.Count) screened url(s) across $($keys.Count) tab(s), $scopeNote -> $out"
       break
   }
 
