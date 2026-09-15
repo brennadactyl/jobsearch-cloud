@@ -284,6 +284,9 @@ switch ($Command) {
       # only meets the rest by chance, and reporting one again costs a check, not a
       # row - the tracker refuses the duplicate. Leads always come back whole.
       $scopedTabs = 0
+      $flagged = 0
+      $recheckBudget = $null
+      $recheckOpen = $null
       $kept = 0
       $of = 0
       $companies = $null
@@ -296,11 +299,19 @@ switch ($Command) {
               $of += [int]$d.scope.of
               $companies = $d.scope.companies
               $since = $d.scope.since
+              if ($d.scope.recheck) {
+                  $recheckBudget = $d.scope.recheck.budget
+                  $recheckOpen = $d.scope.recheck.eligible
+              }
           }
           foreach ($l in @($d.leads | Where-Object { $_ })) {
               # No `id`. Nothing a run posts back is keyed by one, and a lead id
               # in front of a model is an invitation to report by it.
-              $leads += [pscustomobject]@{ url = $l.url; status = $l.status; search = $k }
+              $row = [ordered]@{ url = $l.url; status = $l.status; search = $k }
+              # The tracker picks tonight's re-checks across the whole search, longest-
+              # unconfirmed first, so the flag is carried through as it came.
+              if ($l.recheck -eq $true) { $row["recheck"] = $true; $flagged++ }
+              $leads += [pscustomobject]$row
           }
           foreach ($u in @($d.screened | Where-Object { $_ })) {
               if (-not $seen.ContainsKey($u)) { $seen[$u] = $true; $screened += $u }
@@ -317,7 +328,12 @@ switch ($Command) {
       } else {
           $scopeNote = "scoped on $scopedTabs of $($keys.Count) tab(s)"
       }
-      Say "dedup: $($leads.Count) tracked lead(s), $($screened.Count) screened url(s) across $($keys.Count) tab(s), $scopeNote -> $out"
+      if ($null -ne $recheckBudget) {
+          $recheckNote = "$flagged to re-check tonight (budget $recheckBudget of $recheckOpen open)"
+      } else {
+          $recheckNote = "no re-check selection from the tracker"
+      }
+      Say "dedup: $($leads.Count) tracked lead(s), $($screened.Count) screened url(s) across $($keys.Count) tab(s), $scopeNote, $recheckNote -> $out"
       break
   }
 
