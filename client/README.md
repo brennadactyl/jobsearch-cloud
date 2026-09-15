@@ -136,6 +136,10 @@ tests cover:
   funnel row, the number shown is the length of the rows it opens.
 - **`src/domain/domain.test.ts`** — URL safety, location tiers, sorting, fill and run
   states, dates and tabs.
+- **`src/domain/export.test.ts`** — CSV quoting, the byte-order mark, the
+  formula guard, filenames, and that every header is one of the page's labels.
+- **`src/export.test.tsx`** — the Export button writes exactly the rows its list
+  renders, in order, and counts them.
 - **`src/App.test.tsx`** — the gate, shell and routing, queried by role and
   accessible name.
 - **`src/writes.test.tsx`** — the optimistic layer.

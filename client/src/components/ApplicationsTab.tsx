@@ -2,7 +2,9 @@ import { Fragment, useState, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Application, TrackerData } from "../api/schema";
 import { useAddApplication, useDeleteApplication } from "../api/mutations";
+import { LABELS } from "../domain/constants";
 import { appRows, drillKeeps } from "../domain/drills";
+import { applicationColumns } from "../domain/export";
 import { daysSince, hostOf, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { appComparator, fillState, type FillState } from "../domain/rows";
@@ -10,7 +12,7 @@ import { buildTracks, pathForTab } from "../domain/tabs";
 import { revealSelectedRow } from "../ui/hooks";
 import { saved } from "../ui/saved";
 import { selectRow, setPrefs, shownRow, usePrefs } from "../ui/prefs";
-import { DrillChip, GeoBadge, GeoKey, Pill, SortSelect, TrashIcon, ViewSwitch } from "./bits";
+import { DrillChip, ExportButton, GeoBadge, GeoKey, Pill, SortSelect, TrashIcon, ViewSwitch } from "./bits";
 import { AppFactsCards, AutofillNote, NotesBlock } from "./facts";
 import { AppStatusSelect, EditableField, StageDateModal, type PendingStage } from "./writes";
 
@@ -90,6 +92,13 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
             : "Adds a row for you to fill in yourself."}
         </span>
         <ViewSwitch />
+        {/* The sorted list both views draw from. Grid's fill-state groups and
+            folds only arrange that list on screen, so they don't change the file. */}
+        <ExportButton
+          rows={rows}
+          columns={applicationColumns(settings)}
+          label={settings.applications_label || "Applications"}
+        />
       </div>
       <div className="key">
         <SortSelect kind="applications" id="appSort" />
@@ -281,12 +290,12 @@ function AppsGrid({
       <table>
         <thead>
           <tr>
-            <th>Company</th>
-            <th>Role</th>
-            <th>Location</th>
-            <th>Link</th>
-            <th>Status</th>
-            <th>Applied</th>
+            <th>{LABELS.company}</th>
+            <th>{LABELS.role}</th>
+            <th>{LABELS.location}</th>
+            <th>{LABELS.link}</th>
+            <th>{LABELS.status}</th>
+            <th>{LABELS.applied}</th>
             <th>Days</th>
             <th />
             <th />
@@ -357,20 +366,20 @@ function AppsGrid({
                               row={a}
                               kind="application"
                               field="company"
-                              placeholder={ph || "Company"}
-                              ariaLabel="Company"
+                              placeholder={ph || LABELS.company}
+                              ariaLabel={LABELS.company}
                             />
                           </td>
                           <td>
-                            <EditableField row={a} kind="application" field="title" placeholder={ph || "Role"} ariaLabel="Role" />
+                            <EditableField row={a} kind="application" field="title" placeholder={ph || LABELS.role} ariaLabel={LABELS.role} />
                           </td>
                           <td className="loc">
                             <EditableField
                               row={a}
                               kind="application"
                               field="location"
-                              placeholder={ph || "Location"}
-                              ariaLabel="Location"
+                              placeholder={ph || LABELS.location}
+                              ariaLabel={LABELS.location}
                             />
                           </td>
                           <td className="lk">
@@ -469,16 +478,16 @@ function AppDetail({
             kind="application"
             field="company"
             className="dh-in dh-h1"
-            placeholder="Company"
-            ariaLabel="Company"
+            placeholder={LABELS.company}
+            ariaLabel={LABELS.company}
           />
           <EditableField
             row={app}
             kind="application"
             field="title"
             className="dh-in dh-sub-in"
-            placeholder="Role"
-            ariaLabel="Role"
+            placeholder={LABELS.role}
+            ariaLabel={LABELS.role}
           />
           <div className="dh-meta dh-app-meta">
             {/* Sized to its text, so a full-width box doesn't push the tier and
@@ -489,8 +498,8 @@ function AppDetail({
               field="location"
               className="dh-in dh-loc-in"
               size={Math.max(14, Math.min(38, (app.location || "").length + 1))}
-              placeholder="Location"
-              ariaLabel="Location"
+              placeholder={LABELS.location}
+              ariaLabel={LABELS.location}
             />
             {g && <span className={`geo ${g.p}`}>{g.label}</span>}
             {safe && (

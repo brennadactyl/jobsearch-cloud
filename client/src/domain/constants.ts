@@ -33,9 +33,29 @@ export const STAGE_DATE_FIELDS: readonly (readonly [label: string, field: string
   ["Withdrawn", "dateWithdrawn"],
 ];
 
+/**
+ * Names the page shows for fields and columns. The CSV export writes these as
+ * its headers, so a rename changes the page and the file together.
+ */
+export const LABELS = {
+  search: "Search",
+  company: "Company",
+  role: "Role",
+  location: "Location",
+  locationTier: "Location tier",
+  status: "Status",
+  found: "Found",
+  verified: "Confirmed live",
+  fit: "Fit",
+  url: "Posting URL",
+  link: "Link",
+  applied: "Applied",
+  notes: "Notes",
+} as const;
+
 /** "Applied" first - the order Stage history renders in. */
 export const STAGE_HISTORY_FIELDS: readonly (readonly [field: string, label: string])[] = [
-  ["dateApplied", "Applied"],
+  ["dateApplied", LABELS.applied],
   ...STAGE_DATE_FIELDS.map(([label, field]) => [field, label] as const),
 ];
 
@@ -52,7 +72,7 @@ export const ROLE_FIELDS: readonly (readonly [field: string, label: string])[] =
  */
 export const APP_ROLE_FIELDS: readonly (readonly [field: string, label: string])[] = [
   ...ROLE_FIELDS,
-  ["link", "Link"],
+  ["link", LABELS.link],
 ];
 
 export const LEAD_SORTS: readonly (readonly [key: string, label: string])[] = [

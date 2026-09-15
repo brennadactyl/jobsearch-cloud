@@ -7,8 +7,9 @@ import { Fragment, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Lead, TrackerData } from "../api/schema";
 import { useDeleteLead, useMoveLead } from "../api/mutations";
-import { ALL_LEADS, LEAD_STATUS } from "../domain/constants";
+import { ALL_LEADS, LABELS, LEAD_STATUS } from "../domain/constants";
 import { drillKeeps, leadRows } from "../domain/drills";
+import { leadColumns } from "../domain/export";
 import { safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { leadComparator } from "../domain/rows";
@@ -16,7 +17,7 @@ import { runState } from "../domain/runs";
 import { buildTracks, pathForTab, trackCountLine } from "../domain/tabs";
 import { revealSelectedRow } from "../ui/hooks";
 import { selectRow, setPrefs, shownRow, usePrefs } from "../ui/prefs";
-import { DrillChip, GeoBadge, GeoKey, Pill, RunStamp, SortSelect, TrashIcon, ViewSwitch } from "./bits";
+import { DrillChip, ExportButton, GeoBadge, GeoKey, Pill, RunStamp, SortSelect, TrashIcon, ViewSwitch } from "./bits";
 import { LeadFactsCard, NotesBlock } from "./facts";
 import { EditableField, LeadStatusSelect } from "./writes";
 
@@ -82,6 +83,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
           <DrillChip drill={drill} settings={settings} clearTo={clearDrillTo(trackKey, params)} />
         </div>
         <ViewSwitch />
+        <ExportButton rows={rows} columns={leadColumns(tracks, settings)} label={scopeLabel} />
       </div>
       {/* Sort sits in this quieter row: it is glanced at, not touched constantly. */}
       <div className="key">
@@ -211,7 +213,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
                   <span className="md-row-place">{l.location}</span>
                   <GeoBadge location={l.location} settings={settings} />
                   <span className="md-row-found" title="Date this listing was added">
-                    Found <span className="mono">{l.found}</span>
+                    {LABELS.found} <span className="mono">{l.found}</span>
                   </span>
                 </div>
               </div>
@@ -272,15 +274,15 @@ function LeadsGrid({
       <table>
         <thead>
           <tr>
-            <th>Company</th>
-            <th>Role</th>
-            <th>Location</th>
-            <th>Status</th>
+            <th>{LABELS.company}</th>
+            <th>{LABELS.role}</th>
+            <th>{LABELS.location}</th>
+            <th>{LABELS.status}</th>
             {LEAD_GRID_FIELDS.map(([, label]) => (
               <th key={label}>{label}</th>
             ))}
-            {isAll && <th>Search</th>}
-            <th>Found</th>
+            {isAll && <th>{LABELS.search}</th>}
+            <th>{LABELS.found}</th>
             <th />
           </tr>
         </thead>
@@ -395,7 +397,7 @@ function LeadDetail({ lead, data }: { lead: Lead; data: TrackerData }) {
       <div className="dh-status">
         <LeadStatusSelect lead={lead} />
         <span className="dh-dates">
-          Found {lead.found} &middot; Confirmed live {lead.verified}
+          {LABELS.found} {lead.found} &middot; {LABELS.verified} {lead.verified}
         </span>
         <RemoveLead lead={lead} />
       </div>

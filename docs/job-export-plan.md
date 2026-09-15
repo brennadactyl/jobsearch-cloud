@@ -34,9 +34,13 @@ file".
 
 - **It exports the rows the list is showing**, in the order it shows them:
   the status chip, the text filter, a drill from an Overview tile and the sort
-  all apply. The count is the same `rows.length` the "12 of 40 shown" note
-  already prints, so the button and the note can't disagree. To export
-  everything, clear the filters, the same as seeing everything.
+  all apply. The count is the length of the list the tab renders, which is
+  the same array it exports; on a leads tab that is also the N in its "N of M
+  shown" note. To export everything, clear the filters, the same as seeing
+  everything.
+- **Grid arranges the list; it doesn't change the file.** Applications in Grid
+  view groups rows by fill state, and a group can be folded. The file holds the
+  whole list in its sort order, folded groups included, the same as Detail.
 - **It exports every field, not the visible columns.** The file has the same
   columns in Grid and Detail view.
 - **When the list is empty the button is disabled.** An empty file is never
@@ -50,8 +54,9 @@ file".
 
 ## Columns
 
-Headers are the labels the page already uses, taken from `domain/constants.ts`.
-A label renamed there gets renamed in the file too. Dates are written as the
+Headers are the labels the page uses: `LABELS` and the field lists in
+`domain/constants.ts`. The components read the same constants, so a label
+renamed there changes the page and the file together. Dates are written as the
 API sends them, per the tracker's rule that date-only fields print verbatim.
 
 **Leads**
@@ -123,8 +128,9 @@ they can't interpret in the file.
   drill invariant the page already enforces, so an export can never quietly
   include a row the list hid.
 - Every header comes from `constants.ts`, not from a literal in `export.ts`.
-- The button is disabled on an empty list, and its count matches the "N of M
-  shown" note.
+- The button is disabled on an empty list. On every tab, in both views, its
+  count equals the number of rows the list renders, which on a leads tab is the
+  N in "N of M shown".
 
 Before deploy, check it live on the demo account: export from a track tab, All
 leads and Applications, and open each file in Excel and in Google Sheets.

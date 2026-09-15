@@ -1,5 +1,5 @@
 import type { Application, Lead } from "../api/schema";
-import { APP_ROLE_FIELDS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "../domain/constants";
+import { APP_ROLE_FIELDS, LABELS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "../domain/constants";
 import { safeUrl } from "../domain/format";
 import { fillState } from "../domain/rows";
 import { EditableField, EditableNotes } from "./writes";
@@ -99,7 +99,7 @@ export function NotesBlock({
 }) {
   return (
     <div className="dh-notes">
-      <div className="mf-label">Notes</div>
+      <div className="mf-label">{LABELS.notes}</div>
       <EditableNotes row={row} kind={kind} placeholder={placeholder} />
     </div>
   );

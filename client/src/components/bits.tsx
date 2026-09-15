@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import type { Settings, Track } from "../api/schema";
+import { exportFilename, localDate, toCsv, type Column } from "../domain/export";
+import { downloadFile } from "../ui/download";
 import { APP_SORTS, LEAD_SORTS, pillFor } from "../domain/constants";
 import { drillLabel } from "../domain/drills";
 import { relWhen, safeUrl } from "../domain/format";
@@ -153,5 +155,39 @@ export function TrashIcon() {
       <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" />
       <path d="M6.7 7v4M9.3 7v4" />
     </svg>
+  );
+}
+
+/**
+ * Downloads the rows a list shows as CSV. `rows` must be the array the list
+ * renders, filtered and sorted, never a second filtering of its own. Nothing is
+ * written to the server, so the save indicator stays silent.
+ */
+export function ExportButton<T>({
+  rows,
+  columns,
+  label,
+}: {
+  rows: readonly T[];
+  columns: readonly Column<T>[];
+  label: string;
+}) {
+  const n = rows.length;
+  return (
+    <button
+      className="btn"
+      type="button"
+      disabled={!n}
+      title={
+        n === 0
+          ? "Nothing in this list to export"
+          : n === 1
+            ? "Download this row as a CSV file"
+            : `Download these ${n} rows as a CSV file`
+      }
+      onClick={() => downloadFile(exportFilename(label, localDate()), toCsv(columns, rows), "text/csv;charset=utf-8")}
+    >
+      Export {n}
+    </button>
   );
 }

@@ -19,7 +19,10 @@ TanStack Query plus `useState`, or SSR.
   `client.ts` is the only code that calls `fetch`. `mutations.ts` holds every
   write, as an optimistic mutation over the one `["data"]` query.
 - **`src/domain/`** — pure rules with no React: drills, row sorting, location
-  tiers, run staleness, tab building, formatting. Tested directly.
+  tiers, run staleness, tab building, formatting, CSV export. Tested directly.
+  `constants.ts` holds the labels the page shows (`LABELS`, the field lists);
+  the CSV headers are the same constants, so read a label from there rather
+  than typing it into a component.
 - **`src/components/`** — the UI. `Shell.tsx` is the header, tab bar and
   routes; one component per tab; `writes.tsx` holds the editable controls;
   `facts.tsx` the detail cards.
