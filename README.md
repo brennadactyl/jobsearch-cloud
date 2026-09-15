@@ -257,8 +257,8 @@ invented company on that list is one every real nightly run would go looking
 for. Its rotation tab still shows the real list.
 
 It has no `private\` folder, so `setup-scheduler.ps1` never schedules it.
-`-Force` re-seeds an account that already holds data, and refuses if any lead
-on it isn't an `example.com` URL.
+`-Force` re-seeds an account that already holds data, purging its searches and
+applications first, and refuses if any lead on it isn't an `example.com` URL.
 
 ## Backups
 

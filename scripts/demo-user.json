@@ -106,63 +106,63 @@
   ],
 
   "leads": [
-    { "search": "engineering", "company": "Northwind Systems", "title": "Senior Backend Engineer", "location": "Seattle, WA", "url": "https://careers.northwind.example.com/jobs/482103", "foundDaysAgo": 18, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Payments services in Go, on-call ownership, and a team that runs what it builds - close to the last four years of the profile.", "team": "Payments Platform", "setup": "Hybrid, 3 days onsite", "comp": "$185k - $225k", "notes": "Recruiter replied to the application; waiting on a screen time." },
-    { "search": "engineering", "company": "Vantage Labs", "title": "Staff Software Engineer, Platform", "location": "Remote (US)", "url": "https://careers.vantagelabs.example.com/jobs/771248", "foundDaysAgo": 16, "verifiedDaysAgo": 1, "status": "New", "fit": "Staff-level scope on internal platform tooling. The posting asks for multi-team technical leadership, which is a stretch but a stated one.", "team": "Developer Platform", "setup": "Remote", "comp": "$210k - $250k" },
-    { "search": "engineering", "company": "Cobalt Interactive", "title": "Senior Gameplay Engineer", "location": "Bellevue, WA", "url": "https://careers.cobalt.example.com/jobs/338914", "foundDaysAgo": 15, "verifiedDaysAgo": 2, "status": "Applied", "fit": "C++ gameplay systems on a shipped title - the closest thing on this board to the engine work in the profile.", "team": "Core Gameplay", "setup": "Onsite", "comp": "$170k - $205k" },
-    { "search": "engineering", "company": "Harborline Software", "title": "Senior Software Engineer, Distributed Systems", "location": "Remote (US)", "url": "https://careers.harborline.example.com/jobs/905517", "foundDaysAgo": 14, "verifiedDaysAgo": 1, "status": "New", "fit": "Consensus and replication work on a storage layer. Deep on the systems side, light on the product side, which suits.", "team": "Storage", "setup": "Remote" },
-    { "search": "engineering", "company": "Kestrel Analytics", "title": "Backend Engineer, Data Platform", "location": "Portland, OR", "url": "https://careers.kestrel.example.com/jobs/214860", "foundDaysAgo": 13, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Pipeline and ingestion services rather than modelling - sits between this track and the Data Science one.", "team": "Data Platform", "setup": "Hybrid, 2 days onsite", "comp": "$160k - $190k" },
-    { "search": "engineering", "company": "Lumenwave", "title": "Senior Full Stack Engineer", "location": "Redmond, WA", "url": "https://careers.lumenwave.example.com/jobs/659032", "foundDaysAgo": 12, "verifiedDaysAgo": 2, "status": "Applied", "fit": "TypeScript front to back with real backend ownership, not a UI-only role dressed up as full stack.", "team": "Customer Experience", "setup": "Hybrid, 3 days onsite", "comp": "$165k - $200k" },
-    { "search": "engineering", "company": "Tidepool Games", "title": "Engine Programmer", "location": "Kirkland, WA", "url": "https://careers.tidepool.example.com/jobs/187443", "foundDaysAgo": 11, "verifiedDaysAgo": 1, "status": "New", "fit": "Rendering and tooling on a proprietary engine. Strong overlap with the C++ half of the profile.", "team": "Engine", "setup": "Onsite" },
-    { "search": "engineering", "company": "Fernbrook Robotics", "title": "Senior Software Engineer, Controls", "location": "Austin, TX", "url": "https://careers.fernbrook.example.com/jobs/443219", "foundDaysAgo": 10, "verifiedDaysAgo": 3, "status": "Not a fit", "fit": "Real-time controls with a hard requirement for embedded and ROS experience, neither of which is in this background.", "setup": "Onsite", "notes": "Onsite in Austin with no relocation support, and the controls requirement reads as genuine rather than a wish list." },
-    { "search": "engineering", "company": "Silverpine Media", "title": "Senior Backend Engineer, Streaming", "location": "Remote (US)", "url": "https://careers.silverpine.example.com/jobs/560771", "foundDaysAgo": 9, "verifiedDaysAgo": 1, "status": "Applied", "fit": "Video delivery at scale - latency and cost work, which is the part of the last role that went best.", "team": "Playback", "setup": "Remote", "comp": "$180k - $215k" },
-    { "search": "engineering", "company": "Arcadia Grid", "title": "Software Engineer III, Infrastructure", "location": "Seattle, WA", "url": "https://careers.arcadiagrid.example.com/jobs/128806", "foundDaysAgo": 8, "verifiedDaysAgo": 1, "status": "New", "fit": "Kubernetes and internal deploy tooling. The level reads a notch below the rest of this list, so worth weighing against the band.", "team": "Infrastructure", "setup": "Hybrid, 2 days onsite", "comp": "$150k - $180k" },
-    { "search": "engineering", "company": "Bellwether Health", "title": "Senior Engineer, Integrations", "location": "Remote (US)", "url": "https://careers.bellwether.example.com/jobs/802455", "foundDaysAgo": 7, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Health data integrations. HL7 and FHIR are learnable, and the posting says so rather than requiring them up front.", "team": "Interoperability", "setup": "Remote" },
-    { "search": "engineering", "company": "Driftwood Studios", "title": "Senior Tools Engineer", "location": "Vancouver, BC", "url": "https://careers.driftwood.example.com/jobs/671290", "foundDaysAgo": 7, "verifiedDaysAgo": 4, "status": "Not a fit", "fit": "Good role, wrong country - the posting is Vancouver only, with no US-remote option.", "setup": "Onsite", "notes": "Outside the configured geographic scope. Kept as a lead rather than screened, so it stays visible if the scope ever widens." },
-    { "search": "engineering", "company": "Meridian Freight", "title": "Staff Engineer, Logistics Platform", "location": "Chicago, IL", "url": "https://careers.meridianfreight.example.com/jobs/394178", "foundDaysAgo": 5, "verifiedDaysAgo": 1, "status": "New", "fit": "Staff scope on a routing and scheduling platform. The domain is new, the systems problems are not.", "team": "Platform", "setup": "Hybrid, 3 days onsite", "comp": "$195k - $230k" },
-    { "search": "engineering", "company": "Oakmoss Design", "title": "Senior Frontend Engineer", "location": "Remote (US)", "url": "https://careers.oakmoss.example.com/jobs/556201", "foundDaysAgo": 4, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Design-systems work with real accessibility ownership. Frontend-heavy compared with the rest of this tab.", "team": "Design Systems", "setup": "Remote" },
-    { "search": "engineering", "company": "Pinehurst Cloud", "title": "Senior Site Reliability Engineer", "location": "Seattle, WA", "url": "https://careers.pinehurst.example.com/jobs/733640", "foundDaysAgo": 2, "verifiedDaysAgo": 0, "status": "New", "fit": "SRE with a genuine reliability charter rather than a rebadged ops queue - the posting names error budgets and owns them.", "team": "Reliability", "setup": "Hybrid, 2 days onsite", "comp": "$175k - $210k" },
+    { "search": "engineering", "company": "Northwind Systems", "title": "Senior Backend Engineer", "location": "Seattle, WA", "url": "https://careers.northwind.example.com/jobs/482103", "foundDaysAgo": 72, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Payments services in Go, on-call ownership, and a team that runs what it builds - close to the last four years of the profile.", "team": "Payments Platform", "setup": "Hybrid, 3 days onsite", "comp": "$185k - $225k", "notes": "Recruiter replied to the application; waiting on a screen time." },
+    { "search": "engineering", "company": "Vantage Labs", "title": "Staff Software Engineer, Platform", "location": "Remote (US)", "url": "https://careers.vantagelabs.example.com/jobs/771248", "foundDaysAgo": 64, "verifiedDaysAgo": 1, "status": "New", "fit": "Staff-level scope on internal platform tooling. The posting asks for multi-team technical leadership, which is a stretch but a stated one.", "team": "Developer Platform", "setup": "Remote", "comp": "$210k - $250k" },
+    { "search": "engineering", "company": "Cobalt Interactive", "title": "Senior Gameplay Engineer", "location": "Bellevue, WA", "url": "https://careers.cobalt.example.com/jobs/338914", "foundDaysAgo": 60, "verifiedDaysAgo": 2, "status": "Applied", "fit": "C++ gameplay systems on a shipped title - the closest thing on this board to the engine work in the profile.", "team": "Core Gameplay", "setup": "Onsite", "comp": "$170k - $205k" },
+    { "search": "engineering", "company": "Harborline Software", "title": "Senior Software Engineer, Distributed Systems", "location": "Remote (US)", "url": "https://careers.harborline.example.com/jobs/905517", "foundDaysAgo": 56, "verifiedDaysAgo": 1, "status": "New", "fit": "Consensus and replication work on a storage layer. Deep on the systems side, light on the product side, which suits.", "team": "Storage", "setup": "Remote" },
+    { "search": "engineering", "company": "Kestrel Analytics", "title": "Backend Engineer, Data Platform", "location": "Portland, OR", "url": "https://careers.kestrel.example.com/jobs/214860", "foundDaysAgo": 52, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Pipeline and ingestion services rather than modelling - sits between this track and the Data Science one.", "team": "Data Platform", "setup": "Hybrid, 2 days onsite", "comp": "$160k - $190k" },
+    { "search": "engineering", "company": "Lumenwave", "title": "Senior Full Stack Engineer", "location": "Redmond, WA", "url": "https://careers.lumenwave.example.com/jobs/659032", "foundDaysAgo": 48, "verifiedDaysAgo": 2, "status": "Applied", "fit": "TypeScript front to back with real backend ownership, not a UI-only role dressed up as full stack.", "team": "Customer Experience", "setup": "Hybrid, 3 days onsite", "comp": "$165k - $200k" },
+    { "search": "engineering", "company": "Tidepool Games", "title": "Engine Programmer", "location": "Kirkland, WA", "url": "https://careers.tidepool.example.com/jobs/187443", "foundDaysAgo": 44, "verifiedDaysAgo": 1, "status": "New", "fit": "Rendering and tooling on a proprietary engine. Strong overlap with the C++ half of the profile.", "team": "Engine", "setup": "Onsite" },
+    { "search": "engineering", "company": "Fernbrook Robotics", "title": "Senior Software Engineer, Controls", "location": "Austin, TX", "url": "https://careers.fernbrook.example.com/jobs/443219", "foundDaysAgo": 40, "verifiedDaysAgo": 3, "status": "Not a fit", "fit": "Real-time controls with a hard requirement for embedded and ROS experience, neither of which is in this background.", "setup": "Onsite", "notes": "Onsite in Austin with no relocation support, and the controls requirement reads as genuine rather than a wish list." },
+    { "search": "engineering", "company": "Silverpine Media", "title": "Senior Backend Engineer, Streaming", "location": "Remote (US)", "url": "https://careers.silverpine.example.com/jobs/560771", "foundDaysAgo": 36, "verifiedDaysAgo": 1, "status": "Applied", "fit": "Video delivery at scale - latency and cost work, which is the part of the last role that went best.", "team": "Playback", "setup": "Remote", "comp": "$180k - $215k" },
+    { "search": "engineering", "company": "Arcadia Grid", "title": "Software Engineer III, Infrastructure", "location": "Seattle, WA", "url": "https://careers.arcadiagrid.example.com/jobs/128806", "foundDaysAgo": 32, "verifiedDaysAgo": 1, "status": "New", "fit": "Kubernetes and internal deploy tooling. The level reads a notch below the rest of this list, so worth weighing against the band.", "team": "Infrastructure", "setup": "Hybrid, 2 days onsite", "comp": "$150k - $180k" },
+    { "search": "engineering", "company": "Bellwether Health", "title": "Senior Engineer, Integrations", "location": "Remote (US)", "url": "https://careers.bellwether.example.com/jobs/802455", "foundDaysAgo": 28, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Health data integrations. HL7 and FHIR are learnable, and the posting says so rather than requiring them up front.", "team": "Interoperability", "setup": "Remote" },
+    { "search": "engineering", "company": "Driftwood Studios", "title": "Senior Tools Engineer", "location": "Vancouver, BC", "url": "https://careers.driftwood.example.com/jobs/671290", "foundDaysAgo": 28, "verifiedDaysAgo": 4, "status": "Not a fit", "fit": "Good role, wrong country - the posting is Vancouver only, with no US-remote option.", "setup": "Onsite", "notes": "Outside the configured geographic scope. Kept as a lead rather than screened, so it stays visible if the scope ever widens." },
+    { "search": "engineering", "company": "Meridian Freight", "title": "Staff Engineer, Logistics Platform", "location": "Chicago, IL", "url": "https://careers.meridianfreight.example.com/jobs/394178", "foundDaysAgo": 20, "verifiedDaysAgo": 1, "status": "New", "fit": "Staff scope on a routing and scheduling platform. The domain is new, the systems problems are not.", "team": "Platform", "setup": "Hybrid, 3 days onsite", "comp": "$195k - $230k" },
+    { "search": "engineering", "company": "Oakmoss Design", "title": "Senior Frontend Engineer", "location": "Remote (US)", "url": "https://careers.oakmoss.example.com/jobs/556201", "foundDaysAgo": 16, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Design-systems work with real accessibility ownership. Frontend-heavy compared with the rest of this tab.", "team": "Design Systems", "setup": "Remote" },
+    { "search": "engineering", "company": "Pinehurst Cloud", "title": "Senior Site Reliability Engineer", "location": "Seattle, WA", "url": "https://careers.pinehurst.example.com/jobs/733640", "foundDaysAgo": 8, "verifiedDaysAgo": 0, "status": "New", "fit": "SRE with a genuine reliability charter rather than a rebadged ops queue - the posting names error budgets and owns them.", "team": "Reliability", "setup": "Hybrid, 2 days onsite", "comp": "$175k - $210k" },
     { "search": "engineering", "company": "Northwind Systems", "title": "Software Engineer II, Payments", "location": "Bellevue, WA", "url": "https://careers.northwind.example.com/jobs/482990", "foundDaysAgo": 0, "verifiedDaysAgo": 0, "status": "New", "fit": "Same team as the senior posting above, one level down. Worth keeping visible in case the senior req closes.", "team": "Payments Platform", "setup": "Hybrid, 3 days onsite" },
     { "search": "engineering", "company": "Wavelet Labs", "title": "Senior Backend Engineer, API", "location": "Remote (US)", "url": "https://careers.wavelet.example.com/jobs/610334", "foundDaysAgo": 0, "verifiedDaysAgo": 0, "status": "New", "fit": "Public API design and versioning, which is exactly the work described in the last two roles of the profile.", "team": "API", "setup": "Remote", "comp": "$180k - $220k" },
 
-    { "search": "eng-leadership", "company": "Arcadia Grid", "title": "Engineering Manager, Platform", "location": "Seattle, WA", "url": "https://careers.arcadiagrid.example.com/jobs/128533", "foundDaysAgo": 17, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Managing a platform team of six or seven. First-time-manager friendly, which the posting states outright.", "team": "Infrastructure", "setup": "Hybrid, 2 days onsite", "comp": "$200k - $240k" },
-    { "search": "eng-leadership", "company": "Harborline Software", "title": "Engineering Manager, Core Services", "location": "Remote (US)", "url": "https://careers.harborline.example.com/jobs/905882", "foundDaysAgo": 12, "verifiedDaysAgo": 1, "status": "Applied", "fit": "A working-manager role - the posting expects code review and design ownership alongside the people work.", "team": "Core Services", "setup": "Remote", "comp": "$205k - $245k" },
-    { "search": "eng-leadership", "company": "Lumenwave", "title": "Senior Engineering Manager", "location": "Bellevue, WA", "url": "https://careers.lumenwave.example.com/jobs/659774", "foundDaysAgo": 9, "verifiedDaysAgo": 2, "status": "New", "fit": "Two teams reporting in, with one tech lead between. A level up from the other management postings on this tab.", "setup": "Hybrid, 3 days onsite" },
-    { "search": "eng-leadership", "company": "Silverpine Media", "title": "Director of Engineering", "location": "Remote (US)", "url": "https://careers.silverpine.example.com/jobs/561402", "foundDaysAgo": 6, "verifiedDaysAgo": 1, "status": "Not a fit", "fit": "Managing managers, with eight-plus years of leadership asked for as a hard line rather than a preference.", "setup": "Remote", "notes": "Two levels up rather than one. Left visible as a marker of where this tab's ceiling currently sits." },
-    { "search": "eng-leadership", "company": "Bellwether Health", "title": "Engineering Manager, Data", "location": "Portland, OR", "url": "https://careers.bellwether.example.com/jobs/802910", "foundDaysAgo": 3, "verifiedDaysAgo": 1, "status": "New", "fit": "Manages the data engineering team - the one management posting here that also uses the Data Science background.", "team": "Data Engineering", "setup": "Hybrid, 2 days onsite" },
+    { "search": "eng-leadership", "company": "Arcadia Grid", "title": "Engineering Manager, Platform", "location": "Seattle, WA", "url": "https://careers.arcadiagrid.example.com/jobs/128533", "foundDaysAgo": 68, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Managing a platform team of six or seven. First-time-manager friendly, which the posting states outright.", "team": "Infrastructure", "setup": "Hybrid, 2 days onsite", "comp": "$200k - $240k" },
+    { "search": "eng-leadership", "company": "Harborline Software", "title": "Engineering Manager, Core Services", "location": "Remote (US)", "url": "https://careers.harborline.example.com/jobs/905882", "foundDaysAgo": 48, "verifiedDaysAgo": 1, "status": "Applied", "fit": "A working-manager role - the posting expects code review and design ownership alongside the people work.", "team": "Core Services", "setup": "Remote", "comp": "$205k - $245k" },
+    { "search": "eng-leadership", "company": "Lumenwave", "title": "Senior Engineering Manager", "location": "Bellevue, WA", "url": "https://careers.lumenwave.example.com/jobs/659774", "foundDaysAgo": 36, "verifiedDaysAgo": 2, "status": "New", "fit": "Two teams reporting in, with one tech lead between. A level up from the other management postings on this tab.", "setup": "Hybrid, 3 days onsite" },
+    { "search": "eng-leadership", "company": "Silverpine Media", "title": "Director of Engineering", "location": "Remote (US)", "url": "https://careers.silverpine.example.com/jobs/561402", "foundDaysAgo": 24, "verifiedDaysAgo": 1, "status": "Not a fit", "fit": "Managing managers, with eight-plus years of leadership asked for as a hard line rather than a preference.", "setup": "Remote", "notes": "Two levels up rather than one. Left visible as a marker of where this tab's ceiling currently sits." },
+    { "search": "eng-leadership", "company": "Bellwether Health", "title": "Engineering Manager, Data", "location": "Portland, OR", "url": "https://careers.bellwether.example.com/jobs/802910", "foundDaysAgo": 12, "verifiedDaysAgo": 1, "status": "New", "fit": "Manages the data engineering team - the one management posting here that also uses the Data Science background.", "team": "Data Engineering", "setup": "Hybrid, 2 days onsite" },
     { "search": "eng-leadership", "company": "Pinehurst Cloud", "title": "Engineering Manager, Reliability", "location": "Seattle, WA", "url": "https://careers.pinehurst.example.com/jobs/733915", "foundDaysAgo": 0, "verifiedDaysAgo": 0, "status": "New", "fit": "Same org as the SRE posting on the Engineering tab, found in the same sweep and filed here instead.", "team": "Reliability", "setup": "Hybrid, 2 days onsite" },
 
-    { "search": "data", "company": "Kestrel Analytics", "title": "Senior Data Scientist", "location": "Portland, OR", "url": "https://careers.kestrel.example.com/jobs/215774", "foundDaysAgo": 19, "verifiedDaysAgo": 1, "status": "Applied", "fit": "Forecasting and experiment design, owned end to end. The modelling is the role rather than a side duty.", "team": "Decision Science", "setup": "Hybrid, 2 days onsite", "comp": "$170k - $200k" },
-    { "search": "data", "company": "Quillfeather AI", "title": "Machine Learning Engineer", "location": "Remote (US)", "url": "https://careers.quillfeather.example.com/jobs/880125", "foundDaysAgo": 15, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Training and serving infrastructure rather than research. Leans on the engineering half of the background.", "team": "Model Serving", "setup": "Remote", "comp": "$190k - $235k" },
-    { "search": "data", "company": "Sandbar Metrics", "title": "Data Scientist, Product Analytics", "location": "Seattle, WA", "url": "https://careers.sandbar.example.com/jobs/301968", "foundDaysAgo": 13, "verifiedDaysAgo": 2, "status": "New", "fit": "Product experimentation with a stated say in what gets shipped, not a request queue.", "team": "Product Analytics", "setup": "Hybrid, 3 days onsite" },
-    { "search": "data", "company": "Thornfield Energy", "title": "Senior Data Scientist, Forecasting", "location": "Denver, CO", "url": "https://careers.thornfield.example.com/jobs/475230", "foundDaysAgo": 11, "verifiedDaysAgo": 3, "status": "Not a fit", "fit": "Load forecasting for a utility, with a doctorate and a publication record required as a hard line.", "setup": "Onsite", "notes": "The doctorate requirement is stated as non-negotiable in the posting itself." },
-    { "search": "data", "company": "Ironvale Retail", "title": "Analytics Engineer", "location": "Remote (US)", "url": "https://careers.ironvale.example.com/jobs/629047", "foundDaysAgo": 8, "verifiedDaysAgo": 1, "status": "Applied", "fit": "Warehouse modelling and transformation work. Less statistics than the rest of this tab, more engineering, and the posting is honest about that.", "team": "Data Platform", "setup": "Remote", "comp": "$155k - $185k" },
-    { "search": "data", "company": "Marrowstone Bio", "title": "Computational Biologist", "location": "Seattle, WA", "url": "https://careers.marrowstone.example.com/jobs/917366", "foundDaysAgo": 6, "verifiedDaysAgo": 1, "status": "New", "fit": "Genomics pipelines. The domain would be new, but the posting weighs pipeline engineering as heavily as the biology.", "team": "Computational Sciences", "setup": "Onsite" },
-    { "search": "data", "company": "Arcadia Grid", "title": "Data Scientist, Infrastructure Insights", "location": "Seattle, WA", "url": "https://careers.arcadiagrid.example.com/jobs/129417", "foundDaysAgo": 3, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Capacity and cost modelling for the same infrastructure org as the Engineering tab's posting. Unusually good overlap of both tracks.", "team": "Infrastructure", "setup": "Hybrid, 2 days onsite", "comp": "$175k - $205k" },
+    { "search": "data", "company": "Kestrel Analytics", "title": "Senior Data Scientist", "location": "Portland, OR", "url": "https://careers.kestrel.example.com/jobs/215774", "foundDaysAgo": 76, "verifiedDaysAgo": 1, "status": "Applied", "fit": "Forecasting and experiment design, owned end to end. The modelling is the role rather than a side duty.", "team": "Decision Science", "setup": "Hybrid, 2 days onsite", "comp": "$170k - $200k" },
+    { "search": "data", "company": "Quillfeather AI", "title": "Machine Learning Engineer", "location": "Remote (US)", "url": "https://careers.quillfeather.example.com/jobs/880125", "foundDaysAgo": 60, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Training and serving infrastructure rather than research. Leans on the engineering half of the background.", "team": "Model Serving", "setup": "Remote", "comp": "$190k - $235k" },
+    { "search": "data", "company": "Sandbar Metrics", "title": "Data Scientist, Product Analytics", "location": "Seattle, WA", "url": "https://careers.sandbar.example.com/jobs/301968", "foundDaysAgo": 52, "verifiedDaysAgo": 2, "status": "New", "fit": "Product experimentation with a stated say in what gets shipped, not a request queue.", "team": "Product Analytics", "setup": "Hybrid, 3 days onsite" },
+    { "search": "data", "company": "Thornfield Energy", "title": "Senior Data Scientist, Forecasting", "location": "Denver, CO", "url": "https://careers.thornfield.example.com/jobs/475230", "foundDaysAgo": 44, "verifiedDaysAgo": 3, "status": "Not a fit", "fit": "Load forecasting for a utility, with a doctorate and a publication record required as a hard line.", "setup": "Onsite", "notes": "The doctorate requirement is stated as non-negotiable in the posting itself." },
+    { "search": "data", "company": "Ironvale Retail", "title": "Analytics Engineer", "location": "Remote (US)", "url": "https://careers.ironvale.example.com/jobs/629047", "foundDaysAgo": 32, "verifiedDaysAgo": 1, "status": "Applied", "fit": "Warehouse modelling and transformation work. Less statistics than the rest of this tab, more engineering, and the posting is honest about that.", "team": "Data Platform", "setup": "Remote", "comp": "$155k - $185k" },
+    { "search": "data", "company": "Marrowstone Bio", "title": "Computational Biologist", "location": "Seattle, WA", "url": "https://careers.marrowstone.example.com/jobs/917366", "foundDaysAgo": 24, "verifiedDaysAgo": 1, "status": "New", "fit": "Genomics pipelines. The domain would be new, but the posting weighs pipeline engineering as heavily as the biology.", "team": "Computational Sciences", "setup": "Onsite" },
+    { "search": "data", "company": "Arcadia Grid", "title": "Data Scientist, Infrastructure Insights", "location": "Seattle, WA", "url": "https://careers.arcadiagrid.example.com/jobs/129417", "foundDaysAgo": 12, "verifiedDaysAgo": 1, "status": "Reviewing", "fit": "Capacity and cost modelling for the same infrastructure org as the Engineering tab's posting. Unusually good overlap of both tracks.", "team": "Infrastructure", "setup": "Hybrid, 2 days onsite", "comp": "$175k - $205k" },
     { "search": "data", "company": "Wavelet Labs", "title": "ML Platform Engineer", "location": "Remote (US)", "url": "https://careers.wavelet.example.com/jobs/610889", "foundDaysAgo": 0, "verifiedDaysAgo": 0, "status": "New", "fit": "Feature store and training pipeline ownership - the platform side of ML rather than the modelling side.", "team": "ML Platform", "setup": "Remote", "comp": "$185k - $225k" }
   ],
 
   "screened": [
-    { "search": "engineering", "company": "Northwind Systems", "title": "Principal Engineer, Payments", "location": "Seattle, WA", "url": "https://careers.northwind.example.com/jobs/481006", "reason": "above target level - principal, ten-plus years required", "daysAgo": 18 },
-    { "search": "engineering", "company": "Vantage Labs", "title": "Software Engineer I", "location": "Remote (US)", "url": "https://careers.vantagelabs.example.com/jobs/770115", "reason": "below target level - new grad posting", "daysAgo": 16 },
-    { "search": "engineering", "company": "Harborline Software", "title": "Senior Software Engineer, Storage", "location": "London, UK", "url": "https://careers.harborline.example.com/jobs/904220", "reason": "outside the US: London, UK, with no US-remote option", "daysAgo": 14 },
-    { "search": "engineering", "company": "Cobalt Interactive", "title": "Technical Artist", "location": "Bellevue, WA", "url": "https://careers.cobalt.example.com/jobs/338100", "reason": "not an engineering role - art pipeline, not software", "daysAgo": 15 },
-    { "search": "engineering", "company": "Tidepool Games", "title": "QA Automation Engineer", "location": "Kirkland, WA", "url": "https://careers.tidepool.example.com/jobs/186220", "reason": "QA automation rather than a product engineering role", "daysAgo": 11 },
-    { "search": "engineering", "company": "Silverpine Media", "title": "Senior Backend Engineer, Ads", "location": "Remote (US)", "url": "https://careers.silverpine.example.com/jobs/559004", "reason": "dead on arrival - the posting page returns a closed-req notice", "daysAgo": 12 },
-    { "search": "engineering", "company": "Meridian Freight", "title": "Solutions Engineer", "location": "Chicago, IL", "url": "https://careers.meridianfreight.example.com/jobs/393002", "reason": "customer-facing pre-sales role rather than product engineering", "daysAgo": 5 },
-    { "search": "engineering", "company": "Oakmoss Design", "title": "Contract Frontend Developer", "location": "Remote (US)", "url": "https://careers.oakmoss.example.com/jobs/555330", "reason": "six-month contract, not a permanent role", "daysAgo": 4 },
-    { "search": "engineering", "company": "Fernbrook Robotics", "title": "Embedded Firmware Engineer", "location": "Austin, TX", "url": "https://careers.fernbrook.example.com/jobs/442087", "reason": "firmware role - no overlap with the background", "daysAgo": 10 },
-    { "search": "engineering", "company": "Arcadia Grid", "title": "Engineering Manager, Platform", "location": "Berlin, Germany", "url": "https://careers.arcadiagrid.example.com/jobs/127441", "reason": "outside the US: Berlin, Germany", "daysAgo": 17 },
-    { "search": "engineering", "company": "Pinehurst Cloud", "title": "Support Engineer, Tier 2", "location": "Seattle, WA", "url": "https://careers.pinehurst.example.com/jobs/732118", "reason": "support queue rather than an engineering role", "daysAgo": 2 },
-    { "search": "engineering", "company": "Driftwood Studios", "title": "Senior Tools Engineer", "location": "Toronto, ON", "url": "https://careers.driftwood.example.com/jobs/670115", "reason": "outside the US: Toronto, ON", "daysAgo": 7 },
-    { "search": "engineering", "company": "Lumenwave", "title": "Senior Full Stack Engineer", "location": "Redmond, WA", "url": "https://careers.lumenwave.example.com/jobs/658011", "reason": "duplicate of a posting already tracked under another URL", "daysAgo": 12 },
-    { "search": "engineering", "company": "Bellwether Health", "title": "Data Entry Specialist", "location": "Remote (US)", "url": "https://careers.bellwether.example.com/jobs/801003", "reason": "not a technical role", "daysAgo": 7 },
+    { "search": "engineering", "company": "Northwind Systems", "title": "Principal Engineer, Payments", "location": "Seattle, WA", "url": "https://careers.northwind.example.com/jobs/481006", "reason": "above target level - principal, ten-plus years required", "daysAgo": 72 },
+    { "search": "engineering", "company": "Vantage Labs", "title": "Software Engineer I", "location": "Remote (US)", "url": "https://careers.vantagelabs.example.com/jobs/770115", "reason": "below target level - new grad posting", "daysAgo": 64 },
+    { "search": "engineering", "company": "Harborline Software", "title": "Senior Software Engineer, Storage", "location": "London, UK", "url": "https://careers.harborline.example.com/jobs/904220", "reason": "outside the US: London, UK, with no US-remote option", "daysAgo": 56 },
+    { "search": "engineering", "company": "Cobalt Interactive", "title": "Technical Artist", "location": "Bellevue, WA", "url": "https://careers.cobalt.example.com/jobs/338100", "reason": "not an engineering role - art pipeline, not software", "daysAgo": 60 },
+    { "search": "engineering", "company": "Tidepool Games", "title": "QA Automation Engineer", "location": "Kirkland, WA", "url": "https://careers.tidepool.example.com/jobs/186220", "reason": "QA automation rather than a product engineering role", "daysAgo": 44 },
+    { "search": "engineering", "company": "Silverpine Media", "title": "Senior Backend Engineer, Ads", "location": "Remote (US)", "url": "https://careers.silverpine.example.com/jobs/559004", "reason": "dead on arrival - the posting page returns a closed-req notice", "daysAgo": 48 },
+    { "search": "engineering", "company": "Meridian Freight", "title": "Solutions Engineer", "location": "Chicago, IL", "url": "https://careers.meridianfreight.example.com/jobs/393002", "reason": "customer-facing pre-sales role rather than product engineering", "daysAgo": 20 },
+    { "search": "engineering", "company": "Oakmoss Design", "title": "Contract Frontend Developer", "location": "Remote (US)", "url": "https://careers.oakmoss.example.com/jobs/555330", "reason": "six-month contract, not a permanent role", "daysAgo": 16 },
+    { "search": "engineering", "company": "Fernbrook Robotics", "title": "Embedded Firmware Engineer", "location": "Austin, TX", "url": "https://careers.fernbrook.example.com/jobs/442087", "reason": "firmware role - no overlap with the background", "daysAgo": 40 },
+    { "search": "engineering", "company": "Arcadia Grid", "title": "Engineering Manager, Platform", "location": "Berlin, Germany", "url": "https://careers.arcadiagrid.example.com/jobs/127441", "reason": "outside the US: Berlin, Germany", "daysAgo": 68 },
+    { "search": "engineering", "company": "Pinehurst Cloud", "title": "Support Engineer, Tier 2", "location": "Seattle, WA", "url": "https://careers.pinehurst.example.com/jobs/732118", "reason": "support queue rather than an engineering role", "daysAgo": 8 },
+    { "search": "engineering", "company": "Driftwood Studios", "title": "Senior Tools Engineer", "location": "Toronto, ON", "url": "https://careers.driftwood.example.com/jobs/670115", "reason": "outside the US: Toronto, ON", "daysAgo": 28 },
+    { "search": "engineering", "company": "Lumenwave", "title": "Senior Full Stack Engineer", "location": "Redmond, WA", "url": "https://careers.lumenwave.example.com/jobs/658011", "reason": "duplicate of a posting already tracked under another URL", "daysAgo": 48 },
+    { "search": "engineering", "company": "Bellwether Health", "title": "Data Entry Specialist", "location": "Remote (US)", "url": "https://careers.bellwether.example.com/jobs/801003", "reason": "not a technical role", "daysAgo": 28 },
     { "search": "engineering", "company": "Wavelet Labs", "title": "Engineering Program Manager", "location": "Remote (US)", "url": "https://careers.wavelet.example.com/jobs/609221", "reason": "program management rather than an engineering role", "daysAgo": 0 },
 
-    { "search": "data", "company": "Quillfeather AI", "title": "Research Scientist, Foundation Models", "location": "Remote (US)", "url": "https://careers.quillfeather.example.com/jobs/879044", "reason": "research role requiring a doctorate and a publication record", "daysAgo": 15 },
-    { "search": "data", "company": "Sandbar Metrics", "title": "Business Intelligence Analyst", "location": "Seattle, WA", "url": "https://careers.sandbar.example.com/jobs/300114", "reason": "poor fit - a data title over dashboard maintenance", "daysAgo": 13 },
-    { "search": "data", "company": "Ironvale Retail", "title": "Senior Data Scientist", "location": "Bangalore, India", "url": "https://careers.ironvale.example.com/jobs/628003", "reason": "outside the US: Bangalore, India", "daysAgo": 8 },
-    { "search": "data", "company": "Marrowstone Bio", "title": "Lab Technician II", "location": "Seattle, WA", "url": "https://careers.marrowstone.example.com/jobs/916002", "reason": "wet-lab role, not computational", "daysAgo": 6 },
-    { "search": "data", "company": "Thornfield Energy", "title": "Data Engineer, Metering", "location": "Denver, CO", "url": "https://careers.thornfield.example.com/jobs/474118", "reason": "dead on arrival - the req was withdrawn between the search result and the fetch", "daysAgo": 11 }
+    { "search": "data", "company": "Quillfeather AI", "title": "Research Scientist, Foundation Models", "location": "Remote (US)", "url": "https://careers.quillfeather.example.com/jobs/879044", "reason": "research role requiring a doctorate and a publication record", "daysAgo": 60 },
+    { "search": "data", "company": "Sandbar Metrics", "title": "Business Intelligence Analyst", "location": "Seattle, WA", "url": "https://careers.sandbar.example.com/jobs/300114", "reason": "poor fit - a data title over dashboard maintenance", "daysAgo": 52 },
+    { "search": "data", "company": "Ironvale Retail", "title": "Senior Data Scientist", "location": "Bangalore, India", "url": "https://careers.ironvale.example.com/jobs/628003", "reason": "outside the US: Bangalore, India", "daysAgo": 32 },
+    { "search": "data", "company": "Marrowstone Bio", "title": "Lab Technician II", "location": "Seattle, WA", "url": "https://careers.marrowstone.example.com/jobs/916002", "reason": "wet-lab role, not computational", "daysAgo": 24 },
+    { "search": "data", "company": "Thornfield Energy", "title": "Data Engineer, Metering", "location": "Denver, CO", "url": "https://careers.thornfield.example.com/jobs/474118", "reason": "dead on arrival - the req was withdrawn between the search result and the fetch", "daysAgo": 44 }
   ],
 
   "applications": [
@@ -174,11 +174,11 @@
       "nextAction": "Respond to the offer",
       "nextActionDaysAhead": 4,
       "stages": [
-        { "status": "Applied", "daysAgo": 17 },
-        { "status": "Recruiter Screen", "daysAgo": 13 },
-        { "status": "Tech Screen", "daysAgo": 9 },
-        { "status": "Onsite / Loop", "daysAgo": 5 },
-        { "status": "Offer", "daysAgo": 1 }
+        { "status": "Applied", "daysAgo": 51 },
+        { "status": "Recruiter Screen", "daysAgo": 39 },
+        { "status": "Tech Screen", "daysAgo": 27 },
+        { "status": "Onsite / Loop", "daysAgo": 15 },
+        { "status": "Offer", "daysAgo": 3 }
       ]
     },
     {
@@ -189,10 +189,10 @@
       "nextAction": "Onsite loop - prepare the team-scaling story",
       "nextActionDaysAhead": 6,
       "stages": [
-        { "status": "Applied", "daysAgo": 10 },
-        { "status": "Recruiter Screen", "daysAgo": 6 },
-        { "status": "Tech Screen", "daysAgo": 3 },
-        { "status": "Onsite / Loop", "daysAgo": 1 }
+        { "status": "Applied", "daysAgo": 30 },
+        { "status": "Recruiter Screen", "daysAgo": 18 },
+        { "status": "Tech Screen", "daysAgo": 9 },
+        { "status": "Onsite / Loop", "daysAgo": 3 }
       ]
     },
     {
@@ -203,9 +203,9 @@
       "nextAction": "Follow up with the recruiter",
       "nextActionDaysAhead": 2,
       "stages": [
-        { "status": "Applied", "daysAgo": 13 },
-        { "status": "Recruiter Screen", "daysAgo": 9 },
-        { "status": "Tech Screen", "daysAgo": 4 }
+        { "status": "Applied", "daysAgo": 39 },
+        { "status": "Recruiter Screen", "daysAgo": 27 },
+        { "status": "Tech Screen", "daysAgo": 12 }
       ]
     },
     {
@@ -213,9 +213,9 @@
       "source": "Company careers page",
       "notes": "Rejected after the recruiter screen - they had moved the req to an onsite-only schedule that did not work.",
       "stages": [
-        { "status": "Applied", "daysAgo": 11 },
-        { "status": "Recruiter Screen", "daysAgo": 7 },
-        { "status": "Rejected", "daysAgo": 2 }
+        { "status": "Applied", "daysAgo": 33 },
+        { "status": "Recruiter Screen", "daysAgo": 21 },
+        { "status": "Rejected", "daysAgo": 6 }
       ]
     },
     {
@@ -224,7 +224,7 @@
       "comp": "$180k - $215k",
       "notes": "Applied through their own site. Nothing back beyond the automated receipt.",
       "stages": [
-        { "status": "Applied", "daysAgo": 8 }
+        { "status": "Applied", "daysAgo": 24 }
       ]
     },
     {
@@ -232,8 +232,8 @@
       "source": "Company careers page",
       "notes": "Withdrawn - the role turned out to be reporting maintenance once the scope was described in the screen.",
       "stages": [
-        { "status": "Applied", "daysAgo": 7 },
-        { "status": "Withdrawn", "daysAgo": 2 }
+        { "status": "Applied", "daysAgo": 21 },
+        { "status": "Withdrawn", "daysAgo": 6 }
       ]
     },
     {
@@ -244,11 +244,11 @@
       "referral": "Former teammate",
       "notes": "Added by hand - a referral, so it never came through a search. Rejected at the loop; they went with an internal candidate.",
       "stages": [
-        { "status": "Applied", "daysAgo": 21 },
-        { "status": "Recruiter Screen", "daysAgo": 18 },
-        { "status": "Tech Screen", "daysAgo": 14 },
-        { "status": "Onsite / Loop", "daysAgo": 9 },
-        { "status": "Rejected", "daysAgo": 6 }
+        { "status": "Applied", "daysAgo": 63 },
+        { "status": "Recruiter Screen", "daysAgo": 54 },
+        { "status": "Tech Screen", "daysAgo": 42 },
+        { "status": "Onsite / Loop", "daysAgo": 27 },
+        { "status": "Rejected", "daysAgo": 18 }
       ]
     },
     {
@@ -258,7 +258,7 @@
       "source": "Job board",
       "notes": "Added by hand. Nothing back in a month - counted as gone quiet rather than rejected, since they never said so.",
       "stages": [
-        { "status": "Applied", "daysAgo": 30 }
+        { "status": "Applied", "daysAgo": 90 }
       ]
     },
     {

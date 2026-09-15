@@ -8,10 +8,10 @@
   account can only be in a state the API could have produced. It creates no
   private folder, so setup-scheduler.ps1 never schedules a search for it.
 
-  Dates are stored as day offsets; re-run to move them to today. Re-seeding an
-  account that holds data needs -Force, which deletes its application rows (the
-  one thing nothing dedups) only after checking that every lead is an
-  example.com URL.
+  Dates are stored as day offsets; re-run with -Force to move them to today.
+  Re-seeding an account that holds data needs -Force, which deletes its
+  application rows and purges its searches' leads and screened rows, only after
+  checking that every lead is an example.com URL.
 
   See README.md, "The demo account".
 
@@ -34,7 +34,8 @@
 
 .PARAMETER Force
   Required to re-seed an account that already has data. Deletes its application
-  rows before recreating them, after the example.com check above.
+  rows and purges its searches before recreating them, after the example.com
+  check above.
 
 .EXAMPLE
   .\seed-demo-user.ps1 -AdminToken $env:TRACKER_ADMIN_TOKEN
@@ -195,14 +196,15 @@ if (($existingLeads.Count -gt 0 -or $existingApps.Count -gt 0) -and -not $Force)
     Write-Error @"
 $demoName already holds $($existingLeads.Count) leads and $($existingApps.Count) applications.
 
-Re-run with -Force to refresh it. Leads, screened rows and config all
-merge safely on their own; -Force is about the application rows, which nothing
-dedups, so they are deleted and recreated rather than doubled.
+Re-run with -Force to refresh it. -Force deletes the account's rows and
+recreates them: application rows because nothing dedups them, and leads and
+screened rows because they dedup by URL, so re-posting them would keep the
+dates they were first seeded with.
 "@
     exit 1
 }
 
-if ($Force -and $existingApps.Count -gt 0) {
+if ($Force -and ($existingApps.Count -gt 0 -or $existingLeads.Count -gt 0)) {
     # This script only writes example.com postings, so a lead on any other host
     # means a real person's account. Refuse before deleting a single row.
     $real = @($existingLeads | Where-Object { $_.url -notmatch '(^|\.)example\.com/' })
@@ -231,6 +233,21 @@ application records. No rows have been changed.$resetWarning
     Say "Removing $($existingApps.Count) existing application row(s) before reseeding..."
     foreach ($app in $existingApps) {
         Invoke-Api -Method POST -Path "/api/delete-application" -Token $token -What "Deleting application $($app.id)" -Body @{ id = $app.id } | Out-Null
+    }
+
+    # A purge refuses a key that is still a configured track, so the track list
+    # is swapped for a placeholder first. The config post below replaces it.
+    $placeholder = "reseeding"
+    $keys = @(@($existing.tracks | ForEach-Object { $_.key }) + @($existingLeads | ForEach-Object { $_.search }) +
+        @($existing.screened | ForEach-Object { $_.search }) | Where-Object { $_ -and $_ -ne $placeholder } | Sort-Object -Unique)
+    if ($keys.Count -gt 0) {
+        Invoke-Api -Method POST -Path "/api/config" -Token $token -What "Retiring the tracks to purge them" -Body @{
+            tracks = @(@{ key = $placeholder; label = "Reseeding"; full_description = "Replaced when the seed finishes" })
+        } | Out-Null
+        foreach ($key in $keys) {
+            Invoke-Api -Method POST -Path "/api/purge" -Token $AdminToken -What "Purging search $key" -Body @{ user = $demoName; search = $key } | Out-Null
+        }
+        Say "Purged $($keys.Count) search(es), so every lead and screened row is re-dated."
     }
 }
 
