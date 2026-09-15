@@ -53,6 +53,8 @@ The ids are what's stored, so a renamed heading doesn't reset anyone's layout.
   links leave the tab order.
 - **Sections and subsections fold independently.** Collapsing a section and
   expanding it again brings back each chart as it was.
+- **Each chart's "Show as table" choice is held above the charts** for as long
+  as the Overview is on screen, so it survives a fold. It isn't stored.
 - An empty-state card (no searches, no applications) belongs to its section
   and folds with it.
 - **Everything starts expanded.**
