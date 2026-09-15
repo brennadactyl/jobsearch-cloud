@@ -140,6 +140,9 @@ tests cover:
   formula guard, filenames, and that every header is one of the page's labels.
 - **`src/export.test.tsx`** — the Export button writes exactly the rows its list
   renders, in order, and counts them.
+- **`src/open-filter.test.tsx`** — leads tabs open on Open: the chips, the Open
+  leads tile's count, where selection goes when a row leaves the chip, the
+  empty state, and what an export holds.
 - **`src/App.test.tsx`** — the gate, shell and routing, queried by role and
   accessible name.
 - **`src/writes.test.tsx`** — the optimistic layer.

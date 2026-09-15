@@ -18,11 +18,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-/** Every target the Overview offers: the six tiles and every funnel row. */
+/** Every target the Overview offers - the six tiles and every funnel row - plus the leads filters a tab resolves. */
 const targets: DrillTarget[] = [
   { tab: ALL_LEADS, filter: "New" },
   { tab: ALL_LEADS, drill: "top-geo-open" },
   { tab: ALL_LEADS },
+  { tab: ALL_LEADS, filter: "All" },
+  { tab: "alpha" },
+  { tab: "alpha", filter: "Not a fit" },
   { tab: "applications", drill: "applied" },
   { tab: "applications", drill: "in-conversation" },
   { tab: "applications", drill: "gone-quiet" },
@@ -35,9 +38,16 @@ describe("drill parity", () => {
     // asserts the two agree. Computing it the same way would prove nothing.
     const isApps = t.tab === "applications";
     const base = isApps ? appRows(applications) : leadRows(leads, t.tab);
+    // On a leads tab, no filter means New and Reviewing, and "All" means every status.
+    const statusShown = (status: string) =>
+      isApps
+        ? !t.filter || status === t.filter
+        : !t.filter
+          ? status === "New" || status === "Reviewing"
+          : t.filter === "All" || status === t.filter;
     const shown = base.filter(
       (r) =>
-        (!t.filter || r.status === t.filter) &&
+        statusShown(r.status) &&
         drillKeeps(t.drill ?? null, isApps ? "apps" : "leads", r, settings),
     );
     expect(drillCount(t, src)).toBe(shown.length);

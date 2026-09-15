@@ -27,8 +27,12 @@ The status chips on every leads tab (each track and All leads) become:
 - The note under the list keeps `N of M shown`. M still counts every row the
   tab holds, so the difference makes the hidden rows visible.
 - **Marking a lead `Not a fit` while in `Open`** takes it out of the list
-  straight away, and selection moves to the next row. The save indicator reads
-  `Marked Not a fit — hidden from Open`.
+  straight away, and selection moves to the next row (the previous one when it
+  was last). The save indicator reads `Marked Not a fit — hidden from Open`.
+  Any status change that hides the selected row from the chip on screen does
+  the same, e.g. `Marked Reviewing — hidden from New`. Setting `Applied` moves
+  the row to Applications, so selection moves on and the indicator says `Saved`.
+  If the save fails, the row comes back and so does the selection.
 - **When `Open` is empty but the tab isn't**, the empty state says `Nothing
   open` and names the count, e.g. `12 marked Not a fit`, linking to that chip.
   It replaces "Nothing matches · Try a different filter", which suggests the

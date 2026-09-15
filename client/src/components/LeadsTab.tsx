@@ -4,11 +4,11 @@
  * is skipped for the pooled tab rather than faked.
  */
 import { Fragment, type MouseEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { Lead, TrackerData } from "../api/schema";
-import { useDeleteLead, useMoveLead } from "../api/mutations";
+import { useDeleteLead, useMoveLead, type LeavingView } from "../api/mutations";
 import { ALL_LEADS, LABELS, LEAD_STATUS } from "../domain/constants";
-import { drillKeeps, leadRows } from "../domain/drills";
+import { ALL_FILTER, OPEN_FILTER, drillKeeps, leadFilterKeeps, leadRows, resolveLeadFilter } from "../domain/drills";
 import { leadColumns } from "../domain/export";
 import { safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
@@ -26,7 +26,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   const prefs = usePrefs();
   const [params, setParams] = useSearchParams();
   const drill = params.get("drill");
-  const filter = params.get("filter") ?? "All";
+  const filter = resolveLeadFilter(params.get("filter"));
   const q = params.get("q") ?? "";
 
   const isAll = trackKey === ALL_LEADS;
@@ -40,14 +40,37 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   const tracked = data.leads.filter((l) => isAll || l.search === trackKey);
   const all = leadRows(data.leads, trackKey);
   const needle = q.toLowerCase();
+  const narrowed = (l: Lead) =>
+    drillKeeps(drill, "leads", l, settings) &&
+    (!needle || `${l.company} ${l.title} ${l.location}`.toLowerCase().includes(needle));
   const rows = all
-    .filter((l) => {
-      if (filter !== "All" && l.status !== filter) return false;
-      if (!drillKeeps(drill, "leads", l, settings)) return false;
-      if (!needle) return true;
-      return `${l.company} ${l.title} ${l.location}`.toLowerCase().includes(needle);
-    })
+    .filter((l) => leadFilterKeeps(filter, l) && narrowed(l))
     .sort(leadComparator(prefs.leadSort, settings.priority_locations));
+
+  const withFilter = (f: string) => {
+    const next = new URLSearchParams(params);
+    if (f === OPEN_FILTER) next.delete("filter");
+    else next.set("filter", f);
+    const qs = next.toString();
+    return pathForTab(trackKey) + (qs ? `?${qs}` : "");
+  };
+
+  // A status change that hides its row from the chip on screen moves the
+  // selection to the row that followed it, rather than back to the top.
+  // Applied leaves the leads tabs altogether, so it gets no "hidden from" note.
+  const onLeave = (lead: Lead, status: string): LeavingView | undefined => {
+    if (status !== "Applied" && leadFilterKeeps(filter, { ...lead, status })) return undefined;
+    const leaving: LeavingView = status === "Applied" ? {} : { note: `Marked ${status} — hidden from ${filter}` };
+    if (shownRow(rows, prefs.selected[trackKey]).id === lead.id) {
+      const i = rows.findIndex((r) => r.id === lead.id);
+      const next = rows[i + 1] ?? rows[i - 1];
+      if (next) {
+        selectRow(trackKey, String(next.id));
+        leaving.restore = { scope: trackKey, id: String(lead.id) };
+      }
+    }
+    return leaving;
+  };
 
   const setParam = (k: string, v: string | null) => {
     const next = new URLSearchParams(params);
@@ -69,13 +92,13 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
           />
         </div>
         <div className="chips">
-          {["All", ...LEAD_STATUS.filter((s) => s !== "Applied")].map((f) => (
+          {[OPEN_FILTER, ...LEAD_STATUS.filter((s) => s !== "Applied"), ALL_FILTER].map((f) => (
             <button
               key={f}
               className="chip"
               type="button"
               aria-pressed={filter === f}
-              onClick={() => setParam("filter", f === "All" ? null : f)}
+              onClick={() => setParam("filter", f === OPEN_FILTER ? null : f)}
             >
               {f}
             </button>
@@ -150,11 +173,25 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   }
 
   if (!rows.length) {
+    // Open is the default, so an empty Open list isn't something the person
+    // filtered out: say what it holds instead, one click away.
+    const notAFit = filter === OPEN_FILTER ? all.filter((l) => l.status === "Not a fit" && narrowed(l)).length : 0;
     return (
       <>
         {toolbar}
         <div className="card empty">
-          <strong>Nothing matches</strong>Try a different filter.
+          {notAFit ? (
+            <>
+              <strong>Nothing open</strong>
+              <Link className="jumplink" to={withFilter("Not a fit")}>
+                {notAFit} marked Not a fit
+              </Link>
+            </>
+          ) : (
+            <>
+              <strong>Nothing matches</strong>Try a different filter.
+            </>
+          )}
         </div>
       </>
     );
@@ -166,7 +203,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
     return (
       <>
         {toolbar}
-        <LeadsGrid rows={rows} trackKey={trackKey} isAll={isAll} data={data} trackLabel={trackLabel} />
+        <LeadsGrid rows={rows} trackKey={trackKey} isAll={isAll} data={data} trackLabel={trackLabel} onLeave={onLeave} />
         <div className="note">
           Quick-scan columns only — referral, notes, team, setup, and the rest are in Detail view (click a row to open
           them). Edits save when you click away. {rows.length} of {all.length} shown.
@@ -221,7 +258,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
           })}
         </div>
         <div className="md-detail">
-          <LeadDetail lead={sel} data={data} />
+          <LeadDetail lead={sel} data={data} onLeave={onLeave} />
         </div>
       </div>
       <div className="note">
@@ -257,12 +294,14 @@ function LeadsGrid({
   isAll,
   data,
   trackLabel,
+  onLeave,
 }: {
   rows: Lead[];
   trackKey: string;
   isAll: boolean;
   data: TrackerData;
   trackLabel: (l: Lead) => string;
+  onLeave: (lead: Lead, status: string) => LeavingView | undefined;
 }) {
   const prefs = usePrefs();
   const { settings } = data;
@@ -330,7 +369,7 @@ function LeadsGrid({
                     <div className="loc-txt">{l.location}</div>
                   </td>
                   <td>
-                    <LeadStatusSelect lead={l} />
+                    <LeadStatusSelect lead={l} onLeave={onLeave} />
                   </td>
                   {LEAD_GRID_FIELDS.map(([field, label]) => (
                     <td key={field}>
@@ -365,7 +404,15 @@ function LeadsGrid({
   );
 }
 
-function LeadDetail({ lead, data }: { lead: Lead; data: TrackerData }) {
+function LeadDetail({
+  lead,
+  data,
+  onLeave,
+}: {
+  lead: Lead;
+  data: TrackerData;
+  onLeave: (lead: Lead, status: string) => LeavingView | undefined;
+}) {
   const { settings } = data;
   const g = geo(lead.location, settings.priority_locations);
   const url = safeUrl(lead.url);
@@ -395,7 +442,7 @@ function LeadDetail({ lead, data }: { lead: Lead; data: TrackerData }) {
       </div>
       {lead.fit && <div className="dh-fit">{lead.fit}</div>}
       <div className="dh-status">
-        <LeadStatusSelect lead={lead} />
+        <LeadStatusSelect lead={lead} onLeave={onLeave} />
         <span className="dh-dates">
           {LABELS.found} {lead.found} &middot; {LABELS.verified} {lead.verified}
         </span>
