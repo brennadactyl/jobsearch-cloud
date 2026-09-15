@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { geo } from "./geo";
-import { locationRules, parseLocation, parseLocations } from "./locations";
+import { locationRules, parseLocation, parseLocations, tooManyLocations } from "./locations";
 
 /** Location strings in the shapes postings write them. A rule is right when it ranks these. */
-const REMOTE_US = ["Remote (U.S.)", "USA - Remote", "Remote-Friendly, United States", "Remote (U.S./Canada)"];
+const REMOTE_US = [
+  "Remote (U.S.)", "USA - Remote", "Remote-Friendly, United States", "Remote (U.S./Canada)",
+  "US - Remote", "Remote (US/Canada)", "Remote, Texas, USA", "Denver, CO / remote US", "Remote-US (per listing)",
+];
 const MULTI_CITY = "Seattle, WA / Denver, CO / Austin, TX";
 
 const rank = (answer: string, location: string) => geo(location, locationRules(parseLocations(answer)))?.label ?? null;
@@ -40,10 +43,24 @@ describe("Remote with a country", () => {
 });
 
 describe("a city with its state", () => {
-  it("matches only that state's city of the name", () => {
-    expect(rank("Portland OR", "Portland, OR")).toBe("Portland OR");
+  it("matches only that state's city, for a name several places share", () => {
+    for (const location of ["Portland, OR", "Portland, OR (Hybrid)", "Tacoma, WA / Portland, OR / multiple locations", "Portland OR"]) {
+      expect(rank("Portland OR", location), location).toBe("Portland OR");
+    }
     expect(rank("Portland Oregon", "Portland, Oregon")).toBe("Portland Oregon");
     expect(rank("Portland OR", "Portland, ME")).toBeNull();
+    // "or" as a word elsewhere in the string doesn't count as Oregon.
+    expect(rank("Portland OR", "Portland, ME (or Boston, MA)")).toBeNull();
+  });
+
+  it("knows Canadian provinces for the names shared across the border", () => {
+    expect(rank("Vancouver BC", "Vancouver, BC, Canada")).toBe("Vancouver BC");
+    expect(rank("Vancouver BC", "Vancouver, WA")).toBeNull();
+  });
+
+  it("matches any other city by name alone, so a posting that omits the state still ranks", () => {
+    expect(rank("Austin TX", "Austin/Denver/Chicago")).toBe("Austin TX");
+    expect(parseLocation("Austin TX")).toMatchObject({ means: "Austin, Texas" });
   });
 
   it("reads back the city and state in full", () => {
@@ -57,8 +74,8 @@ describe("a plain city", () => {
     expect(rank("Seattle", "Boulder, CO (also Chicago, Seattle, or remote)")).toBe("Seattle");
   });
 
-  it("nudges a name several places share towards adding the state", () => {
-    expect(parseLocation("Portland")).toMatchObject({ means: "any place named Portland — add the state to narrow it" });
+  it("asks for the state rather than choosing, for a name several places share", () => {
+    expect(parseLocation("Portland")).toMatchObject({ problem: expect.stringContaining("Add the state") });
   });
 
   it("expands the short forms people type", () => {
@@ -66,9 +83,41 @@ describe("a plain city", () => {
     expect(rank("SF", "San Francisco, CA")).toBe("SF");
   });
 
+  it("ranks a multi-city posting by the best city it mentions anywhere", () => {
+    expect(rank("Seattle, Bellevue", "Boulder, CO (also Bellevue, Seattle)")).toBe("Seattle");
+  });
+
   it("ranks the first entry a posting matches", () => {
     expect(rank("Bellevue, Seattle", MULTI_CITY)).toBe("Seattle");
     expect(rank("Seattle, Remote US", "Seattle, WA (Remote - US)")).toBe("Seattle");
+  });
+});
+
+describe("the setup API's limits", () => {
+  it("flags an entry longer than a label can be", () => {
+    expect(parseLocation("x".repeat(61))).toHaveProperty("problem");
+  });
+
+  it("says so beside the field past twenty places", () => {
+    const many = Array.from({ length: 21 }, (_, i) => `City${String.fromCharCode(97 + i)}ville`).join(", ");
+    expect(tooManyLocations(parseLocations(many))).toContain("up to 20");
+    expect(tooManyLocations(parseLocations("Seattle, Remote US"))).toBe("");
+  });
+
+  it("emits only label, allOf and anyOf, each list non-empty and within size", () => {
+    const answer = "Seattle, Remote US, Portland OR, Vancouver BC, NYC, Remote UK, Remote, Canada, Austin TX, Remote Germany";
+    for (const rule of locationRules(parseLocations(answer))) {
+      expect(Object.keys(rule).every((k) => ["label", "allOf", "anyOf"].includes(k)), rule.label).toBe(true);
+      expect(rule.label.length).toBeGreaterThan(0);
+      expect(rule.label.length).toBeLessThanOrEqual(60);
+      expect((rule.allOf?.length ?? 0) + (rule.anyOf?.length ?? 0)).toBeGreaterThan(0);
+      for (const list of [rule.allOf, rule.anyOf]) {
+        if (!list) continue;
+        expect(list.length, rule.label).toBeGreaterThan(0);
+        expect(list.length, rule.label).toBeLessThanOrEqual(20);
+        for (const term of list) expect(term.length).toBeLessThanOrEqual(80);
+      }
+    }
   });
 });
 

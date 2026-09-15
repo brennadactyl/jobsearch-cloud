@@ -15,7 +15,13 @@ export type LocationEntry =
   | { text: string; problem: string };
 
 const COUNTRIES: Record<string, { name: string; terms: string[] }> = {
-  us: { name: "the United States", terms: ["u.s.", "united states", "(us)", "us-", "- us", ", us", "(usa)", "usa -", "- usa", ", usa", "usa,"] },
+  us: {
+    name: "the United States",
+    terms: [
+      "u.s.", "united states", "(us)", "(us/", "us/canada", "us-", "- us", ", us", "remote us", "remote-us", "us remote", "us - remote",
+      "(usa)", "usa -", "- usa", ", usa", "usa,", "rest of us",
+    ],
+  },
   canada: { name: "Canada", terms: ["canada"] },
   uk: { name: "the United Kingdom", terms: ["united kingdom", "u.k.", "(uk)", ", uk", "england", "scotland", "wales"] },
 };
@@ -37,7 +43,12 @@ const STATES: Record<string, string> = {
   sd: "south dakota", tn: "tennessee", tx: "texas", ut: "utah", vt: "vermont",
   va: "virginia", wa: "washington", wv: "west virginia", wi: "wisconsin", wy: "wyoming",
 };
-const STATE_BY_NAME = Object.fromEntries(Object.entries(STATES).map(([abbr, name]) => [name, abbr]));
+/** Canadian provinces, for the shared names that also exist there (Vancouver BC, Richmond BC). */
+const PROVINCES: Record<string, string> = {
+  bc: "british columbia", ab: "alberta", on: "ontario", qc: "quebec", ns: "nova scotia", mb: "manitoba",
+};
+const REGIONS: Record<string, string> = { ...STATES, ...PROVINCES };
+const REGION_BY_NAME = Object.fromEntries(Object.entries(REGIONS).map(([abbr, name]) => [name, abbr]));
 
 /** Short forms people type for places whose postings spell them out. */
 const CITY_ALIASES: Record<string, { name: string; terms: string[] }> = {
@@ -49,9 +60,13 @@ const CITY_ALIASES: Record<string, { name: string; terms: string[] }> = {
 
 /** City names shared by more than one well-known place, which read back with a nudge to add the state. */
 const SHARED_CITY_NAMES = new Set([
-  "portland", "vancouver", "cambridge", "springfield", "columbus", "richmond", "arlington",
-  "kansas city", "birmingham", "athens", "jackson", "aurora", "salem", "dover", "concord",
+  "portland", "vancouver", "cambridge", "springfield", "columbus", "columbia", "richmond", "arlington",
+  "kansas city", "birmingham", "athens", "jackson", "aurora", "salem", "dover", "concord", "burlington",
 ]);
+
+/** The setup API stores at most this many rules, with labels up to MAX_LABEL characters. */
+export const MAX_LOCATIONS = 20;
+const MAX_LABEL = 60;
 
 const letters = (s: string) => s.replace(/[^a-z]/gi, "").length;
 const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -76,6 +91,7 @@ function tooShort(text: string): string {
 export function parseLocation(raw: string): LocationEntry {
   const text = raw.trim().replace(/\s+/g, " ");
   const lower = text.toLowerCase();
+  if (text.length > MAX_LABEL) return { text, problem: `Shorten this one to ${MAX_LABEL} characters or fewer.` };
 
   const remote = /^remote\b(.*)$/.exec(lower) ?? /^(.*)\bremote$/.exec(lower);
   if (remote) return remoteEntry(text, remote[1]);
@@ -83,19 +99,23 @@ export function parseLocation(raw: string): LocationEntry {
   const alias = CITY_ALIASES[lower];
   if (alias) return { text, rule: { label: text, anyOf: alias.terms }, means: alias.name };
 
-  // "Portland OR", "Portland Oregon": a city with its state after it.
+  // "Portland OR", "Austin Texas": a city with its state or province after it.
+  // Only a shared name needs the region to match; any other city matches by
+  // name alone, so "Austin TX" still ranks "Austin/Bay Area".
   const words = lower.split(" ");
   for (const n of [2, 1]) {
     if (words.length <= n) continue;
     const tail = words.slice(-n).join(" ");
-    const abbr = STATES[tail] ? tail : STATE_BY_NAME[tail];
+    const abbr = REGIONS[tail] ? tail : REGION_BY_NAME[tail];
     if (!abbr) continue;
     const city = words.slice(0, -n).join(" ");
     if (letters(city) <= 3) break;
+    const means = `${titleCase(city)}, ${titleCase(REGIONS[abbr])}`;
+    if (!SHARED_CITY_NAMES.has(city)) return { text, rule: { label: text, anyOf: [city] }, means };
     return {
       text,
-      rule: { label: text, allOf: [city], anyOf: [`, ${abbr}`, STATES[abbr]] },
-      means: `${titleCase(city)}, ${titleCase(STATES[abbr])}`,
+      rule: { label: text, allOf: [city], anyOf: [`${city}, ${abbr}`, `${city} ${abbr}`, REGIONS[abbr]] },
+      means,
     };
   }
 
@@ -107,11 +127,7 @@ export function parseLocation(raw: string): LocationEntry {
   if (letters(lower) <= 3) return { text, problem: tooShort(text) };
 
   if (SHARED_CITY_NAMES.has(lower)) {
-    return {
-      text,
-      rule: { label: text, anyOf: [lower] },
-      means: `any place named ${titleCase(lower)} — add the state to narrow it`,
-    };
+    return { text, problem: `Several places are called ${titleCase(lower)}. Add the state after the name, like Portland OR.` };
   }
   return { text, rule: { label: text, anyOf: [lower] }, means: "" };
 }
@@ -119,6 +135,11 @@ export function parseLocation(raw: string): LocationEntry {
 /** The whole answer, in order. Empty entries (a trailing comma) are dropped. */
 export function parseLocations(answer: string): LocationEntry[] {
   return answer.split(",").map((s) => s.trim()).filter(Boolean).map(parseLocation);
+}
+
+/** The message beside the field when there are more entries than the setup API stores, or "". */
+export function tooManyLocations(entries: readonly LocationEntry[]): string {
+  return entries.length > MAX_LOCATIONS ? `List up to ${MAX_LOCATIONS} places — the first ones matter most.` : "";
 }
 
 /** The rules to store, in rank order. Flagged entries are left out; the form won't send while there are any. */
