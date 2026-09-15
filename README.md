@@ -243,9 +243,19 @@ their folder. A lost link can't be shown again: stop it with
 `.\scripts\new-invite.ps1 -Revoke <id>` and mint another.
 
 Everyone's searches run on this machine, under its Claude account, one after
-another in their own slots. The
-[job-search-setup](.claude/skills/job-search-setup/) skill still covers setting
-someone up by hand, or adding a track later.
+another in their own slots.
+
+**Setting someone up by hand** - in person, or on a machine without the
+onboarding task:
+
+1. Create their account with the `ADMIN_TOKEN` - see
+   [server/README.md](server/README.md#accounts). It returns their user id.
+2. Run the [job-search-setup](.claude/skills/job-search-setup/) skill for
+   them. It makes `private\<their id>\`, mints the token their scheduled runs
+   use, reads their resume, asks about their tracks and locations, posts their
+   config, and registers their scheduled tasks without touching anyone else's.
+
+The same skill adds a track to an existing search later.
 
 The API keeps each person's data separate, but whoever administers the
 Cloudflare account can read all of it directly in D1.
