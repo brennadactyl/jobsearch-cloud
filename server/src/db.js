@@ -336,17 +336,28 @@ export class Db {
    * @returns {Promise<{leads: Array<{id: number, url: string, status: string}>, screened: string[]}>}
    */
   async getDedupData(trackKey) {
+    const { leads, screened } = await this.getDedupRows(trackKey);
+    return { leads, screened: screened.map((r) => r.url) };
+  }
+
+  /**
+   * getDedupData's rows before `screened` is reduced to URLs: each screened row
+   * keeps the company and date a scoped read trims by (routes/screened.js).
+   * @param {string} trackKey
+   * @returns {Promise<{leads: Array<{id: number, url: string, status: string}>, screened: Array<{url: string, company: string, date: string}>}>}
+   */
+  async getDedupRows(trackKey) {
     const [leads, screened] = await Promise.all([
       this.d1
         .prepare("SELECT id, url, status FROM leads WHERE user_id = ? AND search = ? ORDER BY id")
         .bind(this.userId, trackKey)
         .all(),
       this.d1
-        .prepare("SELECT url FROM screened WHERE user_id = ? AND search = ? ORDER BY id")
+        .prepare("SELECT url, company, date FROM screened WHERE user_id = ? AND search = ? ORDER BY id")
         .bind(this.userId, trackKey)
         .all(),
     ]);
-    return { leads: leads.results, screened: screened.results.map((r) => r.url) };
+    return { leads: leads.results, screened: screened.results };
   }
 
   // ---------------------------------------------------- company sweeps --
