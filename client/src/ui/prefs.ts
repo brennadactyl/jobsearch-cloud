@@ -4,6 +4,7 @@
  * filtered view can be linked to.
  */
 import { useCallback, useSyncExternalStore } from "react";
+import { OVERVIEW_FOLD_IDS } from "../domain/overview";
 
 export interface Prefs {
   view: "detail" | "grid";
@@ -15,6 +16,8 @@ export interface Prefs {
   selected: Record<string, string>;
   /** Expanded rows in Grid view. */
   expanded: Record<string, boolean>;
+  /** Overview sections and charts folded away, by OVERVIEW_FOLD_IDS id. Only true entries. */
+  overviewCollapsed: Record<string, boolean>;
 }
 
 const DEFAULTS: Prefs = {
@@ -24,6 +27,7 @@ const DEFAULTS: Prefs = {
   collapsed: {},
   selected: {},
   expanded: {},
+  overviewCollapsed: {},
 };
 
 /** The keys browsers already hold; renaming one resets everyone's saved view. */
@@ -31,6 +35,7 @@ const KEYS: Partial<Record<keyof Prefs, string>> = {
   view: "bjs.view",
   leadSort: "bjs.leadSort",
   appSort: "bjs.appSort",
+  overviewCollapsed: "bjs.overviewCollapsed",
 };
 
 /** Guarded like client.ts's readStored: losing preferences is a worse experience, not a broken one. */
@@ -45,11 +50,30 @@ function read<K extends keyof Prefs>(key: K): Prefs[K] | undefined {
   }
 }
 
+/**
+ * The stored Overview folds, which are JSON. Anything unreadable - bad JSON, a
+ * non-object, an id no section has - is dropped, so the page falls back to
+ * expanded rather than failing before its first render.
+ */
+export function readOverviewCollapsed(): Record<string, boolean> {
+  const raw = read("overviewCollapsed") as unknown;
+  if (typeof raw !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const known: readonly string[] = OVERVIEW_FOLD_IDS;
+    return Object.fromEntries(Object.entries(parsed).filter(([id, v]) => v === true && known.includes(id)));
+  } catch {
+    return {};
+  }
+}
+
 let current: Prefs = {
   ...DEFAULTS,
   view: (read("view") as Prefs["view"]) ?? DEFAULTS.view,
   leadSort: read("leadSort") ?? DEFAULTS.leadSort,
   appSort: read("appSort") ?? DEFAULTS.appSort,
+  overviewCollapsed: readOverviewCollapsed(),
 };
 
 const listeners = new Set<() => void>();
@@ -63,9 +87,15 @@ export function setPrefs(patch: Partial<Prefs>): void {
   current = { ...current, ...patch };
   for (const [k, v] of Object.entries(patch)) {
     const storageKey = KEYS[k as keyof Prefs];
-    if (!storageKey || typeof v !== "string") continue;
+    if (!storageKey) continue;
+    // A string as it is; a record as JSON of its true entries.
+    let stored: string;
+    if (typeof v === "string") stored = v;
+    else if (v && typeof v === "object") {
+      stored = JSON.stringify(Object.fromEntries(Object.entries(v).filter(([, on]) => on === true)));
+    } else continue;
     try {
-      localStorage.setItem(storageKey, v);
+      localStorage.setItem(storageKey, stored);
     } catch {
       /* not remembered; not fatal */
     }
@@ -105,6 +135,14 @@ export function usePref<K extends keyof Prefs>(key: K): [Prefs[K], (v: Prefs[K])
   const prefs = usePrefs();
   const set = useCallback((v: Prefs[K]) => setPrefs({ [key]: v } as Partial<Prefs>), [key]);
   return [prefs[key], set];
+}
+
+/** Folds or unfolds one Overview section or chart. Reads the store, so clicks landing before a re-render all count. */
+export function toggleOverviewFold(id: string): void {
+  const next = { ...current.overviewCollapsed };
+  if (next[id]) delete next[id];
+  else next[id] = true;
+  setPrefs({ overviewCollapsed: next });
 }
 
 /** Reads the store, not a render's copy: it is also called from onSuccess, when that copy can be stale. */

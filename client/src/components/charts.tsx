@@ -6,7 +6,9 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { DrillTarget } from "../domain/drills";
+import type { FoldId } from "../domain/overview";
 import { pathForTarget } from "../domain/tabs";
+import { toggleOverviewFold, usePrefs } from "../ui/prefs";
 
 interface TipState {
   text: string;
@@ -122,21 +124,110 @@ export function Mark({
   );
 }
 
-/** Switches a chart to the same rows as an HTML table. */
-export function TableToggle({ on, set }: { on: boolean; set: (on: boolean) => void }) {
+interface FoldState {
+  open: (id: FoldId) => boolean;
+  toggle: (id: FoldId) => void;
+  asTable: (id: FoldId) => boolean;
+  setAsTable: (id: FoldId, on: boolean) => void;
+}
+
+const FoldContext = createContext<FoldState>({
+  open: () => true,
+  toggle: () => {},
+  asTable: () => false,
+  setAsTable: () => {},
+});
+
+/**
+ * What the Overview has folded, and which charts show as tables. Folds are a
+ * stored preference. Table views live here rather than in each chart, because
+ * folded content isn't rendered and a chart's own state would reset when its
+ * section opens again.
+ */
+export function FoldLayer({ children }: { children: ReactNode }) {
+  const { overviewCollapsed } = usePrefs();
+  const [tables, setTables] = useState<Partial<Record<FoldId, boolean>>>({});
+  const state: FoldState = {
+    open: (id) => !overviewCollapsed[id],
+    toggle: toggleOverviewFold,
+    asTable: (id) => !!tables[id],
+    setAsTable: (id, on) => setTables((t) => ({ ...t, [id]: on })),
+  };
+  return <FoldContext.Provider value={state}>{children}</FoldContext.Provider>;
+}
+
+const domId = (id: FoldId) => `ov-${id.replace(/\./g, "-")}`;
+
+function Chevron() {
   return (
-    <button type="button" className="ch-toggle" aria-pressed={on} onClick={() => set(!on)}>
-      {on ? "Show as chart" : "Show as table"}
-    </button>
+    <span className="chev" aria-hidden="true">
+      ▾
+    </span>
   );
 }
 
-export function ChartHead({ title, sub, toggle }: { title: string; sub?: ReactNode; toggle?: ReactNode }) {
+/**
+ * A top-level Overview section. Folded, its heading and subline stay as the
+ * summary; everything else, empty states included, isn't rendered.
+ */
+export function Section({ id, title, sub, children }: { id: FoldId; title: string; sub: ReactNode; children: ReactNode }) {
+  const fold = useContext(FoldContext);
+  const open = fold.open(id);
   return (
-    <div className="ch-head">
-      <h3>{title}</h3>
-      {sub && <span className="ch-sub">{sub}</span>}
-      {toggle}
+    <>
+      <div className="sec">
+        <h2>
+          <button type="button" className="fold" aria-expanded={open} aria-controls={domId(id)} onClick={() => fold.toggle(id)}>
+            <Chevron />
+            <span className="fold-title">{title}</span>
+            <span className="fold-sub">{sub}</span>
+          </button>
+        </h2>
+      </div>
+      {open && <div id={domId(id)}>{children}</div>}
+    </>
+  );
+}
+
+/**
+ * One chart or table inside a section. The heading button folds it; "Show as
+ * table" sits outside that button, so switching views never folds anything, and
+ * a folded chart hides the switch along with the chart.
+ */
+export function Subsection({
+  id,
+  title,
+  sub,
+  tableView,
+  children,
+}: {
+  id: FoldId;
+  title: string;
+  sub?: ReactNode;
+  /** Offers "Show as table"; `children` is then called with the current choice. */
+  tableView?: boolean;
+  children: (asTable: boolean) => ReactNode;
+}) {
+  const fold = useContext(FoldContext);
+  const open = fold.open(id);
+  const asTable = !!tableView && fold.asTable(id);
+  return (
+    <div className="ch-block">
+      <div className={`ch-head${open ? "" : " folded"}`}>
+        <h3>
+          <button type="button" className="fold" aria-expanded={open} aria-controls={domId(id)} onClick={() => fold.toggle(id)}>
+            <Chevron />
+            <span className="fold-title">{title}</span>
+            {sub && <span className="ch-sub">{sub}</span>}
+          </button>
+        </h3>
+        {open && tableView && (
+          <button type="button" className="ch-toggle" aria-pressed={asTable} onClick={() => fold.setAsTable(id, !asTable)}>
+            {asTable ? "Show as chart" : "Show as table"}
+          </button>
+        )}
+      </div>
+      {open && <div id={domId(id)}>{children(asTable)}</div>}
     </div>
   );
 }

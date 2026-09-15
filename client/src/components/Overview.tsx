@@ -4,7 +4,6 @@
  * the link, so what you clicked and what you land in are the same set. The
  * charts' series are built in `domain/overview.ts`.
  */
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { usePinnedLayout } from "../ui/hooks";
 import type { TrackerData } from "../api/schema";
@@ -23,6 +22,7 @@ import {
   type Count,
   type FoundBreakdown,
   type PayoffRow,
+  type FoldId,
   type WeekPoint,
 } from "../domain/overview";
 import { runState } from "../domain/runs";
@@ -31,13 +31,14 @@ import { buildTracks, pathForTab, pathForTarget } from "../domain/tabs";
 import { selectRow } from "../ui/prefs";
 import { RunStamp } from "./bits";
 import {
-  ChartHead,
   ChartTable,
   ColumnChart,
+  FoldLayer,
   Mark,
+  Section,
   StackedBar,
+  Subsection,
   TipLayer,
-  TableToggle,
   type BarSegment,
   type ColumnPoint,
 } from "./charts";
@@ -119,9 +120,12 @@ export default function Overview({
       </div>
 
       <div className={`panel-scroll${scrolled ? " scrolled" : ""}`} ref={scrollRef} onScroll={onScroll}>
-        <MomentumSection data={data} />
-        <SearchesSection data={data} trackKeys={trackKeys} tracks={tracks} />
-        <PipelineSection data={data} appliedCount={appliedCount} toApply={toApply} />
+        {/* What a person acts on first; the longer view last. */}
+        <FoldLayer>
+          <SearchesSection data={data} trackKeys={trackKeys} tracks={tracks} />
+          <PipelineSection data={data} appliedCount={appliedCount} toApply={toApply} />
+          <MomentumSection data={data} />
+        </FoldLayer>
         <div className="note">
           {trackCount
             ? `Scheduled searches across your ${trackCount} tracked search${trackCount === 1 ? "" : "es"} add rows here every day.`
@@ -137,14 +141,16 @@ export default function Overview({
 
 function MomentumSection({ data }: { data: TrackerData }) {
   const m = momentum(data);
+  const thisWeek = (points: readonly WeekPoint[]) => points[points.length - 1]?.n ?? 0;
   return (
-    <>
-      <div className="sec">
-        <h2>Momentum</h2>
-        <p>Last {m.found.length} weeks, Monday to Sunday</p>
-      </div>
+    <Section
+      id="momentum"
+      title="Momentum"
+      sub={`${thisWeek(m.found)} found · ${thisWeek(m.applied)} applied this week`}
+    >
       <div className="card ch">
         <WeeksChart
+          id="momentum.found"
           title="Positions found"
           noun="found"
           points={m.found}
@@ -153,9 +159,9 @@ function MomentumSection({ data }: { data: TrackerData }) {
           }
           opensHeader="Still on your board"
         />
-        <WeeksChart title="Applications sent" noun="applied" points={m.applied} />
+        <WeeksChart id="momentum.applied" title="Applications sent" noun="applied" points={m.applied} />
       </div>
-    </>
+    </Section>
   );
 }
 
@@ -164,20 +170,20 @@ function weekName(p: WeekPoint): string {
 }
 
 function WeeksChart({
+  id,
   title,
   noun,
   points,
   detail,
   opensHeader,
 }: {
+  id: FoldId;
   title: string;
   noun: string;
   points: readonly WeekPoint[];
   detail?: (p: WeekPoint) => string;
   opensHeader?: string;
 }) {
-  const [asTable, setAsTable] = useState(false);
-  const toggle = <TableToggle on={asTable} set={setAsTable} />;
   const thisWeek = points[points.length - 1]?.n ?? 0;
   const lastWeek = points[points.length - 2]?.n ?? 0;
   const tip = (p: WeekPoint) => `${weekName(p)}: ${p.n} ${noun}${detail ? ` · ${detail(p)}` : ""}`;
@@ -193,35 +199,37 @@ function WeeksChart({
     partial: p.current,
   }));
   return (
-    <div className="ch-block">
-      <ChartHead
-        title={title}
-        sub={`${noun[0].toUpperCase()}${noun.slice(1)}: ${thisWeek} this week · ${lastWeek} last week`}
-        toggle={toggle}
-      />
-      {asTable ? (
-        <ChartTable
-          label={title}
-          rows={points}
-          rowKey={(p) => p.monday}
-          columns={[
-            { header: "Week", cell: weekName },
-            {
-              header: title,
-              num: true,
-              cell: (p) => (
-                <Mark n={p.n} target={p.opens ? p.target : undefined} tip={tip(p)}>
-                  {p.n}
-                </Mark>
-              ),
-            },
-            ...(opensHeader ? [{ header: opensHeader, num: true, cell: (p: WeekPoint) => p.opens }] : []),
-          ]}
-        />
-      ) : (
-        <ColumnChart label={title} points={columns} />
-      )}
-    </div>
+    <Subsection
+      id={id}
+      title={title}
+      sub={`${noun[0].toUpperCase()}${noun.slice(1)}: ${thisWeek} this week · ${lastWeek} last week`}
+      tableView
+    >
+      {(asTable) =>
+        asTable ? (
+          <ChartTable
+            label={title}
+            rows={points}
+            rowKey={(p) => p.monday}
+            columns={[
+              { header: "Week", cell: weekName },
+              {
+                header: title,
+                num: true,
+                cell: (p) => (
+                  <Mark n={p.n} target={p.opens ? p.target : undefined} tip={tip(p)}>
+                    {p.n}
+                  </Mark>
+                ),
+              },
+              ...(opensHeader ? [{ header: opensHeader, num: true, cell: (p: WeekPoint) => p.opens }] : []),
+            ]}
+          />
+        ) : (
+          <ColumnChart label={title} points={columns} />
+        )
+      }
+    </Subsection>
   );
 }
 
@@ -249,11 +257,7 @@ function SearchesSection({
   else subline = `All ${trackKeys.length} reporting on schedule`;
 
   return (
-    <>
-      <div className="sec">
-        <h2>Daily searches</h2>
-        <p>{subline}</p>
-      </div>
+    <Section id="searches" title="Daily searches" sub={subline}>
       {!trackKeys.length ? (
         <div className="card empty">
           <strong>No searches set up yet</strong>
@@ -266,7 +270,7 @@ function SearchesSection({
           <TierChart data={data} />
         </div>
       )}
-    </>
+    </Section>
   );
 }
 
@@ -355,37 +359,36 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
     );
   };
   return (
-    <div className="ch-block">
-      <ChartHead title="Which searches pay off" sub="Every posting each search has found, and where it went" />
-      <div className="ch-table">
-        <table className="payoff" aria-label="Which searches pay off">
-          <thead>
-            <tr>
-              <th>{LABELS.search}</th>
-              <th className="num">{LABELS.found}</th>
-              <th className="num">{LABELS.open}</th>
-              <th className="num">{LABELS.notAFit}</th>
-              <th className="num">{LABELS.applied}</th>
-              <th className="num">{LABELS.responded}</th>
-              <th>{LABELS.applyRate}</th>
-              <th>{LABELS.responseRate}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => line(r))}
-            {line(total, true)}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <Subsection id="searches.payoff" title="Which searches pay off" sub="Every posting each search has found, and where it went">
+      {() => (
+        <div className="ch-table">
+          <table className="payoff" aria-label="Which searches pay off">
+            <thead>
+              <tr>
+                <th>{LABELS.search}</th>
+                <th className="num">{LABELS.found}</th>
+                <th className="num">{LABELS.open}</th>
+                <th className="num">{LABELS.notAFit}</th>
+                <th className="num">{LABELS.applied}</th>
+                <th className="num">{LABELS.responded}</th>
+                <th>{LABELS.applyRate}</th>
+                <th>{LABELS.responseRate}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => line(r))}
+              {line(total, true)}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Subsection>
   );
 }
 
 const TIER_TONES: Record<string, string> = { applied: "s-accent", open: "s-soft", "not-a-fit": "s-line" };
 
 function TierChart({ data }: { data: TrackerData }) {
-  const [asTable, setAsTable] = useState(false);
-  const toggle = <TableToggle on={asTable} set={setAsTable} />;
   const bars = tierBars(data);
   if (!bars.length) return null;
   const totals = bars.map((b) => b.segments.reduce((s, x) => s + x.n, 0));
@@ -397,43 +400,44 @@ function TierChart({ data }: { data: TrackerData }) {
       tip: `${b.label} · ${s.label}: ${s.n}${total ? ` (${Math.round((s.n / total) * 100)}%)` : ""}`,
     }));
   return (
-    <div className="ch-block">
-      <ChartHead title="By location" sub="Applied, open and not a fit, per location tier" toggle={toggle} />
-      {asTable ? (
-        <ChartTable
-          label="By location"
-          rows={bars.map((b, i) => ({ b, segments: segs(b, totals[i]) }))}
-          rowKey={(r) => r.b.key}
-          columns={[
-            { header: LABELS.locationTier, cell: (r) => r.b.label },
-            ...bars[0].segments.map((seg, j) => ({
-              header: seg.label,
-              num: true,
-              cell: (r: { segments: BarSegment[] }) => {
-                const s = r.segments[j];
-                return (
-                  <Mark n={s.n} target={s.target} tip={s.tip}>
-                    {s.n}
-                  </Mark>
-                );
-              },
-            })),
-          ]}
-        />
-      ) : (
-        <div className="hbars">
-          {bars.map((b, i) => (
-            <div key={b.key}>
-              <div className="hrow-head">
-                <span>{b.label}</span>
-                <span className="mono">{totals[i]}</span>
+    <Subsection id="searches.location" title="By location" sub="Applied, open and not a fit, per location tier" tableView>
+      {(asTable) =>
+        asTable ? (
+          <ChartTable
+            label="By location"
+            rows={bars.map((b, i) => ({ b, segments: segs(b, totals[i]) }))}
+            rowKey={(r) => r.b.key}
+            columns={[
+              { header: LABELS.locationTier, cell: (r) => r.b.label },
+              ...bars[0].segments.map((seg, j) => ({
+                header: seg.label,
+                num: true,
+                cell: (r: { segments: BarSegment[] }) => {
+                  const s = r.segments[j];
+                  return (
+                    <Mark n={s.n} target={s.target} tip={s.tip}>
+                      {s.n}
+                    </Mark>
+                  );
+                },
+              })),
+            ]}
+          />
+        ) : (
+          <div className="hbars">
+            {bars.map((b, i) => (
+              <div key={b.key}>
+                <div className="hrow-head">
+                  <span>{b.label}</span>
+                  <span className="mono">{totals[i]}</span>
+                </div>
+                <StackedBar label={b.label} segments={segs(b, totals[i])} scale={totals[i] / max} />
               </div>
-              <StackedBar label={b.label} segments={segs(b, totals[i])} scale={totals[i] / max} />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+            ))}
+          </div>
+        )
+      }
+    </Subsection>
   );
 }
 
@@ -449,11 +453,11 @@ const FLOW_TONES: Record<string, string> = {
 function PipelineSection({ data, appliedCount, toApply }: { data: TrackerData; appliedCount: number; toApply: number }) {
   const active = drillCount({ tab: "applications", drill: "in-conversation" }, data);
   return (
-    <>
-      <div className="sec">
-        <h2>Application pipeline</h2>
-        <p>{appliedCount ? `${appliedCount} applied · ${active} in active conversation` : "Nothing applied yet"}</p>
-      </div>
+    <Section
+      id="pipeline"
+      title="Application pipeline"
+      sub={appliedCount ? `${appliedCount} applied · ${active} in active conversation` : "Nothing applied yet"}
+    >
       {!appliedCount ? (
         <div className="card empty">
           <strong>No applications yet</strong>
@@ -472,72 +476,88 @@ function PipelineSection({ data, appliedCount, toApply }: { data: TrackerData; a
           </div>
         </>
       )}
-    </>
+    </Section>
   );
 }
 
 function FlowChart({ data, appliedCount }: { data: TrackerData; appliedCount: number }) {
-  const [asTable, setAsTable] = useState(false);
-  const toggle = <TableToggle on={asTable} set={setAsTable} />;
   const { bars, offer } = flow(data);
-  const sent = drillRows({ tab: "applications", drill: "applied" }, data);
-  const countStatus = (s: string) => sent.filter((a) => a.status === s).length;
-  const heard = drillCount({ tab: "applications", drill: "responded" }, data);
   const segs = (b: (typeof bars)[number]): BarSegment[] =>
     b.segments.map((s) => ({
       ...s,
       tone: FLOW_TONES[s.key],
       tip: `${b.label} · ${s.label}: ${s.n} of ${b.reached.n}${b.reached.n ? ` (${Math.round((s.n / b.reached.n) * 100)}%)` : ""}`,
     }));
+  const name = "Where applications move on or stall";
+  return (
+    <Subsection id="pipeline.flow" title={name} sub="Each bar is every application that reached the stage" tableView>
+      {(asTable) => (
+        <>
+          {asTable ? (
+            <ChartTable
+              label={name}
+              rows={bars}
+              rowKey={(b) => b.slug}
+              columns={[
+                { header: LABELS.status, cell: (b) => b.label },
+                {
+                  header: "Reached",
+                  num: true,
+                  cell: (b) => (
+                    <Mark n={b.reached.n} target={b.reached.target} tip={`Reached ${b.label}: ${b.reached.n}`}>
+                      {b.reached.n}
+                    </Mark>
+                  ),
+                },
+                ...bars[0].segments.map((seg, j) => ({
+                  header: seg.label,
+                  num: true,
+                  cell: (b: (typeof bars)[number]) => {
+                    const s = segs(b)[j];
+                    return (
+                      <Mark n={s.n} target={s.target} tip={s.tip}>
+                        {s.n}
+                      </Mark>
+                    );
+                  },
+                })),
+              ]}
+            />
+          ) : (
+            <div className="hbars">
+              {bars.map((b) => (
+                <div key={b.slug}>
+                  <div className="hrow-head">
+                    <Mark
+                      n={b.reached.n}
+                      target={b.reached.target}
+                      tip={`Reached ${b.label}: ${b.reached.n}`}
+                      className="jumplink"
+                    >
+                      {b.label}
+                    </Mark>
+                    <span className="mono">{b.reached.n}</span>
+                  </div>
+                  <StackedBar label={b.label} segments={segs(b)} />
+                </div>
+              ))}
+            </div>
+          )}
+          <FlowFoot data={data} offer={offer} appliedCount={appliedCount} />
+        </>
+      )}
+    </Subsection>
+  );
+}
+
+/** The Offer row that closes the flow, and the outcome legend under it. */
+function FlowFoot({ data, offer, appliedCount }: { data: TrackerData; offer: Count; appliedCount: number }) {
+  const sent = drillRows({ tab: "applications", drill: "applied" }, data);
+  const countStatus = (s: string) => sent.filter((a) => a.status === s).length;
+  const heard = drillCount({ tab: "applications", drill: "responded" }, data);
   const offerLabel = FORWARD_STAGES[FORWARD_STAGES.length - 1].label;
   return (
-    <div className="ch-block">
-      <ChartHead title="Where applications move on or stall" sub="Each bar is every application that reached the stage" toggle={toggle} />
-      {asTable ? (
-        <ChartTable
-          label="Where applications move on or stall"
-          rows={bars}
-          rowKey={(b) => b.slug}
-          columns={[
-            { header: LABELS.status, cell: (b) => b.label },
-            {
-              header: "Reached",
-              num: true,
-              cell: (b) => (
-                <Mark n={b.reached.n} target={b.reached.target} tip={`Reached ${b.label}: ${b.reached.n}`}>
-                  {b.reached.n}
-                </Mark>
-              ),
-            },
-            ...bars[0].segments.map((seg, j) => ({
-              header: seg.label,
-              num: true,
-              cell: (b: (typeof bars)[number]) => {
-                const s = segs(b)[j];
-                return (
-                  <Mark n={s.n} target={s.target} tip={s.tip}>
-                    {s.n}
-                  </Mark>
-                );
-              },
-            })),
-          ]}
-        />
-      ) : (
-        <div className="hbars">
-          {bars.map((b) => (
-            <div key={b.slug}>
-              <div className="hrow-head">
-                <Mark n={b.reached.n} target={b.reached.target} tip={`Reached ${b.label}: ${b.reached.n}`} className="jumplink">
-                  {b.label}
-                </Mark>
-                <span className="mono">{b.reached.n}</span>
-              </div>
-              <StackedBar label={b.label} segments={segs(b)} />
-            </div>
-          ))}
-        </div>
-      )}
+    <>
       <div className="hrow-head offer-row">
         <Mark n={offer.n} target={offer.target} tip={`Reached ${offerLabel}: ${offer.n}`} className="jumplink">
           {offerLabel}
@@ -562,82 +582,91 @@ function FlowChart({ data, appliedCount }: { data: TrackerData; appliedCount: nu
         </span>
         <span className="legend-run">{Math.round((heard / appliedCount) * 100)}% responded</span>
       </div>
-    </div>
+    </>
   );
 }
 
 function ResponseChart({ data }: { data: TrackerData }) {
-  const [asTable, setAsTable] = useState(false);
-  const toggle = <TableToggle on={asTable} set={setAsTable} />;
   const h = responseHistogram(data);
   const replies = h.bins.reduce((s, b) => s + b.n, 0);
   const tip = (b: (typeof h.bins)[number]) =>
     `First reply in ${b.label}: ${b.n}${replies ? ` (${Math.round((b.n / replies) * 100)}%)` : ""}`;
   return (
-    <div className="ch-block">
-      <ChartHead
-        title="Time to first reply"
-        sub={h.median === null ? "No replies yet" : `Median ${h.median} day${h.median === 1 ? "" : "s"}`}
-        toggle={toggle}
-      />
-      {asTable ? (
-        <ChartTable
-          label="Time to first reply"
-          rows={h.bins}
-          rowKey={(b) => b.key}
-          columns={[
-            { header: "Days", cell: (b) => b.label },
-            {
-              header: "Applications",
-              num: true,
-              cell: (b) => (
-                <Mark n={b.n} target={b.target} tip={tip(b)}>
-                  {b.n}
-                </Mark>
-              ),
-            },
-          ]}
-        />
-      ) : (
-        <ColumnChart
-          label="Time to first reply"
-          points={h.bins.map((b) => ({ key: b.key, axis: b.label.replace(" days", "d"), n: b.n, target: b.target, tip: tip(b) }))}
-        />
-      )}
-    </div>
+    <Subsection
+      id="pipeline.reply"
+      title="Time to first reply"
+      sub={h.median === null ? "No replies yet" : `Median ${h.median} day${h.median === 1 ? "" : "s"}`}
+      tableView
+    >
+      {(asTable) =>
+        asTable ? (
+          <ChartTable
+            label="Time to first reply"
+            rows={h.bins}
+            rowKey={(b) => b.key}
+            columns={[
+              { header: "Days", cell: (b) => b.label },
+              {
+                header: "Applications",
+                num: true,
+                cell: (b) => (
+                  <Mark n={b.n} target={b.target} tip={tip(b)}>
+                    {b.n}
+                  </Mark>
+                ),
+              },
+            ]}
+          />
+        ) : (
+          <ColumnChart
+            label="Time to first reply"
+            points={h.bins.map((b) => ({
+              key: b.key,
+              axis: b.label.replace(" days", "d"),
+              n: b.n,
+              target: b.target,
+              tip: tip(b),
+            }))}
+          />
+        )
+      }
+    </Subsection>
   );
 }
 
 function WaitingList({ data }: { data: TrackerData }) {
   const rows = waitingLongest(data);
   return (
-    <div className="ch-block">
-      <ChartHead title="Waiting longest" sub="Since each last moved" />
-      {!rows.length ? (
-        <p className="ch-empty">Nothing is waiting on a reply.</p>
-      ) : (
-        <ol className="waitlist">
-          {rows.map(({ app, days }) => (
-            <li key={app.id}>
-              {/* Selecting the row first is what makes the tab open on it. */}
-              <Link
-                className="wait-row"
-                to={pathForTab("applications")}
-                onClick={() => selectRow("applications", String(app.id))}
-              >
-                <span className="wait-co">{app.company || "Untitled"}</span>
-                <span className="wait-role">{app.title}</span>
-                <span className="wait-meta">
-                  {app.status} · <span className="mono">{days} day{days === 1 ? "" : "s"}</span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ol>
+    <Subsection id="pipeline.waiting" title="Waiting longest" sub="Since each last moved">
+      {() => (
+        <>
+          {!rows.length ? (
+            <p className="ch-empty">Nothing is waiting on a reply.</p>
+          ) : (
+            <ol className="waitlist">
+              {rows.map(({ app, days }) => (
+                <li key={app.id}>
+                  {/* Selecting the row first is what makes the tab open on it. */}
+                  <Link
+                    className="wait-row"
+                    to={pathForTab("applications")}
+                    onClick={() => selectRow("applications", String(app.id))}
+                  >
+                    <span className="wait-co">{app.company || "Untitled"}</span>
+                    <span className="wait-role">{app.title}</span>
+                    <span className="wait-meta">
+                      {app.status} · <span className="mono">{days} day{days === 1 ? "" : "s"}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          )}
+          <Link className="jumplink ch-more" to={pathForTarget({ tab: "applications", drill: "waiting" })}>
+            See all waiting ›
+          </Link>
+        </>
       )}
-      <Link className="jumplink ch-more" to={pathForTarget({ tab: "applications", drill: "waiting" })}>
-        See all waiting ›
-      </Link>
-    </div>
+    </Subsection>
   );
 }

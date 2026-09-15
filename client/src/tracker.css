@@ -426,8 +426,21 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .ch-block+.ch-block{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
 .ch-split{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px 32px;margin-top:12px}
 .ch-split .ch-block+.ch-block{margin-top:0;padding-top:0;border-top:0}
+/* A heading that folds its section or chart. The whole title-and-subline row is
+   the button; the chevron turns to say which way it will go. */
+.fold{appearance:none;border:0;background:none;padding:0;margin:0;font:inherit;color:inherit;text-align:left;
+  cursor:pointer;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;width:100%;border-radius:4px}
+.fold:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.fold .chev{display:inline-block;width:14px;flex:none;text-align:center;font-size:14px;line-height:1;color:var(--ink2);
+  transition:transform .12s ease}
+.fold[aria-expanded="false"] .chev{transform:rotate(-90deg)}
+.fold:hover .fold-title{color:var(--accent)}
+.sec h2{flex:1;min-width:0}
+.sec .fold-sub{margin-left:auto;font-size:13px;font-weight:400;color:var(--ink3)}
 .ch-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;margin-bottom:12px}
-.ch-head h3{font-size:14px;font-weight:600}
+.ch-head.folded{margin-bottom:0}
+.ch-head h3{font-size:14px;font-weight:600;flex:1;min-width:0}
+.ch-head .fold .ch-sub{font-weight:400}
 .ch-sub{font-size:12.5px;color:var(--ink3)}
 .ch-toggle{appearance:none;border:0;background:none;padding:2px 0;margin-left:auto;font:inherit;
   font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;white-space:nowrap}

@@ -22,6 +22,26 @@ import {
 } from "./stages";
 import { buildTracks } from "./tabs";
 
+/**
+ * Every Overview section and chart that folds, in page order. These ids are what
+ * a browser stores, so a heading can be renamed without resetting anyone's
+ * folds; renaming an id does reset it.
+ */
+export const OVERVIEW_FOLD_IDS = [
+  "searches",
+  "searches.payoff",
+  "searches.location",
+  "pipeline",
+  "pipeline.flow",
+  "pipeline.reply",
+  "pipeline.waiting",
+  "momentum",
+  "momentum.found",
+  "momentum.applied",
+] as const;
+
+export type FoldId = (typeof OVERVIEW_FOLD_IDS)[number];
+
 export const MOMENTUM_WEEKS = 12;
 
 export interface WeekPoint {
