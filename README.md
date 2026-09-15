@@ -50,7 +50,7 @@ scripts/
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
   import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
   setup-scheduler.ps1          registers every person's tracks as daily Windows Scheduled Tasks
-  new-invite.ps1               makes an invite link to add a person, or lists what became of each
+  new-invite.ps1               makes an invite link to add a person, lists what became of each, or revokes one
   set-password.ps1             resets an account's password with the ADMIN_TOKEN, typed at a prompt
   seed-demo-user.ps1           creates the demo account and fills it with invented postings
   demo-user.json               that invented data - the only fabricated content in this repo
@@ -237,9 +237,10 @@ free slot later the same night. In the morning their tracker has leads. When
 the machine has no free overnight slot left, their setup is marked failed and
 the page tells them why, rather than stacking a search on top of another.
 
-`.\scripts\new-invite.ps1 -List` shows each invite's state (waiting, used or
-expired) and, once used, the account's name and user id, which names their
-folder. A lost link can't be shown again; mint another.
+`.\scripts\new-invite.ps1 -List` shows each invite's id and state (open, used,
+expired or revoked) and, once used, the account's name and user id, which names
+their folder. A lost link can't be shown again: stop it with
+`.\scripts\new-invite.ps1 -Revoke <id>` and mint another.
 
 Everyone's searches run on this machine, under its Claude account, one after
 another in their own slots. The

@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-  Makes an invite link to send someone, or lists what became of the invites
-  already made.
+  Makes an invite link to send someone, lists what became of the invites
+  already made, or revokes one that hasn't been used.
 
 .DESCRIPTION
   Adding a person is sending this link. They create their own account on the
@@ -9,35 +9,45 @@
   run-onboarding.ps1 builds it (docs/onboarding-plan.md).
 
   The code is shown once. The server stores only its hash, so a lost code is
-  replaced with a new invite, never looked up. An invite makes one account,
-  can't touch an existing one, and expires after -Days.
+  revoked and replaced, never looked up. An invite makes one account, can't
+  touch an existing one, and expires after -Days.
 
   Reads the API URL, the ADMIN_TOKEN and the tracker page's URL from
   <DataDir>\deployment.json (see private.example/README.md). The token is sent
   to the API and never printed.
 
 .PARAMETER Note
-  Who the invite is for, in your own words. Shown in -List, never to them.
+  Who the invite is for, in your own words, up to 200 characters. Shown in
+  -List, never to them.
 
 .PARAMETER Days
-  How long the link stays good. Default 14; the API allows at most 30.
+  How long the link stays good, from 1 to 30. Default 14.
 
 .PARAMETER List
-  Show every invite: when it was made, whether it is waiting, used or expired,
-  and the name and user id of the account a used one created. The user id names
-  that person's folder in the data dir.
+  Show every invite, newest first: its id, note, when it was made and expires,
+  its state (open, used, expired or revoked), and the name and user id of the
+  account a used one created. The user id names that person's folder in the
+  data dir.
+
+.PARAMETER Revoke
+  The id of an invite, from -List, to stop working. A used invite can't be
+  revoked, because its account already exists.
 
 .EXAMPLE
   .\new-invite.ps1 -Note "Sam, from the climbing gym"
 
 .EXAMPLE
   .\new-invite.ps1 -List
+
+.EXAMPLE
+  .\new-invite.ps1 -Revoke 7
 #>
 [CmdletBinding(DefaultParameterSetName = "Mint")]
 param(
-    [Parameter(ParameterSetName = "Mint", Mandatory = $true)][string]$Note,
+    [Parameter(ParameterSetName = "Mint", Mandatory = $true)][ValidateLength(0, 200)][string]$Note,
     [Parameter(ParameterSetName = "Mint")][ValidateRange(1, 30)][int]$Days = 14,
     [Parameter(ParameterSetName = "List", Mandatory = $true)][switch]$List,
+    [Parameter(ParameterSetName = "Revoke", Mandatory = $true)][int]$Revoke,
     [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
     [string]$DeploymentFile
 )
@@ -63,72 +73,97 @@ $request = @{
     UserAgent = "curl/8.0"
 }
 
-function Get-ApiError($err) {
-    $status = $null
-    $detail = $err.Exception.Message
-    if ($err.Exception.Response) {
-        $status = [int]$err.Exception.Response.StatusCode
-        try {
-            $reader = New-Object System.IO.StreamReader($err.Exception.Response.GetResponseStream())
-            $raw = $reader.ReadToEnd()
-            if ($raw) { $detail = $raw }
-        } catch { }
+function Invoke-Api([string]$Method, [string]$Path, $Body) {
+    $call = @{ Uri = "$api$Path"; Method = $Method } + $request
+    if ($null -ne $Body) {
+        # UTF-8 bytes: PowerShell 5.1 would send a string body in the console's
+        # codepage and mangle a non-ASCII note.
+        $call.Body = [Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Compress))
+        $call.ContentType = "application/json; charset=utf-8"
     }
-    switch ($status) {
-        401 { "The API refused the admin token (401). Check admin_token in $DeploymentFile matches the ADMIN_TOKEN secret on $api." }
-        404 { "$api has no invite routes (404). Deploy server/ first." }
-        default { "The API answered $status`: $detail" }
-    }
-}
-
-if ($List) {
     try {
-        $res = Invoke-RestMethod @request -Uri "$api/api/invites" -Method Get
+        return Invoke-RestMethod @call
     } catch {
-        throw (Get-ApiError $_)
-    }
-    $invites = @($res.invites)
-    if ($invites.Count -eq 0) {
-        Write-Host "No invites yet. Make one with: .\new-invite.ps1 -Note `"their name`""
-        return
-    }
-    # ISO 8601 UTC instants compare correctly as strings.
-    $now = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss")
-    $invites | ForEach-Object {
-        $state = if ($_.used_at) { "used" } elseif ([string]$_.expires_at -lt $now) { "expired" } else { "waiting" }
-        [pscustomobject]@{
-            Note    = $_.note
-            Created = ([string]$_.created_at).Substring(0, 10)
-            Expires = ([string]$_.expires_at).Substring(0, 10)
-            State   = $state
-            Name    = $_.user_name
-            UserId  = $_.user_id
+        $status = $null
+        $message = $_.Exception.Message
+        if ($_.Exception.Response) {
+            $status = [int]$_.Exception.Response.StatusCode
+            try {
+                $raw = (New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())).ReadToEnd()
+                $parsed = $raw | ConvertFrom-Json
+                if ($parsed.error) { $message = [string]$parsed.error } elseif ($raw) { $message = $raw }
+            } catch { }
         }
-    } | Format-Table -AutoSize
-    return
+        if ($null -eq $status) {
+            throw "Couldn't reach $api`: $message"
+        }
+        if ($status -eq 401) {
+            throw "The API refused the admin token (401). Check admin_token in $DeploymentFile matches the ADMIN_TOKEN secret on $api."
+        }
+        # A 404 whose body isn't the route's own "no such invite" means the
+        # deployment predates the invite routes.
+        if ($status -eq 404 -and $message -ne "no such invite") {
+            throw "$api has no invite routes (404). Deploy server/ first."
+        }
+        throw "The API answered $status`: $message"
+    }
 }
 
-try {
-    $body = @{ note = $Note; days = $Days } | ConvertTo-Json -Compress
-    $invite = Invoke-RestMethod @request -Uri "$api/api/invites" -Method Post `
-        -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($body))
-} catch {
-    throw (Get-ApiError $_)
+# Instants arrive as UTC; the operator reads them in their own time.
+function Format-When([string]$iso) {
+    if (-not $iso) { return "" }
+    ([datetime]::Parse($iso, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind)).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
 }
 
-Write-Host ""
-if ($d.client_url) {
-    Write-Host "Send them this link:" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  $(([string]$d.client_url).TrimEnd('/'))/?invite=$($invite.code)"
-} else {
-    Write-Host "Invite code:" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  $($invite.code)"
-    Write-Host ""
-    Write-Host "Send them the tracker page's address with ?invite=<code> on the end."
-    Write-Host "Add client_url to $DeploymentFile and this prints the whole link."
+switch ($PSCmdlet.ParameterSetName) {
+    "List" {
+        $invites = @((Invoke-Api Get "/api/invites").invites)
+        if ($invites.Count -eq 0) {
+            Write-Host "No invites yet. Make one with: .\new-invite.ps1 -Note `"their name`""
+            return
+        }
+        $invites | ForEach-Object {
+            [pscustomobject]@{
+                Id      = $_.id
+                Note    = $_.note
+                Created = Format-When $_.created_at
+                Expires = Format-When $_.expires_at
+                State   = $_.state
+                Name    = $(if ($_.user) { $_.user.name })
+                UserId  = $(if ($_.user) { $_.user.id })
+            }
+        } | Format-Table -AutoSize
+    }
+
+    "Revoke" {
+        try {
+            $res = Invoke-Api Post "/api/invites/revoke" @{ id = $Revoke }
+        } catch {
+            if ($_.Exception.Message -match "invite already used") {
+                throw "Invite $Revoke has been used, so its account exists and revoking can't undo that. Find the account with -List."
+            }
+            throw
+        }
+        Write-Host "Invite $($res.id) is $($res.state). Its link no longer works."
+    }
+
+    "Mint" {
+        $invite = Invoke-Api Post "/api/invites" @{ note = $Note; days = $Days }
+        Write-Host ""
+        if ($d.client_url) {
+            Write-Host "Send them this link:" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  $(([string]$d.client_url).TrimEnd('/'))/?invite=$($invite.code)"
+        } else {
+            Write-Host "Invite code:" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  $($invite.code)"
+            Write-Host ""
+            Write-Host "Send them the tracker page's address with ?invite=<code> on the end."
+            Write-Host "Add client_url to $DeploymentFile and this prints the whole link."
+        }
+        Write-Host ""
+        Write-Host "Invite $($invite.id): one use, good until $(Format-When $invite.expires_at). This code can't be shown again." -ForegroundColor DarkGray
+        Write-Host "Check on it with -List, or stop it with -Revoke $($invite.id)." -ForegroundColor DarkGray
+    }
 }
-Write-Host ""
-Write-Host "One use, good until $(([string]$invite.expires_at).Substring(0, 10)). This code can't be shown again." -ForegroundColor DarkGray
-Write-Host "Check on it later with: .\new-invite.ps1 -List" -ForegroundColor DarkGray
