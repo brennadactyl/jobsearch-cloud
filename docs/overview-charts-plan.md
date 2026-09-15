@@ -127,9 +127,9 @@ past that stage.
 | Segment | Rule | Token |
 |---|---|---|
 | Moved on | `furthestStage` is past this stage | `--accent` |
-| Rejected here | `furthestStage` is this stage, status `Rejected` | `--crit` |
-| Withdrew here | `furthestStage` is this stage, status `Withdrawn` | `--line` |
-| Waiting | `furthestStage` is this stage, any other status | `--accent-soft` |
+| Rejected at this stage | `furthestStage` is this stage, status `Rejected` | `--crit` |
+| Withdrew at this stage | `furthestStage` is this stage, status `Withdrawn` | `--line` |
+| Still waiting | `furthestStage` is this stage, any other status | `--accent-soft` |
 
 The four segments always add up to the bar. Each segment opens Applications
 through a `flow:<stage>:<segment>` drill that calls the same function. The
