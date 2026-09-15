@@ -152,7 +152,7 @@ components.
     since the answers check needs a resume already under `resumes/`.
   - Send status goes through `saved`.
   - The stale banner compares `sent_at` with `stale_run_hours`.
-- **Locations.** `domain/locations.ts` turns each entry into a `priority_locations` rule, with a fixed synonym table: a city matches its name, adding state spellings for a shared name such as Portland; Remote with a country is `allOf remote` plus that country's spellings; bare Remote is remote anywhere; nothing reduces to a bare token of three letters or fewer. The read-back and the rules sent with the answers both come from it. Tests use real location strings from leads.
+- **Locations.** `domain/locations.ts` turns each entry into a `priority_locations` rule, with a fixed synonym table: a city matches its name, adding state spellings for a shared name such as Portland; Remote with a country is `allOf remote` plus that country's spellings; bare Remote is remote anywhere; nothing reduces to a bare token of three letters or fewer. The read-back and the rules sent with the answers both come from it. Tests use location strings in the shapes postings write them.
 - **Constants.** New labels go in `LABELS`. The readable-format list is one
   constant, shared by the check and its message.
 - **Tests.**
