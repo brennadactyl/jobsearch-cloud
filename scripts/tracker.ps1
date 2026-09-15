@@ -65,6 +65,13 @@ if ($Base) { $Base = $Base.TrimEnd("/") }
 $Token = $env:TRACKER_API_TOKEN
 $Search = $env:TRACKER_SEARCH
 
+# The shared list's names, read once by the first `known` of a stretch of the
+# run. `companies` and `swept` delete it, because those are the two points where
+# the list a run knows about can change; tying the cache to them rather than to
+# a fresh directory keeps it correct for a -UseLocalFiles run, whose working
+# directory persists between nights.
+$KnownCache = [System.IO.Path]::Combine((Get-Location).Path, "known-list.json")
+
 # --------------------------------------------------------------- arguments --
 
 # Parsed by hand rather than through param(): the prompt writes `--status ok`,
@@ -291,6 +298,7 @@ switch ($Command) {
   }
 
   "companies" {
+      if (Test-Path $KnownCache) { Remove-Item $KnownCache -Force }
       $c = Invoke-Tracker "GET" "/api/coverage/$Search" $null
       $out = OutPath "companies.json"
       Write-Json $out $c
@@ -317,12 +325,22 @@ switch ($Command) {
       $norm = { param($s) (([string]$s).ToLowerInvariant() -creplace "[^a-z0-9]+", " ").Trim() }
       $want = & $norm $File
       if (-not $want) { Fail "'$File' has no letters or digits to match on" }
-      $c = Invoke-Tracker "GET" "/api/coverage/${Search}?all=1" $null
-      $hit = @($c.companies | Where-Object { $_ -and ((& $norm $_.company) -eq $want) }) | Select-Object -First 1
-      if ($hit) {
-          Say "known: $File is on the list as '$($hit.company)' - skip it, its turn comes in the rotation"
+      if (Test-Path $KnownCache) {
+          $names = @((Get-Content -Raw -Encoding UTF8 $KnownCache | ConvertFrom-Json).companies)
       } else {
-          Say "known: $File is not on the list"
+          $c = Invoke-Tracker "GET" "/api/coverage/${Search}?all=1" $null
+          $names = @($c.companies | Where-Object { $_ } | ForEach-Object { [string]$_.company })
+          # Under a property, not as a bare array: piped through ConvertTo-Json, a
+          # one-name list is written as a string and an empty one as nothing.
+          Write-Json "known-list.json" @{ companies = $names }
+      }
+      $hit = @($names | Where-Object { $_ -and ((& $norm $_) -eq $want) }) | Select-Object -First 1
+      if ($hit) {
+          Say "known: $File is on the list as '$hit' - skip it, its turn comes in the rotation"
+      } else {
+          # The list hides this account's excluded companies, so absence is one of
+          # two things, and the run has to hear both.
+          Say "known: $File is not on the list, or is excluded for this account"
       }
       break
   }
@@ -431,6 +449,7 @@ switch ($Command) {
       }
       if ($send.Count -eq 0) { Say "swept: nothing to record (refused=$($script:Refused))"; exit 0 }
       $res = Invoke-Tracker "POST" "/api/coverage" @{ search = $Search; on = $Today; swept = @($send) }
+      if (Test-Path $KnownCache) { Remove-Item $KnownCache -Force }
       # `added`: companies this call put on the shared list, which every search
       # sweeps. `withheld`: rows the server shared nothing from because of the
       # wall contradiction. It should equal the WARNING count above - both apply
