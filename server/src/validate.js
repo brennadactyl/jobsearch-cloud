@@ -19,6 +19,37 @@ export function isoDate(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
 }
 
+// The first thing wrong with a set of location rules, or "" for none. The shape
+// the page and the prompt read: an array of `{label, allOf?, anyOf?}`, each
+// array a list of strings a posting's location is matched against. The caps are
+// generous for a person's ranked places and tight enough that nothing sent here
+// swells the config every prompt is composed from.
+export const LOCATION_RULES_MAX = 20;
+export function priorityLocationsError(rules) {
+  if (!Array.isArray(rules)) return "priority_locations must be an array";
+  if (rules.length > LOCATION_RULES_MAX) return `at most ${LOCATION_RULES_MAX} location rules`;
+  for (const [i, rule] of rules.entries()) {
+    const at = `location rule ${i + 1}`;
+    if (!rule || typeof rule !== "object" || Array.isArray(rule)) return `${at} must be an object`;
+    const unknown = Object.keys(rule).find((k) => !["label", "allOf", "anyOf"].includes(k));
+    if (unknown) return `${at} has an unknown field "${unknown}"`;
+    if (typeof rule.label !== "string" || !rule.label.trim() || rule.label.length > 60) {
+      return `${at} needs a label of 1 to 60 characters`;
+    }
+    let terms = 0;
+    for (const key of ["allOf", "anyOf"]) {
+      if (rule[key] === undefined) continue;
+      const list = rule[key];
+      if (!Array.isArray(list) || list.length > 20 || list.some((t) => typeof t !== "string" || !t || t.length > 80)) {
+        return `${at}'s ${key} must be at most 20 strings of 1 to 80 characters`;
+      }
+      terms += list.length;
+    }
+    if (!terms) return `${at} needs at least one term in allOf or anyOf`;
+  }
+  return "";
+}
+
 // The refusal for a track key that isn't one of the caller's configured tracks.
 // Worded identically on every route because it always means the same thing:
 // the caller's idea of this search and the tracker's have drifted apart.

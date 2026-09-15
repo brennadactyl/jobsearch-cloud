@@ -1,7 +1,7 @@
 # Schema
 
-The tracker's D1 database as `server/migrations/` builds it: ten tables, from
-`0001_schema.sql` through `0014_screened_found.sql` applied in order. This is the
+The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
+`0001_schema.sql` through `0016_intake.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -17,14 +17,17 @@ points at a user, track or lead that does not exist, or at someone else's. That
 is why most of `server/verify-local.mjs` is checks that one user's rows cannot
 reach another's.
 
-**Apart from `users` itself, `company_fetch` is the only table with no
-`user_id`.** It is the one company list every search indexes into, and it holds
+**Apart from `users` itself, only `company_fetch` and `invites` have no
+`user_id`.** `company_fetch` is the one company list every search indexes into, and it holds
 facts about each company's public careers site, shared by every account. What
 may be stored in it is set out at the top of
 `server/migrations/0010_company_fetch.sql` and
 `server/migrations/0011_one_company_list.sql`: a row describes a website,
 never a search, and membership is visible across the deployment, while the
-record of who looked at a company and when stays with each search.
+record of who looked at a company and when stays with each search. `invites`
+belongs to the deployment rather than to anyone: its `used_by` names the
+account an invite created, and is not called `user_id` because nothing scopes
+on it.
 
 **`company_sweeps` reaches `company_fetch` through `company_key`.**
 Both hold `normalize(name)` from `server/src/exclude.js` — lowercased, each run
@@ -56,6 +59,8 @@ erDiagram
     users          ||--o{ applications   : owns
     users          ||--o{ meta           : owns
     users          ||--o{ company_sweeps : owns
+    users          ||--o| intake         : "sets up"
+    users          |o--o| invites        : "created by"
     tracks         ||--|| search_runs    : "last run of"
     tracks         |o--o{ tracks         : "fed_by"
     tracks         ||--o{ leads          : "filed under"
@@ -209,6 +214,24 @@ erDiagram
         TEXT wall_last_on
         INTEGER wall_dates
     }
+    invites {
+        INTEGER id PK
+        TEXT code_hash UK "SHA-256 of the code"
+        TEXT note
+        TEXT created_at
+        TEXT expires_at
+        TEXT used_at
+        TEXT used_by "the account it created"
+        TEXT revoked_at
+    }
+    intake {
+        TEXT user_id PK, FK
+        TEXT answers "the setup form, as JSON"
+        TEXT status
+        TEXT status_note
+        TEXT sent_at
+        TEXT updated_at
+    }
 ```
 
 ## Conventions
@@ -221,13 +244,15 @@ These hold across every table, so the per-table notes below leave them out.
   `sessions.user_id`, `tracks.label`, `leads.user_id`, `leads.search`,
   `leads.found`, `leads.company`, `leads.title`, `leads.url`, `leads.verified`,
   `screened.user_id`, `screened.search`, `screened.url`, `screened.date`,
-  `applications.dateApplied` and `meta.value`.
+  `applications.dateApplied`, `meta.value`, `invites.code_hash`,
+  `invites.created_at` and `invites.expires_at`.
 - `applications.user_id` is not on that list: it defaults to `''`, so an
   insert that omits it succeeds with no owner. Always supply it.
 - The only defaults other than `''` and `0` are `leads.status` (`New`),
-  `applications.status` (`Applied`) and `users.iterations` (`100000`).
-- `leads.id`, `screened.id` and `applications.id` are `AUTOINCREMENT`, unique
-  across all users.
+  `applications.status` (`Applied`), `users.iterations` (`100000`),
+  `intake.status` (`pending`) and `intake.answers` (`{}`).
+- `leads.id`, `screened.id`, `applications.id` and `invites.id` are
+  `AUTOINCREMENT`, unique across all users.
 - `user_id` has its own index on `sessions`, `leads`, `screened` and
   `applications`. The other user-scoped tables lead their primary key with it.
 - The diagram lists columns in the order a database built from empty holds
@@ -373,3 +398,34 @@ name as written when the company joined.
 - A wrong row is retracted, not deleted: `retracted_on` and `retracted_note` are
   set, reads return only the retraction, and runs cannot update the row.
   A retracted company stays on the list.
+
+### invites
+
+One row per invite the operator has minted. The code itself is never stored:
+`code_hash` is its SHA-256, and every lookup goes through it, so a backup holds
+no usable invite.
+
+- `created_at`, `expires_at`, `used_at` and `revoked_at` are ISO 8601 instants,
+  `''` while unset. An invite expires 14 days after it is minted unless the
+  operator asks otherwise, and never more than 30.
+- An invite is used once. `used_at` and `used_by` are set in the same
+  transaction that creates the account, and `used_by` holds that account's
+  `id`.
+- What became of an invite is worked out rather than stored: used if `used_at`
+  is set, otherwise revoked if `revoked_at` is, otherwise expired once
+  `expires_at` has passed.
+
+### intake
+
+One row per account that has sent the first-run setup form, keyed by
+`user_id`.
+
+- `answers` is the form's answers as JSON, stored as sent. `POST /api/intake`
+  checks only what the onboarding run cannot work without, and keeps every other
+  field for the run to read.
+- `status` is `pending` until the onboarding run has built the search, then
+  `done` or `failed`. `done` is final.
+- `status_note` is plain text the run wrote for the person.
+- `sent_at` is when the current attempt began: the first send, or a send after a
+  failure. Editing a pending setup leaves it alone, so a late run cannot be
+  hidden by an edit. `updated_at` moves on every change.

@@ -443,5 +443,26 @@ console.log("\n== 0012 against an empty database ==");
   db.close();
 }
 
+const STOP16 = MIGRATIONS.find((f) => f.startsWith("0016_"));
+
+console.log("\n== 0015 and 0016 against an empty database ==");
+{
+  const db = migratedThrough(STOP16, null);
+  const cols = (t) => db.prepare(`SELECT name FROM pragma_table_info('${t}') ORDER BY cid`).all().map((c) => c.name);
+  check("invites has its columns and no user_id: an invite belongs to no one",
+    JSON.stringify(cols("invites")) === JSON.stringify(["id", "code_hash", "note", "created_at", "expires_at", "used_at", "used_by", "revoked_at"]),
+    JSON.stringify(cols("invites")));
+  check("an invite's code hash is unique",
+    !!db.prepare("SELECT 1 FROM pragma_index_list('invites') WHERE [unique] = 1").get());
+  check("intake is one row per account",
+    JSON.stringify(cols("intake")) === JSON.stringify(["user_id", "answers", "status", "status_note", "sent_at", "updated_at"]) &&
+    db.prepare("SELECT pk FROM pragma_table_info('intake') WHERE name = 'user_id'").get().pk === 1,
+    JSON.stringify(cols("intake")));
+  db.exec("INSERT INTO intake (user_id) VALUES ('u')");
+  const fresh = db.prepare("SELECT answers, status FROM intake").get();
+  check("a new intake row is pending with empty answers", fresh.answers === "{}" && fresh.status === "pending", JSON.stringify(fresh));
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1,0 +1,270 @@
+/**
+ * Invite signup and first-run setup (docs/onboarding-plan.md).
+ *
+ * Three kinds of caller, and the route table (./index.js) keeps them apart:
+ * - a new person with only an invite link: the invite check and signup are
+ *   public
+ * - that person once signed in: their own setup, through their session
+ * - the operator's scripts and the onboarding run: invites, the setup queue and
+ *   search tokens, with ADMIN_TOKEN, checked once for the whole admin list
+ *
+ * Data access is in ../onboarding.js and, for a person's own setup, ../db.js.
+ */
+
+import { createSession } from "../auth.js";
+import { json, readJson } from "../http.js";
+import {
+  completeIntake,
+  findInvite,
+  INVITE_DAYS_DEFAULT,
+  INVITE_DAYS_MAX,
+  inviteState,
+  listInvites,
+  mintInvite,
+  mintSearchToken,
+  pendingIntakes,
+  revokeInvite,
+  signupWithInvite,
+} from "../onboarding.js";
+import { isDocumentPath, priorityLocationsError } from "../validate.js";
+
+const NOTE_MAX = 200;
+const NAME_MAX = 60;
+// The same floor POST /api/users enforces, for the same reason: /api/login has
+// no rate limiting in front of it.
+const PASSWORD_MIN = 12;
+const STATUS_NOTE_MAX = 500;
+const ANSWERS_MAX_BYTES = 256 * 1024;
+const ROLES_MAX = 10;
+const PRONOUNS = ["", "she/her", "he/him", "they/them"];
+const ANSWER_STRINGS = ["page_title", "pronouns", "resume_text", "location_limits", "locations_first", "never_work_for", "preferences"];
+const ROLE_STRINGS = ["name", "titles", "company_kinds", "rule_outs", "min_pay"];
+
+/**
+ * GET /api/invite/:code - public -> `{ valid: true, expires_at }` or
+ * `{ valid: false, reason: "invalid"|"used"|"expired"|"revoked" }`.
+ *
+ * What the page asks before showing signup. A code nobody minted and a malformed
+ * one both read "invalid": telling them apart would only help someone guessing.
+ */
+export async function handleCheckInvite({ env, params }) {
+  const invite = await findInvite(env.DB, params[0]);
+  if (!invite) return json({ valid: false, reason: "invalid" });
+  const state = inviteState(invite, new Date().toISOString());
+  return state === "open" ? json({ valid: true, expires_at: invite.expires_at }) : json({ valid: false, reason: state });
+}
+
+/**
+ * POST /api/signup - public. Body `{ code, name, password }` -> `201 { token,
+ * user: {id, name} }`; 410 `{ error, reason }` for an invite that cannot be used;
+ * 400 `{ error, field }` for the name or password; 409 `{ error, field: "name" }`
+ * for a name already taken, with the invite left open.
+ *
+ * The invite is checked before anything else, so a caller without a working
+ * link learns nothing about which names exist. The claim and the account happen
+ * together or not at all - see signupWithInvite. The token is a browser session,
+ * issued once the account exists; if issuing it failed, the person could still
+ * sign in with the password they chose.
+ */
+export async function handleSignup({ request, env }) {
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+
+  const invite = await findInvite(env.DB, typeof body.code === "string" ? body.code : "");
+  const state = invite ? inviteState(invite, new Date().toISOString()) : "invalid";
+  if (state !== "open") return json({ error: "this invite can't be used", reason: state }, 410);
+
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  if (!name) return json({ error: "name is required", field: "name" }, 400);
+  if (name.length > NAME_MAX) return json({ error: `name must be at most ${NAME_MAX} characters`, field: "name" }, 400);
+  if (password.length < PASSWORD_MIN) {
+    return json({ error: `password must be at least ${PASSWORD_MIN} characters`, field: "password" }, 400);
+  }
+
+  const outcome = await signupWithInvite(env.DB, invite, name, password);
+  if (outcome.taken) {
+    return json({ error: `The name “${name}” is already taken here — pick another.`, field: "name" }, 409);
+  }
+  if (outcome.reason) return json({ error: "this invite can't be used", reason: outcome.reason }, 410);
+
+  const token = await createSession(env.DB, outcome.user.id, "browser");
+  return json({ token, user: outcome.user }, 201);
+}
+
+/**
+ * GET /api/intake - requires a Bearer token -> `{ intake: null }` or
+ * `{ intake: { answers, status, status_note, sent_at, updated_at } }`.
+ */
+export async function handleGetIntake({ db }) {
+  return json({ intake: await db.getIntake() });
+}
+
+/**
+ * POST /api/intake - requires a Bearer token. Body `{ answers }` -> `{ intake }`,
+ * stored as pending; 400 `{ error, field }` for answers the run cannot use; 409
+ * once the setup is done; 403 for a demo account.
+ *
+ * The answers are stored whole, as sent, because the run reads every field and
+ * the form may add more. Only what the run cannot work without is checked:
+ * at least one role with a name and titles, a resume it can find, and location
+ * rules of the shape /api/config will be given. A resume counts when there is
+ * pasted text, or when a named file under resumes/ exists now - the page uploads
+ * files before it sends the answers.
+ */
+export async function handlePostIntake({ request, db, docs, user }) {
+  if (user.demo) return json({ error: "a demo account cannot send setup" }, 403);
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+
+  const current = await db.getIntake();
+  if (current && current.status === "done") return json({ error: "setup is already done" }, 409);
+
+  const problem = await answersProblem(body.answers, docs);
+  if (problem) return json(problem, 400);
+
+  // saveIntake refuses a done setup too, for a run that finished between the read above and this write.
+  if (!(await db.saveIntake(JSON.stringify(body.answers)))) return json({ error: "setup is already done" }, 409);
+  return json({ intake: await db.getIntake() });
+}
+
+/**
+ * The first thing wrong with a set of answers, as `{ error, field }`, or null.
+ * `field` names where the page shows the message.
+ * @param {unknown} answers
+ * @param {import("../r2.js").Docs} docs
+ */
+async function answersProblem(answers, docs) {
+  const bad = (field, error) => ({ error, field });
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return bad("answers", "answers must be an object");
+  if (new TextEncoder().encode(JSON.stringify(answers)).length > ANSWERS_MAX_BYTES) {
+    return bad("answers", "answers are larger than 256 KB");
+  }
+  for (const key of ANSWER_STRINGS) {
+    if (answers[key] !== undefined && typeof answers[key] !== "string") {
+      return bad(key === "resume_text" ? "resume" : "answers", `${key} must be text`);
+    }
+  }
+  if (answers.pronouns !== undefined && !PRONOUNS.includes(answers.pronouns)) {
+    return bad("answers", "pronouns must be she/her, he/him, they/them or empty");
+  }
+
+  const roles = answers.roles;
+  if (!Array.isArray(roles) || roles.length === 0) return bad("roles", "add at least one role");
+  if (roles.length > ROLES_MAX) return bad("roles", `at most ${ROLES_MAX} roles`);
+  for (const [i, role] of roles.entries()) {
+    if (!role || typeof role !== "object" || Array.isArray(role)) return bad("roles", `role ${i + 1} must be an object`);
+    for (const key of ROLE_STRINGS) {
+      if (role[key] !== undefined && typeof role[key] !== "string") return bad("roles", `role ${i + 1}'s ${key} must be text`);
+    }
+    if (!(role.name || "").trim()) return bad("roles", `role ${i + 1} needs a name`);
+    if (!(role.titles || "").trim()) return bad("roles", `role ${i + 1} needs the roles to search for`);
+  }
+
+  if (answers.priority_locations !== undefined) {
+    const error = priorityLocationsError(answers.priority_locations);
+    if (error) return bad("priority_locations", error);
+  }
+
+  const files = answers.resume_files === undefined ? [] : answers.resume_files;
+  if (!Array.isArray(files) || files.some((p) => typeof p !== "string" || !p.startsWith("resumes/") || !isDocumentPath(p))) {
+    return bad("resume", "resume_files must be document paths under resumes/");
+  }
+  if ((answers.resume_text || "").trim()) return null;
+  if (files.length) {
+    const stored = new Set((await docs.list()).map((d) => d.path));
+    if (files.some((p) => stored.has(p))) return null;
+  }
+  return bad("resume", "attach a resume or paste its text");
+}
+
+/**
+ * POST /api/invites - ADMIN_TOKEN. Body `{ note?, days? }` -> `201 { id, code,
+ * note, created_at, expires_at }`; 400 for a note over 200 characters or days
+ * outside 1-30. The code appears only in this response.
+ */
+export async function handleMintInvite({ request, env }) {
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+  const note = body.note === undefined ? "" : body.note;
+  if (typeof note !== "string" || note.length > NOTE_MAX) {
+    return json({ error: `note must be at most ${NOTE_MAX} characters` }, 400);
+  }
+  const days = body.days === undefined ? INVITE_DAYS_DEFAULT : body.days;
+  if (!Number.isInteger(days) || days < 1 || days > INVITE_DAYS_MAX) {
+    return json({ error: `days must be a whole number from 1 to ${INVITE_DAYS_MAX}` }, 400);
+  }
+  return json(await mintInvite(env.DB, note, days), 201);
+}
+
+/**
+ * GET /api/invites - ADMIN_TOKEN -> `{ invites: [{ id, note, created_at,
+ * expires_at, used_at, revoked_at, user, state }] }`, newest first. `state` is
+ * worked out here so no script redoes the date comparison.
+ */
+export async function handleListInvites({ env }) {
+  return json({ invites: await listInvites(env.DB) });
+}
+
+/**
+ * POST /api/invites/revoke - ADMIN_TOKEN. Body `{ id }` -> `{ id, state:
+ * "revoked" }`; 404 for no such invite; 409 for one already used.
+ */
+export async function handleRevokeInvite({ request, env }) {
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+  if (!Number.isInteger(body.id)) return json({ error: "id must be an invite id" }, 400);
+  const outcome = await revokeInvite(env.DB, body.id);
+  if (outcome === "missing") return json({ error: "no such invite" }, 404);
+  if (outcome === "used") return json({ error: "invite already used" }, 409);
+  return json({ id: body.id, state: "revoked" });
+}
+
+/**
+ * GET /api/intake/pending - ADMIN_TOKEN -> `{ intakes: [{ user: {id, name},
+ * status, status_note, sent_at, updated_at, answers }] }`, oldest attempt first.
+ */
+export async function handlePendingIntakes({ env }) {
+  return json({ intakes: await pendingIntakes(env.DB) });
+}
+
+/**
+ * POST /api/tokens - ADMIN_TOKEN. Body `{ user }` -> `201 { token, user,
+ * label: "scheduled-search", replaced }`; 404 for no such account; 403 for a
+ * demo account.
+ *
+ * This is the one admin route that yields access to a person's own data: the
+ * token reaches everything that account owns, as the nightly search's does. That
+ * is what the onboarding run needs to build someone's search, and it is why
+ * ADMIN_TOKEN is no longer only a way to create accounts - see server/README.md's
+ * security notes.
+ */
+export async function handleMintSearchToken({ request, env }) {
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+  const outcome = await mintSearchToken(env.DB, body.user);
+  if (outcome.missing) return json({ error: "no such user" }, 404);
+  if (outcome.demo) return json({ error: "a demo account has no scheduled search" }, 403);
+  return json({ token: outcome.token, user: outcome.user, label: "scheduled-search", replaced: outcome.replaced }, 201);
+}
+
+/**
+ * POST /api/intake/complete - ADMIN_TOKEN. Body `{ user, status: "done"|"failed",
+ * note? }` -> `{ user, status, status_note, updated_at }`; 404 for an account
+ * that never sent a setup; 409 once done. `note` is shown to the person as
+ * written, as plain text.
+ */
+export async function handleCompleteIntake({ request, env }) {
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+  if (typeof body.user !== "string" || !body.user) return json({ error: "user must be an account id" }, 400);
+  if (body.status !== "done" && body.status !== "failed") return json({ error: 'status must be "done" or "failed"' }, 400);
+  const note = body.note === undefined ? "" : body.note;
+  if (typeof note !== "string" || note.length > STATUS_NOTE_MAX) {
+    return json({ error: `note must be at most ${STATUS_NOTE_MAX} characters` }, 400);
+  }
+  const outcome = await completeIntake(env.DB, body.user, body.status, note);
+  if (outcome.missing) return json({ error: "no such intake" }, 404);
+  if (outcome.done) return json({ error: "intake already done" }, 409);
+  return json(outcome);
+}
