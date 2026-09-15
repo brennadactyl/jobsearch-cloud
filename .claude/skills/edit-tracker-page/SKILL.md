@@ -33,7 +33,9 @@ TanStack Query plus `useState`, or SSR.
 
 The URL holds what you are looking at - the tab (`/applications`, `/all-leads`,
 `/t/<track>`), and the `drill`, `filter` and `q` query params - so a view can be
-linked to and the back button works. Per-browser preferences go in `prefs.ts`,
+linked to and the back button works. On a leads tab no `filter` means Open (New
+and Reviewing) and `filter=All` means every status; `resolveLeadFilter` in
+`domain/drills.ts` decides that for the tabs and the Overview's counts alike. Per-browser preferences go in `prefs.ts`,
 never the URL, and never the account.
 
 ## Rules the tests enforce

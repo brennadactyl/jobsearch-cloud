@@ -132,14 +132,22 @@ tests cover:
   while its region scrolls.
 - **`src/deploy-config.test.ts`** — `wrangler.toml` falls back to `index.html`,
   so tab URLs don't 404 on reload.
-- **`src/domain/drills.test.ts`** — the drill invariant: for every tile and
-  funnel row, the number shown is the length of the rows it opens.
+- **`src/domain/drills.test.ts`** — the drill invariant: for every tile, the
+  number shown is the length of the rows it opens.
+- **`src/domain/charts.test.ts`** — the same invariant for every Overview chart,
+  plus local weeks across DST, how far an application got, and that each
+  chart's parts add up to its whole.
+- **`src/overview.test.tsx`** — each chart's table view shows the chart's
+  figures, and a figure that opens nothing isn't a link.
 - **`src/domain/domain.test.ts`** — URL safety, location tiers, sorting, fill and run
   states, dates and tabs.
 - **`src/domain/export.test.ts`** — CSV quoting, the byte-order mark, the
   formula guard, filenames, and that every header is one of the page's labels.
 - **`src/export.test.tsx`** — the Export button writes exactly the rows its list
   renders, in order, and counts them.
+- **`src/open-filter.test.tsx`** — leads tabs open on Open: the chips, the Open
+  leads tile's count, where selection goes when a row leaves the chip, the
+  empty state, and what an export holds.
 - **`src/App.test.tsx`** — the gate, shell and routing, queried by role and
   accessible name.
 - **`src/writes.test.tsx`** — the optimistic layer.

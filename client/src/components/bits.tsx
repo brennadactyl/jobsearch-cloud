@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
 import type { Settings, Track } from "../api/schema";
-import { exportFilename, localDate, toCsv, type Column } from "../domain/export";
+import { exportFilename, toCsv, type Column } from "../domain/export";
 import { downloadFile } from "../ui/download";
 import { APP_SORTS, LEAD_SORTS, pillFor } from "../domain/constants";
 import { drillLabel, type DrillContext } from "../domain/drills";
-import { relWhen, safeUrl } from "../domain/format";
+import { isoDay, relWhen, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { runState, runSummary } from "../domain/runs";
 import { setPrefs, usePrefs } from "../ui/prefs";
@@ -185,7 +185,7 @@ export function ExportButton<T>({
             ? "Download this row as a CSV file"
             : `Download these ${n} rows as a CSV file`
       }
-      onClick={() => downloadFile(exportFilename(label, localDate()), toCsv(columns, rows), "text/csv;charset=utf-8")}
+      onClick={() => downloadFile(exportFilename(label, isoDay(new Date())), toCsv(columns, rows), "text/csv;charset=utf-8")}
     >
       Export {n}
     </button>

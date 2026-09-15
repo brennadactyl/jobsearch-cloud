@@ -8,7 +8,7 @@ import { ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
 import { DRILLS, drillCount, drillKeeps, drillLabel, drillRows, leadRows, appRows, type DrillTarget } from "./drills";
 import { NOW, applications, leads, settings, tracks } from "./fixture";
 
-const src = { leads, applications, settings, tracks };
+const src = { leads, applications, settings, tracks, screened: [] };
 
 beforeEach(() => {
   // Every "days ago" rule below is measured from here. Without freezing it the
@@ -18,11 +18,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-/** The tiles and the reached-* drills. The charts' targets are checked in charts.test.ts. */
+/** The tiles, the reached-* drills and the leads filters a tab resolves. The charts' targets are checked in charts.test.ts. */
 const targets: DrillTarget[] = [
   { tab: ALL_LEADS, filter: "New" },
   { tab: ALL_LEADS, drill: "top-geo-open" },
   { tab: ALL_LEADS },
+  { tab: ALL_LEADS, filter: "All" },
+  { tab: "alpha" },
+  { tab: "alpha", filter: "Not a fit" },
   { tab: "applications", drill: "applied" },
   { tab: "applications", drill: "in-conversation" },
   { tab: "applications", drill: "gone-quiet" },
@@ -35,9 +38,16 @@ describe("drill parity", () => {
     // asserts the two agree. Computing it the same way would prove nothing.
     const isApps = t.tab === "applications";
     const base = isApps ? appRows(applications) : leadRows(leads, t.tab);
+    // On a leads tab, no filter means New and Reviewing, and "All" means every status.
+    const statusShown = (status: string) =>
+      isApps
+        ? !t.filter || status === t.filter
+        : !t.filter
+          ? status === "New" || status === "Reviewing"
+          : t.filter === "All" || status === t.filter;
     const shown = base.filter(
       (r) =>
-        (!t.filter || r.status === t.filter) &&
+        statusShown(r.status) &&
         drillKeeps(t.drill ?? null, isApps ? "apps" : "leads", r, src),
     );
     expect(drillCount(t, src)).toBe(shown.length);

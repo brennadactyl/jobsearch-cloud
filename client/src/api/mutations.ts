@@ -8,6 +8,7 @@
  * The local guess may be incomplete; onSuccess corrects it.
  */
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { selectRow } from "../ui/prefs";
 import { saved } from "../ui/saved";
 import * as api from "./client";
 import type { Application, Lead, TrackerData } from "./schema";
@@ -49,7 +50,9 @@ function useWrite<TVars, TResult>(opts: {
   /** What the indicator says while this is in flight, when "Saving…" is not the verb. */
   pending?: string;
   /** A success worth saying more precisely than "Saved", read once the result is in the cache. */
-  done?: (result: TResult, d: TrackerData | undefined) => string;
+  done?: (result: TResult, d: TrackerData | undefined, v: TVars) => string | undefined;
+  /** Anything beyond the rollback a failure has to undo. */
+  failed?: (v: TVars) => void;
 }) {
   const qc = useQueryClient();
   return useMutation({
@@ -63,8 +66,9 @@ function useWrite<TVars, TResult>(opts: {
       if (opts.optimistic) patch(qc, (d) => opts.optimistic!(d, vars));
       return { snapshot };
     },
-    onError(err: Error, _vars, ctx) {
+    onError(err: Error, vars, ctx) {
       if (ctx?.snapshot) qc.setQueryData(DATA_KEY, ctx.snapshot);
+      opts.failed?.(vars);
       if (signedOut(err)) return;
       const specific = opts.message?.(err);
       if (specific) saved.message(specific);
@@ -72,7 +76,7 @@ function useWrite<TVars, TResult>(opts: {
     },
     onSuccess(result: TResult, vars) {
       if (opts.onResult) patch(qc, (d) => opts.onResult!(d, result, vars));
-      const text = opts.done?.(result, qc.getQueryData<TrackerData>(DATA_KEY));
+      const text = opts.done?.(result, qc.getQueryData<TrackerData>(DATA_KEY), vars);
       if (text) saved.note(text);
       else saved.ok();
     },
@@ -96,11 +100,23 @@ export function useUpdateField() {
 }
 
 /**
+ * A status change that takes its row out of the list being viewed. Carried in
+ * the write's variables rather than a mutate() callback, because the control
+ * that made the change can be gone from the page before the answer comes back.
+ */
+export interface LeavingView {
+  /** Said instead of "Saved": where the row went. */
+  note?: string;
+  /** The selection to put back if the write fails and the row returns. */
+  restore?: { scope: string; id: string };
+}
+
+/**
  * A lead's status, which the server owns: moving one to "Applied" creates its
  * application atomically and takes it out of the leads tab entirely.
  */
 export function useSetLeadStatus() {
-  return useWrite<{ id: number; status: string }, Awaited<ReturnType<typeof api.setLeadStatus>>>({
+  return useWrite<{ id: number; status: string; leaving?: LeavingView }, Awaited<ReturnType<typeof api.setLeadStatus>>>({
     mutationFn: ({ id, status }) => api.setLeadStatus(id, status),
     // The application the server may create is not guessed - it has no id yet,
     // and inventing one would put a row on screen that the next read deletes.
@@ -117,6 +133,10 @@ export function useSetLeadStatus() {
           ? [res.application, ...d.applications]
           : d.applications,
     }),
+    done: (_res, _d, { leaving }) => leaving?.note,
+    failed: ({ leaving }) => {
+      if (leaving?.restore) selectRow(leaving.restore.scope, leaving.restore.id);
+    },
   });
 }
 

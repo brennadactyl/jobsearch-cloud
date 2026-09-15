@@ -72,7 +72,7 @@ export default function Overview({
   const tiles: TileSpec[] = [
     { k: "Untriaged", f: "leads marked New", hi: true, tab: ALL_LEADS, filter: "New" },
     { k: topLabel, f: "still open", color: "var(--pri-0)", tab: ALL_LEADS, drill: "top-geo-open" },
-    { k: "Tracked leads", f: `across ${trackCount} tracked search${trackCount === 1 ? "" : "es"}`, tab: ALL_LEADS },
+    { k: "Open leads", f: `across ${trackCount} tracked search${trackCount === 1 ? "" : "es"}`, tab: ALL_LEADS },
     {
       k: "Applied",
       f: toApply ? `plus ${toApply} still to apply` : "in your Applications tab",

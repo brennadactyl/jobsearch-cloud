@@ -86,9 +86,3 @@ export function exportFilename(label: string, date: string): string {
   const name = label.replace(/[\\/:*?"<>|]/g, "-").replace(/\p{Cc}/gu, "-").trim();
   return `${name || "export"}-${date}.csv`;
 }
-
-/** The calendar date where the person is. format.ts's today() is the UTC date. */
-export function localDate(now: Date = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}

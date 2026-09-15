@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import type { Application, Lead } from "../api/schema";
-import { useSetApplicationStatus, useSetLeadStatus, useUpdateField } from "../api/mutations";
+import { useSetApplicationStatus, useSetLeadStatus, useUpdateField, type LeavingView } from "../api/mutations";
 import { APP_STAGE_DATE_MAP, APP_STATUS, LEAD_STATUS } from "../domain/constants";
 import { today } from "../domain/format";
 
@@ -103,13 +103,23 @@ export function EditableNotes({
   );
 }
 
-export function LeadStatusSelect({ lead }: { lead: Lead }) {
+export function LeadStatusSelect({
+  lead,
+  onLeave,
+}: {
+  lead: Lead;
+  /** Asked before the write: does this status take the row out of the list on screen, and what then. */
+  onLeave?: (lead: Lead, status: string) => LeavingView | undefined;
+}) {
   const setStatus = useSetLeadStatus();
   return (
     <select
       value={lead.status}
       aria-label="Status"
-      onChange={(e) => setStatus.mutate({ id: lead.id, status: e.target.value })}
+      onChange={(e) => {
+        const status = e.target.value;
+        setStatus.mutate({ id: lead.id, status, leaving: onLeave?.(lead, status) });
+      }}
     >
       {LEAD_STATUS.map((s) => (
         <option key={s}>{s}</option>

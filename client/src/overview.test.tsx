@@ -99,7 +99,7 @@ describe("which searches pay off", () => {
     // Alpha: Acme New, Bolt Reviewing, Cog Applied, Dyn Not a fit; nothing removed.
     expect(found).toHaveAttribute("aria-label", "4 found: 2 open · 1 not a fit · 1 moved to Applications · 0 removed");
     const open = alpha.querySelectorAll("td")[2].querySelector("a")!;
-    expect(open).toHaveAttribute("href", "/t/alpha?drill=open");
+    expect(open).toHaveAttribute("href", "/t/alpha");
   });
 
   it("shows a zero as plain text, not a link", async () => {

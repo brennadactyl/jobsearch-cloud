@@ -102,7 +102,11 @@ describe("weeks", () => {
 
   it("names a week by its Monday", () => {
     expect(shortDate("2026-09-08")).toBe("Sep 8");
-    expect(drillLabel("found-week:2026-09-08", data)).toBe("Found week of Sep 8");
+    // The chip says why the list is shorter than the column: of the fixture's
+    // eight leads Cog and Hal are applied to, and a delisted posting found that
+    // week makes nine.
+    const monday = weekOf(daysAgo(1));
+    expect(drillLabel(`found-week:${monday}`, data)).toBe(`Found week of ${shortDate(monday)} · 6 of 9 still on your board`);
   });
 });
 
@@ -219,8 +223,15 @@ describe("drill parity for every chart", () => {
     // Reproduces what the tab does on arrival, independently of drillRows.
     const isApps = t.tab === "applications";
     const base = isApps ? appRows(data.applications) : leadRows(data.leads, t.tab);
+    // On a leads tab, no filter means New and Reviewing, and "All" means every status.
+    const statusShown = (status: string) =>
+      isApps
+        ? !t.filter || status === t.filter
+        : !t.filter
+          ? status === "New" || status === "Reviewing"
+          : t.filter === "All" || status === t.filter;
     const opened = base.filter(
-      (r) => (!t.filter || r.status === t.filter) && drillKeeps(t.drill ?? null, isApps ? "apps" : "leads", r, data),
+      (r) => statusShown(r.status) && drillKeeps(t.drill ?? null, isApps ? "apps" : "leads", r, data),
     );
     expect(drillCount(t, data)).toBe(opened.length);
     if (shown !== null) expect(shown).toBe(opened.length);

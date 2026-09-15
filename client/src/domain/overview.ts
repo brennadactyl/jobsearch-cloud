@@ -6,8 +6,8 @@
  */
 import type { Application, Lead, Screened, TrackerData } from "../api/schema";
 import { ALL_LEADS, DELISTED_REASON, LEAD_STATUS } from "./constants";
-import { drillCount, drillRows, isOpen, type DrillTarget, type RowSource } from "./drills";
-import { lastWeeks, localToday, weekOf } from "./format";
+import { ALL_FILTER, drillCount, drillRows, foundInWeek, isOpen, type DrillTarget, type RowSource } from "./drills";
+import { lastWeeks, localToday } from "./format";
 import {
   FLOW_SEGMENTS,
   FLOW_STAGES,
@@ -49,11 +49,9 @@ export function momentum(data: TrackerData, now: Date = localToday()): Momentum 
   const last = weeks[weeks.length - 1];
   const removedCounted = data.screened.length === 0 || data.screened.some((s) => s.found != null);
   const found = weeks.map((monday) => {
-    const target = { tab: ALL_LEADS, drill: `found-week:${monday}` };
-    const n =
-      data.leads.filter((l) => weekOf(l.found) === monday).length +
-      data.screened.filter((s) => weekOf(s.found) === monday).length;
-    return { monday, current: monday === last, n, target, opens: drillCount(target, data) };
+    // "All": a posting found that week counts whatever has been decided about it since.
+    const target = { tab: ALL_LEADS, filter: ALL_FILTER, drill: `found-week:${monday}` };
+    return { monday, current: monday === last, n: foundInWeek(data, monday), target, opens: drillCount(target, data) };
   });
   const applied = weeks.map((monday) => {
     const target = { tab: "applications", drill: `applied-week:${monday}` };
@@ -119,7 +117,8 @@ export function payoff(data: TrackerData): { rows: PayoffRow[]; total: PayoffRow
       key,
       label: tracks[key].label,
       found: { n: leads.length + removed, breakdown: breakdown(leads, removed) },
-      open: count({ tab: key, drill: "open" }, data),
+      // A leads tab opens on Open when its URL names no filter.
+      open: count({ tab: key }, data),
       notAFit: count({ tab: key, filter: "Not a fit" }, data),
       applied: count({ tab: "applications", drill: `search-applied:${key}` }, data),
       responded: count({ tab: "applications", drill: `search-responded:${key}` }, data),
@@ -141,7 +140,7 @@ export function payoff(data: TrackerData): { rows: PayoffRow[]; total: PayoffRow
     key: "total",
     label: "Total",
     found: { n: data.leads.length + removed, breakdown: breakdown(data.leads, removed) },
-    open: count({ tab: ALL_LEADS, drill: "open" }, data),
+    open: count({ tab: ALL_LEADS }, data),
     notAFit: count({ tab: ALL_LEADS, filter: "Not a fit" }, data),
     applied: count({ tab: "applications", drill: "applied" }, data),
     responded: count({ tab: "applications", drill: "responded" }, data),
@@ -180,7 +179,11 @@ export function tierBars(data: TrackerData): TierBar[] {
     segments: [
       { key: "applied", label: "Applied", target: { tab: "applications", drill: `tier:${t.key}:applied` } },
       { key: "open", label: "Open", target: { tab: ALL_LEADS, drill: `tier:${t.key}:open` } },
-      { key: "not-a-fit", label: "Not a fit", target: { tab: ALL_LEADS, drill: `tier:${t.key}:not-a-fit` } },
+      {
+        key: "not-a-fit",
+        label: "Not a fit",
+        target: { tab: ALL_LEADS, filter: ALL_FILTER, drill: `tier:${t.key}:not-a-fit` },
+      },
     ].map((s) => ({ ...s, n: drillCount(s.target, data) })),
   }));
 }

@@ -9,7 +9,7 @@
  *
  * The scope union keeps a leads drill from being handed an application.
  */
-import type { Application, Lead, Settings, Track } from "../api/schema";
+import type { Application, Lead, Screened, Settings, Track } from "../api/schema";
 import { ACTIVE, ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
 import { daysSince, localDay, shortDate, weekOf } from "./format";
 import { geo } from "./geo";
@@ -33,6 +33,18 @@ export interface DrillContext {
   settings: Settings;
   leads: readonly Lead[];
   tracks: readonly Track[];
+  screened: readonly Screened[];
+}
+
+/**
+ * Postings found in the week starting `monday`: leads in any status, plus
+ * removed postings whose screened row kept their found date.
+ */
+export function foundInWeek(c: DrillContext, monday: string): number {
+  return (
+    c.leads.filter((l) => weekOf(l.found) === monday).length +
+    c.screened.filter((s) => weekOf(s.found) === monday).length
+  );
 }
 
 export type Drill =
@@ -53,12 +65,6 @@ const base: Record<string, Drill> = {
       const g = geo(l.location, c.settings.priority_locations);
       return !!g && g.i === 0 && l.status !== "Not a fit";
     },
-  },
-  /** Not yet decided on. */
-  open: {
-    scope: "leads",
-    label: () => "New or Reviewing",
-    test: (l) => isOpen(l),
   },
   "in-conversation": {
     scope: "apps",
@@ -135,9 +141,20 @@ const TIER_SEGMENTS = ["applied", "open", "not-a-fit"] as const;
  * drill name.
  */
 const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
+  /**
+   * The label gives both counts: the week's column counts postings no leads tab
+   * shows (applied to, or removed), so the list it opens can be shorter.
+   */
   "found-week": (monday) =>
     localDay(monday)
-      ? { scope: "leads", label: () => `Found week of ${shortDate(monday)}`, test: (l) => weekOf(l.found) === monday }
+      ? {
+          scope: "leads",
+          label: (c) => {
+            const onBoard = leadRows(c.leads, ALL_LEADS).filter((l) => weekOf(l.found) === monday).length;
+            return `Found week of ${shortDate(monday)} · ${onBoard} of ${foundInWeek(c, monday)} still on your board`;
+          },
+          test: (l) => weekOf(l.found) === monday,
+        }
       : undefined,
   "applied-week": (monday) =>
     localDay(monday)
@@ -242,10 +259,35 @@ export function appRows(applications: readonly Application[]): Application[] {
   return applications.slice();
 }
 
+/** The chip a leads view shows when its URL names none: postings still waiting on a decision. */
+export const OPEN_FILTER = "Open";
+/** The chip for every status a leads tab holds, Not a fit included. */
+export const ALL_FILTER = "All";
+
+/** Still waiting on a decision. */
+export function isOpen(lead: Lead): boolean {
+  return lead.status === "New" || lead.status === "Reviewing";
+}
+
+/**
+ * A leads view with no filter shows Open. The Overview's counts and the tabs
+ * they open both resolve through here, so a figure and its list can't disagree.
+ */
+export function resolveLeadFilter(filter: string | null | undefined): string {
+  return filter || OPEN_FILTER;
+}
+
+/** Whether a lead shows under a resolved leads filter: Open, All, or one status. */
+export function leadFilterKeeps(filter: string, lead: Lead): boolean {
+  if (filter === OPEN_FILTER) return isOpen(lead);
+  if (filter === ALL_FILTER) return true;
+  return lead.status === filter;
+}
+
 /** What a tile or chart mark links to: a tab, plus at most one narrowing of it. */
 export interface DrillTarget {
   tab: string;
-  /** A plain status chip. */
+  /** A status chip. On a leads tab, none means Open; every status is ALL_FILTER. */
   filter?: string;
   /** An entry in DRILLS, which owns the rule. */
   drill?: string;
@@ -258,8 +300,14 @@ export interface RowSource extends DrillContext {
 /** The rows a target opens. Nothing computes an Overview figure any other way. */
 export function drillRows(t: DrillTarget, src: RowSource): (Lead | Application)[] {
   const isApps = t.tab === "applications";
-  let rows: (Lead | Application)[] = isApps ? appRows(src.applications) : leadRows(src.leads, t.tab);
-  if (t.filter) rows = rows.filter((r) => r.status === t.filter);
+  let rows: (Lead | Application)[];
+  if (isApps) {
+    rows = appRows(src.applications);
+    if (t.filter) rows = rows.filter((r) => r.status === t.filter);
+  } else {
+    const filter = resolveLeadFilter(t.filter);
+    rows = leadRows(src.leads, t.tab).filter((l) => leadFilterKeeps(filter, l));
+  }
   if (t.drill) {
     const scope: DrillScope = isApps ? "apps" : "leads";
     rows = rows.filter((r) => drillKeeps(t.drill!, scope, r, src));
@@ -274,10 +322,6 @@ export function drillCount(t: DrillTarget, src: RowSource): number {
 /** Sent, as opposed to parked in "To Apply". */
 function sent(a: Application): boolean {
   return a.status !== "To Apply";
-}
-
-export function isOpen(l: Lead): boolean {
-  return l.status === "New" || l.status === "Reviewing";
 }
 
 /** A location's tier as a drill parameter: its rank, or `other`. */

@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { APP_ROLE_FIELDS, LABELS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "./constants";
-import { applicationColumns, exportFilename, leadColumns, localDate, toCsv, type Column } from "./export";
+import { applicationColumns, exportFilename, leadColumns, toCsv, type Column } from "./export";
+import { isoDay } from "./format";
 import { data } from "./fixture";
 import { buildTracks } from "./tabs";
 
@@ -52,10 +53,10 @@ describe("exportFilename", () => {
   });
 });
 
-describe("localDate", () => {
+describe("isoDay, which names the file", () => {
   it("is the local calendar date, not the UTC one", () => {
     // 23:30 local on the 15th, which is already the 16th in UTC for anyone west of it.
-    expect(localDate(new Date(2026, 8, 15, 23, 30))).toBe("2026-09-15");
+    expect(isoDay(new Date(2026, 8, 15, 23, 30))).toBe("2026-09-15");
   });
 });
 

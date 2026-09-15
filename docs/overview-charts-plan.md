@@ -16,8 +16,13 @@ These apply to all three sections and are the acceptance bar for each.
 - **Every number opens the rows behind it.** A column, a bar segment or a table
   cell is a link to the tab it counts, filtered by a drill from `drills.ts`.
   The figure is the length of that drill's rows, the same invariant the tiles
-  hold. A zero is plain text, not a link. So is a figure that includes rows no
-  tab shows (§2's Found column); its tooltip gives the breakdown instead.
+  hold. A zero is plain text, not a link.
+- **A figure that includes rows no tab shows** (Applied leads, removed
+  postings) says so, in one of two ways:
+  - §2's Found is plain text, and its tooltip gives the breakdown.
+  - §1's found-week column links to the part still on the board. Its tooltip
+    and the drill chip on the tab it opens both state the two counts. With
+    nothing left on the board it's plain text.
 - **Hover or focus shows the exact figure** in a tooltip: label, count, and
   share where one applies. Hit targets are at least the mark's full column
   height or row width.
@@ -44,7 +49,7 @@ Weeks start on Monday, local time.
 
 | Chart | Counts, per week | Opens |
 |---|---|---|
-| Positions found | leads with `found` in that week, plus removed postings with their original found date (§4) | All leads, drill `found-week:<monday>` |
+| Positions found | leads with `found` in that week, plus removed postings with their original found date (§4) | All leads, `filter=All`, drill `found-week:<monday>` |
 | Applications sent | applications with `dateApplied` in that week, `To Apply` excluded | Applications, drill `applied-week:<monday>` |
 
 - The current week is drawn at reduced opacity and labelled "so far".
@@ -55,7 +60,7 @@ Weeks start on Monday, local time.
   still on your board`.
 - The drills take a parameter, which `drills.ts` doesn't support today. Extend
   it so `found-week:2026-09-08` resolves to one predicate, and the label reads
-  `Found week of Sep 8`.
+  `Found week of Sep 8 · 24 of 31 still on your board`.
 - Fewer than two weeks of data: show the charts anyway, with the empty weeks
   at zero, rather than an empty state.
 
@@ -72,7 +77,7 @@ A table with one row per search, plus a row for applications added by hand
 |---|---|---|
 | Search | label, with its run stamp beneath | its tab |
 | Found | every posting the search ever filed: its leads in any status, plus its removed postings | nothing: plain text |
-| Open | leads in `New` or `Reviewing` | its tab, drill `open` |
+| Open | leads in `New` or `Reviewing` | its tab, default `Open` view ([hide-not-a-fit-plan.md](hide-not-a-fit-plan.md)) |
 | Not a fit | leads in `Not a fit` | its tab, filter `Not a fit` |
 | Applied | applications whose `leadId` is a lead in this search, `To Apply` excluded | Applications, drill `search-applied:<key>` |
 | Responded | of those, applications with any response date (same rule as the pipeline) | Applications, drill `search-responded:<key>` |
@@ -96,7 +101,8 @@ bar per `priority_locations` rule plus "Other", split into Applied, Open and
 Not a fit. Applied counts applications (hand-added included, `To Apply`
 excluded), tiered by the application's own location. Open and Not a fit count
 leads, with no screened rows. Each segment opens its rows through a
-`tier:<index>:<segment>` drill. The segments use `--accent`, `--accent-soft` and `--line`, with a
+`tier:<index>:<segment>` drill. The Not a fit segment's target carries
+`filter: "All"`, since the leads tab's default Open view hides those rows. The segments use `--accent`, `--accent-soft` and `--line`, with a
 2px gap between them and direct labels.
 
 ## 3. Pipeline flow and waiting
