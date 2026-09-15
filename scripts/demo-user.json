@@ -175,7 +175,7 @@
       "nextActionDaysAhead": 4,
       "stages": [
         { "status": "Applied", "daysAgo": 51 },
-        { "status": "Recruiter Screen", "daysAgo": 39 },
+        { "status": "Recruiter Screen", "daysAgo": 49 },
         { "status": "Tech Screen", "daysAgo": 27 },
         { "status": "Onsite / Loop", "daysAgo": 15 },
         { "status": "Offer", "daysAgo": 3 }
@@ -190,7 +190,7 @@
       "nextActionDaysAhead": 6,
       "stages": [
         { "status": "Applied", "daysAgo": 30 },
-        { "status": "Recruiter Screen", "daysAgo": 18 },
+        { "status": "Recruiter Screen", "daysAgo": 24 },
         { "status": "Tech Screen", "daysAgo": 9 },
         { "status": "Onsite / Loop", "daysAgo": 3 }
       ]
@@ -214,7 +214,7 @@
       "notes": "Rejected after the recruiter screen - they had moved the req to an onsite-only schedule that did not work.",
       "stages": [
         { "status": "Applied", "daysAgo": 33 },
-        { "status": "Recruiter Screen", "daysAgo": 21 },
+        { "status": "Recruiter Screen", "daysAgo": 13 },
         { "status": "Rejected", "daysAgo": 6 }
       ]
     },
@@ -224,7 +224,7 @@
       "comp": "$180k - $215k",
       "notes": "Applied through their own site. Nothing back beyond the automated receipt.",
       "stages": [
-        { "status": "Applied", "daysAgo": 24 }
+        { "status": "Applied", "daysAgo": 1 }
       ]
     },
     {
@@ -232,8 +232,8 @@
       "source": "Company careers page",
       "notes": "Withdrawn - the role turned out to be reporting maintenance once the scope was described in the screen.",
       "stages": [
-        { "status": "Applied", "daysAgo": 21 },
-        { "status": "Withdrawn", "daysAgo": 6 }
+        { "status": "Applied", "daysAgo": 8 },
+        { "status": "Withdrawn", "daysAgo": 3 }
       ]
     },
     {
@@ -245,7 +245,7 @@
       "notes": "Added by hand - a referral, so it never came through a search. Rejected at the loop; they went with an internal candidate.",
       "stages": [
         { "status": "Applied", "daysAgo": 63 },
-        { "status": "Recruiter Screen", "daysAgo": 54 },
+        { "status": "Recruiter Screen", "daysAgo": 60 },
         { "status": "Tech Screen", "daysAgo": 42 },
         { "status": "Onsite / Loop", "daysAgo": 27 },
         { "status": "Rejected", "daysAgo": 18 }
@@ -256,7 +256,7 @@
       "title": "Engineering Manager",
       "link": "https://careers.alderpoint.example.com/jobs/158702",
       "source": "Job board",
-      "notes": "Added by hand. Nothing back in a month - counted as gone quiet rather than rejected, since they never said so.",
+      "notes": "Added by hand. Nothing back in three months - counted as gone quiet rather than rejected, since they never said so.",
       "stages": [
         { "status": "Applied", "daysAgo": 90 }
       ]
