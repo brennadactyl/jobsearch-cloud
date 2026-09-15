@@ -4,18 +4,40 @@
  * here, the tab filters by the same `test`, and the count is the length of the
  * list the rule produces (see `drillRows`), never a second copy of the rule.
  *
+ * A drill id is a name, or a name and a parameter after the first colon
+ * (`found-week:2026-09-08`), resolved by `findDrill`.
+ *
  * The scope union keeps a leads drill from being handed an application.
  */
-import type { Application, Lead, Settings } from "../api/schema";
+import type { Application, Lead, Settings, Track } from "../api/schema";
 import { ACTIVE, ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
-import { daysSince } from "./format";
+import { daysSince, localDay, shortDate, weekOf } from "./format";
 import { geo } from "./geo";
+import {
+  FLOW_SEGMENTS,
+  FORWARD_STAGES,
+  OFFER_INDEX,
+  RESPONSE_BINS,
+  flowSegment,
+  furthestStage,
+  isWaiting,
+  responded,
+  responseBin,
+  type FlowSegment,
+} from "./stages";
 
 export type DrillScope = "leads" | "apps";
 
+/** What a drill may read besides the row: some rules ask about another table. */
+export interface DrillContext {
+  settings: Settings;
+  leads: readonly Lead[];
+  tracks: readonly Track[];
+}
+
 export type Drill =
-  | { scope: "leads"; label: (s: Settings) => string; test: (row: Lead, s: Settings) => boolean }
-  | { scope: "apps"; label: (s: Settings) => string; test: (row: Application, s: Settings) => boolean };
+  | { scope: "leads"; label: (c: DrillContext) => string; test: (row: Lead, c: DrillContext) => boolean }
+  | { scope: "apps"; label: (c: DrillContext) => string; test: (row: Application, c: DrillContext) => boolean };
 
 const base: Record<string, Drill> = {
   /**
@@ -26,11 +48,17 @@ const base: Record<string, Drill> = {
    */
   "top-geo-open": {
     scope: "leads",
-    label: (s) => `${s.priority_locations[0]?.label ?? "Top locations"} · still open`,
-    test: (l, s) => {
-      const g = geo(l.location, s.priority_locations);
+    label: (c) => `${c.settings.priority_locations[0]?.label ?? "Top locations"} · still open`,
+    test: (l, c) => {
+      const g = geo(l.location, c.settings.priority_locations);
       return !!g && g.i === 0 && l.status !== "Not a fit";
     },
+  },
+  /** Not yet decided on. */
+  open: {
+    scope: "leads",
+    label: () => "New or Reviewing",
+    test: (l) => isOpen(l),
   },
   "in-conversation": {
     scope: "apps",
@@ -52,7 +80,27 @@ const base: Record<string, Drill> = {
   applied: {
     scope: "apps",
     label: () => "Applied",
-    test: (a) => a.status !== "To Apply",
+    test: (a) => sent(a),
+  },
+  responded: {
+    scope: "apps",
+    label: () => "Applied and heard back",
+    test: (a) => sent(a) && responded(a),
+  },
+  "hand-applied": {
+    scope: "apps",
+    label: () => "Applied · added by hand",
+    test: (a) => sent(a) && !a.leadId,
+  },
+  "hand-responded": {
+    scope: "apps",
+    label: () => "Heard back · added by hand",
+    test: (a) => sent(a) && !a.leadId && responded(a),
+  },
+  waiting: {
+    scope: "apps",
+    label: () => "Waiting to hear back",
+    test: (a) => isWaiting(a),
   },
 };
 
@@ -60,31 +108,119 @@ const base: Record<string, Drill> = {
  * One per pipeline stage, built from the same list the funnel is built from, so
  * a stage added there arrives here too. These test the stage *date*, not the
  * current status: the date is stamped once and never cleared, so an application
- * rejected after a tech screen still counts as having reached one - which is
- * what the funnel row it opens from counted.
+ * rejected after a tech screen still counts as having reached one.
  */
 for (const [label, field] of STAGE_DATE_FIELDS) {
   base[`reached-${field}`] = {
     scope: "apps",
     label: () => `Reached ${label}`,
-    test: (a) => a.status !== "To Apply" && !!(a as unknown as Record<string, string>)[field],
+    test: (a) => sent(a) && !!(a as unknown as Record<string, string>)[field],
   };
 }
 
 export const DRILLS: Readonly<Record<string, Drill>> = base;
 
-export function drillLabel(id: string | null, settings: Settings): string {
-  const d = id ? DRILLS[id] : undefined;
-  return d ? d.label(settings) : "";
+const SEGMENT_LABELS: Record<FlowSegment, string> = {
+  "moved-on": "moved on",
+  waiting: "waiting",
+  rejected: "rejected here",
+  withdrew: "withdrew here",
+};
+
+const TIER_SEGMENTS = ["applied", "open", "not-a-fit"] as const;
+
+/**
+ * Drills that take a parameter. Each returns undefined for a parameter it
+ * can't read, which filters nothing and shows no chip - the same as an unknown
+ * drill name.
+ */
+const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
+  "found-week": (monday) =>
+    localDay(monday)
+      ? { scope: "leads", label: () => `Found week of ${shortDate(monday)}`, test: (l) => weekOf(l.found) === monday }
+      : undefined,
+  "applied-week": (monday) =>
+    localDay(monday)
+      ? {
+          scope: "apps",
+          label: () => `Applied week of ${shortDate(monday)}`,
+          test: (a) => sent(a) && weekOf(a.dateApplied) === monday,
+        }
+      : undefined,
+  "search-applied": (key) => ({
+    scope: "apps",
+    label: (c) => `Applied · ${trackLabel(key, c)}`,
+    test: (a, c) => sent(a) && leadSearch(a, c) === key,
+  }),
+  "search-responded": (key) => ({
+    scope: "apps",
+    label: (c) => `Heard back · ${trackLabel(key, c)}`,
+    test: (a, c) => sent(a) && leadSearch(a, c) === key && responded(a),
+  }),
+  /** `tier:<index>:<segment>`, index being a priority_locations rank or `other`. */
+  tier: (arg) => {
+    const [tier, segment] = splitOnce(arg);
+    if (!(tier === "other" || /^\d+$/.test(tier))) return undefined;
+    if (!(TIER_SEGMENTS as readonly string[]).includes(segment)) return undefined;
+    const name = (c: DrillContext) =>
+      tier === "other" ? "Other locations" : (c.settings.priority_locations[Number(tier)]?.label ?? "Unknown tier");
+    const inTier = (location: string, c: DrillContext) => tierKey(location, c.settings) === tier;
+    if (segment === "applied") {
+      return { scope: "apps", label: (c) => `${name(c)} · Applied`, test: (a, c) => sent(a) && inTier(a.location, c) };
+    }
+    return segment === "open"
+      ? { scope: "leads", label: (c) => `${name(c)} · Open`, test: (l, c) => isOpen(l) && inTier(l.location, c) }
+      : {
+          scope: "leads",
+          label: (c) => `${name(c)} · Not a fit`,
+          test: (l, c) => l.status === "Not a fit" && inTier(l.location, c),
+        };
+  },
+  /** `flow:<stage slug>:<segment>`, or `flow:<stage slug>:reached` for the whole bar. */
+  flow: (arg) => {
+    const [slug, segment] = splitOnce(arg);
+    const stage = FORWARD_STAGES.findIndex((s) => s.slug === slug);
+    if (stage < 0) return undefined;
+    const label = FORWARD_STAGES[stage].label;
+    if (segment === "reached") {
+      return {
+        scope: "apps",
+        label: () => `Reached ${label}`,
+        test: (a) => (furthestStage(a) ?? -1) >= stage,
+      };
+    }
+    if (!(FLOW_SEGMENTS as readonly string[]).includes(segment) || stage === OFFER_INDEX) return undefined;
+    const seg = segment as FlowSegment;
+    return { scope: "apps", label: () => `${label} · ${SEGMENT_LABELS[seg]}`, test: (a) => flowSegment(a, stage) === seg };
+  },
+  "response-days": (bin) => {
+    const b = RESPONSE_BINS.find((r) => r.key === bin);
+    return b
+      ? { scope: "apps", label: () => `First reply in ${b.label}`, test: (a) => sent(a) && responseBin(a) === bin }
+      : undefined;
+  },
+};
+
+/** The rule a drill id names, parameterised or not. */
+export function findDrill(id: string | null): Drill | undefined {
+  if (!id) return undefined;
+  if (Object.hasOwn(DRILLS, id)) return DRILLS[id];
+  const [name, arg] = splitOnce(id);
+  return arg && Object.hasOwn(PARAMETERISED, name) ? PARAMETERISED[name](arg) : undefined;
+}
+
+export function drillLabel(id: string | null, ctx: DrillContext): string {
+  const d = findDrill(id);
+  return d ? d.label(ctx) : "";
 }
 
 /** True when a row survives the active drill. No drill, or one belonging to the other kind of tab, filters nothing. */
-export function drillKeeps(id: string | null, scope: DrillScope, row: Lead | Application, settings: Settings): boolean {
-  const d = id ? DRILLS[id] : undefined;
+export function drillKeeps(id: string | null, scope: DrillScope, row: Lead | Application, ctx: DrillContext): boolean {
+  const d = findDrill(id);
   if (!d || d.scope !== scope) return true;
   return d.scope === "leads"
-    ? d.test(row as Lead, settings)
-    : d.test(row as Application, settings);
+    ? d.test(row as Lead, ctx)
+    : d.test(row as Application, ctx);
 }
 
 /**
@@ -106,7 +242,7 @@ export function appRows(applications: readonly Application[]): Application[] {
   return applications.slice();
 }
 
-/** What a tile or funnel row links to: a tab, plus at most one narrowing of it. */
+/** What a tile or chart mark links to: a tab, plus at most one narrowing of it. */
 export interface DrillTarget {
   tab: string;
   /** A plain status chip. */
@@ -115,10 +251,8 @@ export interface DrillTarget {
   drill?: string;
 }
 
-export interface RowSource {
-  leads: readonly Lead[];
+export interface RowSource extends DrillContext {
   applications: readonly Application[];
-  settings: Settings;
 }
 
 /** The rows a target opens. Nothing computes an Overview figure any other way. */
@@ -128,11 +262,50 @@ export function drillRows(t: DrillTarget, src: RowSource): (Lead | Application)[
   if (t.filter) rows = rows.filter((r) => r.status === t.filter);
   if (t.drill) {
     const scope: DrillScope = isApps ? "apps" : "leads";
-    rows = rows.filter((r) => drillKeeps(t.drill!, scope, r, src.settings));
+    rows = rows.filter((r) => drillKeeps(t.drill!, scope, r, src));
   }
   return rows;
 }
 
 export function drillCount(t: DrillTarget, src: RowSource): number {
   return drillRows(t, src).length;
+}
+
+/** Sent, as opposed to parked in "To Apply". */
+function sent(a: Application): boolean {
+  return a.status !== "To Apply";
+}
+
+export function isOpen(l: Lead): boolean {
+  return l.status === "New" || l.status === "Reviewing";
+}
+
+/** A location's tier as a drill parameter: its rank, or `other`. */
+export function tierKey(location: string, settings: Settings): string {
+  const g = geo(location, settings.priority_locations);
+  return g ? String(g.i) : "other";
+}
+
+function splitOnce(s: string): [string, string] {
+  const i = s.indexOf(":");
+  return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + 1)];
+}
+
+function trackLabel(key: string, c: DrillContext): string {
+  return c.tracks.find((t) => t.key === key)?.label || key;
+}
+
+// Built once per leads array, so filtering every application doesn't rescan
+// the leads for each one. The query cache replaces the array on any change.
+const searchById = new WeakMap<readonly Lead[], Map<string, string>>();
+
+/** The search an application's lead was filed under, or "" when it has none. */
+function leadSearch(a: Application, c: DrillContext): string {
+  if (!a.leadId) return "";
+  let m = searchById.get(c.leads);
+  if (!m) {
+    m = new Map(c.leads.map((l) => [String(l.id), l.search]));
+    searchById.set(c.leads, m);
+  }
+  return m.get(String(a.leadId)) ?? "";
 }

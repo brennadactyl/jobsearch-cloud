@@ -1,16 +1,46 @@
 /**
- * Every number here opens the rows behind it. A tile or funnel row declares one
+ * Every number here opens the rows behind it. A tile or chart mark declares one
  * `DrillTarget`; `drillCount` turns it into the figure and `pathForTarget` into
- * the link, so what you clicked and what you land in are the same set.
+ * the link, so what you clicked and what you land in are the same set. The
+ * charts' series are built in `domain/overview.ts`.
  */
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { usePinnedLayout } from "../ui/hooks";
 import type { TrackerData } from "../api/schema";
-import { ALL_LEADS, LEAD_STATUS, STAGE_DATE_FIELDS } from "../domain/constants";
+import { ALL_LEADS, LABELS } from "../domain/constants";
 import { drillCount, drillRows, type DrillTarget, type RowSource } from "../domain/drills";
+import { shortDate } from "../domain/format";
+import {
+  MIN_FOR_RESPONSE_RATE,
+  flow,
+  momentum,
+  payoff,
+  rate,
+  responseHistogram,
+  tierBars,
+  waitingLongest,
+  type Count,
+  type FoundBreakdown,
+  type PayoffRow,
+  type WeekPoint,
+} from "../domain/overview";
 import { runState } from "../domain/runs";
+import { FORWARD_STAGES } from "../domain/stages";
 import { buildTracks, pathForTab, pathForTarget } from "../domain/tabs";
+import { selectRow } from "../ui/prefs";
 import { RunStamp } from "./bits";
+import {
+  ChartHead,
+  ChartTable,
+  ColumnChart,
+  Mark,
+  StackedBar,
+  TipLayer,
+  TableToggle,
+  type BarSegment,
+  type ColumnPoint,
+} from "./charts";
 
 interface TileSpec extends DrillTarget {
   k: string;
@@ -28,13 +58,11 @@ export default function Overview({
   data: TrackerData;
 } & Pick<ReturnType<typeof usePinnedLayout>, "scrollRef" | "scrolled" | "onScroll">) {
   const { settings } = data;
-  const src: RowSource = { leads: data.leads, applications: data.applications, settings };
+  const src: RowSource = data;
   const tracks = buildTracks(data.tracks);
   const trackKeys = Object.keys(tracks);
 
-  const appliedRows = drillRows({ tab: "applications", drill: "applied" }, src);
-  const appliedCount = appliedRows.length;
-  const active = drillCount({ tab: "applications", drill: "in-conversation" }, src);
+  const appliedCount = drillCount({ tab: "applications", drill: "applied" }, src);
   // The complement of the count above, so the two cannot disagree about which
   // rows are which.
   const toApply = data.applications.length - appliedCount;
@@ -55,19 +83,8 @@ export default function Overview({
     { k: "Gone quiet", f: "applied 14+ days ago", tab: "applications", drill: "gone-quiet" },
   ];
 
-  // Whether every scheduled search is still firing is the one thing the lead
-  // counts genuinely cannot show - a search that stopped running and a search
-  // that found nothing produce the same unchanged numbers.
-  const bad = trackKeys.filter((k) => ["stale", "error"].includes(runState(tracks[k].last_run, settings)));
-  const never = trackKeys.filter((k) => runState(tracks[k].last_run, settings) === "never");
-  let subline: string;
-  if (!trackKeys.length) subline = "No tracks configured yet";
-  else if (bad.length) subline = `${bad.length} of ${trackKeys.length} haven’t reported a clean run recently`;
-  else if (never.length === trackKeys.length) subline = "Waiting on the first recorded run";
-  else subline = `All ${trackKeys.length} reporting on schedule`;
-
   return (
-    <>
+    <TipLayer>
       <div className="tiles">
         {tiles.map((t) => {
           const v = drillCount(t, src);
@@ -101,90 +118,135 @@ export default function Overview({
         })}
       </div>
 
-      <div
-        className={`panel-scroll${scrolled ? " scrolled" : ""}`}
-        ref={scrollRef}
-        onScroll={onScroll}
-      >
-      <PanelBody
-        data={data}
-        src={src}
-        subline={subline}
-        trackKeys={trackKeys}
-        tracks={tracks}
-        appliedCount={appliedCount}
-        appliedRows={appliedRows}
-        active={active}
-        toApply={toApply}
-        trackCount={trackCount}
-      />
+      <div className={`panel-scroll${scrolled ? " scrolled" : ""}`} ref={scrollRef} onScroll={onScroll}>
+        <MomentumSection data={data} />
+        <SearchesSection data={data} trackKeys={trackKeys} tracks={tracks} />
+        <PipelineSection data={data} appliedCount={appliedCount} toApply={toApply} />
+        <div className="note">
+          {trackCount
+            ? `Scheduled searches across your ${trackCount} tracked search${trackCount === 1 ? "" : "es"} add rows here every day.`
+            : "Once a tracked search is set up, its scheduled run adds rows here every day."}{" "}
+          Every posting is opened and confirmed live before it lands; nothing arrives from a search snippet alone.
+        </div>
+      </div>
+    </TipLayer>
+  );
+}
+
+/* ---------------------------------------------------------------- momentum */
+
+function MomentumSection({ data }: { data: TrackerData }) {
+  const m = momentum(data);
+  return (
+    <>
+      <div className="sec">
+        <h2>Momentum</h2>
+        <p>Last {m.found.length} weeks, Monday to Sunday</p>
+      </div>
+      <div className="card ch">
+        <WeeksChart
+          title="Positions found"
+          noun="found"
+          points={m.found}
+          detail={(p) =>
+            `${p.opens} still on your board${m.removedCounted ? "" : " · postings you removed aren’t counted yet"}`
+          }
+          opensHeader="Still on your board"
+        />
+        <WeeksChart title="Applications sent" noun="applied" points={m.applied} />
       </div>
     </>
   );
 }
 
-function PanelBody({
+function weekName(p: WeekPoint): string {
+  return p.current ? "This week so far" : `Week of ${shortDate(p.monday)}`;
+}
+
+function WeeksChart({
+  title,
+  noun,
+  points,
+  detail,
+  opensHeader,
+}: {
+  title: string;
+  noun: string;
+  points: readonly WeekPoint[];
+  detail?: (p: WeekPoint) => string;
+  opensHeader?: string;
+}) {
+  const [asTable, setAsTable] = useState(false);
+  const toggle = <TableToggle on={asTable} set={setAsTable} />;
+  const thisWeek = points[points.length - 1]?.n ?? 0;
+  const lastWeek = points[points.length - 2]?.n ?? 0;
+  const tip = (p: WeekPoint) => `${weekName(p)}: ${p.n} ${noun}${detail ? ` · ${detail(p)}` : ""}`;
+  const columns: ColumnPoint[] = points.map((p, i) => ({
+    key: p.monday,
+    axis: p.current ? "so far" : shortDate(p.monday),
+    // Every third label survives a narrow axis, counted back from this week.
+    minor: (points.length - 1 - i) % 3 !== 0,
+    n: p.n,
+    // A week whose postings have all left the board has nothing to open.
+    target: p.opens ? p.target : undefined,
+    tip: tip(p),
+    partial: p.current,
+  }));
+  return (
+    <div className="ch-block">
+      <ChartHead
+        title={title}
+        sub={`${noun[0].toUpperCase()}${noun.slice(1)}: ${thisWeek} this week · ${lastWeek} last week`}
+        toggle={toggle}
+      />
+      {asTable ? (
+        <ChartTable
+          label={title}
+          rows={points}
+          rowKey={(p) => p.monday}
+          columns={[
+            { header: "Week", cell: weekName },
+            {
+              header: title,
+              num: true,
+              cell: (p) => (
+                <Mark n={p.n} target={p.opens ? p.target : undefined} tip={tip(p)}>
+                  {p.n}
+                </Mark>
+              ),
+            },
+            ...(opensHeader ? [{ header: opensHeader, num: true, cell: (p: WeekPoint) => p.opens }] : []),
+          ]}
+        />
+      ) : (
+        <ColumnChart label={title} points={columns} />
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- searches */
+
+function SearchesSection({
   data,
-  src,
-  subline,
   trackKeys,
   tracks,
-  appliedCount,
-  appliedRows,
-  active,
-  toApply,
-  trackCount,
 }: {
   data: TrackerData;
-  src: RowSource;
-  subline: string;
   trackKeys: string[];
   tracks: ReturnType<typeof buildTracks>;
-  appliedCount: number;
-  appliedRows: ReturnType<typeof drillRows>;
-  active: number;
-  toApply: number;
-  trackCount: number;
 }) {
   const { settings } = data;
-  const cols: Record<string, string> = {
-    New: "var(--accent)",
-    Reviewing: "var(--warn)",
-    Applied: "var(--good)",
-    "Not a fit": "var(--line)",
-  };
-
-  const funnel: { label: string; drill: string; n: number }[] = [
-    { label: "Applied", drill: "applied", n: appliedCount },
-    ...STAGE_DATE_FIELDS.slice(0, 4).map(([label, field]) => ({
-      label,
-      drill: `reached-${field}`,
-      n: drillCount({ tab: "applications", drill: `reached-${field}` }, src),
-    })),
-  ];
-
-  const RESPONSE_FIELDS = ["dateRecruiterScreen", "dateTechScreen", "dateOnsite", "dateOffer", "dateRejected"];
-  const rows = appliedRows as unknown as Record<string, string>[];
-  const responded = rows.filter((a) => RESPONSE_FIELDS.some((f) => a[f])).length;
-  const respTimes = rows
-    .map((a) => {
-      if (!a.dateApplied) return null;
-      const d0 = Date.parse(a.dateApplied);
-      if (Number.isNaN(d0)) return null;
-      let earliest: number | null = null;
-      for (const f of RESPONSE_FIELDS) {
-        if (!a[f]) continue;
-        const d = Date.parse(a[f]);
-        if (Number.isNaN(d)) continue;
-        if (earliest === null || d < earliest) earliest = d;
-      }
-      if (earliest === null) return null;
-      const days = Math.round((earliest - d0) / 86_400_000);
-      return days >= 0 ? days : null;
-    })
-    .filter((n): n is number => n !== null);
-  const avgResp = respTimes.length ? Math.round(respTimes.reduce((a, b) => a + b, 0) / respTimes.length) : null;
-  const countStatus = (s: string) => appliedRows.filter((a) => a.status === s).length;
+  // Whether every scheduled search is still firing is the one thing the lead
+  // counts genuinely cannot show - a search that stopped running and a search
+  // that found nothing produce the same unchanged numbers.
+  const bad = trackKeys.filter((k) => ["stale", "error"].includes(runState(tracks[k].last_run, settings)));
+  const never = trackKeys.filter((k) => runState(tracks[k].last_run, settings) === "never");
+  let subline: string;
+  if (!trackKeys.length) subline = "No tracks configured yet";
+  else if (bad.length) subline = `${bad.length} of ${trackKeys.length} haven’t reported a clean run recently`;
+  else if (never.length === trackKeys.length) subline = "Waiting on the first recorded run";
+  else subline = `All ${trackKeys.length} reporting on schedule`;
 
   return (
     <>
@@ -192,7 +254,6 @@ function PanelBody({
         <h2>Daily searches</h2>
         <p>{subline}</p>
       </div>
-
       {!trackKeys.length ? (
         <div className="card empty">
           <strong>No searches set up yet</strong>
@@ -200,129 +261,383 @@ function PanelBody({
           including the days it finds nothing.
         </div>
       ) : (
-        <div className="card" style={{ padding: 19 }}>
-          <div className="bars">
-            {trackKeys.map((k) => {
-              const trackLeads = data.leads.filter((l) => l.search === k);
-              const byStatus = LEAD_STATUS.map((s) => ({ s, n: trackLeads.filter((r) => r.status === s).length }));
-              const tot = trackLeads.length || 1;
-              return (
-                <div className="bar" key={k}>
-                  <h3>
-                    {/* The name opens that track's tab. Only the name: the row
-                        also carries the description and the run stamp, and a
-                        click target that wide would swallow selecting either. */}
-                    <Link className="jumplink" to={pathForTab(k)} title="Open this tab">
-                      {tracks[k].label}
-                    </Link>{" "}
-                    <span>
-                      {tracks[k].full_description} &middot; {trackLeads.length}
-                    </span>
-                  </h3>
-                  <div className="meter">
-                    {byStatus.map((b) =>
-                      b.n ? <i key={b.s} style={{ width: `${(b.n / tot) * 100}%`, background: cols[b.s] }} /> : null,
-                    )}
-                  </div>
-                  <div className="legend">
-                    {byStatus
-                      .filter((b) => b.n)
-                      .map((b) => (
-                        <span key={b.s}>
-                          <b style={{ background: cols[b.s] }} />
-                          {b.s} {b.n}
-                        </span>
-                      ))}
-                    {!trackLeads.length && <span style={{ color: "var(--ink3)" }}>No postings found yet</span>}
-                    <span className="legend-run">
-                      <RunStamp track={tracks[k]} settings={settings} />
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <div className="card ch">
+          <PayoffTable data={data} tracks={tracks} />
+          <TierChart data={data} />
         </div>
       )}
+    </>
+  );
+}
 
+function foundTip(n: number, b: FoundBreakdown): string {
+  const parts = [
+    `${b.open} open`,
+    `${b.notAFit} not a fit`,
+    `${b.applied} moved to Applications`,
+    `${b.removed} removed`,
+    ...(b.other ? [`${b.other} in another status`] : []),
+  ];
+  return `${n} found: ${parts.join(" · ")}`;
+}
+
+function CountCell({ c, tip }: { c: Count | null; tip: string }) {
+  if (!c) return null;
+  return (
+    <Mark n={c.n} target={c.target} tip={`${tip}: ${c.n}`} className="cnt">
+      {c.n}
+    </Mark>
+  );
+}
+
+function RateCell({ part, whole, min = 1, tip }: { part: number; whole: number; min?: number; tip: string }) {
+  const pct = rate(part, whole, min);
+  if (pct === null) return null;
+  return (
+    <Mark n={0} tip={`${tip}: ${part} of ${whole}`} className="rate" focusable>
+      <span className="mono">{pct}%</span>
+      <span className="rate-meter" aria-hidden="true">
+        <i style={{ width: `${Math.min(100, pct)}%` }} />
+      </span>
+    </Mark>
+  );
+}
+
+function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<typeof buildTracks> }) {
+  const { rows, total } = payoff(data);
+  const line = (r: PayoffRow, isTotal = false) => {
+    const name = isTotal ? "All searches" : r.label;
+    return (
+      <tr key={r.key || "hand"} className={isTotal ? "total" : undefined}>
+        <td>
+          {r.key && !isTotal ? (
+            <>
+              <Link className="jumplink" to={pathForTab(r.key)} title="Open this tab">
+                {r.label}
+              </Link>
+              <div className="payoff-run">
+                <RunStamp track={tracks[r.key]} settings={data.settings} />
+              </div>
+            </>
+          ) : (
+            r.label
+          )}
+        </td>
+        <td className="num">
+          {r.found && (
+            <Mark n={0} tip={foundTip(r.found.n, r.found.breakdown)} className="cnt plain" focusable>
+              {r.found.n}
+            </Mark>
+          )}
+        </td>
+        <td className="num">
+          <CountCell c={r.open} tip={`${name} · ${LABELS.open}`} />
+        </td>
+        <td className="num">
+          <CountCell c={r.notAFit} tip={`${name} · ${LABELS.notAFit}`} />
+        </td>
+        <td className="num">
+          <CountCell c={r.applied} tip={`${name} · ${LABELS.applied}`} />
+        </td>
+        <td className="num">
+          <CountCell c={r.responded} tip={`${name} · ${LABELS.responded}`} />
+        </td>
+        <td>{r.found && <RateCell part={r.applied.n} whole={r.found.n} tip={`${name} · ${LABELS.applyRate}`} />}</td>
+        <td>
+          <RateCell
+            part={r.responded.n}
+            whole={r.applied.n}
+            min={MIN_FOR_RESPONSE_RATE}
+            tip={`${name} · ${LABELS.responseRate}`}
+          />
+        </td>
+      </tr>
+    );
+  };
+  return (
+    <div className="ch-block">
+      <ChartHead title="Which searches pay off" sub="Every posting each search has found, and where it went" />
+      <div className="ch-table">
+        <table className="payoff" aria-label="Which searches pay off">
+          <thead>
+            <tr>
+              <th>{LABELS.search}</th>
+              <th className="num">{LABELS.found}</th>
+              <th className="num">{LABELS.open}</th>
+              <th className="num">{LABELS.notAFit}</th>
+              <th className="num">{LABELS.applied}</th>
+              <th className="num">{LABELS.responded}</th>
+              <th>{LABELS.applyRate}</th>
+              <th>{LABELS.responseRate}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => line(r))}
+            {line(total, true)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const TIER_TONES: Record<string, string> = { applied: "s-accent", open: "s-soft", "not-a-fit": "s-line" };
+
+function TierChart({ data }: { data: TrackerData }) {
+  const [asTable, setAsTable] = useState(false);
+  const toggle = <TableToggle on={asTable} set={setAsTable} />;
+  const bars = tierBars(data);
+  if (!bars.length) return null;
+  const totals = bars.map((b) => b.segments.reduce((s, x) => s + x.n, 0));
+  const max = Math.max(1, ...totals);
+  const segs = (b: (typeof bars)[number], total: number): BarSegment[] =>
+    b.segments.map((s) => ({
+      ...s,
+      tone: TIER_TONES[s.key],
+      tip: `${b.label} · ${s.label}: ${s.n}${total ? ` (${Math.round((s.n / total) * 100)}%)` : ""}`,
+    }));
+  return (
+    <div className="ch-block">
+      <ChartHead title="By location" sub="Applied, open and not a fit, per location tier" toggle={toggle} />
+      {asTable ? (
+        <ChartTable
+          label="By location"
+          rows={bars.map((b, i) => ({ b, segments: segs(b, totals[i]) }))}
+          rowKey={(r) => r.b.key}
+          columns={[
+            { header: LABELS.locationTier, cell: (r) => r.b.label },
+            ...bars[0].segments.map((seg, j) => ({
+              header: seg.label,
+              num: true,
+              cell: (r: { segments: BarSegment[] }) => {
+                const s = r.segments[j];
+                return (
+                  <Mark n={s.n} target={s.target} tip={s.tip}>
+                    {s.n}
+                  </Mark>
+                );
+              },
+            })),
+          ]}
+        />
+      ) : (
+        <div className="hbars">
+          {bars.map((b, i) => (
+            <div key={b.key}>
+              <div className="hrow-head">
+                <span>{b.label}</span>
+                <span className="mono">{totals[i]}</span>
+              </div>
+              <StackedBar label={b.label} segments={segs(b, totals[i])} scale={totals[i] / max} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- pipeline */
+
+const FLOW_TONES: Record<string, string> = {
+  "moved-on": "s-accent",
+  waiting: "s-soft",
+  rejected: "s-crit",
+  withdrew: "s-line",
+};
+
+function PipelineSection({ data, appliedCount, toApply }: { data: TrackerData; appliedCount: number; toApply: number }) {
+  const active = drillCount({ tab: "applications", drill: "in-conversation" }, data);
+  return (
+    <>
       <div className="sec">
         <h2>Application pipeline</h2>
         <p>{appliedCount ? `${appliedCount} applied · ${active} in active conversation` : "Nothing applied yet"}</p>
       </div>
-
       {!appliedCount ? (
         <div className="card empty">
           <strong>No applications yet</strong>
           {toApply
-            ? `You have ${toApply} queued to apply in the Applications tab — the funnel fills in once you mark one Applied.`
+            ? `You have ${toApply} queued to apply in the Applications tab — the pipeline fills in once you mark one Applied.`
             : "Move a lead to Applied, or add one directly from the Applications tab, and its progress shows up here."}
         </div>
       ) : (
-        <div className="card" style={{ padding: 19 }}>
-          <div className="bars">
-            {funnel.map((r, i) => {
-              const pct = Math.round((r.n / appliedCount) * 100);
-              const color = i === 0 ? "var(--ink3)" : i === funnel.length - 1 ? "var(--good)" : "var(--accent)";
-              return (
-                <div className="bar" key={r.drill}>
-                  <h3>
-                    {/* A stage nothing has reached has no rows to open, so it
-                        stays plain text rather than a link to an empty list. */}
-                    {r.n ? (
-                      <Link
-                        className="jumplink"
-                        to={pathForTarget({ tab: "applications", drill: r.drill })}
-                        title="Open these in Applications"
-                      >
-                        {r.label}
-                      </Link>
-                    ) : (
-                      <span className="jumpdead" title="Nothing has reached this stage yet">
-                        {r.label}
-                      </span>
-                    )}{" "}
-                    <span>
-                      {r.n} &middot; {pct}%
-                    </span>
-                  </h3>
-                  <div className="meter">
-                    <i style={{ width: `${pct}%`, background: color }} />
-                  </div>
-                </div>
-              );
-            })}
+        <>
+          <div className="card ch">
+            <FlowChart data={data} appliedCount={appliedCount} />
           </div>
-          {/* "Responded" counts a rejection as a response - it is one, just not
-              a forward one - so it is deliberately a larger number than the
-              funnel's forward-progress stages. Withdrawn is excluded from both
-              halves: it is your action, not the company's. */}
-          <div className="legend" style={{ marginTop: 15, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
-            <span>
-              <b style={{ background: "var(--good)" }} />
-              {countStatus("Offer")} offer{countStatus("Offer") === 1 ? "" : "s"}
-            </span>
-            <span>
-              <b style={{ background: "var(--crit)" }} />
-              {countStatus("Rejected")} rejected
-            </span>
-            <span>
-              <b style={{ background: "var(--ink3)" }} />
-              {countStatus("Withdrawn")} withdrawn
-            </span>
-            <span className="legend-run">
-              {Math.round((responded / appliedCount) * 100)}% responded
-              {avgResp !== null && ` · avg ${avgResp}d to first response`}
-            </span>
+          <div className="card ch ch-split">
+            <ResponseChart data={data} />
+            <WaitingList data={data} />
           </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function FlowChart({ data, appliedCount }: { data: TrackerData; appliedCount: number }) {
+  const [asTable, setAsTable] = useState(false);
+  const toggle = <TableToggle on={asTable} set={setAsTable} />;
+  const { bars, offer } = flow(data);
+  const sent = drillRows({ tab: "applications", drill: "applied" }, data);
+  const countStatus = (s: string) => sent.filter((a) => a.status === s).length;
+  const heard = drillCount({ tab: "applications", drill: "responded" }, data);
+  const segs = (b: (typeof bars)[number]): BarSegment[] =>
+    b.segments.map((s) => ({
+      ...s,
+      tone: FLOW_TONES[s.key],
+      tip: `${b.label} · ${s.label}: ${s.n} of ${b.reached.n}${b.reached.n ? ` (${Math.round((s.n / b.reached.n) * 100)}%)` : ""}`,
+    }));
+  const offerLabel = FORWARD_STAGES[FORWARD_STAGES.length - 1].label;
+  return (
+    <div className="ch-block">
+      <ChartHead title="Where applications move on or stall" sub="Each bar is every application that reached the stage" toggle={toggle} />
+      {asTable ? (
+        <ChartTable
+          label="Where applications move on or stall"
+          rows={bars}
+          rowKey={(b) => b.slug}
+          columns={[
+            { header: LABELS.status, cell: (b) => b.label },
+            {
+              header: "Reached",
+              num: true,
+              cell: (b) => (
+                <Mark n={b.reached.n} target={b.reached.target} tip={`Reached ${b.label}: ${b.reached.n}`}>
+                  {b.reached.n}
+                </Mark>
+              ),
+            },
+            ...bars[0].segments.map((seg, j) => ({
+              header: seg.label,
+              num: true,
+              cell: (b: (typeof bars)[number]) => {
+                const s = segs(b)[j];
+                return (
+                  <Mark n={s.n} target={s.target} tip={s.tip}>
+                    {s.n}
+                  </Mark>
+                );
+              },
+            })),
+          ]}
+        />
+      ) : (
+        <div className="hbars">
+          {bars.map((b) => (
+            <div key={b.slug}>
+              <div className="hrow-head">
+                <Mark n={b.reached.n} target={b.reached.target} tip={`Reached ${b.label}: ${b.reached.n}`} className="jumplink">
+                  {b.label}
+                </Mark>
+                <span className="mono">{b.reached.n}</span>
+              </div>
+              <StackedBar label={b.label} segments={segs(b)} />
+            </div>
+          ))}
         </div>
       )}
-
-      <div className="note">
-        {trackCount
-          ? `Scheduled searches across your ${trackCount} tracked search${trackCount === 1 ? "" : "es"} add rows here every day.`
-          : "Once a tracked search is set up, its scheduled run adds rows here every day."}{" "}
-        Every posting is opened and confirmed live before it lands; nothing arrives from a search snippet alone.
+      <div className="hrow-head offer-row">
+        <Mark n={offer.n} target={offer.target} tip={`Reached ${offerLabel}: ${offer.n}`} className="jumplink">
+          {offerLabel}
+        </Mark>
+        <span className="mono">{offer.n}</span>
       </div>
-    </>
+      {/* "Responded" counts a rejection as a response - it is one, just not a
+          forward one. Withdrawn is excluded: it is your action, not the
+          company's. */}
+      <div className="legend ch-foot">
+        <span>
+          <b className="s-good" />
+          {countStatus("Offer")} offer{countStatus("Offer") === 1 ? "" : "s"}
+        </span>
+        <span>
+          <b className="s-crit" />
+          {countStatus("Rejected")} rejected
+        </span>
+        <span>
+          <b className="s-line" />
+          {countStatus("Withdrawn")} withdrawn
+        </span>
+        <span className="legend-run">{Math.round((heard / appliedCount) * 100)}% responded</span>
+      </div>
+    </div>
+  );
+}
+
+function ResponseChart({ data }: { data: TrackerData }) {
+  const [asTable, setAsTable] = useState(false);
+  const toggle = <TableToggle on={asTable} set={setAsTable} />;
+  const h = responseHistogram(data);
+  const replies = h.bins.reduce((s, b) => s + b.n, 0);
+  const tip = (b: (typeof h.bins)[number]) =>
+    `First reply in ${b.label}: ${b.n}${replies ? ` (${Math.round((b.n / replies) * 100)}%)` : ""}`;
+  return (
+    <div className="ch-block">
+      <ChartHead
+        title="Time to first reply"
+        sub={h.median === null ? "No replies yet" : `Median ${h.median} day${h.median === 1 ? "" : "s"}`}
+        toggle={toggle}
+      />
+      {asTable ? (
+        <ChartTable
+          label="Time to first reply"
+          rows={h.bins}
+          rowKey={(b) => b.key}
+          columns={[
+            { header: "Days", cell: (b) => b.label },
+            {
+              header: "Applications",
+              num: true,
+              cell: (b) => (
+                <Mark n={b.n} target={b.target} tip={tip(b)}>
+                  {b.n}
+                </Mark>
+              ),
+            },
+          ]}
+        />
+      ) : (
+        <ColumnChart
+          label="Time to first reply"
+          points={h.bins.map((b) => ({ key: b.key, axis: b.label.replace(" days", "d"), n: b.n, target: b.target, tip: tip(b) }))}
+        />
+      )}
+    </div>
+  );
+}
+
+function WaitingList({ data }: { data: TrackerData }) {
+  const rows = waitingLongest(data);
+  return (
+    <div className="ch-block">
+      <ChartHead title="Waiting longest" sub="Since each last moved" />
+      {!rows.length ? (
+        <p className="ch-empty">Nothing is waiting on a reply.</p>
+      ) : (
+        <ol className="waitlist">
+          {rows.map(({ app, days }) => (
+            <li key={app.id}>
+              {/* Selecting the row first is what makes the tab open on it. */}
+              <Link
+                className="wait-row"
+                to={pathForTab("applications")}
+                onClick={() => selectRow("applications", String(app.id))}
+              >
+                <span className="wait-co">{app.company || "Untitled"}</span>
+                <span className="wait-role">{app.title}</span>
+                <span className="wait-meta">
+                  {app.status} · <span className="mono">{days} day{days === 1 ? "" : "s"}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      )}
+      <Link className="jumplink ch-more" to={pathForTarget({ tab: "applications", drill: "waiting" })}>
+        See all waiting ›
+      </Link>
+    </div>
   );
 }

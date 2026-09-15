@@ -3,7 +3,7 @@ import type { Settings, Track } from "../api/schema";
 import { exportFilename, localDate, toCsv, type Column } from "../domain/export";
 import { downloadFile } from "../ui/download";
 import { APP_SORTS, LEAD_SORTS, pillFor } from "../domain/constants";
-import { drillLabel } from "../domain/drills";
+import { drillLabel, type DrillContext } from "../domain/drills";
 import { relWhen, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { runState, runSummary } from "../domain/runs";
@@ -106,15 +106,15 @@ export function SortSelect({ kind, id }: { kind: "leads" | "applications"; id: s
  */
 export function DrillChip({
   drill,
-  settings,
+  ctx,
   clearTo,
 }: {
   drill: string | null;
-  settings: Settings;
+  ctx: DrillContext;
   clearTo: string;
 }) {
   if (!drill) return null;
-  const label = drillLabel(drill, settings);
+  const label = drillLabel(drill, ctx);
   if (!label) return null;
   return (
     <Link className="chip drill" to={clearTo} aria-label={`Clear filter: ${label}`} title="Clear this filter">

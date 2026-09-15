@@ -91,6 +91,11 @@ export const screenedSchema = z.object({
   location: text,
   reason: text,
   date: text,
+  added_by: text, // "run" | "hand" | "" for rows older than the column
+  // The removed lead's found date, "" if it never was a lead. Absent (not "")
+  // from a server without the column, which is how the Overview knows its
+  // weekly found counts can't include removed postings yet.
+  found: z.string().nullish(),
 });
 
 /**

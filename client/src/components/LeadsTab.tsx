@@ -43,7 +43,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   const rows = all
     .filter((l) => {
       if (filter !== "All" && l.status !== filter) return false;
-      if (!drillKeeps(drill, "leads", l, settings)) return false;
+      if (!drillKeeps(drill, "leads", l, data)) return false;
       if (!needle) return true;
       return `${l.company} ${l.title} ${l.location}`.toLowerCase().includes(needle);
     })
@@ -80,7 +80,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
               {f}
             </button>
           ))}
-          <DrillChip drill={drill} settings={settings} clearTo={clearDrillTo(trackKey, params)} />
+          <DrillChip drill={drill} ctx={data} clearTo={clearDrillTo(trackKey, params)} />
         </div>
         <ViewSwitch />
         <ExportButton rows={rows} columns={leadColumns(tracks, settings)} label={scopeLabel} />

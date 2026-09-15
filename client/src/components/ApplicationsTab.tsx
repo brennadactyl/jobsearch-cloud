@@ -53,7 +53,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
   };
 
   const all = appRows(data.applications).sort(appComparator(prefs.appSort));
-  const rows = all.filter((a) => drillKeeps(drill, "apps", a, settings));
+  const rows = all.filter((a) => drillKeeps(drill, "apps", a, data));
 
   const clearTo = () => {
     const next = new URLSearchParams(params);
@@ -107,7 +107,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
         <GeoKey settings={settings} />
         {drill && (
           <div className="chips">
-            <DrillChip drill={drill} settings={settings} clearTo={clearTo()} />
+            <DrillChip drill={drill} ctx={data} clearTo={clearTo()} />
           </div>
         )}
       </div>

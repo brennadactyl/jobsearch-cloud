@@ -1,6 +1,7 @@
 import type { Application, Lead, PriorityLocation } from "../api/schema";
 import { safeUrl } from "./format";
 import { rank } from "./geo";
+import { isWaiting, lastMoved } from "./stages";
 
 /**
  * Default ("priority") sinks "Not a fit" to the bottom, then orders by location
@@ -40,6 +41,17 @@ export function appComparator(sortKey: string): (a: Application, b: Application)
       return String(a.location).localeCompare(String(b.location));
     };
   }
+  if (sortKey === "waiting-desc") {
+    // The Overview's waiting list, in full: rows still waiting on the company
+    // first, the one that last moved longest ago at the top. Rows with no date
+    // to measure from, and rows the company has closed, follow.
+    return (a, b) => {
+      const ga = waitGroup(a);
+      const gb = waitGroup(b);
+      if (ga !== gb) return ga - gb;
+      return (lastMoved(a)?.getTime() ?? 0) - (lastMoved(b)?.getTime() ?? 0);
+    };
+  }
   const byDate =
     sortKey === "applied-asc"
       ? (a: Application, b: Application) => String(a.dateApplied).localeCompare(String(b.dateApplied))
@@ -53,6 +65,11 @@ export function appComparator(sortKey: string): (a: Application, b: Application)
     if (ta !== tb) return ta - tb;
     return byDate(a, b);
   };
+}
+
+function waitGroup(a: Application): number {
+  if (!isWaiting(a)) return 2;
+  return lastMoved(a) ? 0 : 1;
 }
 
 /** "" (nothing wrong), "waiting" (tonight's run will read it), "stuck" (no run will). */

@@ -420,6 +420,86 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .stage-hist input[type=date]{width:100%}
 
 /* ---------------------------------------------------------------------------
+   Overview charts. Magnitude is --accent; --good and --crit keep their status
+   meaning and always sit beside a text label. */
+.ch{padding:17px 19px}
+.ch-block+.ch-block{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+.ch-split{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px 32px;margin-top:12px}
+.ch-split .ch-block+.ch-block{margin-top:0;padding-top:0;border-top:0}
+.ch-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;margin-bottom:12px}
+.ch-head h3{font-size:14px;font-weight:600}
+.ch-sub{font-size:12.5px;color:var(--ink3)}
+.ch-toggle{appearance:none;border:0;background:none;padding:2px 0;margin-left:auto;font:inherit;
+  font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;white-space:nowrap}
+.ch-toggle:hover{text-decoration:underline;text-underline-offset:3px}
+.ch-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.ch-empty{margin:0;font-size:13px;color:var(--ink3)}
+.ch-more{display:inline-block;margin-top:10px;font-size:12.5px;font-weight:600;color:var(--accent)}
+.ch-foot{margin-top:15px;padding-top:14px;border-top:1px solid var(--line)}
+
+/* Column chart: each column is its mark's hit target, full height. */
+.ch-cols{display:flex;align-items:stretch;gap:3px;height:118px;border-bottom:1px solid var(--line)}
+.ch-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;
+  color:inherit;text-decoration:none;border-radius:4px 4px 0 0}
+a.ch-col:hover{background:var(--surface2)}
+.ch-col:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ch-fill{display:block;background:var(--accent);border-radius:3px 3px 0 0}
+.ch-col.now .ch-fill{opacity:.45}
+.ch-axis{display:flex;gap:3px;margin-top:5px}
+.ch-axis span{flex:1 1 0;min-width:0;text-align:center;font-size:10.5px;color:var(--ink3);white-space:nowrap}
+@media (max-width:640px){.ch-axis .minor{visibility:hidden}}
+
+/* Stacked bars. The 2px gap separates segments without an outline. */
+.hbars{display:flex;flex-direction:column;gap:14px}
+.hrow-head{display:flex;justify-content:space-between;align-items:baseline;gap:4px 12px;flex-wrap:wrap;
+  font-size:13.5px;font-weight:600;margin-bottom:6px}
+.hrow-head .mono{font-size:12px;font-weight:400;color:var(--ink3)}
+.offer-row{margin:14px 0 0}
+.hbar{display:flex;gap:2px;height:14px;min-width:6px}
+.hseg{display:block;flex-basis:0;min-width:3px;height:100%;border-radius:3px}
+a.hseg:hover{outline:1px solid var(--ink3);outline-offset:1px}
+.hseg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.s-accent{background:var(--accent)}
+.s-soft{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.s-line{background:var(--line)}
+.s-crit{background:var(--crit)}
+.s-good{background:var(--good)}
+.seglabels{margin-top:6px;gap:4px 14px}
+.seglabel{color:var(--ink2);text-decoration:none;white-space:nowrap}
+a.seglabel:hover{color:var(--accent)}
+.seglabel .mono{font-size:12px}
+
+/* A chart's table view, and the searches table. */
+.ch-table{overflow-x:auto}
+.ch-table table{font-size:13px}
+.ch-table th,.ch-table td{white-space:nowrap;padding:8px 10px}
+.ch-table th:first-child,.ch-table td:first-child{padding-left:0}
+.ch-table .num{text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.ch-table a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--line)}
+.ch-table a:hover{border-bottom-color:var(--accent)}
+.ch-table a.jumplink{color:inherit;border-bottom:0;font-weight:600}
+.payoff tr.total td{font-weight:600;border-top:1px solid var(--line)}
+.payoff-run{margin-top:3px}
+.payoff-run .runstamp{font-size:11.5px}
+.cnt.plain{cursor:help;border-bottom:1px dotted var(--ink3)}
+.rate{display:inline-flex;align-items:center;gap:8px;cursor:help}
+.rate-meter{display:inline-block;width:44px;height:5px;border-radius:99px;background:var(--surface2);overflow:hidden}
+.rate-meter i{display:block;height:100%;background:var(--accent)}
+
+.waitlist{list-style:none;margin:0;padding:0}
+.waitlist li+li{border-top:1px solid var(--line)}
+.wait-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 12px;padding:8px 0;
+  color:inherit;text-decoration:none}
+.wait-row:hover .wait-co{color:var(--accent)}
+.wait-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.wait-co{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wait-role{grid-row:2;font-size:12.5px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wait-meta{grid-row:1/3;grid-column:2;align-self:center;font-size:12px;color:var(--ink3);white-space:nowrap}
+
+.tip{position:fixed;z-index:70;max-width:min(260px,calc(100vw - 16px));padding:5px 9px;border-radius:6px;
+  background:var(--ink);color:var(--ground);font-size:12px;font-weight:500;line-height:1.4;pointer-events:none}
+
+/* ---------------------------------------------------------------------------
    These controls render as links, and the rules above assume no link colour or
    underline. */
 .tab, .tile, .jumplink, .chip.drill { text-decoration: none; }

@@ -6,9 +6,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
 import { DRILLS, drillCount, drillKeeps, drillLabel, drillRows, leadRows, appRows, type DrillTarget } from "./drills";
-import { NOW, applications, leads, settings } from "./fixture";
+import { NOW, applications, leads, settings, tracks } from "./fixture";
 
-const src = { leads, applications, settings };
+const src = { leads, applications, settings, tracks };
 
 beforeEach(() => {
   // Every "days ago" rule below is measured from here. Without freezing it the
@@ -38,7 +38,7 @@ describe("drill parity", () => {
     const shown = base.filter(
       (r) =>
         (!t.filter || r.status === t.filter) &&
-        drillKeeps(t.drill ?? null, isApps ? "apps" : "leads", r, settings),
+        drillKeeps(t.drill ?? null, isApps ? "apps" : "leads", r, src),
     );
     expect(drillCount(t, src)).toBe(shown.length);
   });
@@ -113,20 +113,20 @@ describe("individual drills", () => {
   it("ignores a drill belonging to the other kind of tab", () => {
     // A leads drill applied to an application filters nothing, rather than
     // throwing or silently emptying the list.
-    expect(drillKeeps("in-conversation", "leads", leads[0], settings)).toBe(true);
+    expect(drillKeeps("in-conversation", "leads", leads[0], src)).toBe(true);
   });
 });
 
 describe("drillLabel", () => {
   it("names the configured tier rather than a hardcoded place", () => {
-    expect(drillLabel("top-geo-open", settings)).toBe("Metro core · still open");
-    expect(drillLabel("top-geo-open", { ...settings, priority_locations: [] })).toBe(
+    expect(drillLabel("top-geo-open", src)).toBe("Metro core · still open");
+    expect(drillLabel("top-geo-open", { ...src, settings: { ...settings, priority_locations: [] } })).toBe(
       "Top locations · still open",
     );
   });
 
   it("is empty for a drill that does not exist", () => {
-    expect(drillLabel("no-such-drill", settings)).toBe("");
-    expect(drillLabel(null, settings)).toBe("");
+    expect(drillLabel("no-such-drill", src)).toBe("");
+    expect(drillLabel(null, src)).toBe("");
   });
 });

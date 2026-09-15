@@ -51,7 +51,18 @@ export const LABELS = {
   link: "Link",
   applied: "Applied",
   notes: "Notes",
+  open: "Open",
+  notAFit: "Not a fit",
+  responded: "Responded",
+  applyRate: "Apply rate",
+  responseRate: "Response rate",
 } as const;
+
+/**
+ * The `reason` on the screened row a delisted lead leaves behind.
+ * DELISTED_REASON in server/src/db.js.
+ */
+export const DELISTED_REASON = "posting taken down";
 
 /** "Applied" first - the order Stage history renders in. */
 export const STAGE_HISTORY_FIELDS: readonly (readonly [field: string, label: string])[] = [
@@ -86,6 +97,7 @@ export const LEAD_SORTS: readonly (readonly [key: string, label: string])[] = [
 export const APP_SORTS: readonly (readonly [key: string, label: string])[] = [
   ["applied-desc", "Newest applied"],
   ["applied-asc", "Oldest applied"],
+  ["waiting-desc", "Longest waiting"],
   ["location-asc", "Location A-Z"],
   ["company-asc", "Company A-Z"],
 ];
