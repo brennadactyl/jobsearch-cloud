@@ -127,6 +127,9 @@ tests cover:
 - **`src/boundaries.test.ts`** — source-level rules: one path to the server, no
   HTML from strings, every `href` through `safeUrl`, nothing per-person
   hardcoded.
+- **`src/layout.test.ts`** — layout rules jsdom can't apply, read from
+  `tracker.css`: the Overview's tile row reserves the scrollbar gutter only
+  while its region scrolls.
 - **`src/deploy-config.test.ts`** — `wrangler.toml` falls back to `index.html`,
   so tab URLs don't 404 on reload.
 - **`src/domain/drills.test.ts`** — the drill invariant: for every tile and
