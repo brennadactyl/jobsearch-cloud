@@ -116,6 +116,19 @@ function Test-Transient($status) {
     return ($status -eq 0 -or $status -eq 429 -or $status -ge 500)
 }
 
+# A download's -OutFile write fails with no HTTP response, which the status
+# rule reads as a dropped connection. Retrying a local path error only delays
+# it and logs it as a network problem. Matched by exception type anywhere in
+# the chain: a real network failure carries a plain IOException at most, never
+# these two. tracker.ps1 writes no files inside its retry, so it needs no
+# counterpart.
+function Test-LocalPathError($err) {
+    for ($e = $err.Exception; $e; $e = $e.InnerException) {
+        if ($e -is [System.IO.DirectoryNotFoundException] -or $e -is [System.IO.PathTooLongException]) { return $true }
+    }
+    return $false
+}
+
 # Rethrows the last error unchanged, so each caller's catch block handles it
 # exactly as it would without the retry.
 function Invoke-WithRetry($what, $action) {
@@ -124,6 +137,7 @@ function Invoke-WithRetry($what, $action) {
             return & $action
         } catch {
             $status = Get-HttpStatus $_
+            if ($status -eq 0 -and (Test-LocalPathError $_)) { throw }
             if ($attempt -ge $RetryAttempts -or -not (Test-Transient $status)) { throw }
             $wait = $RetryBackoff[[Math]::Min($attempt - 1, $RetryBackoff.Count - 1)]
             Log "transient failure on $what ($status) - retrying in ${wait}s (attempt $attempt of $RetryAttempts)"
@@ -269,6 +283,28 @@ if ($UseLocalFiles) {
         }
 
         $runDir = Join-Path (Join-Path $workDir ".run") $Task
+
+        # A download's -OutFile write stops at MAX_PATH: a file path of 260
+        # characters or more, or a folder of 248 or more, fails as "Could not
+        # find a part of the path",
+        # which reads as a missing folder. Checked up front so a data dir that
+        # is too deep says so, rather than failing on whichever document happens
+        # to be longest. The helper files are written into the same directory.
+        $longest = $null
+        $longestLimit = 0
+        $over = 0
+        foreach ($rel in @($index.documents | ForEach-Object { $_.path -replace '/', '\' }) + @("tracker.ps1", "tracker")) {
+            $file = Join-Path $runDir $rel
+            $dir = Split-Path $file -Parent
+            foreach ($check in @(@{ path = $file; limit = 259 }, @{ path = $dir; limit = 247 })) {
+                $excess = $check.path.Length - $check.limit
+                if ($excess -gt $over) { $over = $excess; $longest = $check.path; $longestLimit = $check.limit }
+            }
+        }
+        if ($longest) {
+            Stop-Run "run directory path too long: $longest is $($longest.Length) characters, over the Windows limit of $longestLimit" ("The run would write '{0}', which is {1} characters - Windows PowerShell cannot write paths longer than {2}. Use a data dir at least {3} characters shorter: set JOB_SEARCH_DATA_DIR or pass -DataDir." -f $longest, $longest.Length, $longestLimit, $over)
+        }
+
         if (Test-Path $runDir) { Remove-Item -Recurse -Force $runDir }
         New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 
