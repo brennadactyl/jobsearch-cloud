@@ -8,23 +8,61 @@
  */
 
 import { DELISTED_REASON } from "../db.js";
-import { excludedCompanyMatcher } from "../exclude.js";
+import { excludedCompanyMatcher, normalize } from "../exclude.js";
 import { json, readJson } from "../http.js";
 import { isoDate, unknownTrack, unknownTrackResponse } from "../validate.js";
+import { COVERAGE_BATCH, upcomingCompanies } from "./coverage.js";
+
+// How far back a scoped dedup read keeps a screened URL at a company outside the
+// window. The window covers what the run will be served; this covers what it is
+// likeliest to meet anyway - a candidate its web search or step 3b turned up on
+// one of the last few nights. Short on purpose: most screened rows are recent,
+// so a window of a couple of weeks keeps nearly every list whole and the scope
+// stops trimming anything. A URL this drops is at worst verified again, because
+// POST /api/screened and /api/leads refuse duplicates on the way in.
+export const DEDUP_RECENT_DAYS = 3;
 
 /**
- * GET /api/dedup/:key - requires a Bearer token ->
- * `{ leads: [{id, url, status}], screened: [url] }`; 404 for an unknown track.
+ * GET /api/dedup/:key[?scope=batch] - requires a Bearer token ->
+ * `{ leads: [{id, url, status}], screened: [url] }`, plus `scope` when scoped;
+ * 404 for an unknown track.
  *
  * What a scheduled run fetches before searching. Narrow on purpose - see
  * db.getDedupData. 404 rather than empty arrays, because empty is what a
  * mistyped key would produce, and a run that believes it has seen nothing
  * re-adds every posting it already screened.
+ *
+ * `?scope=batch` trims `screened` to what the run can meet tonight: URLs at a
+ * company in the next 2 x COVERAGE_BATCH companies along the rotation, plus any
+ * URL screened in the last DEDUP_RECENT_DAYS. Two batches, because step 9e reads
+ * a second slice once 9d has moved the cursor, and a replacement company that
+ * arrived with no history would be verified again. A fed tab takes the window
+ * from the track whose search fills it, since that is the cursor its run reads;
+ * its rows are still its own, because a delisted lead leaves its screened row
+ * under the lead's tab. `leads` is never trimmed: step 8 re-checks every one.
+ *
+ * The cutoff is the server's date, compared with dates runs stamp in their own
+ * local time, so it can keep a day more than it says - the safe direction.
+ *
+ * `scope` is `{cursor, companies, since, kept, of}`, so a run's log can say what
+ * it was given. Without the parameter the response is exactly the unscoped one.
  */
-export async function handleGetDedup({ db, params }) {
+export async function handleGetDedup({ db, params, url }) {
   const key = params[0];
-  if (!(await db.trackExists(key))) return unknownTrack(key);
-  return json(await db.getDedupData(key));
+  const track = await db.getTrack(key);
+  if (!track) return unknownTrack(key);
+  if (url.searchParams.get("scope") !== "batch") return json(await db.getDedupData(key));
+
+  const upcoming = await upcomingCompanies(db, track.fed_by || key, 2 * COVERAGE_BATCH);
+  const inWindow = new Set(upcoming.companies.map((c) => normalize(c.company)));
+  const since = new Date(Date.now() - DEDUP_RECENT_DAYS * 86400000).toISOString().slice(0, 10);
+  const { leads, screened: rows } = await db.getDedupRows(key);
+  const kept = rows.filter((r) => inWindow.has(normalize(r.company)) || r.date >= since);
+  return json({
+    leads,
+    screened: kept.map((r) => r.url),
+    scope: { cursor: upcoming.cursor, companies: upcoming.companies.length, since, kept: kept.length, of: rows.length },
+  });
 }
 
 /**

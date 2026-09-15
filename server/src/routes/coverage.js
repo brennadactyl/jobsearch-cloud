@@ -23,16 +23,32 @@ import { excluderFor, isoDate, today, unknownTrack } from "../validate.js";
 // A constant, not config: a setting nobody sets is a setting that goes stale.
 export const COVERAGE_BATCH = 24;
 
-// The slice a search is served from `cursor`: eligible companies at or after it
-// in position order, then round from the front, capped at the batch. Both
-// routes go through this one function - GET to serve the slice, POST to bound
-// how far a report can move the cursor - so the two cannot come to disagree
-// about what a run was given.
-function sliceAt(eligible, cursor) {
+// The companies a search is served from `cursor`: eligible companies at or
+// after it in position order, then round from the front, capped at `count`.
+// Everything that needs to know what a run will be handed goes through this one
+// function - GET to serve the slice, POST to bound how far a report can move the
+// cursor, and upcomingCompanies for the dedup window - so none of them can come
+// to disagree about what a run was given.
+function sliceAt(eligible, cursor, count = COVERAGE_BATCH) {
   return eligible
     .filter((c) => c.position >= cursor)
     .concat(eligible.filter((c) => c.position < cursor))
-    .slice(0, COVERAGE_BATCH);
+    .slice(0, count);
+}
+
+/**
+ * The next `count` companies along a search's rotation from its cursor, with
+ * the caller's excluded companies stepped over: what GET /api/coverage would
+ * serve across that many companies, read without moving anything.
+ * @param {import("../db.js").Db} db
+ * @param {string} key a track that runs its own search
+ * @param {number} count
+ * @returns {Promise<{cursor: number, companies: Array<{company: string, position: number}>}>}
+ */
+export async function upcomingCompanies(db, key, count) {
+  const [log, cursor] = await Promise.all([db.getCoverage(key), db.getSweepCursor(key)]);
+  const isExcluded = await excluderFor(db);
+  return { cursor, companies: sliceAt(log.filter((c) => !isExcluded(c.company)), cursor, count) };
 }
 
 /**
