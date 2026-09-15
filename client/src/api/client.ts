@@ -6,11 +6,16 @@
  */
 import { z } from "zod";
 import {
+  intakeResponseSchema,
+  inviteCheckSchema,
   applicationSchema,
   dataSchema,
   leadSchema,
   loginSchema,
   type Application,
+  type Intake,
+  type IntakeAnswers,
+  type InviteCheck,
   type Lead,
   type TrackerData,
 } from "./schema";
@@ -96,7 +101,24 @@ export class SchemaError extends Error {
   }
 }
 
-type RequestOptions = { method?: string; body?: unknown; token?: string };
+type RequestOptions = {
+  method?: string;
+  body?: unknown;
+  token?: string;
+  /** Bytes sent as they are, for a document, in place of a JSON `body`. */
+  raw?: Blob;
+};
+
+/**
+ * A refused request carries what the server said beyond the message: `field`
+ * names the form field it's about, `reason` why an invite can't be used. Still
+ * a plain Error, so callers that only read the message are unchanged.
+ */
+export type RequestFailure = Error & { status: number; field?: string; reason?: string };
+
+export function failureOf(err: unknown): RequestFailure | null {
+  return err instanceof Error && typeof (err as RequestFailure).status === "number" ? (err as RequestFailure) : null;
+}
 
 /**
  * One request, parsed through `schema`. Every response this client reads goes
@@ -106,16 +128,18 @@ type RequestOptions = { method?: string; body?: unknown; token?: string };
 async function request<T>(
   path: string,
   schema: z.ZodType<T>,
-  { method = "GET", body, token }: RequestOptions = {},
+  { method = "GET", body, token, raw }: RequestOptions = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": raw ? raw.type || "application/octet-stream" : "application/json",
+  };
   const bearer = token ?? session.token();
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
 
   const res = await fetch(API_BASE + path, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
   });
 
   if (res.status === 401) {
@@ -128,11 +152,13 @@ async function request<T>(
   const payload: unknown = await res.json().catch(() => null);
 
   if (!res.ok) {
-    const message =
-      payload && typeof payload === "object" && "error" in payload
-        ? String((payload as { error: unknown }).error)
-        : `Request failed (${res.status})`;
-    throw new Error(message);
+    const said = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const message = "error" in said ? String(said.error) : `Request failed (${res.status})`;
+    throw Object.assign(new Error(message), {
+      status: res.status,
+      field: typeof said.field === "string" ? said.field : undefined,
+      reason: typeof said.reason === "string" ? said.reason : undefined,
+    });
   }
 
   const parsed = schema.safeParse(payload);
@@ -158,6 +184,52 @@ export async function login(name: string, password: string) {
   });
   session.start(res.token, res.user?.name || name);
   return res;
+}
+
+/** Whether an invite link can still make an account. Public: sends no session. */
+export function checkInvite(code: string): Promise<InviteCheck> {
+  return request(`/api/invite/${encodeURIComponent(code)}`, inviteCheckSchema, { token: "" });
+}
+
+/**
+ * Spends an invite on a new account and signs in as it. Refusals carry
+ * `field` ("name", "password") or, when the invite itself can't be used,
+ * `reason` - see RequestFailure.
+ */
+export async function signup(code: string, name: string, password: string) {
+  const res = await request("/api/signup", loginSchema, {
+    method: "POST",
+    body: { code, name, password },
+    token: "",
+  });
+  session.start(res.token, res.user?.name || name);
+  return res;
+}
+
+/** This person's setup answers and where the overnight run is with them; null before the first send. */
+export async function getIntake(): Promise<Intake | null> {
+  return (await request("/api/intake", intakeResponseSchema)).intake;
+}
+
+/** Sends the setup answers. The resume files they name must already be stored. */
+export async function submitIntake(answers: IntakeAnswers): Promise<Intake | null> {
+  return (await request("/api/intake", intakeResponseSchema, { method: "POST", body: { answers } })).intake;
+}
+
+const documentWriteSchema = z.object({ path: z.string() });
+
+/** Stores a file among this person's documents, e.g. `resumes/Sam Resume.pdf`. */
+export function putDocument(path: string, file: Blob): Promise<{ path: string }> {
+  return request(`/api/documents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, documentWriteSchema, {
+    method: "PUT",
+    raw: file,
+  });
+}
+
+export function deleteDocument(path: string): Promise<{ path: string }> {
+  return request(`/api/documents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, documentWriteSchema, {
+    method: "DELETE",
+  });
 }
 
 /**

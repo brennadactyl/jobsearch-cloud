@@ -170,6 +170,49 @@ export const loginSchema = z.object({
   user: userSchema.partial().optional(),
 });
 
+/** GET /api/invite/<code>: whether an invite link can still make an account. */
+export const INVITE_REASONS = ["invalid", "used", "expired", "revoked"] as const;
+export const inviteCheckSchema = z.discriminatedUnion("valid", [
+  z.object({ valid: z.literal(true), expires_at: text }),
+  z.object({ valid: z.literal(false), reason: z.enum(INVITE_REASONS) }),
+]);
+
+/** The three the nightly prompt knows; "" is unset, which it reads as they/them. */
+export const PRONOUNS = ["she/her", "he/him", "they/them"] as const;
+
+/**
+ * The setup form's answers, stored by POST /api/intake exactly as sent and read
+ * by the onboarding run. Every key defaults, so a partly filled or older stored
+ * answer still parses.
+ */
+export const roleAnswerSchema = z.object({
+  name: str.default(""),
+  titles: str.default(""),
+  company_kinds: str.default(""),
+  rule_outs: str.default(""),
+  min_pay: str.default(""),
+});
+export const intakeAnswersSchema = z.object({
+  page_title: str.default(""),
+  pronouns: z.enum(["", ...PRONOUNS]).default(""),
+  resume_text: str.default(""),
+  resume_files: z.array(str).default([]),
+  location_limits: str.default(""),
+  locations_first: str.default(""),
+  priority_locations: z.array(priorityLocationSchema).default([]),
+  roles: z.array(roleAnswerSchema).default([]),
+  never_work_for: str.default(""),
+  preferences: str.default(""),
+});
+export const intakeSchema = z.object({
+  answers: intakeAnswersSchema,
+  status: z.enum(["pending", "done", "failed"]),
+  status_note: text,
+  sent_at: text,
+  updated_at: text,
+});
+export const intakeResponseSchema = z.object({ intake: intakeSchema.nullable() });
+
 export type Lead = z.infer<typeof leadSchema>;
 export type Application = z.infer<typeof applicationSchema>;
 export type Screened = z.infer<typeof screenedSchema>;
@@ -180,3 +223,8 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type User = z.infer<typeof userSchema>;
 export type TrackerData = z.infer<typeof dataSchema>;
 export type LoginResponse = z.infer<typeof loginSchema>;
+export type InviteCheck = z.infer<typeof inviteCheckSchema>;
+export type InviteReason = (typeof INVITE_REASONS)[number];
+export type RoleAnswer = z.infer<typeof roleAnswerSchema>;
+export type IntakeAnswers = z.infer<typeof intakeAnswersSchema>;
+export type Intake = z.infer<typeof intakeSchema>;
