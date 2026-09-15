@@ -103,13 +103,11 @@ function Invoke-Api([string]$Method, [string]$Path, $Body) {
         if ($null -eq $status) {
             throw "Couldn't reach $api`: $message"
         }
+        # The server resolves the caller before it matches a route, so a
+        # deployment without the invite routes also answers 401.
         if ($status -eq 401) {
-            throw "The API refused the admin token (401). Check admin_token in $DeploymentFile matches the ADMIN_TOKEN secret on $api."
-        }
-        # A 404 whose body isn't the route's own "no such invite" means the
-        # deployment predates the invite routes.
-        if ($status -eq 404 -and $message -ne "no such invite") {
-            throw "$api has no invite routes (404). Deploy server/ first."
+            throw ("The API refused the request (401). Check admin_token in $DeploymentFile matches the ADMIN_TOKEN secret on $api. " +
+                   "If that server predates the invite routes, deploy server/ first.")
         }
         throw "The API answered $status`: $message"
     }
