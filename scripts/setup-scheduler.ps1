@@ -266,6 +266,13 @@ if ($people.Count -gt 0) {
 
 # Machine-wide like the fill, so it goes into $registered for the same reason.
 # Without an ADMIN_TOKEN every run would fail, so the task is removed instead.
+#
+# A -User run leaves it alone: run-onboarding.ps1 itself calls this script with
+# -User for each person it sets up, and replacing a task's definition from
+# inside its own running instance is not something to rely on.
+if ($User) {
+    Write-Host "`n$ONBOARDING_TASK left as it is (-User run)."
+} else {
 Write-Host "`n== Onboarding (one task, anyone who signed up from an invite) ==" -ForegroundColor Cyan
 if (-not $canOnboard) {
     if (Get-ScheduledTask -TaskName $ONBOARDING_TASK -ErrorAction SilentlyContinue) {
@@ -279,6 +286,7 @@ if (-not $canOnboard) {
 } elseif (Register-JobSearchTask -Name $ONBOARDING_TASK -Script $onboardingScript -Arguments "-DataDir `"$DataDir`"" -Time $ONBOARDING_TIME) {
     Write-Host "  $ONBOARDING_TASK - daily at $ONBOARDING_TIME (sets up new signups before the night's searches)"
     $registered += $ONBOARDING_TASK
+}
 }
 
 if ($ownedPrefixes.Count -gt 0) {
