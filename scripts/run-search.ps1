@@ -193,6 +193,45 @@ function Record-FailedRun($reason) {
     }
 }
 
+# ---- How much a track doc may grow in one run. ----------------------------
+#
+# Every run reads its track doc in full, so the doc's size is a cost paid every
+# night, and it only grows. What runs append is mostly per-company fetch notes,
+# which belong on the shared company list through step 9d; a sentence in the
+# prompt saying so doesn't stop it, so the limit lives here. 1.5 KB fits a fit
+# refinement or a promoted company; a batch of fetch notes doesn't. A doc may
+# always shrink.
+$DocGrowthLimitBytes = 1500
+
+# Puts a sentence in front of this track's run record note, so something the
+# runner decided after the run shows on the page rather than only in a log
+# nobody reads. In front, because the tracker keeps 500 characters and cuts
+# from the end. Keeps the run's own status, date and time. Never fatal.
+function Add-RunNote($text) {
+    try {
+        $cfg = Invoke-WithRetry "GET /api/config" {
+            Invoke-RestMethod -Uri "$trackerUrl/api/config" -TimeoutSec 30 `
+                -Headers @{ Authorization = "Bearer $trackerToken" } -ErrorAction Stop
+        }
+        $track = $cfg.tracks | Where-Object { $_.key -eq $Task } | Select-Object -First 1
+        $run = if ($track) { $track.last_run } else { $null }
+        $body = @{
+            search = $Task
+            status = if ($run -and $run.status) { [string]$run.status } else { "ok" }
+            on     = if ($run -and $run.on) { [string]$run.on } else { (Get-Date).ToString("yyyy-MM-dd") }
+            note   = "runner: $text" + $(if ($run -and $run.note) { " | $($run.note)" } else { "" })
+        }
+        if ($run -and $run.at) { $body.at = [string]$run.at }
+        $null = Invoke-WithRetry "POST /api/runs" {
+            Invoke-RestMethod -Uri "$trackerUrl/api/runs" -Method Post -TimeoutSec 30 `
+                -Headers @{ Authorization = "Bearer $trackerToken" } `
+                -ContentType "application/json" -Body ($body | ConvertTo-Json -Compress)
+        }
+    } catch {
+        Log "WARNING: couldn't add to the run record ($($_.Exception.Message)): $text"
+    }
+}
+
 # Every fatal path before the CLI runs exits through here, so none can skip
 # recording. The checks above - data dir, user folder, credentials - cannot use
 # it, since there is no tracker to record to yet.
@@ -330,8 +369,9 @@ if ($UseLocalFiles) {
                 Stop-Run "$($doc.path) came back $got bytes, expected $($doc.bytes)" "Document '$($doc.path)' downloaded short. Refusing to search against a truncated profile."
             }
             $manifest[$doc.path] = @{
-                etag = $doc.etag
-                sha  = (Get-FileHash -Path $dest -Algorithm SHA256).Hash
+                etag  = $doc.etag
+                sha   = (Get-FileHash -Path $dest -Algorithm SHA256).Hash
+                bytes = $got
             }
             $bytes += $got
         }
@@ -552,6 +592,17 @@ if ($runDir -and $manifest.Count -gt 0) {
 
         if ($folder -ne "docs") {
             Log "WARNING: $rel changed during the run and was discarded - only docs/ is written back."
+            continue
+        }
+
+        $grew = (Get-Item $local).Length - $manifest[$rel].bytes
+        if ($grew -gt $DocGrowthLimitBytes) {
+            # Not a failed run: the search itself is fine. The edit is kept for a
+            # person to look at rather than sent, and the run record says where.
+            $kept = Join-Path $logDir "$Task-doc-refused-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
+            Copy-Item $local $kept -Force
+            Log "WARNING: $rel grew $grew bytes in this run, over the $DocGrowthLimitBytes-byte limit - not written back. This run's version: $kept"
+            Add-RunNote "$rel grew $grew bytes, over the $DocGrowthLimitBytes-byte limit, so this run's doc edit wasn't saved - it is in logs\$(Split-Path $kept -Leaf)"
             continue
         }
 
