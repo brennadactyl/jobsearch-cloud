@@ -10,8 +10,15 @@
 
   The export is staged in a temp file and validated before it lands, because
   wrangler can exit 0 with an empty export and the archive is append-only (see
-  protect-backups.ps1), so a bad file could not be removed from it. Backups are
-  never deleted automatically; pruning is a deliberate, elevated act.
+  protect-backups.ps1), so a bad file could not be removed from it.
+
+  Backups are kept for RetentionDays (30), here and in the mirror. That is what
+  lets a deleted account leave the backups too: nothing of it is exported after
+  the delete, and the last export holding it ages out a month later. Pruning
+  only follows a clean run - a new export that landed and passed every check -
+  so an export that has stopped working, or come back suspect, never deletes the
+  good ones before it. The age is read from the date in each file's name, not
+  from the file's timestamps, which a copy can change.
 
   Exit codes: 0 wrote and validated; 1 the export failed, nothing written; 2
   wrote the file but a check failed - read the log. Task Scheduler shows the
@@ -41,6 +48,10 @@
 .PARAMETER NoMirror
   Skip the off-machine copy entirely.
 
+.PARAMETER RetentionDays
+  How many days of backups to keep, in BackupDir and the mirror. Defaults to 30.
+  0 keeps everything.
+
 .PARAMETER MinBytes
   Refuse to call an export healthy below this size. Defaults to 10 KB: catches
   an empty or truncated file without tripping on a new install with few rows.
@@ -63,6 +74,7 @@ param(
     ),
     [switch]$NoMirror,
     [switch]$NoDocuments,
+    [int]$RetentionDays = 30,
     [int]$MinBytes = 10240
 )
 
@@ -325,6 +337,46 @@ if (-not $NoDocuments) {
     }
 } else {
     Log "documents: skipped (-NoDocuments)"
+}
+
+# ---- Retention -------------------------------------------------------------
+#
+# The day a backup was taken, from its name: d1-<db>-yyyy-MM-dd-HHmmss.sql, or
+# documents\yyyy-MM-dd-HHmmss. $null for anything else, which is never pruned -
+# a file this script didn't name is not this script's to delete.
+function Get-BackupDate([string]$Name) {
+    $m = [regex]::Match($Name, '(\d{4}-\d{2}-\d{2})-\d{6}(\.sql)?$')
+    if (-not $m.Success) { return $null }
+    return [datetime]::ParseExact($m.Groups[1].Value, "yyyy-MM-dd", $null)
+}
+
+function Remove-ExpiredBackups([string]$Dir, [datetime]$Cutoff) {
+    if (-not (Test-Path $Dir)) { return 0 }
+    $removed = 0
+    $expired = @(Get-ChildItem $Dir -Filter "*.sql" -File -ErrorAction SilentlyContinue)
+    $docs = Join-Path $Dir "documents"
+    if (Test-Path $docs) { $expired += @(Get-ChildItem $docs -Directory -ErrorAction SilentlyContinue) }
+    foreach ($item in $expired) {
+        $taken = Get-BackupDate $item.Name
+        if (-not $taken -or $taken -ge $Cutoff) { continue }
+        try {
+            Remove-Item $item.FullName -Recurse -Force -ErrorAction Stop
+            Log ("pruned {0} (taken {1:yyyy-MM-dd}, older than {2} days)" -f $item.FullName, $taken, $RetentionDays)
+            $removed++
+        } catch {
+            Log "WARNING: could not prune $($item.FullName) - $($_.Exception.Message)"
+        }
+    }
+    return $removed
+}
+
+if ($RetentionDays -gt 0 -and $problems.Count -eq 0) {
+    $cutoff = (Get-Date).Date.AddDays(-$RetentionDays)
+    $pruned = Remove-ExpiredBackups $BackupDir $cutoff
+    if (-not $NoMirror -and $MirrorDir) { $pruned += Remove-ExpiredBackups $MirrorDir $cutoff }
+    Log ("retention: kept backups taken on or after {0:yyyy-MM-dd}; pruned {1}" -f $cutoff, $pruned)
+} elseif ($RetentionDays -gt 0) {
+    Log "retention: skipped - this run has warnings, so nothing older is pruned until a clean run replaces it."
 }
 
 $kept = (Get-ChildItem $BackupDir -Filter "*.sql" -ErrorAction SilentlyContinue).Count

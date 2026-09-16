@@ -3,9 +3,15 @@
   Copies new database exports into the protected archive. Runs as SYSTEM.
 
 .DESCRIPTION
-  Copies exports not yet in the archive, matched by name, and never removes
-  anything: an archive that mirrored deletions could be emptied by deleting the
-  source.
+  Copies exports not yet in the archive, matched by name, and never mirrors a
+  deletion: an archive that did could be emptied by deleting the source.
+
+  It does prune by age, on its own rule: an export taken more than
+  RetentionDays (30) ago is removed, which is how a deleted account's data
+  leaves this archive too. The age is the date in the file's name. Nothing is
+  pruned unless the archive also holds an export from inside the window, so an
+  export that has stopped running never lets this empty the archive - the
+  newest old backups stay until something newer arrives to replace them.
 
   Runs as SYSTEM because the archive is read-only to the everyday account (see
   protect-backups.ps1, which registers the task). Its log lives in the archive
@@ -23,6 +29,10 @@
 .PARAMETER Pattern
   Which files to archive. Defaults to *.sql.
 
+.PARAMETER RetentionDays
+  How many days of exports the archive keeps. Defaults to 30. 0 keeps
+  everything.
+
 .EXAMPLE
   .\archive-backups.ps1 -SourceDir C:\VibeCoding\private\backups
 #>
@@ -32,7 +42,9 @@ param(
 
     [string]$ArchiveDir = (Join-Path $env:ProgramData "JobSearchTracker\backups"),
 
-    [string]$Pattern = "*.sql"
+    [string]$Pattern = "*.sql",
+
+    [int]$RetentionDays = 30
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,11 +68,24 @@ if (-not (Test-Path $SourceDir)) {
     exit 1
 }
 
+# The day an export was taken, from its name (d1-<db>-yyyy-MM-dd-HHmmss.sql), or
+# $null for a name that doesn't carry one - never pruned.
+function Get-ExportDate([string]$Name) {
+    $m = [regex]::Match($Name, '(\d{4}-\d{2}-\d{2})-\d{6}\.sql$')
+    if (-not $m.Success) { return $null }
+    return [datetime]::ParseExact($m.Groups[1].Value, "yyyy-MM-dd", $null)
+}
+$cutoff = if ($RetentionDays -gt 0) { (Get-Date).Date.AddDays(-$RetentionDays) } else { $null }
+
 $copied = 0
 $failed = 0
 foreach ($f in Get-ChildItem $SourceDir -Filter $Pattern -File | Sort-Object Name) {
     $dest = Join-Path $ArchiveDir $f.Name
     if (Test-Path $dest) { continue }
+    # Already past the window: copying it in would only have it pruned below,
+    # and copied in again tomorrow while the source still holds it.
+    $taken = Get-ExportDate $f.Name
+    if ($cutoff -and $taken -and $taken -lt $cutoff) { continue }
     try {
         Copy-Item $f.FullName $dest
         Log ("archived {0} ({1:N0} bytes)" -f $f.Name, $f.Length)
@@ -68,6 +93,29 @@ foreach ($f in Get-ChildItem $SourceDir -Filter $Pattern -File | Sort-Object Nam
     } catch {
         Log "ERROR: could not archive $($f.Name) - $($_.Exception.Message)"
         $failed++
+    }
+}
+
+if ($cutoff) {
+    $exports = @(Get-ChildItem $ArchiveDir -Filter $Pattern -File |
+        ForEach-Object { [pscustomobject]@{ File = $_; Taken = (Get-ExportDate $_.Name) } } |
+        Where-Object { $_.Taken })
+    $inWindow = @($exports | Where-Object { $_.Taken -ge $cutoff })
+    if ($inWindow.Count -eq 0) {
+        Log ("retention: skipped - no export from the last {0} days is here, so nothing older is pruned until one arrives." -f $RetentionDays)
+    } else {
+        $pruned = 0
+        foreach ($e in @($exports | Where-Object { $_.Taken -lt $cutoff })) {
+            try {
+                Remove-Item $e.File.FullName -Force -ErrorAction Stop
+                Log ("pruned {0} (taken {1:yyyy-MM-dd}, older than {2} days)" -f $e.File.Name, $e.Taken, $RetentionDays)
+                $pruned++
+            } catch {
+                Log "ERROR: could not prune $($e.File.Name) - $($_.Exception.Message)"
+                $failed++
+            }
+        }
+        Log ("retention: kept exports taken on or after {0:yyyy-MM-dd}; pruned {1}" -f $cutoff, $pruned)
     }
 }
 
