@@ -16,7 +16,9 @@
 
 import {
   bearer,
+  countAccountRows,
   createSession,
+  deleteAccount,
   deleteOtherBrowserSessions,
   deleteSession,
   getUserById,
@@ -26,6 +28,7 @@ import {
   verifyPassword,
 } from "../auth.js";
 import { json, readJson, unauthorized } from "../http.js";
+import { Docs } from "../r2.js";
 
 /**
  * POST /api/login - public. Body `{ name, password, label? }` ->
@@ -97,6 +100,53 @@ export async function handleUpsertUser({ request, env }) {
   const demo = typeof body.demo === "boolean" ? body.demo : undefined;
   const result = await upsertUser(env.DB, name, password, demo);
   return json(result, result.created ? 201 : 200);
+}
+
+/**
+ * DELETE /api/users/<id> - in ADMIN_ROUTES, so the router has already required
+ * ADMIN_TOKEN. Body `{ name, dryRun? }` -> `{ deleted: {<table>: n, documents,
+ * invites} }`, or `{ dryRun: true, wouldDelete }`; 400 without a name, 404 for
+ * an id nobody has, 409 when the name is not that account's.
+ *
+ * The id is in the path and the name in the body because deleting an account
+ * should take two independent references to the same person. A mistyped id
+ * alone deletes nobody: it either doesn't resolve, or resolves to an account
+ * whose name won't match. There is no form of this route that names a set of
+ * accounts - every call deletes exactly one, named twice.
+ *
+ * Documents go before the rows (../auth.js explains the order), and both halves
+ * tolerate having already run, so a call that failed part way is finished by
+ * calling it again rather than by anyone repairing it by hand.
+ *
+ * What the account contributed to the shared company list stays: those facts
+ * are every account's, and the rotation would lose them for everyone. `deleted`
+ * counts rows per table so a caller can assert on what went, the way
+ * /api/purge does.
+ */
+export async function handleDeleteUser({ request, env, params }) {
+  const id = params[0];
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) return json({ error: "name is required - it names the same account as the id, so a wrong id deletes nobody" }, 400);
+
+  const user = await getUserById(env.DB, id);
+  if (!user) return json({ error: `no account with id "${id}"` }, 404);
+  if (user.name !== name) {
+    return json({ error: `"${name}" is not the name of account ${id}`, name: user.name }, 409);
+  }
+
+  const docs = env.DOCS ? new Docs(env.DOCS, user.id) : null;
+  if (body.dryRun) {
+    const rows = await countAccountRows(env.DB, user.id);
+    const documents = docs ? (await docs.list()).length : null;
+    return json({ dryRun: true, wouldDelete: { ...rows, documents } });
+  }
+
+  const documents = docs ? await docs.deleteAll() : null;
+  const deleted = await deleteAccount(env.DB, user.id);
+  return json({ deleted: { ...deleted, documents } });
 }
 
 /** GET /api/me - requires a Bearer token -> `{ id, name }`. */

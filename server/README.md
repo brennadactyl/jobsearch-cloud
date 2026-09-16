@@ -229,6 +229,29 @@ or a rename leaves their data alone. Passwords must be at least 12
 characters - `/api/login` has no rate limiting, so length is the whole
 defence (see [Security](#security-notes)).
 
+**Delete someone** - everything they own, and nothing anyone else's:
+
+```bash
+curl -s -X DELETE "$TRACKER_URL/api/users/<their-id>" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"Their Name","dryRun":true}'
+```
+
+The dry run counts what would go; the same call without `dryRun` does it and
+counts what went. The id and the name have to name the same account, so a
+mistyped id deletes nobody, and only that one account is ever named.
+
+This is the only way to remove an account. `/api/purge` works a track at a
+time, and `POST /api/config` refuses an empty track list, so retiring someone's
+last track leaves a placeholder behind rather than an empty account.
+
+Their contribution to the shared company list stays - a company's board and
+whether it walls a fetch is every account's, and the rotation would lose it for
+everyone. Their own record of which companies they swept goes with them. Their
+resume, baseline docs and anything else under their prefix in R2 go too, and
+they are gone before the rows are, so a call that dies half way is finished by
+making it again.
+
 **Sign in** - the webpage does this for them. Do it by hand once per machine
 that runs their searches, to mint the long-lived token for the scheduled
 runs:
@@ -323,7 +346,8 @@ application id or track key doesn't resolve, and comes back as a 404.
 - `GET /api/invite/:code` - **no auth** -> `{ valid: true, expires_at }` or `{ valid: false, reason: "invalid"|"used"|"expired"|"revoked" }`. An unknown code and a malformed one both read `invalid`.
 - `POST /api/signup` - **no auth** - body `{ code, name, password }` -> `201 { token, user: { id, name } }`, a browser session. `410 { error, reason }` for an invite that can't be used; `400 { error, field }` for a name (1-60 characters, trimmed) or a password under 12 characters; `409 { error, field: "name" }` for a name already taken, which leaves the invite open. The invite is checked first, so a caller without a working link learns nothing about which names exist. Claiming the invite and creating the account are one transaction: one link makes one account, and signup never touches an existing one.
 - `POST /api/logout` - revokes **only the token that made the request**.
-- `POST /api/users` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ name, password, demo? }` -> `{ id, name, created, demo }`: creates an account with a fresh GUID (`201`), or sets an existing name's password (`200`), which makes it the password reset too. Minimum 12 characters. `demo: true` marks an account whose data is invented, which `POST /api/coverage` then refuses; omitted, a new account is a person and an existing one keeps what it was. See [Accounts](#accounts).
+- `POST /api/users` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ name, password, demo? }` -> `{ id, name, created, demo }`: creates an account with a fresh GUID (`201`), or sets an existing name's password (`200`), which makes it the password reset too. Minimum 12 characters. `demo: true` marks an account whose data is invented, which `POST /api/coverage` and `POST /api/tokens` then refuse; omitted, a new account is a person and an existing one keeps what it was. See [Accounts](#accounts).
+- `DELETE /api/users/<id>` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ name, dryRun? }` -> `{ deleted: {<table>: n, documents, invites} }`, or `{ dryRun: true, wouldDelete }`: removes the account and everything it owns - its rows in every table with a `user_id`, its sessions, and its documents in R2. `400` without a name, `404` for an id nobody has, `409` when the name is not that account's. The account is named twice, in the path and the body, so a mistyped id deletes nobody; there is no form of this that names a set of accounts. Documents go before the rows, so a call that fails between the two leaves an account whose documents are gone and is finished by calling again - and deleting an account that is already gone is a `404`, since there is nothing left to delete. What the account contributed to the shared company list stays, because those facts are every account's. An invite that created it keeps its ledger row with `used_by` cleared. See [Accounts](#accounts).
 - `POST /api/password` - body `{ currentPassword, newPassword, signOutOthers? }` -> `{ ok, signedOut }`. Changes the caller's own password; needs the current password as well as the session. `403` for a wrong current password, `400` for a new one under 12 characters or identical to the old. Other sessions survive unless `signOutOthers: true`, which revokes only this person's other `browser`-labelled sessions and reports how many in `signedOut`. See [Changing your own password](#changing-your-own-password).
 - `GET /api/me` -> `{ id, name }` - who this token belongs to.
 
@@ -483,6 +507,8 @@ The full procedure - choosing a port, starting the dev worker, deploying - is
   so guessing one is not a practical attack and a leaked backup holds no usable
   invite. Signup changes nothing without an open code.
 - **`ADMIN_TOKEN` reaches every account's data.** It creates accounts and resets
-  passwords, and `POST /api/tokens` mints a session that reads and writes
-  everything an account owns. Treat it, and the `deployment.json` that holds it,
-  as the keys to every account on the deployment.
+  passwords, `POST /api/tokens` mints a session that reads and writes everything
+  an account owns, and `DELETE /api/users/<id>` removes an account and its data
+  outright - the one action here that a backup is the only way back from. Treat
+  it, and the `deployment.json` that holds it, as the keys to every account on
+  the deployment.

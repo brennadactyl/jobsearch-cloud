@@ -2151,5 +2151,112 @@ for (const [method, path] of [
     (await req(method, path, { token: N_TOK, body: method === "POST" ? {} : undefined })).status === 401);
 }
 
+console.log("\n== deleting an account ==");
+// What a test account, or a person who asks to be forgotten, leaves behind.
+// Nothing else can remove it: /api/purge works a track at a time, and
+// POST /api/config refuses an empty track list, so retiring the last track
+// leaves a placeholder behind.
+const delRun = Date.now();
+const goneInvite = await invAdmin("POST", "/api/invites", { note: `delete check ${delRun}` });
+const goneName = `Gone ${delRun}`;
+const goneSignup = await req("POST", "/api/signup", {
+  body: { code: goneInvite.json.code, name: goneName, password: "gone-long-password-1" } });
+const GONE_ID = goneSignup.json.user.id, GONE_TOK = goneSignup.json.token;
+// A neighbour, created the same way, whose rows must be untouched by the delete.
+const stayInvite = await invAdmin("POST", "/api/invites", { note: `delete neighbour ${delRun}` });
+const stayName = `Stay ${delRun}`;
+const staySignup = await req("POST", "/api/signup", {
+  body: { code: stayInvite.json.code, name: stayName, password: "stay-long-password-1" } });
+const STAY_ID = staySignup.json.user.id, STAY_TOK = staySignup.json.token;
+
+// Give each of them a row in every table an account owns, so "everything went"
+// is a claim about the whole schema rather than the two tables a test remembers.
+const delSeedAccount = async (token, tag) => {
+  const key = `DEL${tag}`;
+  await req("POST", "/api/config", { token, body: {
+    tracks: [{ key, label: "Delete me" }], page_title: `${tag}'s page` } });
+  await req("POST", "/api/leads", { token, body: { leads: [
+    { search: key, company: "Delete Co", title: "Engineer", url: `https://del.example.com/${tag}/${delRun}` }] } });
+  const lead = (await req("GET", "/api/data", { token })).json.leads[0];
+  await req("POST", `/api/leads/${lead.id}/status`, { token, body: { status: "Applied" } });
+  // A different id, not just a different path: canonicalUrl keys on the ids in
+  // a url, so a screened row sharing the lead's id reads as the same posting.
+  await req("POST", "/api/screened", { token, body: { screened: [{ search: key,
+      url: `https://del.example.com/${tag}/screened-${delRun + 1}`, company: "Screened Co", reason: "not a fit" }] } });
+  await req("POST", "/api/runs", { token, body: { search: key, leads_added: 1, screened_added: 1 } });
+  await req("POST", "/api/coverage", { token, body: { search: key, on: "",
+    swept: [{ company: `Del Sweep ${delRun}` }] } });
+  await req("POST", "/api/intake", { token, body: { answers: {
+    resume_text: "a resume", roles: [{ name: "Eng", titles: "Engineer" }] } } });
+  await req("PUT", `/api/documents/resumes/${tag}_${delRun}.txt`, {
+    token, raw: "resume text", type: "text/plain" });
+  return key;
+};
+await delSeedAccount(GONE_TOK, "gone");
+await delSeedAccount(STAY_TOK, "stay");
+
+const delListLength = async () =>
+  (await req("GET", `/api/coverage/DELstay?all=1`, { token: STAY_TOK })).json.total;
+const delSharedBefore = await delListLength();
+
+const delAdmin = (method, path, body) => req(method, path, { admin: true, body });
+check("deleting an account refuses a session token, whoever it belongs to",
+  (await req("DELETE", `/api/users/${GONE_ID}`, { token: GONE_TOK, body: { name: goneName } })).status === 401);
+check("an id nobody has is a 404, and a missing name a 400",
+  (await delAdmin("DELETE", "/api/users/00000000-0000-4000-8000-000000000000", { name: "x" })).status === 404 &&
+  (await delAdmin("DELETE", `/api/users/${GONE_ID}`, {})).status === 400);
+// The two references are the whole safety story: an id alone never deletes.
+const mismatched = await delAdmin("DELETE", `/api/users/${GONE_ID}`, { name: stayName });
+check("the right id with another account's name is refused, and removes nothing",
+  mismatched.status === 409 &&
+  (await req("GET", "/api/me", { token: GONE_TOK })).status === 200,
+  JSON.stringify({ status: mismatched.status }));
+
+const dryDel = await delAdmin("DELETE", `/api/users/${GONE_ID}`, { name: goneName, dryRun: true });
+check("a dry run counts what would go, and goes through with nothing",
+  dryDel.json.dryRun === true && dryDel.json.wouldDelete?.tracks === 1 && dryDel.json.wouldDelete?.leads === 1 &&
+  dryDel.json.wouldDelete?.documents === 1 &&
+  (await req("GET", "/api/me", { token: GONE_TOK })).status === 200,
+  JSON.stringify(dryDel.json));
+
+// The state a run that died between the two halves leaves: documents gone,
+// rows still there. Deleting again has to finish it rather than refuse.
+await req("DELETE", `/api/documents/resumes/gone_${delRun}.txt`, { token: GONE_TOK });
+const delResult = await delAdmin("DELETE", `/api/users/${GONE_ID}`, { name: goneName });
+check("a delete that follows a half-finished one completes it",
+  delResult.status === 200 && delResult.json.deleted?.documents === 0 && delResult.json.deleted?.tracks === 1,
+  JSON.stringify(delResult.json));
+check("it reports what it removed, per table, the way /api/purge does",
+  delResult.json.deleted?.leads === 1 && delResult.json.deleted?.applications === 1 &&
+  delResult.json.deleted?.screened === 1 && delResult.json.deleted?.search_runs === 1 &&
+  delResult.json.deleted?.company_sweeps === 1 && delResult.json.deleted?.intake === 1 &&
+  delResult.json.deleted?.meta >= 1 && delResult.json.deleted?.sessions === 1,
+  JSON.stringify(delResult.json.deleted));
+check("the account is gone: its token is dead and its name can't sign in",
+  (await req("GET", "/api/me", { token: GONE_TOK })).status === 401 &&
+  (await req("POST", "/api/login", { body: { name: goneName, password: "gone-long-password-1" } })).status === 401);
+check("and deleting it again is a 404, since there is nothing left to delete",
+  (await delAdmin("DELETE", `/api/users/${GONE_ID}`, { name: goneName })).status === 404);
+
+// The point of the whole feature, checked the way the isolation checks are:
+// one account's deletion is invisible to another.
+const delStayData = await req("GET", "/api/data", { token: STAY_TOK });
+const delStayDocs = await req("GET", "/api/documents", { token: STAY_TOK });
+check("the other account still has its session, rows and documents",
+  delStayData.status === 200 && delStayData.json.leads?.length === 1 &&
+  (delStayDocs.json?.documents || []).some((d) => d.path === `resumes/stay_${delRun}.txt`),
+  JSON.stringify({ leads: delStayData.json.leads?.length, docs: (delStayDocs.json?.documents || []).length }));
+check("the shared company list is untouched - those facts are everyone's",
+  (await delListLength()) === delSharedBefore,
+  JSON.stringify({ before: delSharedBefore, after: await delListLength() }));
+
+// The delLedger outlives the account: an operator can still see who was invited
+// and when, without the deleted person's name or id surviving in it.
+const delLedger = (await invAdmin("GET", "/api/invites")).json.invites;
+const delGoneRow = (delLedger || []).find((i) => i.note === `delete check ${delRun}`);
+check("the invite that made it keeps its ledger row, used, with no account",
+  !!delGoneRow && delGoneRow.state === "used" && !!delGoneRow.used_at && delGoneRow.user === null,
+  JSON.stringify(delGoneRow));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
