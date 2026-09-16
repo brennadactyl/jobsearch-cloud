@@ -1,6 +1,7 @@
 /**
  * Vocabulary mirrored by hand from server/src/routes/; nothing checks the copies
- * agree. A shared types package is out of scope (docs/react-adoption-plan.md).
+ * agree. Server and client are built separately, so there is no shared types
+ * package to import them from.
  */
 
 /** server/src/routes/leads.js */
