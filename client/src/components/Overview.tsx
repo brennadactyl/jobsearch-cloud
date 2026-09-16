@@ -294,15 +294,17 @@ function CountCell({ c, tip }: { c: Count | null; tip: string }) {
   );
 }
 
-function RateCell({ part, whole, min = 1, tip }: { part: number; whole: number; min?: number; tip: string }) {
-  const pct = rate(part, whole, min);
+/**
+ * A count's rate, set after it in the same cell: "7 · 6%". Never the link - the
+ * count beside it is what opens the rows. Nothing for a zero count, whose rate
+ * is zero and says nothing the count doesn't.
+ */
+function RateNote({ part, whole, min = 1, tip }: { part: number; whole: number; min?: number; tip: string }) {
+  const pct = part ? rate(part, whole, min) : null;
   if (pct === null) return null;
   return (
     <Mark n={0} tip={`${tip}: ${part} of ${whole}`} className="rate" focusable>
-      <span className="mono">{pct}%</span>
-      <span className="rate-meter" aria-hidden="true">
-        <i style={{ width: `${Math.min(100, pct)}%` }} />
-      </span>
+      {` · ${pct}%`}
     </Mark>
   );
 }
@@ -342,13 +344,11 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
         </td>
         <td className="num">
           <CountCell c={r.applied} tip={`${name} · ${LABELS.applied}`} />
+          {r.found && <RateNote part={r.applied.n} whole={r.found.n} tip={`${name} · ${LABELS.applyRate}`} />}
         </td>
         <td className="num">
           <CountCell c={r.responded} tip={`${name} · ${LABELS.responded}`} />
-        </td>
-        <td>{r.found && <RateCell part={r.applied.n} whole={r.found.n} tip={`${name} · ${LABELS.applyRate}`} />}</td>
-        <td>
-          <RateCell
+          <RateNote
             part={r.responded.n}
             whole={r.applied.n}
             min={MIN_FOR_RESPONSE_RATE}
@@ -372,8 +372,6 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
                 <th className="num">{LABELS.notAFit.replace(/ a /i, (m) => `${m.trimEnd()} `)}</th>
                 <th className="num">{LABELS.applied}</th>
                 <th className="num">{LABELS.responded}</th>
-                <th>{LABELS.applyRate}</th>
-                <th>{LABELS.responseRate}</th>
               </tr>
             </thead>
             <tbody>
@@ -430,9 +428,14 @@ function TierChart({ data }: { data: TrackerData }) {
               <div key={b.key}>
                 <div className="hrow-head">
                   <span>{b.label}</span>
-                  <span className="mono">{totals[i]}</span>
                 </div>
-                <StackedBar label={b.label} segments={segs(b, totals[i])} scale={totals[i] / max} />
+                <StackedBar
+                  label={b.label}
+                  segments={segs(b, totals[i])}
+                  scale={totals[i] / max}
+                  end={totals[i]}
+                  endDigits={String(max).length}
+                />
               </div>
             ))}
           </div>
