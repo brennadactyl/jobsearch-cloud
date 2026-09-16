@@ -77,6 +77,12 @@ unreachable, which tab a finding belongs in, what a run must report.
   optional step follows that shape rather than becoming another config flag.
 - `buildAutofillPrompt()` takes no arguments - the nightly application fill is
   the same text for everybody. Keep it that way.
+- **Code outside `prompt.js` cites steps by number and heading** - "step 9d
+  ("RECORD WHAT YOU COVERED")", "step 1b (`./tracker dedup`)". Renumber a step,
+  reword its heading, or change what a cited command or builder variable does,
+  and grep `server/src` and `scripts/` for the old text in the same change.
+  Nothing fails when a comment's citation goes stale; the next reader just
+  follows it to a step that says something else.
 
 **Read the result, do not imagine it.** The composed prompt is a route:
 
