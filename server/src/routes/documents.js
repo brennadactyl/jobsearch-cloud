@@ -17,7 +17,9 @@
  */
 
 import { json, CORS_HEADERS } from "../http.js";
-import { badDocumentPath, isDocumentPath } from "../validate.js";
+import { parseDocumentList } from "../db.js";
+import { searchRootOf } from "../tracks.js";
+import { badDocumentPath, isDocumentPath, unknownTrack } from "../validate.js";
 
 /**
  * The largest document this API will store. Every object is downloaded in full
@@ -61,25 +63,69 @@ function missingBucket(docs) {
 }
 
 /**
- * GET /api/documents - requires a Bearer token -> `{ documents: [...] }`.
+ * GET /api/documents[?search=<key>] - requires a Bearer token -> `{ documents:
+ * [...] }`, or with `search`, `{ search, documents: [...], missing: [path, ...] }`;
+ * with `search`, 404 for a track this person doesn't have and 409 for one whose
+ * `documents` list is empty.
  *
  * Path, kind, content type, size, etag and upload time for each, with no
- * bodies, so the listing stays cheap: the nightly runner fetches this first and
- * then only the paths it needs.
+ * bodies, so the listing stays cheap.
+ *
+ * Without `search`, everything this person has - what the backup and the
+ * import script want. With it, only what that one search reads: its tracking
+ * doc (`doc_file`) and its `documents` list (migrations/0017). The nightly run
+ * asks with `search`, so a person with two searches doesn't hand each one the
+ * other's tracking doc and resumes. A tab another search fills is served that
+ * search's list, since that search is the one that runs.
+ *
+ * `missing` names a listed path with no document behind it, rather than
+ * leaving it out: the runner refuses to search against a partial profile, and
+ * a path quietly dropped here would look like a complete one.
+ *
+ * An empty `documents` list is refused, not served as the tracking doc alone. A
+ * search with no resume runs anyway and searches for nothing in particular, and
+ * the refusal is the loud version of that.
  */
-export async function handleListDocuments({ docs }) {
+export async function handleListDocuments({ docs, db, url }) {
   const unconfigured = missingBucket(docs);
   if (unconfigured) return unconfigured;
 
+  const all = (await docs.list()).map((d) => ({
+    path: d.path,
+    kind: d.kind,
+    content_type: d.contentType,
+    bytes: d.bytes,
+    etag: d.etag,
+    uploaded: d.uploaded,
+  }));
+
+  const search = url.searchParams.get("search");
+  if (search === null) return json({ documents: all });
+
+  const track = await db.getTrack(search);
+  if (!track) return unknownTrack(search);
+  // A fed tab reads the documents of the search that fills it. A root that has
+  // gone missing falls back to the tab itself.
+  const rootKey = searchRootOf(track);
+  const runs = rootKey === track.key ? track : (await db.getTrack(rootKey)) || track;
+
+  const listed = parseDocumentList(runs.documents);
+  if (listed.length === 0) {
+    return json(
+      {
+        error: `search "${runs.key}" lists no documents, so a run would have no resume to read - set its documents before running it`,
+        field: "documents",
+      },
+      409
+    );
+  }
+
+  const wanted = [...new Set([runs.doc_file, ...listed].filter(Boolean))];
+  const byPath = new Map(all.map((d) => [d.path, d]));
   return json({
-    documents: (await docs.list()).map((d) => ({
-      path: d.path,
-      kind: d.kind,
-      content_type: d.contentType,
-      bytes: d.bytes,
-      etag: d.etag,
-      uploaded: d.uploaded,
-    })),
+    search: runs.key,
+    documents: wanted.filter((p) => byPath.has(p)).map((p) => byPath.get(p)),
+    missing: wanted.filter((p) => !byPath.has(p)),
   });
 }
 

@@ -783,6 +783,10 @@ Rules for this run:
         foreach ($t in $tracks) {
             $body = $t.Body.Clone()
             if ($first) { foreach ($k in $scopeBody.Keys) { $body[$k] = $scopeBody[$k] } }
+            # The documents the search reads besides its tracking doc: the one
+            # resume this run chose, which resume_line was checked to name. A
+            # track with no list is refused its documents at run time.
+            $body["documents"] = @($resumePath)
             $written = Api POST "/api/writeup" $personToken $body
             Log "      wrote up $($t.Key) at $($t.Slot): $(($written.written) -join ', ')"
             $first = $false

@@ -1,6 +1,6 @@
 /**
  * Invites and setup intake: the data behind invite signup and first-run setup
- * (docs/onboarding-plan.md).
+ * (docs/onboarding.md).
  *
  * Not methods on Db, which is bound to one user and can only see that user's
  * rows. An invite belongs to no one until it is used, signup runs before there
@@ -18,6 +18,30 @@ const DAY_MS = 86400000;
 // How many nights a failed setup is retried before the run gives up and the
 // note tells the person to ask whoever invited them.
 export const RETRY_NIGHTS = 3;
+const RETRY_WINDOW_MS = RETRY_NIGHTS * DAY_MS;
+
+/**
+ * The oldest `sent_at` a failed setup can have and still be retried at `now`:
+ * pendingIntakes hands the run a failed setup only while its `sent_at` is after
+ * this, strictly.
+ * @param {number} now - milliseconds since the epoch
+ */
+export function retryCutoff(now) {
+  return new Date(now - RETRY_WINDOW_MS).toISOString();
+}
+
+/**
+ * The first instant a setup sent at `sentAt` is no longer retried, which the
+ * page shows so it stops promising another night. It is retryCutoff's rule
+ * turned around - `sentAt > retryCutoff(now)` holds exactly while
+ * `now < retriesEndAt(sentAt)` - so the two must change together. "" when there
+ * is no readable `sentAt`.
+ * @param {string} sentAt
+ */
+export function retriesEndAt(sentAt) {
+  const sent = Date.parse(sentAt || "");
+  return Number.isNaN(sent) ? "" : new Date(sent + RETRY_WINDOW_MS).toISOString();
+}
 
 /**
  * @typedef {{id: number, code_hash: string, note: string, created_at: string,
@@ -214,7 +238,7 @@ function parseAnswers(text) {
  */
 export async function pendingIntakes(d1) {
   // A failed setup is retried on the following nights with the same answers,
-  // and gives up after three (docs/instant-setup-plan.md). The bound is here,
+  // and gives up after three (docs/onboarding.md#retries). The bound is here,
   // in what the run is handed, rather than in the run's own memory: a run that
   // forgot, or a second machine, would otherwise retry a setup that has already
   // been abandoned, and the person would keep being told tonight is the night.
@@ -223,7 +247,7 @@ export async function pendingIntakes(d1) {
   // nothing stores an attempt count - an `attempts` column is the better shape
   // and is its own change. Until then a night the machine was off spends one of
   // the three.
-  const giveUpBefore = new Date(Date.now() - RETRY_NIGHTS * DAY_MS).toISOString();
+  const giveUpBefore = retryCutoff(Date.now());
   const rows = await d1
     .prepare(
       `SELECT i.user_id, u.name, i.status, i.status_note, i.sent_at, i.updated_at, i.answers

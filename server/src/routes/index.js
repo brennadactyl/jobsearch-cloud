@@ -45,6 +45,7 @@ import {
   handlePutDocument,
 } from "./documents.js";
 import { handleDelistUrls, handleMarkVerified } from "./delisting.js";
+import { handleGetRunLog, handleListRunLogs, handlePutRunLog } from "./logs.js";
 import { handleAddLeads, handleDeleteLeads, handleSetLeadStatus } from "./leads.js";
 import {
   handleCheckInvite,
@@ -71,12 +72,9 @@ import { handleUpdate } from "./update.js";
  *   has no account yet, so there is nothing else they could present. Each
  *   answers only to a code worth 32 random bytes, and signup changes nothing
  *   unless that code is an open invite.
- * - Provisioning a user and purging a retired search, each with ADMIN_TOKEN
- *   checked inside the handler. They name their subject in the body rather than
- *   being the caller, so a session would be the wrong credential - and sitting
- *   here means a session token is not even a candidate credential. A new admin
- *   route belongs in ADMIN_ROUTES instead, where the router does the check
- *   rather than each handler.
+ *
+ * Nothing here takes ADMIN_TOKEN: an operator route belongs in ADMIN_ROUTES,
+ * where the router checks the token for every entry.
  *
  * @type {Array<[string, string|RegExp, Function]>}
  */
@@ -84,8 +82,6 @@ export const PUBLIC_ROUTES = [
   ["POST", "/api/login", handleLogin],
   ["GET", /^\/api\/invite\/([^/]+)$/, handleCheckInvite],
   ["POST", "/api/signup", handleSignup],
-  ["POST", "/api/users", handleUpsertUser],
-  ["POST", "/api/purge", handlePurgeSearch],
 ];
 
 /**
@@ -105,10 +101,12 @@ export const ADMIN_ROUTES = [
   ["GET", "/api/intake/pending", handlePendingIntakes],
   ["POST", "/api/intake/complete", handleCompleteIntake],
   ["POST", "/api/tokens", handleMintSearchToken],
-  // Deleting an account sits here rather than beside POST /api/users in
-  // PUBLIC_ROUTES: the router checks the token for this list, so the handler
-  // cannot forget to.
+  // Creating an account or resetting its password, and removing one. Each names
+  // the account it acts on, so the caller is never the subject.
+  ["POST", "/api/users", handleUpsertUser],
   ["DELETE", /^\/api\/users\/([^/]+)$/, handleDeleteUser],
+  // Removing the rows a retired search left behind, for the account named in the body.
+  ["POST", "/api/purge", handlePurgeSearch],
 ];
 
 /**
@@ -177,6 +175,11 @@ export const SESSION_ROUTES = [
   ["GET", /^\/api\/documents\/(.+)$/, handleGetDocument],
   ["PUT", /^\/api\/documents\/(.+)$/, handlePutDocument],
   ["DELETE", /^\/api\/documents\/(.+)$/, handleDeleteDocument],
+  // A search's run logs (./logs.js), kept apart from the documents a run
+  // downloads. Also addressed by URI, so PUT carries the write.
+  ["GET", /^\/api\/logs\/([^/]+)$/, handleListRunLogs],
+  ["GET", /^\/api\/logs\/([^/]+)\/([^/]+)$/, handleGetRunLog],
+  ["PUT", /^\/api\/logs\/([^/]+)\/([^/]+)$/, handlePutRunLog],
 ];
 
 /**

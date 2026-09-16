@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0016_intake.sql` applied in order. This is the
+`0001_schema.sql` through `0017_track_documents.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -107,6 +107,7 @@ erDiagram
         TEXT schedule_time
         TEXT fed_by FK
         INTEGER sweep_cursor
+        TEXT documents "JSON list of paths"
     }
     search_runs {
         TEXT user_id PK, FK
@@ -250,7 +251,8 @@ These hold across every table, so the per-table notes below leave them out.
   insert that omits it succeeds with no owner. Always supply it.
 - The only defaults other than `''` and `0` are `leads.status` (`New`),
   `applications.status` (`Applied`), `users.iterations` (`100000`),
-  `intake.status` (`pending`) and `intake.answers` (`{}`).
+  `intake.status` (`pending`), `intake.answers` (`{}`) and `tracks.documents`
+  (`[]`).
 - `leads.id`, `screened.id`, `applications.id` and `invites.id` are
   `AUTOINCREMENT`, unique across all users.
 - `user_id` has its own index on `sessions`, `leads`, `screened` and
@@ -289,6 +291,11 @@ search of its own.
   set has no search of its own.
 - `sweep_cursor` is how far this track's search has read through the shared
   list, compared against `company_fetch.position`.
+- `documents` is a JSON list of the document paths this search reads besides
+  its `doc_file` - its resume, and any reference file. A run downloads its
+  `doc_file` and these, not everything its person has, and a track whose list
+  is empty has no documents served to it at all (`GET /api/documents?search=`).
+  A `fed_by` tab is served the list of the search that fills it.
 
 ### search_runs
 

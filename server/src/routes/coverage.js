@@ -103,7 +103,7 @@ export async function handleGetCoverage({ db, params, url }) {
   const companies = sliceAt(eligible, cursor);
 
   // What is known about reaching each company, pooled across the deployment
-  // (migrations/0010_company_fetch.sql). Attached here rather than served by a
+  // (docs/glossary.md#companies-and-the-rotation). Attached here rather than served by a
   // route of its own, because a run skips a second call on a busy night. Keyed
   // by company, so nothing about anyone's rotation travels with it.
   const intel = await db.getCompanyFetch(companies.map((c) => c.company));
@@ -137,7 +137,7 @@ export async function handleGetCoverage({ db, params, url }) {
 export async function handleRecordSweeps({ request, db, user }) {
   // A demo account's companies are invented, and this route writes the list
   // every account's searches are served from (membership via addCompanies,
-  // facts via upsertCompanyFetch; migrations/0012_demo_account.sql). Refused
+  // facts via upsertCompanyFetch; demo account in docs/glossary.md#accounts). Refused
   // whole rather than filtered, so the caller hears that nothing was written.
   // Reading the list is unaffected.
   if (user.demo) {
@@ -166,7 +166,7 @@ export async function handleRecordSweeps({ request, db, user }) {
   const on = body.on === "" ? "" : isoDate(body.on) || today();
 
   // Seeding a new search with the companies its person named, and starting its
-  // rotation there (docs/onboarding-plan.md). Without it a new track's cursor
+  // rotation there (docs/onboarding.md#the-flow). Without it a new track's cursor
   // is 0 and seeded companies are appended past the end of the list, so the
   // search reaches the names it was given last - a week of nights on a list
   // this size.
@@ -206,7 +206,7 @@ export async function handleRecordSweeps({ request, db, user }) {
     }
   }
 
-  // The list is shared (0011_one_company_list.sql): `log` is every company on
+  // The list is shared (docs/glossary.md#companies-and-the-rotation): `log` is every company on
   // it, with this search's own record of each. Matched through normalize(), so
   // a run that writes "Cursor Anysphere" finds the company listed as
   // "Cursor (Anysphere)" instead of adding it a second time.

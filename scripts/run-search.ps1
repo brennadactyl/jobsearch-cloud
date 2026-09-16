@@ -104,6 +104,11 @@ $logDir = Join-Path $workDir "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $logFile = Join-Path $logDir "$Task.log"
 
+# Where this run's part of the log begins, and the name the uploaded copy of it
+# carries: the start of the run, in UTC. See Send-RunLog.
+$runLogOffset = if (Test-Path $logFile) { (Get-Item $logFile).Length } else { 0 }
+$runStarted = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH-mm-ssZ")
+
 # -Encoding utf8 on every writer to this log (here and the claude-output append
 # below). Windows PowerShell 5.1's Out-File defaults to UTF-16LE, and mixing
 # encodings in one file makes grep report it as binary and Get-Content decode
@@ -249,12 +254,51 @@ function Add-RunNote($text) {
 # Every fatal path before the CLI runs exits through here, so none can skip
 # recording. The checks above - data dir, user folder, credentials - cannot use
 # it, since there is no tracker to record to yet.
+# ---- This run's log, off this machine. ------------------------------------
+#
+# Uploads the part of the log this run wrote (PUT /api/logs), so what a search
+# did is kept with the tracker rather than only on the machine that ran it. It
+# is the last thing a run does, whether it succeeded or failed, so the upload
+# carries everything the run logged before it.
+#
+# A failed upload is a warning in the local log and never changes the run's
+# result: the search has already happened, and the local log still has all of
+# it. The same name on every attempt means a retry replaces its own copy.
+function Send-RunLog {
+    try {
+        $all = [System.IO.File]::ReadAllBytes($logFile)
+        # A log file that shrank since the run began was replaced, so all of it
+        # is this run's.
+        $from = if ($runLogOffset -le $all.Length) { $runLogOffset } else { 0 }
+        # Out-File marks a new file as UTF-8 with three bytes at its very start;
+        # the uploaded copy is labelled UTF-8 already, and a reader would show them.
+        if ($from -eq 0 -and $all.Length -ge 3 -and $all[0] -eq 0xEF -and $all[1] -eq 0xBB -and $all[2] -eq 0xBF) { $from = 3 }
+        $length = $all.Length - $from
+        if ($length -le 0) { return }
+        $part = New-Object byte[] $length
+        [Array]::Copy($all, $from, $part, 0, $length)
+        $null = Invoke-WithRetry "PUT /api/logs/$Task/$runStarted" {
+            Invoke-WebRequest -Uri "$trackerUrl/api/logs/$Task/$runStarted" -Method Put `
+                -Headers @{ Authorization = "Bearer $trackerToken" } `
+                -Body $part -ContentType "text/plain; charset=utf-8" -UseBasicParsing -ErrorAction Stop
+        }
+        Log ("run log:          uploaded {0:N0} bytes as {1}" -f $length, $runStarted)
+    } catch {
+        # The tracker's own reason (a 413's size, a 404's track) is in the
+        # response body, which Windows PowerShell keeps in ErrorDetails rather
+        # than in the exception's message.
+        $why = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+        Log "WARNING: couldn't upload this run's log ($(Get-HttpStatus $_)): $why - it is still in $logFile"
+    }
+}
+
 function Stop-Run($reason, $userMessage) {
     Log "ERROR: $reason"
     Record-FailedRun $reason
     # Guarded: the early fatal checks can reach this before the queue below is
     # even loaded, and a run that never took the lock has nothing to give back.
     if (Get-Command Exit-RunLock -ErrorAction SilentlyContinue) { Exit-RunLock }
+    Send-RunLog
     Write-Error $userMessage
     exit 1
 }
@@ -311,10 +355,14 @@ if (-not $promptBody) {
     Stop-Run "the tracker returned an empty prompt for $Task" "The tracker returned an empty prompt for '$Task'."
 }
 
-# ---- Materialize this person's documents into a throwaway directory. -------
+# ---- Materialize this search's documents into a throwaway directory. -------
 #
 # Wiped and refilled every run, so the search reads what the tracker holds and
 # a run's scratch never accumulates in the durable folder.
+#
+# Only this search's documents: its tracking doc and the files its track lists
+# (GET /api/documents?search=). A person with two searches keeps each one's
+# resumes and tracking doc out of the other's run.
 #
 # $manifest maps path -> the etag the file arrived with and its SHA-256. The
 # write-back sends any docs\ file whose hash changed, conditional on that etag.
@@ -331,8 +379,8 @@ if ($UseLocalFiles) {
 } else {
     $index = $null
     try {
-        $index = Invoke-WithRetry "GET /api/documents" {
-            Invoke-RestMethod -Uri "$trackerUrl/api/documents" -Headers $headers -ErrorAction Stop
+        $index = Invoke-WithRetry "GET /api/documents?search=$Task" {
+            Invoke-RestMethod -Uri "$trackerUrl/api/documents?search=$([uri]::EscapeDataString($Task))" -Headers $headers -ErrorAction Stop
         }
     } catch {
         $status = Get-HttpStatus $_
@@ -341,11 +389,21 @@ if ($UseLocalFiles) {
             # server/README.md): run against whatever is on disk.
             Log "documents:        not configured on this deployment - running against $workDir as-is"
         } else {
-            Stop-Run "couldn't list documents ($status): $($_.Exception.Message)" "Couldn't list documents for '$Task' ($status). The search needs its baseline doc and resume."
+            # The tracker's reason - a track with no documents listed is a 409
+            # that says so - is in the response body, which Windows PowerShell
+            # keeps in ErrorDetails.
+            $why = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+            Stop-Run "couldn't list this search's documents ($status): $why" "Couldn't list documents for '$Task' ($status): $why"
         }
     }
 
     if ($index) {
+        # A document the track lists that isn't in the tracker. Refused like a
+        # failed download: the search would run without a file it was set up to
+        # read, most likely its resume.
+        if ($index.missing -and $index.missing.Count -gt 0) {
+            Stop-Run "this search lists documents the tracker doesn't have: $($index.missing -join ', ')" "Search '$Task' lists documents that aren't in the tracker: $($index.missing -join ', '). Upload them, or correct the track's documents list. Refusing to search against a partial profile."
+        }
         # Zero documents is refused: with no baseline doc and no resume the
         # search screens every posting against nothing and reports success,
         # which looks like a quiet night. Usually the import has not been run.
@@ -667,8 +725,10 @@ if ($runDir -and $manifest.Count -gt 0) {
             }
             $exitCode = 1
             # Recorded before the Write-Error below, which ends the script (see
-            # "Recording a failed run" above).
+            # "Recording a failed run" above) - and the log sent for the same
+            # reason.
             Record-FailedRun $failureReason
+            Send-RunLog
             if ($status -eq 412) {
                 Write-Error "'$rel' was modified during the run. This run's copy is at $rescue - merge it by hand; nothing was overwritten."
             } else {
@@ -694,5 +754,6 @@ Log "finished $Task - job state: $jobState, elapsed: ${elapsed}s, waited for the
 Log "===== done ====="
 
 Exit-RunLock
+Send-RunLog
 
 exit $exitCode

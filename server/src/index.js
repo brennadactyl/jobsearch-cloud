@@ -1,6 +1,6 @@
 /**
  * The worker's entry point: the CORS preflight, resolving who is calling,
- * building the `Db` and `Docs` scoped to them, and dispatching to the route
+ * building the `Db`, `Docs` and `RunLogs` scoped to them, and dispatching to the route
  * table in ./routes/index.js.
  *
  * Access control is that scoped construction (see ./db.js): a handler reaches
@@ -11,7 +11,7 @@
 import { bearer, getSessionUser, isAdminRequest } from "./auth.js";
 import { Db } from "./db.js";
 import { corsPreflight, CORS_HEADERS, unauthorized } from "./http.js";
-import { Docs } from "./r2.js";
+import { Docs, RunLogs } from "./r2.js";
 import { ADMIN_ROUTES, matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./routes/index.js";
 
 /**
@@ -27,6 +27,7 @@ import { ADMIN_ROUTES, matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./route
  * @property {Object|null} user the person the token resolved to, or null
  * @property {Db|null} db a Db scoped to that person, or null on a public route
  * @property {Docs|null} docs their documents in R2, scoped the same way
+ * @property {RunLogs|null} runLogs their nightly run logs in R2, scoped the same way
  */
 
 export default {
@@ -38,7 +39,7 @@ export default {
     const open = matchRoute(PUBLIC_ROUTES, request.method, url.pathname);
     if (open) {
       return open.handler({
-        request, env, url, params: open.params, token: "", user: null, db: null, docs: null,
+        request, env, url, params: open.params, token: "", user: null, db: null, docs: null, runLogs: null,
       });
     }
 
@@ -49,7 +50,7 @@ export default {
     if (admin) {
       if (!(await isAdminRequest(request, env))) return unauthorized();
       return admin.handler({
-        request, env, url, params: admin.params, token: "", user: null, db: null, docs: null,
+        request, env, url, params: admin.params, token: "", user: null, db: null, docs: null, runLogs: null,
       });
     }
 
@@ -71,6 +72,7 @@ export default {
       user,
       db: new Db(env.DB, user.id),
       docs: new Docs(env.DOCS, user.id),
+      runLogs: new RunLogs(env.DOCS, user.id),
     });
   },
 };

@@ -74,7 +74,7 @@
  * @property {string} dateWithdrawn
  * @property {string} autofill - '' | 'filled' | 'failed'; whether the nightly fill has read
  *   this row's posting. Server bookkeeping: no route takes it from a caller. See
- *   migrations/0009_application_autofill.sql.
+ *   docs/glossary.md#applications-and-the-fill.
  * @property {string} autofill_note - why a read failed or came back partial; '' otherwise.
  *   Shown on the row
  */
@@ -90,7 +90,7 @@
  * @property {string} location
  * @property {string} reason
  * @property {string} date - YYYY-MM-DD, date screened
- * @property {string} added_by - 'run', 'hand', or '' (migrations/0007_screened_added_by.sql)
+ * @property {string} added_by - 'run', 'hand', or '' (docs/glossary.md#postings)
  * @property {string} found - YYYY-MM-DD the removed lead was found, or '' (migrations/0014_screened_found.sql)
  */
 
@@ -129,6 +129,7 @@
  * @property {string} screened_examples
  * @property {string} schedule_time
  * @property {string} fed_by - key of the sibling track whose search fills this tab, '' when this track runs its own
+ * @property {string} documents - JSON array of document paths this search reads besides doc_file (migrations/0017)
  */
 
 /**
@@ -153,6 +154,7 @@
  */
 
 import { normalize as normalizeCompany } from "./exclude.js";
+import { searchRootKey } from "./tracks.js";
 import { canonicalUrl } from "./url.js";
 
 // The route modules validate against these same lists, so validation and
@@ -183,12 +185,28 @@ export const TRACK_CONFIG_FIELDS = [
   "role_search_line", "target_companies", "search_note", "resume_line",
   "fit_clause", "fit_disqualifier", "fit_filter_step", "leads_note",
   "doc_file", "doc_summary", "doc_update_line", "intro_note", "report_line",
-  "screened_examples", "schedule_time", "fed_by",
+  "screened_examples", "schedule_time", "fed_by", "documents",
 ];
 
 /**
+ * A stored `tracks.documents` value as a list. Anything that does not parse to
+ * a list of strings reads as empty, which GET /api/documents?search= refuses
+ * loudly rather than serving a search nothing.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function parseDocumentList(text) {
+  try {
+    const list = JSON.parse(text || "[]");
+    return Array.isArray(list) ? list.filter((p) => typeof p === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * The track fields the overnight run owns, and the only ones POST /api/writeup
- * can write (docs/instant-setup-plan.md).
+ * can write (docs/onboarding.md#why-it-is-split-this-way).
  *
  * The complement is what the setup form owns - `label`, `sort_order` and the
  * settings - and nothing is in both lists. `fed_by` is in neither: pairing tabs
@@ -198,7 +216,7 @@ export const WRITEUP_FIELDS = [
   "role_search_line", "full_description", "resume_line", "search_note",
   "fit_clause", "fit_disqualifier", "fit_filter_step", "leads_note",
   "doc_file", "doc_summary", "doc_update_line", "intro_note", "report_line",
-  "screened_examples", "schedule_time",
+  "screened_examples", "schedule_time", "documents",
 ];
 
 /**
@@ -407,7 +425,7 @@ export class Db {
   /**
    * The setup form's whole effect, in one batch, which D1 runs as one
    * transaction: the answers, the settings the form owns, and one track per
-   * role block (docs/instant-setup-plan.md).
+   * role block (docs/onboarding.md#why-it-is-split-this-way).
    *
    * One transaction because the page decides between the form and the tracker
    * by whether an intake exists. A state where the answers are stored and the
@@ -472,7 +490,7 @@ export class Db {
 
   /**
    * Write the overnight run's half of one track: the prose and the schedule,
-   * never the form's fields (docs/instant-setup-plan.md).
+   * never the form's fields (docs/onboarding.md#why-it-is-split-this-way).
    *
    * The UPDATE is built from WRITEUP_FIELDS, not from the caller's keys, so
    * `label`, `sort_order` and the settings the form owns cannot be reached
@@ -521,13 +539,14 @@ export class Db {
   }
 
   /**
-   * Every lead in a search family - a track and the tabs it fills - with what
-   * choosing tonight's re-checks needs (routes/screened.js). The family is one
-   * set because one run re-checks for all of it.
+   * Every lead in a feed group - a track and the tabs it fills - with what
+   * choosing tonight's re-checks needs (routes/screened.js). The group is one
+   * set because one run re-checks for all of it. The SQL selects the same keys
+   * as feedGroupKeys in ./tracks.js.
    * @param {string} rootKey a track that runs its own search
    * @returns {Promise<Array<{id: number, status: string, verified: string}>>}
    */
-  async getFamilyLeadsForRecheck(rootKey) {
+  async getFeedGroupLeadsForRecheck(rootKey) {
     const rows = await this.d1
       .prepare(
         `SELECT id, status, verified FROM leads
@@ -547,7 +566,7 @@ export class Db {
    *
    * Not user-scoped, by design: the caller supplies names and gets back facts
    * about websites, nothing derived from any user's rows. See
-   * migrations/0010_company_fetch.sql and 0011_one_company_list.sql.
+   * docs/glossary.md#companies-and-the-rotation.
    *
    * A retracted row comes back with its fields blanked and only the retraction
    * visible, so a reader cannot use a withdrawn fact by forgetting to check one
@@ -702,7 +721,7 @@ export class Db {
    * companies it had already passed.
    *
    * Not scoped to this.userId: the list is shared by every account, by design -
-   * see 0011_one_company_list.sql.
+   * see docs/glossary.md#companies-and-the-rotation.
    * @param {{company: string, position: number}[]} items
    * @returns {Promise<number>} how many joined
    */
@@ -722,7 +741,7 @@ export class Db {
   /**
    * The list in log order, with this search's own record of each company.
    *
-   * The list is global (company_fetch, 0011_one_company_list.sql); what this
+   * The list is global (company_fetch, docs/glossary.md#companies-and-the-rotation); what this
    * search did with each company - when it last tried, what it noted - is its
    * own, in company_sweeps. Ordered by `position`, a fixed place per company,
    * never by date. routes/coverage.js picks a run's slice from the cursor.
@@ -876,6 +895,9 @@ export class Db {
     const tracks = tracksRes.results.map((row) => {
       const track = { key: row.key };
       for (const f of [...TRACK_DISPLAY_FIELDS, ...TRACK_CONFIG_FIELDS]) track[f] = row[f];
+      // Served as a list, so a caller that reads the config and posts a track back
+      // sends what POST /api/config accepts.
+      track.documents = parseDocumentList(row.documents);
       track.last_run = {
         at: row.last_run_at || "",
         on: row.last_run_on || "",
@@ -1024,11 +1046,13 @@ export class Db {
           typeof t.full_description === "string" ? t.full_description : keep(t, "full_description", ""),
           Number.isInteger(t.sort_order) ? t.sort_order : keep(t, "sort_order", i),
           ...TRACK_CONFIG_FIELDS.map((f) => {
-            // target_companies is the one structured field: accept an array
-            // and store it as JSON, or pass through a string that already is.
-            if (f === "target_companies" && Array.isArray(t[f])) return JSON.stringify(t[f]);
+            // target_companies and documents are the structured fields: accept
+            // an array and store it as JSON, or pass through a string that
+            // already is. A new track's documents start as an empty list, not
+            // an empty string, so every stored value parses.
+            if ((f === "target_companies" || f === "documents") && Array.isArray(t[f])) return JSON.stringify(t[f]);
             if (typeof t[f] === "string") return t[f];
-            return keep(t, f, "");
+            return keep(t, f, f === "documents" ? "[]" : "");
           })
         )
       ),
@@ -1099,7 +1123,7 @@ export class Db {
    *
    * Only `added_by = 'run'` screened rows count, so a person clearing postings
    * off their board isn't reported as the search's work
-   * (migrations/0007_screened_added_by.sql).
+   * (docs/glossary.md#postings).
    *
    * Each key counts only its own rows; a multi-tab run calls this once per tab.
    *
@@ -1197,7 +1221,7 @@ export class Db {
    *
    * A row is already known if its canonical URL (./url.js) matches a lead or a
    * screened row anywhere in the same feed group: the track that runs a search
-   * plus the tabs it fills (`fed_by`, migrations/0003_branched_tracks.sql).
+   * plus the tabs it fills (`fed_by`, docs/glossary.md#searches-and-tracks).
    * Scoped to one track, a posting filed under one tab and sorted into a
    * sibling tab the next night would read as new and be added twice.
    *
@@ -1221,8 +1245,7 @@ export class Db {
       .prepare("SELECT key, fed_by FROM tracks WHERE user_id = ?")
       .bind(this.userId)
       .all();
-    const rootOf = new Map(tracks.results.map((t) => [t.key, t.fed_by || t.key]));
-    const root = (k) => rootOf.get(k) || k;
+    const root = (k) => searchRootKey(tracks.results, k);
 
     const roots = new Set(asked.map(root));
     const groupKeys = tracks.results.map((t) => t.key).filter((k) => roots.has(root(k)));
@@ -1625,7 +1648,7 @@ export class Db {
   /**
    * Which applications a nightly run should read, as `{id, link}` only: the
    * result lands in the run's context. Derived from each row's own state;
-   * nothing is queued. See migrations/0009_application_autofill.sql.
+   * nothing is queued. See docs/glossary.md#applications-and-the-fill.
    *
    * `autofill = ''` limits each row to one read, so an unreadable posting
    * doesn't return nightly. Only a blank company, title or location qualifies
@@ -1714,7 +1737,7 @@ export class Db {
 
   /**
    * Records that a run opened the link and couldn't read it. Final: a failed
-   * read isn't retried (migrations/0009_application_autofill.sql).
+   * read isn't retried (docs/glossary.md#applications-and-the-fill).
    *
    * The note is shown on the row; without it a failed row looks like one not
    * yet read. Stored as the run wrote it.
@@ -1783,7 +1806,7 @@ export class Db {
    * @param {string|null} date - YYYY-MM-DD the posting was confirmed dead (the run's own local date), or null for today
    * @param {'run'|'hand'} addedBy - 'run' for a search reporting a posting gone,
    *   'hand' for a person clearing it off their board. Required, not defaulted:
-   *   countRunActivity counts only 'run' (migrations/0007_screened_added_by.sql).
+   *   countRunActivity counts only 'run' (docs/glossary.md#postings).
    * @returns {Promise<boolean>} true if the lead row was actually deleted
    */
   async deleteLeadAndScreen(lead, reason, date, addedBy) {

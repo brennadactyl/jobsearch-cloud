@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
 import { getData, getIntake, login, logout, session, UnauthorizedError } from "./api/client";
 import type { Intake } from "./api/schema";
-import { setupOverdue } from "./domain/onboarding";
+import { retriesEnded, setupOverdue } from "./domain/onboarding";
 import InviteGate from "./components/InviteGate";
 import Setup from "./components/Setup";
 import Shell from "./components/Shell";
@@ -100,11 +100,25 @@ function Gate({ notice, focusPassword, onSignedIn }: GateState & { onSignedIn: (
 function SetupNotice({ intake, staleRunHours }: { intake: Intake | null; staleRunHours: number }) {
   if (!intake || intake.status === "done") return null;
   if (intake.status === "failed") {
+    // Past the server's cutoff no run will pick this up again, and the stored
+    // note can still say it will be tried again. Say who can help instead.
+    if (retriesEnded(intake.retries_end_at)) {
+      return (
+        <div className="setup-status bad" role="status">
+          <strong>Your setup couldn't be finished</strong>
+          The overnight run tried several times and has stopped trying. Your tracker still works; let whoever invited you
+          know, and they can sort it out.
+        </div>
+      );
+    }
+    // The run's note says what happens next - whether another night will fix it,
+    // or who to ask when it won't - so nothing is added to it but the one thing
+    // true of every failure. Without a note, the retry is all there is to say.
     return (
       <div className="setup-status bad" role="status">
         <strong>Tonight's run couldn't finish your setup</strong>
-        {intake.status_note || "The run stopped before it finished writing your searches."} It tries again tonight —
-        your tracker works in the meantime, and there's nothing you need to do.
+        {intake.status_note || "The run stopped before it finished writing your searches. It tries again tonight."} Your
+        tracker works in the meantime.
       </div>
     );
   }

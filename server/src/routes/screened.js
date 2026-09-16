@@ -10,6 +10,7 @@
 import { DELISTED_REASON } from "../db.js";
 import { excludedCompanyMatcher, normalize } from "../exclude.js";
 import { json, readJson } from "../http.js";
+import { feedGroupKeys, searchRootKey, searchRootOf } from "../tracks.js";
 import { isoDate, unknownTrack, unknownTrackResponse } from "../validate.js";
 import { COVERAGE_BATCH, upcomingCompanies } from "./coverage.js";
 
@@ -22,11 +23,11 @@ import { COVERAGE_BATCH, upcomingCompanies } from "./coverage.js";
 // POST /api/screened and /api/leads refuse duplicates on the way in.
 export const DEDUP_RECENT_DAYS = 3;
 
-// Which tracked leads a run re-checks tonight (step 8). A search family re-checks
+// Which tracked leads a run re-checks tonight (step 8). A feed group re-checks
 // an even share of its open leads each night, so every one comes round within
 // RECHECK_CYCLE_NIGHTS. RECHECK_MAX_PER_RUN caps what that costs a run: past it,
 // the cycle stretches instead of the run growing. A lead confirmed live within
-// RECHECK_AFTER_DAYS is not due, which is what keeps a small family from
+// RECHECK_AFTER_DAYS is not due, which is what keeps a small feed group from
 // re-checking the same few leads every night.
 //
 // Open means New or Reviewing. A re-check of anything else changes nothing
@@ -39,15 +40,15 @@ export const RECHECK_AFTER_DAYS = 7;
 const RECHECK_STATUSES = ["New", "Reviewing"];
 
 /**
- * Tonight's re-checks for one search family: open leads not confirmed within
+ * Tonight's re-checks for one feed group: open leads not confirmed within
  * RECHECK_AFTER_DAYS, longest-unconfirmed first and then by id, at most the
- * family's budget. The same leads in give the same choice out, which is what
- * lets each tab's own read flag its share of one family-wide choice.
- * @param {Array<{id: number, status: string, verified: string}>} familyLeads
+ * group's budget. The same leads in give the same choice out, which is what
+ * lets each tab's own read flag its share of one group-wide choice.
+ * @param {Array<{id: number, status: string, verified: string}>} groupLeads
  * @returns {{eligible: number, budget: number, ids: Set<number>}}
  */
-function chooseRechecks(familyLeads) {
-  const open = familyLeads.filter((l) => RECHECK_STATUSES.includes(l.status));
+function chooseRechecks(groupLeads) {
+  const open = groupLeads.filter((l) => RECHECK_STATUSES.includes(l.status));
   const budget = Math.min(RECHECK_MAX_PER_RUN, Math.ceil(open.length / RECHECK_CYCLE_NIGHTS));
   const dueBy = new Date(Date.now() - RECHECK_AFTER_DAYS * 86400000).toISOString().slice(0, 10);
   const chosen = open
@@ -76,14 +77,14 @@ function chooseRechecks(familyLeads) {
  * its rows are still its own, because a delisted lead leaves its screened row
  * under the lead's tab. `leads` is never trimmed, since dedup needs every URL a
  * search tracks; a scoped read marks the ones due a re-check tonight with
- * `recheck: true`, chosen family-wide by chooseRechecks.
+ * `recheck: true`, chosen group-wide by chooseRechecks.
  *
  * The cutoff is the server's date, compared with dates runs stamp in their own
  * local time, so it can keep a day more than it says - the safe direction.
  *
  * `scope` is `{cursor, companies, since, kept, of, recheck}`, so a run's log can
  * say what it was given. `recheck` is `{eligible, budget, flagged, after_days}`:
- * `eligible` and `budget` for the whole family, `flagged` for this tab. Without
+ * `eligible` and `budget` for the whole feed group, `flagged` for this tab. Without
  * the parameter the response is exactly the unscoped one, with no flags.
  */
 export async function handleGetDedup({ db, params, url }) {
@@ -92,15 +93,16 @@ export async function handleGetDedup({ db, params, url }) {
   if (!track) return unknownTrack(key);
   if (url.searchParams.get("scope") !== "batch") return json(await db.getDedupData(key));
 
-  const upcoming = await upcomingCompanies(db, track.fed_by || key, 2 * COVERAGE_BATCH);
+  const rootKey = searchRootOf(track);
+  const upcoming = await upcomingCompanies(db, rootKey, 2 * COVERAGE_BATCH);
   const inWindow = new Set(upcoming.companies.map((c) => normalize(c.company)));
   const since = new Date(Date.now() - DEDUP_RECENT_DAYS * 86400000).toISOString().slice(0, 10);
-  const [{ leads, screened: rows }, familyLeads] = await Promise.all([
+  const [{ leads, screened: rows }, groupLeads] = await Promise.all([
     db.getDedupRows(key),
-    db.getFamilyLeadsForRecheck(track.fed_by || key),
+    db.getFeedGroupLeadsForRecheck(rootKey),
   ]);
   const kept = rows.filter((r) => inWindow.has(normalize(r.company)) || r.date >= since);
-  const recheck = chooseRechecks(familyLeads);
+  const recheck = chooseRechecks(groupLeads);
   const marked = leads.map((l) => (recheck.ids.has(l.id) ? { ...l, recheck: true } : l));
   return json({
     leads: marked,
@@ -127,7 +129,7 @@ export async function handleGetDedup({ db, params, url }) {
  * unknown track (nothing inserted).
  *
  * Records postings the search looked at and decided NOT to add as a lead (see
- * migrations/0001_schema.sql). Deduped like handleAddLeads, but no
+ * docs/glossary.md#postings). Deduped like handleAddLeads, but no
  * touchUpdated(): the page doesn't show screened rows, so they shouldn't bump
  * its "last updated" banner.
  *
@@ -148,7 +150,7 @@ export async function handleAddScreened({ request, db }) {
 
   // A screened row belongs to the search that did the screening, not to the
   // tab the posting would have been filed under. For a branched search
-  // (`fed_by`, migrations/0003_branched_tracks.sql) nothing displays screened
+  // (`fed_by`, docs/glossary.md#searches-and-tracks) nothing displays screened
   // rows per tab and step 1b reads them back as one set, so they are filed
   // under the feeding track below, whatever key the run sent.
   const { tracks, settings } = await db.getTracksAndSettings();
@@ -183,10 +185,9 @@ export async function handleAddScreened({ request, db }) {
 
   // One hop, not a walk to a root: a fed track is a tab, and the track that
   // fills it runs its own search, so `fed_by` chains have no meaning in the
-  // model (see migrations/0003_branched_tracks.sql) and none exist. Resolving
+  // model (see docs/glossary.md#searches-and-tracks) and none exist. Resolving
   // repeatedly would only be guessing at what a chain ought to mean.
-  const fedBy = new Map(tracks.map((t) => [t.key, t.fed_by || ""]));
-  const filed = allowed.map((item) => ({ ...item, search: fedBy.get(item.search) || item.search }));
+  const filed = allowed.map((item) => ({ ...item, search: searchRootKey(tracks, item.search) }));
 
   const { added, duplicates } = await db.addScreened(filed, on);
   return json({ added, duplicates, excluded });
@@ -221,9 +222,7 @@ export async function handleUnscreen({ request, db }) {
   // delisted lead's under the tab it was filed in (delistLead doesn't), so
   // either key alone misses half. See db.unscreenUrls.
   const { tracks } = await db.getTracksAndSettings();
-  const rootOf = new Map(tracks.map((t) => [t.key, t.fed_by || t.key]));
-  const root = rootOf.get(key) || key;
-  const group = [root, ...tracks.filter((t) => t.fed_by === root).map((t) => t.key)];
+  const group = feedGroupKeys(tracks, searchRootKey(tracks, key));
 
   const result = await db.unscreenUrls(group, urls);
   return json(result);

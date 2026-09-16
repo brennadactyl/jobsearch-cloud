@@ -211,6 +211,8 @@ export const intakeSchema = z.object({
   status_note: text,
   sent_at: text,
   updated_at: text,
+  /** When the run stops retrying a failed setup; "" when there's no send to count from. */
+  retries_end_at: str.default(""),
 });
 export const intakeResponseSchema = z.object({ intake: intakeSchema.nullable() });
 /** A send builds the tracks itself and names them; the tracker data is read back separately. */

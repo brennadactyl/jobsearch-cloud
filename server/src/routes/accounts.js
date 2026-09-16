@@ -15,7 +15,6 @@
  */
 
 import {
-  bearer,
   countAccountRows,
   createSession,
   deleteAccount,
@@ -27,8 +26,8 @@ import {
   upsertUser,
   verifyPassword,
 } from "../auth.js";
-import { json, readJson, unauthorized } from "../http.js";
-import { Docs } from "../r2.js";
+import { json, readJson } from "../http.js";
+import { Docs, RunLogs } from "../r2.js";
 
 /**
  * POST /api/login - public. Body `{ name, password, label? }` ->
@@ -80,9 +79,6 @@ export async function handleLogout({ env, token }) {
  * a forgotten password, which /api/password can't do without the current one.
  */
 export async function handleUpsertUser({ request, env }) {
-  const admin = env.ADMIN_TOKEN;
-  if (!admin || bearer(request) !== admin) return unauthorized();
-
   const body = await readJson(request);
   if (body instanceof Response) return body;
 
@@ -94,7 +90,7 @@ export async function handleUpsertUser({ request, env }) {
   if (password.length < 12) return json({ error: "password must be at least 12 characters" }, 400);
 
   // `demo` marks an account whose data is invented, which keeps it off the
-  // company list every account shares (migrations/0012_demo_account.sql).
+  // company list every account shares (demo account, docs/glossary.md#accounts).
   // Anything but a boolean means "not saying", and leaves an existing account
   // as it was.
   const demo = typeof body.demo === "boolean" ? body.demo : undefined;
@@ -105,7 +101,7 @@ export async function handleUpsertUser({ request, env }) {
 /**
  * DELETE /api/users/<id> - in ADMIN_ROUTES, so the router has already required
  * ADMIN_TOKEN. Body `{ name, dryRun? }` -> `{ deleted: {<table>: n, documents,
- * invites} }`, or `{ dryRun: true, wouldDelete }`; 400 without a name, 404 for
+ * logs, invites} }`, or `{ dryRun: true, wouldDelete }`; 400 without a name, 404 for
  * an id nobody has, 409 when the name is not that account's.
  *
  * The id is in the path and the name in the body because deleting an account
@@ -137,16 +133,23 @@ export async function handleDeleteUser({ request, env, params }) {
     return json({ error: `"${name}" is not the name of account ${id}`, name: user.name }, 409);
   }
 
+  // Run logs live in the same bucket but outside the documents' prefix
+  // (../r2.js), so they are deleted on their own - and, like the documents,
+  // before the rows, so a call that dies between the two is finished by
+  // calling again.
   const docs = env.DOCS ? new Docs(env.DOCS, user.id) : null;
+  const runLogs = env.DOCS ? new RunLogs(env.DOCS, user.id) : null;
   if (body.dryRun) {
     const rows = await countAccountRows(env.DB, user.id);
     const documents = docs ? (await docs.list()).length : null;
-    return json({ dryRun: true, wouldDelete: { ...rows, documents } });
+    const logs = runLogs ? await runLogs.count() : null;
+    return json({ dryRun: true, wouldDelete: { ...rows, documents, logs } });
   }
 
   const documents = docs ? await docs.deleteAll() : null;
+  const logs = runLogs ? await runLogs.deleteAll() : null;
   const deleted = await deleteAccount(env.DB, user.id);
-  return json({ deleted: { ...deleted, documents } });
+  return json({ deleted: { ...deleted, documents, logs } });
 }
 
 /** GET /api/me - requires a Bearer token -> `{ id, name }`. */

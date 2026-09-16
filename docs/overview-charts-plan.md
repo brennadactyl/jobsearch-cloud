@@ -81,8 +81,6 @@ A table with one row per search, plus a row for applications added by hand
 | Not a fit | leads in `Not a fit` | its tab, filter `Not a fit` |
 | Applied | applications whose `leadId` is a lead in this search, `To Apply` excluded | Applications, drill `search-applied:<key>` |
 | Responded | of those, applications with any response date (same rule as the pipeline) | Applications, drill `search-responded:<key>` |
-| Apply rate | Applied ÷ Found, with a thin inline meter in `--accent` | nothing |
-| Response rate | Responded ÷ Applied, blank under 3 applications | nothing |
 
 - **Found is the one total that can't open its rows**: Applied leads and
   removed postings aren't shown on any leads tab. It's plain text, and its
@@ -92,7 +90,13 @@ A table with one row per search, plus a row for applications added by hand
 - A removed posting is a `screened` row for the search with `added_by = 'hand'`
   or the reason `posting taken down`. The `screened` schema in `api/schema.ts`
   gains `added_by`. `/api/data` already returns it.
-- Rates show as whole percentages. The tooltip carries the fraction (`4 of 57`).
+- **No rate columns.** Each rate sits in the cell it is a rate of: Applied reads
+  `7 · 6%` (of Found) and Responded reads `1 · 14%` (of Applied), the percentage
+  in muted ink. Under 3 applications Responded shows the count alone. Rates are
+  whole percentages, and the tooltip carries the fraction (`4 of 57`).
+- **The table is as wide as its content**, not the card: the search column
+  takes what its names and run stamps need, and the number columns sit close
+  enough to read across.
 - Rows are sorted by the configured track order, not by any rate, so a row
   stays where you expect it.
 
@@ -103,7 +107,8 @@ excluded), tiered by the application's own location. Open and Not a fit count
 leads, with no screened rows. Each segment opens its rows through a
 `tier:<index>:<segment>` drill. The Not a fit segment's target carries
 `filter: "All"`, since the leads tab's default Open view hides those rows. The segments use `--accent`, `--accent-soft` and `--line`, with a
-2px gap between them and direct labels.
+2px gap between them and direct labels. Bar length is relative to the largest
+tier and spans the card, with the tier's count at the end of its bar.
 
 ## 3. Pipeline flow and waiting
 

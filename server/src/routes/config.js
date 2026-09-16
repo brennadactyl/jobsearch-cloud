@@ -7,7 +7,7 @@
 
 import { WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
 import { json, readJson } from "../http.js";
-import { unknownTrack } from "../validate.js";
+import { trackDocumentsError, unknownTrack } from "../validate.js";
 
 /**
  * GET /api/config - requires a Bearer token -> `{ tracks[], settings }`.
@@ -31,7 +31,7 @@ export async function handleGetConfig({ db }) {
  * rules - as a side effect of every night it ran. This route makes "the run
  * leaves those alone" a guarantee: db.writeUpTrack builds its UPDATE from
  * WRITEUP_FIELDS and WRITEUP_SETTINGS, so a form-owned field is unreachable
- * here whatever the body says (docs/instant-setup-plan.md).
+ * here whatever the body says (docs/onboarding.md#why-it-is-split-this-way).
  *
  * An unaccepted key is refused rather than dropped, naming the key: a run that
  * tries to rename a tab should hear that it can't, not wonder later why the
@@ -60,12 +60,18 @@ export async function handleWriteUp({ request, db }) {
         400
       );
     }
-    if (sent !== "search" && typeof body[sent] !== "string") {
+    // `documents` is the one list among the run's fields; everything else is
+    // prose the prompt reads.
+    if (sent === "documents") {
+      const problem = trackDocumentsError(body.documents);
+      if (problem) return json({ error: problem, field: "documents" }, 400);
+    } else if (sent !== "search" && typeof body[sent] !== "string") {
       return json({ error: `${sent} must be text`, field: sent }, 400);
     }
   }
 
-  const written = await db.writeUpTrack(key, body);
+  const fields = "documents" in body ? { ...body, documents: JSON.stringify([...new Set(body.documents)]) } : body;
+  const written = await db.writeUpTrack(key, fields);
   if (written === null) return unknownTrack(key);
   return json({ written });
 }
@@ -98,6 +104,10 @@ export async function handleSetConfig({ request, db }) {
     for (const t of valid) {
       if (t.fed_by && (t.fed_by === t.key || !keys.has(t.fed_by))) {
         return json({ error: `track "${t.key}" is fed_by "${t.fed_by}", which is not another track in this list` }, 400);
+      }
+      if (t.documents !== undefined) {
+        const problem = trackDocumentsError(t.documents);
+        if (problem) return json({ error: `track "${t.key}": ${problem}`, field: "documents" }, 400);
       }
     }
     // Each track carries its display fields and, optionally, its search

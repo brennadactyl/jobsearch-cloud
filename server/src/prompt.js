@@ -50,7 +50,7 @@ const DEFAULT_REPORT_LINE =
 /**
  * @param {{user: {id: string, name: string}, track: import("./db.js").Track, settings: import("./db.js").Settings, feeds?: import("./db.js").Track[]}} args
  * @param {import("./db.js").Track[]} [args.feeds] tracks whose `fed_by` names
- *   this one - tabs this run also fills. See migrations/0003_branched_tracks.sql.
+ *   this one - tabs this run also fills. See docs/glossary.md#searches-and-tracks.
  * @returns {string} the full prompt text
  */
 export function buildSearchPrompt({ user, track, settings, feeds }) {

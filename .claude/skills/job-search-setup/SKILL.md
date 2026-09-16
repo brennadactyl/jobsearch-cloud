@@ -244,6 +244,12 @@ finished sentence the search should read:
 - `resume_line` - the whole "read the resume" instruction: the `.txt` to read,
   that the `.pdf`/`.docx` beside it isn't readable headless, and how this track
   frames the resume.
+- `documents` - the list of document paths this search reads besides its
+  `doc_file`: every file `resume_line` names, and any reference file the track
+  uses, e.g. `["resumes/Jane_Resume.txt", "resumes/Jane_Resume.docx"]`. A
+  nightly run downloads its `doc_file` and these and nothing else, and a track
+  with an empty list is refused its documents, so it never runs. List only this
+  track's files - a person's other searches keep their own.
 - `fit_clause` / `fit_disqualifier` - a short requirement and its mirror in the
   disqualified list. Both empty with no fit filter beyond the role line.
 - `fit_filter_step` - only for a genuine pivot, where one clause won't carry

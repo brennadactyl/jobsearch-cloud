@@ -80,6 +80,16 @@ check("unknown name and wrong password are indistinguishable",
   wrongName.status === 401 && wrongPass.status === 401 && wrongName.json.error === wrongPass.json.error);
 check("a session token is not accepted as the admin token",
   (await req("POST", "/api/users", { token: A_TOK, body: { name: "sneaky", password: "aaaaaaaaaaaaa" } })).status === 401);
+
+// Where a route sits decides who checks its token, and both lists above answer
+// 401 to a session token, so only the table itself shows an operator route has
+// stayed under the router's check rather than a handler's.
+const routeTable = await import("./src/routes/index.js");
+const routeListed = (list, method, path) => list.some(([m, p]) => m === method && String(p) === String(path));
+check("provisioning an account and purging a search are admin routes, checked by the router",
+  routeListed(routeTable.ADMIN_ROUTES, "POST", "/api/users") && routeListed(routeTable.ADMIN_ROUTES, "POST", "/api/purge"));
+check("no public route is an operator route",
+  !routeTable.PUBLIC_ROUTES.some(([, p]) => ["/api/users", "/api/purge", "/api/invites", "/api/tokens"].includes(String(p))));
 check("no token at all is 401", (await req("GET", "/api/data")).status === 401);
 check("a made-up token is 401", (await req("GET", "/api/data", { token: "not-a-real-token" })).status === 401);
 
@@ -464,7 +474,7 @@ check("and its own scoped read never carries this account's rows",
   !!aScoped.screened && !aScoped.screened.some((u) => u.startsWith(`https://example.com/scope/${scStamp}/`)));
 
 console.log("\n== tonight's re-checks, chosen by the tracker ==");
-// A search family re-checks an even share of its open leads each night -
+// A feed group re-checks an even share of its open leads each night -
 // min(20, ceil(open / 14)) - longest-unconfirmed first, New and Reviewing only.
 // Its own account and per-run tracks, so nothing earlier in this file counts.
 const rcPw = "recheck-long-password";
@@ -475,7 +485,7 @@ const RC = "RC" + rcStamp, RCF = RC + "F", RCC = RC + "C";
 await req("POST", "/api/config", { token: RC_TOK, body: { tracks: [
   { key: RC, label: "Recheck", full_description: "the feeder", sort_order: 0 },
   { key: RCF, label: "Recheck fed", full_description: "the fed tab", sort_order: 1, fed_by: RC },
-  { key: RCC, label: "Recheck cap", full_description: "a large family", sort_order: 2 } ] } });
+  { key: RCC, label: "Recheck cap", full_description: "a large feed group", sort_order: 2 } ] } });
 const rcUrl = (n) => `https://example.com/recheck/${rcStamp}/${n}`;
 const rcToday = new Date().toISOString().slice(0, 10);
 // Fifteen open leads, so a budget of ceil(15/14) = 2. Three are due; the second
@@ -502,12 +512,12 @@ await rcSetStatus("second", "Reviewing");
 const rcFeed = (await req("GET", `/api/dedup/${RC}?scope=batch`, { token: RC_TOK })).json;
 const rcFed = (await req("GET", `/api/dedup/${RCF}?scope=batch`, { token: RC_TOK })).json;
 const rcFlagged = [...rcFeed.leads, ...rcFed.leads].filter((l) => l.recheck).map((l) => l.url).sort();
-check("the tracker flags the longest-unconfirmed open leads, up to the family's budget",
+check("the tracker flags the longest-unconfirmed open leads, up to the feed group's budget",
   JSON.stringify(rcFlagged) === JSON.stringify([rcUrl("oldest"), rcUrl("second")].sort()), JSON.stringify(rcFlagged));
-check("the budget is an even share of the family's open leads over fourteen nights",
+check("the budget is an even share of the feed group's open leads over fourteen nights",
   !!rcFeed.scope && rcFeed.scope?.recheck?.eligible === 15 && rcFeed.scope?.recheck?.budget === 2 &&
   rcFeed.scope?.recheck?.after_days === 7, JSON.stringify(rcFeed.scope && rcFeed.scope.recheck));
-check("each tab flags its own share of one family-wide choice",
+check("each tab flags its own share of one group-wide choice",
   rcFeed.scope?.recheck?.flagged === 1 && rcFed.scope?.recheck?.flagged === 1 &&
   rcFed.scope?.recheck?.eligible === 15 && rcFed.scope?.recheck?.budget === 2,
   JSON.stringify({ feeder: rcFeed.scope?.recheck, fed: rcFed.scope?.recheck }));
@@ -536,7 +546,7 @@ const rcCap = (await req("GET", `/api/dedup/${RCC}?scope=batch`, { token: RC_TOK
 check("past 280 open leads a run's re-checks stop at twenty",
   !!rcCap.scope && rcCap.scope?.recheck?.eligible === 281 && rcCap.scope?.recheck?.budget === 20 &&
   rcCap.leads.filter((l) => l.recheck).length === 20, JSON.stringify(rcCap.scope && rcCap.scope.recheck));
-check("another account cannot read this family's re-check choice",
+check("another account cannot read this feed group's re-check choice",
   (await req("GET", `/api/dedup/${RC}?scope=batch`, { token: A_TOK })).status === 404);
 
 console.log("\n== runs ==");
@@ -2214,6 +2224,23 @@ check("a failed setup cannot be sent again, and stays in the run's queue for its
 // Only the near side is reachable here - nothing lets a test move `sent_at` -
 // so this checks a fresh failure is still offered, and the rule's other side
 // lives in the query.
+
+// The page stops promising another night at `retries_end_at`, so it has to be
+// the same instant the queue's rule stops offering the setup. The rule is a
+// pure function of `sent_at` and the clock, so both sides of that instant are
+// checked here directly.
+const { retriesEndAt, retryCutoff, RETRY_NIGHTS } = await import("./src/onboarding.js");
+check("the setup says when its retries end: sent_at plus the retry window, exactly",
+  afterFail.retries_end_at === new Date(Date.parse(afterFail.sent_at) + RETRY_NIGHTS * 86400000).toISOString(),
+  JSON.stringify({ sent_at: afterFail.sent_at, retries_end_at: afterFail.retries_end_at }));
+const retryEnd = Date.parse(afterFail.retries_end_at);
+check("the queue still offers the setup one millisecond before retries_end_at",
+  afterFail.sent_at > retryCutoff(retryEnd - 1));
+check("and has stopped offering it at retries_end_at itself",
+  !(afterFail.sent_at > retryCutoff(retryEnd)));
+check("a setup with no sent_at has no retry end",
+  retriesEndAt("") === "" && retriesEndAt(undefined) === "" && retriesEndAt("not a date") === "");
+
 check("marking a setup done closes it",
   (await invAdmin("POST", "/api/intake/complete", { user: N_ID, status: "done" })).status === 200 &&
   (await postIntake(N_TOK, baseAnswers)).status === 409);
@@ -2356,6 +2383,159 @@ const delGoneRow = (delLedger || []).find((i) => i.note === `delete check ${delR
 check("the invite that made it keeps its ledger row, used, with no account",
   !!delGoneRow && delGoneRow.state === "used" && !!delGoneRow.used_at && delGoneRow.user === null,
   JSON.stringify(delGoneRow));
+
+console.log("\n== each search gets only its own documents ==");
+// A person with two searches: each run should read its own tracking doc and
+// resume, never the other search's (migrations/0017_track_documents.sql).
+const sdRun = Date.now();
+const sdUser = async (tag) => {
+  const name = `Docs ${tag} ${sdRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: `docs-${tag}-long-password` } });
+  const token = (await req("POST", "/api/login", { body: { name, password: `docs-${tag}-long-password` } })).json.token;
+  await req("POST", "/api/config", { token, body: { tracks: [
+    { key: "SWE", label: "SWE", doc_file: "docs/tracked_swe_postings.md" },
+    { key: "swe-ai", label: "AI", fed_by: "SWE" },
+    { key: "CPM", label: "CPM", doc_file: "docs/tracked_cpm_postings.md" },
+  ] } });
+  return token;
+};
+const SD = await sdUser("a"), SD_B = await sdUser("b");
+for (const path of ["docs/tracked_swe_postings.md", "docs/tracked_cpm_postings.md", "resumes/swe.txt", "resumes/cpm.txt", "reference/extra.txt"]) {
+  await req("PUT", `/api/documents/${path}`, { token: SD, raw: `contents of ${path}`, type: "text/plain" });
+}
+const forSearch = (token, key) => req("GET", `/api/documents?search=${encodeURIComponent(key)}`, { token });
+const paths = (res) => (res.json?.documents || []).map((d) => d.path).sort().join();
+
+const unlisted = await forSearch(SD, "SWE");
+check("a search with no documents listed is refused, naming the field",
+  unlisted.status === 409 && unlisted.json?.field === "documents", JSON.stringify(unlisted.json));
+
+const listedViaRun = await req("POST", "/api/writeup", { token: SD, body: {
+  search: "SWE", documents: ["resumes/swe.txt", "resumes/swe.txt"] } });
+check("the overnight run writes a search's documents through the write-up route",
+  listedViaRun.status === 200 && (listedViaRun.json?.written || []).includes("documents"), JSON.stringify(listedViaRun.json));
+const sweDocs = await forSearch(SD, "SWE");
+check("a search is served its own tracking doc and resume, and nothing else of its person's",
+  sweDocs.status === 200 && sweDocs.json?.search === "SWE" &&
+  paths(sweDocs) === "docs/tracked_swe_postings.md,resumes/swe.txt" && sweDocs.json?.missing?.length === 0,
+  JSON.stringify(sweDocs.json));
+check("a tab another search fills is served that search's list",
+  paths(await forSearch(SD, "swe-ai")) === "docs/tracked_swe_postings.md,resumes/swe.txt" &&
+  (await forSearch(SD, "swe-ai")).json?.search === "SWE");
+const configTracks = (await req("GET", "/api/config", { token: SD })).json?.tracks || [];
+check("the config serves the list as a list, stored once however often it was named",
+  JSON.stringify(configTracks.find((t) => t.key === "SWE")?.documents) === JSON.stringify(["resumes/swe.txt"]),
+  JSON.stringify(configTracks.find((t) => t.key === "SWE")?.documents));
+
+// The setup skill writes config through POST /api/config, reading it first; a
+// track posted back as it was read has to be accepted.
+const roundTrip = await req("POST", "/api/config", { token: SD, body: { tracks: configTracks.map((t) =>
+  t.key === "CPM" ? { ...t, documents: ["resumes/cpm.txt", "resumes/not-uploaded.txt"] } : t) } });
+check("config read and posted back is accepted, list included",
+  roundTrip.status === 200, JSON.stringify(roundTrip.json));
+const cpmDocs = await forSearch(SD, "CPM");
+check("a listed document the tracker doesn't have is named in missing, not dropped",
+  paths(cpmDocs) === "docs/tracked_cpm_postings.md,resumes/cpm.txt" &&
+  JSON.stringify(cpmDocs.json?.missing) === JSON.stringify(["resumes/not-uploaded.txt"]), JSON.stringify(cpmDocs.json));
+check("without a search, the listing is still everything - for the backup and the import",
+  (await req("GET", "/api/documents", { token: SD })).json?.documents?.length === 5);
+
+for (const [why, list] of [
+  ["a path outside the document folders", ["../tracker.json"]],
+  ["a string rather than a list", "resumes/swe.txt"],
+  ["more than twenty", Array.from({ length: 21 }, (_, i) => `resumes/r${i}.txt`)],
+]) {
+  check(`a documents list is refused: ${why}`,
+    (await req("POST", "/api/writeup", { token: SD, body: { search: "SWE", documents: list } })).json?.field === "documents" &&
+    (await req("POST", "/api/config", { token: SD, body: { tracks: [{ key: "SWE", label: "SWE", documents: list }] } })).status === 400);
+}
+check("a refused list leaves the stored one as it was",
+  paths(await forSearch(SD, "SWE")) === "docs/tracked_swe_postings.md,resumes/swe.txt");
+
+check("another person's search of the same name is served nothing of this person's",
+  (await forSearch(SD_B, "SWE")).status === 409 &&
+  (await req("GET", "/api/documents", { token: SD_B })).json?.documents?.length === 0);
+check("a search this person doesn't have is a 404",
+  (await forSearch(SD, "NOPE")).status === 404);
+
+console.log("\n== run logs ==");
+// A search uploads its run's log as its last act, so a night's record doesn't
+// live only on the machine that ran it. Two accounts share a track key here on
+// purpose: a store keyed by track alone would hand one of them the other's log,
+// and "unknown track" would hide that.
+const logRun = Date.now();
+const logUser = async (tag) => {
+  const name = `Log ${tag} ${logRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: `log-${tag}-long-password` } });
+  const token = (await req("POST", "/api/login", { body: { name, password: `log-${tag}-long-password` } })).json.token;
+  await req("POST", "/api/config", { token, body: { tracks: [{ key: "LOGS", label: "Logs" }] } });
+  return { name, token };
+};
+const logA = await logUser("a"), logB = await logUser("b");
+const earlier = "2026-09-15T08-00-01Z", later = "2026-09-16T08-00-01Z";
+const putLog = (who, track, started, text) =>
+  req("PUT", `/api/logs/${track}/${started}`, { token: who.token, raw: text, type: "text/plain" });
+
+const firstPut = await putLog(logA, "LOGS", earlier, "===== starting LOGS =====\nfirst night\n");
+check("a run's log is stored under its track and start time",
+  firstPut.status === 200 && firstPut.json?.started === earlier && firstPut.json?.bytes > 0,
+  JSON.stringify(firstPut.json));
+await putLog(logA, "LOGS", later, "===== starting LOGS =====\nsecond night\n");
+const logList = await req("GET", "/api/logs/LOGS", { token: logA.token });
+check("a track's logs list newest first",
+  logList.status === 200 && (logList.json?.logs?.map((l) => l.started) || []).join() === `${later},${earlier}`,
+  JSON.stringify(logList.json));
+const oneLog = await req("GET", `/api/logs/LOGS/${earlier}`, { token: logA.token });
+check("and a log reads back exactly as it was written",
+  oneLog.status === 200 && oneLog.text === "===== starting LOGS =====\nfirst night\n" &&
+  (oneLog.headers.get("content-type") || "").startsWith("text/plain"), oneLog.text);
+
+// An upload retried after a lost response must leave one log, not two.
+await putLog(logA, "LOGS", earlier, "===== starting LOGS =====\nfirst night, sent again\n");
+const afterRetry = await req("GET", "/api/logs/LOGS", { token: logA.token });
+check("uploading the same run again replaces its log rather than adding one",
+  afterRetry.json?.logs?.length === 2 &&
+  ((await req("GET", `/api/logs/LOGS/${earlier}`, { token: logA.token })).text || "").includes("sent again"),
+  JSON.stringify(afterRetry.json?.logs));
+
+check("B, with a track of the same name, sees none of A's logs",
+  (await req("GET", "/api/logs/LOGS", { token: logB.token })).json?.logs?.length === 0 &&
+  (await req("GET", `/api/logs/LOGS/${earlier}`, { token: logB.token })).status === 404);
+await putLog(logB, "LOGS", earlier, "B's own night\n");
+check("and B writing a log with A's track and time leaves A's untouched",
+  ((await req("GET", `/api/logs/LOGS/${earlier}`, { token: logA.token })).text || "").includes("sent again") &&
+  (await req("GET", `/api/logs/LOGS/${earlier}`, { token: logB.token })).text === "B's own night\n");
+
+check("a log for a track this person doesn't have is a 404",
+  (await putLog(logA, "NOPE", earlier, "x")).status === 404 &&
+  (await req("GET", "/api/logs/NOPE", { token: logA.token })).status === 404);
+check("a start time in the wrong shape is a 400, before anything is written",
+  (await putLog(logA, "LOGS", "2026-09-16 08:00", "x")).status === 400 &&
+  (await putLog(logA, "LOGS", "..%2F..%2Fdocs", "x")).status === 400);
+check("a log over the size cap is refused whole",
+  (await putLog(logA, "LOGS", "2026-09-17T08-00-01Z", "x".repeat(2 * 1024 * 1024 + 1))).status === 413 &&
+  !(await req("GET", "/api/logs/LOGS", { token: logA.token })).json?.logs?.some((l) => l.started === "2026-09-17T08-00-01Z"));
+check("logs require a session",
+  (await req("GET", "/api/logs/LOGS")).status === 401 &&
+  (await req("PUT", `/api/logs/LOGS/${earlier}`, { raw: "x", type: "text/plain" })).status === 401);
+
+// A log is not a document: it must not appear in the list the backup copies and
+// the documents routes edit. A real document is put first, so an empty list
+// can't pass for a correct one.
+await req("PUT", `/api/documents/docs/tracked_LOGS_${logRun}_postings.md`, { token: logA.token, raw: "# Baseline", type: "text/markdown" });
+const logDocs = (await req("GET", "/api/documents", { token: logA.token })).json.documents || [];
+check("logs never appear among a person's documents",
+  logDocs.length === 1 && logDocs[0].path === `docs/tracked_LOGS_${logRun}_postings.md`,
+  JSON.stringify(logDocs.map((d) => d.path)));
+
+const logAId = (await req("GET", "/api/me", { token: logA.token })).json.id;
+const logDry = await req("DELETE", `/api/users/${logAId}`, { admin: true, body: { name: logA.name, dryRun: true } });
+const logGone = await req("DELETE", `/api/users/${logAId}`, { admin: true, body: { name: logA.name } });
+check("deleting an account counts its logs and takes them with it",
+  logDry.json.wouldDelete?.logs === 2 && logGone.json.deleted?.logs === 2,
+  JSON.stringify({ dry: logDry.json.wouldDelete?.logs, deleted: logGone.json.deleted?.logs }));
+check("and leaves the other account's logs alone",
+  (await req("GET", "/api/logs/LOGS", { token: logB.token })).json?.logs?.length === 1);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
