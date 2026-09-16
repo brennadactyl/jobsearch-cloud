@@ -61,11 +61,11 @@ search.
 - **Attachments.** Stored under a filesystem-safe version of their name: any
   character the documents route refuses becomes `-`. Size (8 MB) is the only
   refusal (2d).
-- **Unreadable resumes.** Only `.txt` and `.md` are readable by a headless run.
-  When every attachment is another format (`.pdf`, `.doc`, `.docx`, `.rtf`,
+- **Unreadable resumes.** `.txt`, `.md` and `.pdf` are readable by the
+  overnight run: it hands a PDF to the model step to read, unconverted. When
+  every attachment is a format the run cannot read (`.doc`, `.docx`, `.rtf`,
   `.pages`, images) and nothing is pasted, the form refuses to send. Beside
-  Attach it says "We can't read PDF or Word files overnight. Paste the text
-  too." (2b)
+  Attach it says "We can’t read Word files overnight. Paste the text too." (2b)
 - **Sending.** The first send is "Start my search", later ones "Send changes".
   Sending and a failed send show in the header save indicator (2e, 2f).
 
@@ -209,7 +209,7 @@ needs judgement.
 |---|---|
 | Page title | `display_title` |
 | Pronouns | `settings.pronouns` |
-| Resume | the readable file in `resumes/`, named in each track's `resume_line` |
+| Resume | the readable attachment in `resumes/` (a PDF is read as it is) or the pasted text, named in each track's `resume_line` |
 | Anywhere you can't take a job? | `geo_scope_line` (a full numbered step with examples), `scope_clause`, `scope_disqualifier` |
 | Locations first | `priority_locations`, as the rules the page computed, unchanged |
 | Call it | track `label`, and a slug `key` unique in the account |
