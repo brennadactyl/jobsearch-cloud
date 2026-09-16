@@ -48,15 +48,29 @@
   .\setup-scheduler.ps1 -DataDir "D:\JobSearchData" -User ab266b6c-00cc-45d1-92ac-cdad412c1558
 #>
 param(
-    [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
+    [string]$DataDir,
     [string]$User
 )
 
 $ErrorActionPreference = "Stop"
-$runScript = Join-Path $PSScriptRoot "run-search.ps1"
-$fillScript = Join-Path $PSScriptRoot "run-fill.ps1"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder is resolved here instead. Otherwise running this by path
+# from another directory fails inside Join-Path, naming a line rather than the
+# folder it could not find. The sibling scripts below are found the same way,
+# and they are what the registered tasks run.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $scriptDir) {
+    throw "Can't work out where this script lives, so the tasks would be registered against nothing. Run it by its full path."
+}
+if (-not $DataDir) {
+    $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $scriptDir "..\private" }
+}
+
+$runScript = Join-Path $scriptDir "run-search.ps1"
+$fillScript = Join-Path $scriptDir "run-fill.ps1"
 $fillName = "JobSearch-Applications"
-$onboardingScript = Join-Path $PSScriptRoot "run-onboarding.ps1"
+$onboardingScript = Join-Path $scriptDir "run-onboarding.ps1"
 $ONBOARDING_TASK = "JobSearch-Onboarding"
 
 # "technical-pm" -> "TechnicalPm". Never emits a hyphen; stale-task cleanup
