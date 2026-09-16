@@ -226,6 +226,14 @@ foreach ($person in $people) {
             Write-Host "  $($track.key) - no task; filled by $($track.fed_by)'s search"
             continue
         }
+        # A track the overnight run hasn't written up yet: its prose is blank, so
+        # GET /api/prompt refuses to compose a prompt for it and a task here
+        # would fire a search with nothing to search for. It gets its task on
+        # the next run after the night writes it up.
+        if (-not $track.role_search_line) {
+            Write-Host "  $($track.key) - no task yet; waiting for a run to write up what it searches for"
+            continue
+        }
         $time = $track.schedule_time
         if (-not $time -or $time -notmatch '^\d{2}:\d{2}$') {
             $time = $auto.ToString("HH:mm")
