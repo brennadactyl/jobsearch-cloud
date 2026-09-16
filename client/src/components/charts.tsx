@@ -272,54 +272,34 @@ export interface BarSegment {
   n: number;
   target: DrillTarget;
   tip: string;
-  /** A token class: s-accent, s-soft, s-line or s-crit. */
+  /** A token class: s-accent, s-accent-dim, s-soft, s-line or s-crit. */
   tone: string;
 }
 
 /**
  * One stacked bar, `scale` of the row wide, with each non-zero segment labelled
  * directly beneath it. Both the segment and its label open the rows.
- *
- * `end` is a figure set straight after the bar - its total - so the eye goes
- * from the bar's end to its number instead of across the row. Bars then scale
- * within the row less the room the widest figure takes (`endDigits` digits), so
- * they stay in proportion and the largest bar's figure ends at the edge.
  */
 export function StackedBar({
   label,
   segments,
   scale = 1,
-  end,
-  endDigits = 1,
 }: {
   label: string;
   segments: readonly BarSegment[];
   scale?: number;
-  end?: ReactNode;
-  endDigits?: number;
 }) {
   const total = segments.reduce((s, x) => s + x.n, 0);
-  const share = Math.max(0, Math.min(1, scale));
-  // 8px is .hbar-line's gap; a digit is 1ch in its tabular mono.
-  const room = `calc(${endDigits}ch + 8px)`;
-  const bar = (
-    <div className="hbar" style={{ width: end === undefined ? `${share * 100}%` : `calc((100% - ${room}) * ${share})` }}>
-      {/* Each segment grows by its count, so the widths are its share of the bar. */}
-      {segments.map((s) =>
-        s.n ? <Mark key={s.key} n={s.n} target={s.target} tip={s.tip} className={`hseg ${s.tone}`} grow={s.n} /> : null,
-      )}
-    </div>
-  );
   return (
     <div role="group" aria-label={label}>
-      {end === undefined ? (
-        bar
-      ) : (
-        <div className="hbar-line">
-          {bar}
-          <span className="hbar-end">{end}</span>
-        </div>
-      )}
+      <div className="hbar" style={{ width: `${Math.max(0, Math.min(1, scale)) * 100}%` }}>
+        {/* Each segment grows by its count, so the widths are its share of the bar. */}
+        {segments.map((s) =>
+          s.n ? (
+            <Mark key={s.key} n={s.n} target={s.target} tip={s.tip} className={`hseg ${s.tone}`} grow={s.n} />
+          ) : null,
+        )}
+      </div>
       <div className="legend seglabels">
         {segments
           .filter((s) => s.n)
