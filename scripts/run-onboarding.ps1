@@ -343,7 +343,7 @@ $MODEL_TIMEOUT_MINUTES = 25
 # Every note below is read by the person on their own page, so each says what
 # they can do, and never what a run was doing when it broke.
 $NOTE_GENERIC = "Setting your search up didn't finish tonight. It will be tried again tomorrow night, and there's nothing you need to do unless this message is still here after that."
-$NOTE_RESUME = "We couldn't read your resume overnight: only .txt and .md files can be read, and no text was pasted. Paste the text of your resume into the setup form and send it again."
+$NOTE_RESUME = "We couldn't read your resume overnight: a Word, RTF or Pages file, or an image, can't be read with nobody there to open it. Attach it as a PDF or a .txt instead, or paste the text into the setup form, and send it again."
 $NOTE_NO_SLOT = "There's no room left in the nightly schedule on the machine that runs these searches, so yours couldn't be added. Let whoever invited you know - this one needs their attention, not yours."
 
 # "Jordan O'Neil" -> "Jordan-O-Neil". The documents route takes word characters,
@@ -446,14 +446,16 @@ foreach ($item in $queue) {
         New-Item -ItemType Directory -Force -Path (Join-Path $stage "resumes") | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $stage "out\docs") | Out-Null
 
-        # Only the formats a headless run can read are staged. A .pdf or .docx
-        # is left in the tracker: staging one would put a file in front of the
-        # model that it cannot read, and the resume it then writes from is the
-        # answers alone, silently.
+        # Only the formats the model turn can read are staged. A PDF is one of
+        # them: verified 2026-09-15 against the confined turn's own tools, which
+        # opened a staged PDF and read the text out of it. A .docx, .rtf,
+        # .pages or an image is left in the tracker, because staging one puts a
+        # file in front of the model it cannot read, and the search it then
+        # writes comes from the answers alone, silently.
         $readable = @()
         foreach ($path in @($answers.resume_files)) {
             $path = [string]$path
-            if ($path -notmatch '\.(txt|md)$') { continue }
+            if ($path -notmatch '\.(txt|md|pdf)$') { continue }
             $dest = Join-Path $stage ("resumes\" + [System.IO.Path]::GetFileName($path))
             Invoke-WithRetry "GET /api/documents/$path" {
                 Invoke-WebRequest -Uri "$TrackerUrl/api/documents/$path" -OutFile $dest `
@@ -510,7 +512,8 @@ tracker access. A script takes what you write here, checks it and posts it.
 
 Read first:
   answers.json     - what they typed, verbatim
-  resumes\         - their resume, as text
+  resumes\         - their resume. A PDF here is readable: open it and read it
+                     like any other file
   setup-skill.md   - how this deployment's search config is written. Its
                      "Intake mode" section is written for this run and maps
                      each answer onto a field; step 4 has the field-by-field

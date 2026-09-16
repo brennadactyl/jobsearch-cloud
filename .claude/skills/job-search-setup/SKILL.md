@@ -102,17 +102,18 @@ A password reset leaves the scheduled-search token working.
 
 ### 2. Get the resume(s)
 
-Read each resume. Plain text or Markdown: read it directly. PDF: the Read tool
-needs `pdftoppm` (poppler), which many machines lack; `py -m pip install pypdf`
-and `pypdf.PdfReader(path).extract_text()` works without it. `.docx`: use the
-`docx` skill, or ask for a plain-text copy. With nothing readable, have the
-installer paste their experience in chat.
+Read each resume. Plain text, Markdown and PDF all open with the Read tool, in
+a headless run as well as an interactive one. `.docx`: use the `docx` skill, or
+ask for a plain-text copy. A scan or a photo is pictures of text and gives a run
+nothing. With nothing readable, have the installer paste their experience in
+chat.
 
-**Upload the original and a plain-text copy**, and point `resume_line` (step 4)
-at the `.txt`. The nightly run is headless: a resume stored only as `.pdf` or
-`.docx` gives it nothing to read, and the run still completes and reports
-success, having screened every posting against an empty profile. Name the text
-copy `<Name>_Resume.txt` and keep that name, so a new resume is a content swap
+**Upload whatever they gave you**, and point `resume_line` (step 4) at a file a
+run can actually read - the `.pdf` itself is fine. For a `.docx`, `.rtf`,
+`.pages` or a scan, upload a plain-text copy too and name that instead: a run
+pointed at a file it can't read still completes and reports success, having
+screened every posting against an empty profile. Name a text copy
+`<Name>_Resume.txt` and keep that name, so a new resume is a content swap
 rather than a config edit.
 
 Upload from anywhere:
@@ -401,7 +402,7 @@ from and where the output goes.
 | Step above | In intake mode |
 |---|---|
 | 1, provisioning | Already done. The account, folder, credential and documents exist. |
-| 2, the resume | `resumes\` in the folder holds their readable resume; the pasted-text copy is already uploaded. Draft the profile paragraph from it as usual. |
+| 2, the resume | `resumes\` in the folder holds their resume - text, Markdown or PDF, all of which you can read; a pasted one is already uploaded as `.txt`. Draft the profile paragraph from it as usual. |
 | 3, asking | `answers.json` is the interview, already answered. Nothing is confirmed with anyone: decide from what they wrote. Where an answer is thin, write the search anyway - a thin search they can see and correct beats no search. |
 | 4, doc and config | Same fields, same template. They go in `out\` as files, not to the API. |
 | 5, confirming | Nobody to confirm with. Prefer the reading that surfaces more jobs: an over-tight fit filter hides work they asked for and nobody is watching. |
