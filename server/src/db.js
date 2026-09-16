@@ -129,6 +129,7 @@
  * @property {string} screened_examples
  * @property {string} schedule_time
  * @property {string} fed_by - key of the sibling track whose search fills this tab, '' when this track runs its own
+ * @property {string} documents - JSON array of document paths this search reads besides doc_file (migrations/0017)
  */
 
 /**
@@ -183,8 +184,24 @@ export const TRACK_CONFIG_FIELDS = [
   "role_search_line", "target_companies", "search_note", "resume_line",
   "fit_clause", "fit_disqualifier", "fit_filter_step", "leads_note",
   "doc_file", "doc_summary", "doc_update_line", "intro_note", "report_line",
-  "screened_examples", "schedule_time", "fed_by",
+  "screened_examples", "schedule_time", "fed_by", "documents",
 ];
+
+/**
+ * A stored `tracks.documents` value as a list. Anything that does not parse to
+ * a list of strings reads as empty, which GET /api/documents?search= refuses
+ * loudly rather than serving a search nothing.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function parseDocumentList(text) {
+  try {
+    const list = JSON.parse(text || "[]");
+    return Array.isArray(list) ? list.filter((p) => typeof p === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * The track fields the overnight run owns, and the only ones POST /api/writeup
@@ -198,7 +215,7 @@ export const WRITEUP_FIELDS = [
   "role_search_line", "full_description", "resume_line", "search_note",
   "fit_clause", "fit_disqualifier", "fit_filter_step", "leads_note",
   "doc_file", "doc_summary", "doc_update_line", "intro_note", "report_line",
-  "screened_examples", "schedule_time",
+  "screened_examples", "schedule_time", "documents",
 ];
 
 /**
@@ -876,6 +893,9 @@ export class Db {
     const tracks = tracksRes.results.map((row) => {
       const track = { key: row.key };
       for (const f of [...TRACK_DISPLAY_FIELDS, ...TRACK_CONFIG_FIELDS]) track[f] = row[f];
+      // Served as a list, so a caller that reads the config and posts a track back
+      // sends what POST /api/config accepts.
+      track.documents = parseDocumentList(row.documents);
       track.last_run = {
         at: row.last_run_at || "",
         on: row.last_run_on || "",
@@ -1024,11 +1044,13 @@ export class Db {
           typeof t.full_description === "string" ? t.full_description : keep(t, "full_description", ""),
           Number.isInteger(t.sort_order) ? t.sort_order : keep(t, "sort_order", i),
           ...TRACK_CONFIG_FIELDS.map((f) => {
-            // target_companies is the one structured field: accept an array
-            // and store it as JSON, or pass through a string that already is.
-            if (f === "target_companies" && Array.isArray(t[f])) return JSON.stringify(t[f]);
+            // target_companies and documents are the structured fields: accept
+            // an array and store it as JSON, or pass through a string that
+            // already is. A new track's documents start as an empty list, not
+            // an empty string, so every stored value parses.
+            if ((f === "target_companies" || f === "documents") && Array.isArray(t[f])) return JSON.stringify(t[f]);
             if (typeof t[f] === "string") return t[f];
-            return keep(t, f, "");
+            return keep(t, f, f === "documents" ? "[]" : "");
           })
         )
       ),

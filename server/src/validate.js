@@ -118,6 +118,32 @@ export function isDocumentPath(path) {
   return !DOS_DEVICE.test(name.split(".")[0]);
 }
 
+// A search reads its tracking doc, a resume or two and perhaps a reference file.
+// The cap is there to refuse a list that is really "everything", not to fit
+// normal searches.
+export const TRACK_DOCUMENTS_MAX = 20;
+
+/**
+ * What is wrong with a track's `documents` list (migrations/0017), or null.
+ * Checked on every write path to it, so the runner never asks R2 for a path
+ * that could not name a document.
+ *
+ * Paths only, not whether each exists: a list can be written before its files
+ * are uploaded, and GET /api/documents?search= reports what is missing at the
+ * point a run needs it.
+ * @param {unknown} list
+ * @returns {string|null}
+ */
+export function trackDocumentsError(list) {
+  if (!Array.isArray(list)) return "documents must be a list of document paths";
+  if (list.length > TRACK_DOCUMENTS_MAX) return `at most ${TRACK_DOCUMENTS_MAX} documents for one search`;
+  const bad = list.filter((p) => !isDocumentPath(p));
+  if (bad.length) {
+    return `not a document path: ${bad.map((p) => JSON.stringify(p)).join(", ")} - a path is ${DOCUMENT_FOLDERS.map((f) => `${f}/`).join(", ")} and a plain file name`;
+  }
+  return null;
+}
+
 // Names the whole rule rather than the offending part: the callers are a
 // PowerShell script and an LLM run, and what they may send is the useful answer.
 export function badDocumentPath(path) {
