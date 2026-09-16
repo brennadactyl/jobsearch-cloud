@@ -154,14 +154,28 @@ describe("the setup form", () => {
     expect(screen.queryByRole("tab")).toBeNull();
   });
 
-  it("refuses to send a PDF alone, beside Attach", async () => {
-    const submit = vi.spyOn(client, "submitIntake");
+  it("sends a PDF on its own, since the run reads it", async () => {
     await openSetup();
+    vi.spyOn(client, "putDocument").mockImplementation(async (path) => ({ path }));
+    const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(intake());
+    vi.mocked(client.getIntake).mockResolvedValue(intake());
+
     await fillRole();
     await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["%PDF"], "resume.pdf", { type: "application/pdf" }));
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
-    expect(screen.getByText("We can't read PDF or Word files overnight. Paste the text too.")).toBeInTheDocument();
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit.mock.calls[0][0].resume_files).toEqual(["resumes/resume.pdf"]);
+  });
+
+  it("refuses to send a Word file alone, beside Attach", async () => {
+    const submit = vi.spyOn(client, "submitIntake");
+    await openSetup();
+    await fillRole();
+    await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["PK"], "resume.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+
+    expect(screen.getByText("We can't read Word files overnight. Paste the text too.")).toBeInTheDocument();
     expect(submit).not.toHaveBeenCalled();
   });
 
