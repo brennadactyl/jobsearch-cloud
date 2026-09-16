@@ -171,23 +171,109 @@ describe("the setup form", () => {
     expect(submit.mock.calls[0][0].resume_files).toEqual(["resumes/resume.pdf"]);
   });
 
-  it("refuses to send a Word file alone, beside Attach", async () => {
+  it("refuses to send a file nothing can read alone, beside Attach", async () => {
     const submit = vi.spyOn(client, "submitIntake");
+    vi.spyOn(client, "putDocument").mockImplementation(async (path) => ({ path }));
     await openSetup();
     await fillRequired();
-    await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["PK"], "resume.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+    await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["{\\rtf1}"], "resume.rtf", { type: "application/rtf" }));
+    await screen.findByText("resume.rtf");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
-    expect(screen.getByText("We can't read Word files overnight. Paste the text too.")).toBeInTheDocument();
+    expect(
+      screen.getByText("We can't read that file overnight. Attach a PDF, Word (.docx), .txt or .md file, or paste the text too."),
+    ).toBeInTheDocument();
     expect(submit).not.toHaveBeenCalled();
   });
 
-  it("refuses a file over 8 MB when it's picked", async () => {
+  it("refuses a file over 8 MB when it's picked, without uploading it", async () => {
+    const put = vi.spyOn(client, "putDocument");
     await openSetup();
     const big = new File(["x"], "scan.pdf", { type: "application/pdf" });
     Object.defineProperty(big, "size", { value: 11.4 * 1024 * 1024 });
     await userEvent.upload(screen.getByLabelText("Attach resume files"), big);
     expect(screen.getByText("Not attached: it's 11.4 MB, and files can be up to 8 MB.")).toBeInTheDocument();
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  describe("a resume uploads the moment it's attached", () => {
+    const docx = (name = "Sam Resume.docx") =>
+      new File(["PK"], name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+
+    it("shows the words read from a Word file, and sends it by the path it was stored under", async () => {
+      const put = vi.spyOn(client, "putDocument").mockImplementation(async (path) => ({
+        path,
+        text_path: path.replace(/\.docx$/, ".txt"),
+        words: 612,
+      }));
+      const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
+      await openSetup();
+      await userEvent.upload(screen.getByLabelText("Attach resume files"), docx());
+
+      // Uploaded on pick, before anything is sent.
+      expect(put).toHaveBeenCalledWith("resumes/Sam Resume.docx", expect.any(File));
+      expect(await screen.findByText("· 612 words read")).toBeInTheDocument();
+
+      await fillRequired();
+      await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+      await waitFor(() => expect(submit).toHaveBeenCalled());
+      expect(submit.mock.calls[0][0].resume_files).toEqual(["resumes/Sam Resume.docx"]);
+      expect(put).toHaveBeenCalledTimes(1);
+    });
+
+    it("turns away an older .doc without uploading it", async () => {
+      const put = vi.spyOn(client, "putDocument");
+      await openSetup();
+      await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["x"], "Old Resume.doc", { type: "application/msword" }));
+      expect(screen.getByText("Not attached: it's an older Word file. Save it as .docx or PDF and attach that.")).toBeInTheDocument();
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it("shows the server's reason beside Attach, and doesn't list or send the refused file", async () => {
+      const reason = "Sam Scan.docx has only 12 words of text - if it is a scanned image or a template, attach a PDF or paste the text instead";
+      vi.spyOn(client, "putDocument").mockRejectedValue(refusal(422, reason));
+      const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
+      await openSetup();
+      await userEvent.upload(screen.getByLabelText("Attach resume files"), docx("Sam Scan.docx"));
+
+      expect(await screen.findByText(reason)).toHaveClass("field-err");
+      expect(screen.queryByRole("button", { name: "remove" })).toBeNull();
+
+      await fillRequired();
+      await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+      await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+      await waitFor(() => expect(submit).toHaveBeenCalled());
+      expect(submit.mock.calls[0][0].resume_files).toEqual([]);
+    });
+
+    it("deletes a stored file when it's removed, and doesn't send it", async () => {
+      vi.spyOn(client, "putDocument").mockImplementation(async (path) => ({ path }));
+      const del = vi.spyOn(client, "deleteDocument").mockImplementation(async (path) => ({ path }));
+      const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
+      await openSetup();
+      await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["hi"], "resume.txt", { type: "text/plain" }));
+      await userEvent.click(await screen.findByRole("button", { name: "remove" }));
+
+      expect(del).toHaveBeenCalledWith("resumes/resume.txt");
+      await fillRequired();
+      await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+      await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+      await waitFor(() => expect(submit).toHaveBeenCalled());
+      expect(submit.mock.calls[0][0].resume_files).toEqual([]);
+    });
+
+    it("holds the send while a resume is still uploading", async () => {
+      vi.spyOn(client, "putDocument").mockImplementation(() => new Promise(() => {}));
+      const submit = vi.spyOn(client, "submitIntake");
+      await openSetup();
+      await userEvent.upload(screen.getByLabelText("Attach resume files"), docx());
+      await fillRequired();
+      await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+      await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+
+      expect(screen.getByText("Wait for your resume to finish uploading, then send.")).toBeInTheDocument();
+      expect(submit).not.toHaveBeenCalled();
+    });
   });
 
   it("asks where the person can work before it will send", async () => {

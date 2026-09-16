@@ -13,6 +13,7 @@ import { locationRules, parseLocations, type LocationEntry } from "../domain/loc
 import {
   emptyAnswers,
   emptyRole,
+  isOlderWordFile,
   MAX_FILE_BYTES,
   safeDocumentName,
   setupProblems,
@@ -20,7 +21,16 @@ import {
 } from "../domain/onboarding";
 import { saved, useSaved } from "../ui/saved";
 
+/** A file the form turned away. `name` is shown before the reason, or "" when the reason already names it. */
 type Refused = { name: string; reason: string };
+
+/**
+ * One resume on the form. It uploads the moment it's picked, so it is either
+ * still on its way or stored - with the words the server read, for a Word file.
+ */
+type Attachment =
+  | { key: number; name: string; status: "uploading" }
+  | { key: number; name: string; status: "stored"; path: string; words?: number };
 
 /** Where a message sits on the form: a problem slot, or "form" beside the send button. */
 type ProblemSlot = keyof SetupProblems | "form";
@@ -46,22 +56,6 @@ function problemSlotFor(field: string | undefined): ProblemSlot {
 /** The filename part of a stored document path: "resumes/cv.pdf" is "cv.pdf". */
 function fileNameOf(path: string): string {
   return path.slice(path.indexOf("/") + 1);
-}
-
-/**
- * Brings the stored resumes in line with the form before the answers are sent:
- * deletes the ones removed, uploads the ones picked, and returns every path the
- * answers should name. A failed delete is ignored - the answers stop naming the
- * file either way.
- */
-async function syncResumeFiles(stored: string[], removed: string[], picked: File[]): Promise<string[]> {
-  for (const path of removed) await deleteDocument(path).catch(() => undefined);
-  const uploaded: string[] = [];
-  for (const file of picked) {
-    const res = await putDocument(`resumes/${safeDocumentName(file.name)}`, file);
-    uploaded.push(res.path);
-  }
-  return [...new Set([...stored, ...uploaded])];
 }
 
 function Field({
@@ -128,42 +122,41 @@ function LocationReadback({ entries }: { entries: LocationEntry[] }) {
   );
 }
 
-/** The resume files the form will send: already stored, picked this visit, and any refused for size. */
+/** The resumes on the form: stored or still uploading, and any turned away. */
 function ResumeFiles({
-  stored,
-  picked,
+  attachments,
   refused,
-  onRemoveStored,
-  onRemovePicked,
+  onRemove,
 }: {
-  stored: string[];
-  picked: File[];
+  attachments: Attachment[];
   refused: Refused[];
-  onRemoveStored: (path: string) => void;
-  onRemovePicked: (index: number) => void;
+  onRemove: (a: Attachment) => void;
 }) {
-  if (stored.length === 0 && picked.length === 0 && refused.length === 0) return null;
+  if (attachments.length === 0 && refused.length === 0) return null;
   return (
     <div className="setup-files">
-      {stored.map((path) => (
-        <div className="setup-file" key={path}>
-          <span>{fileNameOf(path)}</span>
-          <button className="setup-rm" type="button" onClick={() => onRemoveStored(path)}>
-            remove
-          </button>
-        </div>
-      ))}
-      {picked.map((file, i) => (
-        <div className="setup-file" key={`${file.name}-${i}`}>
-          <span>{file.name}</span>
-          <button className="setup-rm" type="button" onClick={() => onRemovePicked(i)}>
-            remove
-          </button>
+      {attachments.map((a) => (
+        <div className="setup-file" key={a.key}>
+          {a.status === "uploading" ? (
+            <span>
+              {a.name} <span className="field-hint">· uploading…</span>
+            </span>
+          ) : (
+            <>
+              <span>
+                {fileNameOf(a.path)}
+                {a.words !== undefined && <span className="field-hint">{` · ${a.words} words read`}</span>}
+              </span>
+              <button className="setup-rm" type="button" onClick={() => onRemove(a)}>
+                remove
+              </button>
+            </>
+          )}
         </div>
       ))}
       {refused.map((r, i) => (
         <div className="setup-file" key={`refused-${i}`}>
-          <span>{r.name}</span>
+          {r.name && <span>{r.name}</span>}
           <p className="field-err">{r.reason}</p>
         </div>
       ))}
@@ -264,10 +257,9 @@ export default function Setup({
   const id = useId();
   const fileInput = useRef<HTMLInputElement>(null);
   const [answers, setAnswers] = useState<IntakeAnswers>(() => emptyAnswers(data.user.name));
-  const [stored, setStored] = useState<string[]>([]);
-  const [removed, setRemoved] = useState<string[]>([]);
-  const [picked, setPicked] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [refused, setRefused] = useState<Refused[]>([]);
+  const nextKey = useRef(0);
   const [problems, setProblems] = useState<Partial<Record<ProblemSlot, string>>>({});
   const [sending, setSending] = useState(false);
 
@@ -276,36 +268,68 @@ export default function Setup({
   const setRole = (i: number, patch: Partial<RoleAnswer>) =>
     setAnswers((a) => ({ ...a, roles: a.roles.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
 
-  const fileNames = [...stored.map(fileNameOf), ...picked.map((f) => f.name)];
+  const stored = attachments.flatMap((a) => (a.status === "stored" ? [a] : []));
+  const uploading = attachments.some((a) => a.status === "uploading");
 
+  /**
+   * Uploads each file as soon as it's picked, so the person sees what was read
+   * from it - or why it was refused - while they're still on the form. A file
+   * too big, or in the older Word format, is turned away without uploading.
+   */
   function pick(files: FileList | null) {
     if (!files) return;
-    const ok: File[] = [];
-    const tooBig: Refused[] = [];
-    for (const f of Array.from(files)) {
-      if (f.size > MAX_FILE_BYTES) {
-        tooBig.push({ name: f.name, reason: `Not attached: it's ${(f.size / 1024 / 1024).toFixed(1)} MB, and files can be up to 8 MB.` });
+    setRefused([]);
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_FILE_BYTES) {
+        refuse({ name: file.name, reason: `Not attached: it's ${(file.size / 1024 / 1024).toFixed(1)} MB, and files can be up to 8 MB.` });
+      } else if (isOlderWordFile(file.name)) {
+        refuse({ name: file.name, reason: "Not attached: it's an older Word file. Save it as .docx or PDF and attach that." });
       } else {
-        ok.push(f);
+        void upload(file);
       }
     }
-    setPicked((p) => [...p, ...ok]);
-    setRefused(tooBig);
+  }
+
+  function refuse(r: Refused) {
+    setRefused((list) => [...list, r]);
+  }
+
+  async function upload(file: File) {
+    const key = nextKey.current++;
+    setAttachments((list) => [...list, { key, name: file.name, status: "uploading" }]);
+    try {
+      const res = await putDocument(`resumes/${safeDocumentName(file.name)}`, file);
+      setAttachments((list) =>
+        list
+          // Picking a file with the same stored name replaces it, so it lists once.
+          .filter((a) => a.key === key || a.status !== "stored" || a.path !== res.path)
+          .map((a) => (a.key === key ? { key, name: file.name, status: "stored", path: res.path, words: res.words } : a)),
+      );
+    } catch (err) {
+      setAttachments((list) => list.filter((a) => a.key !== key));
+      const failure = failureOf(err);
+      if (failure?.status === 401) return;
+      // The server's reason already starts with the file's name.
+      refuse({ name: failure ? "" : file.name, reason: failure?.message ?? (err instanceof Error ? err.message : String(err)) });
+    }
+  }
+
+  function remove(a: Attachment) {
+    setAttachments((list) => list.filter((x) => x.key !== a.key));
+    // Nothing names a removed file any more, so a failed delete leaves only a stray document.
+    if (a.status === "stored") void deleteDocument(a.path).catch(() => undefined);
   }
 
   async function send() {
-    const found = setupProblems(answers, fileNames);
+    const found: Partial<Record<ProblemSlot, string>> = setupProblems(answers, stored.map((a) => fileNameOf(a.path)));
+    if (uploading) found.attach = "Wait for your resume to finish uploading, then send.";
     setProblems(found);
     if (Object.keys(found).length) return;
 
     setSending(true);
     saved.saving("Sending…");
     try {
-      const resumeFiles = await syncResumeFiles(stored, removed, picked);
-      await submitIntake({ ...answers, resume_files: resumeFiles, priority_locations: locationRules(entries) });
-      setStored(resumeFiles);
-      setPicked([]);
-      setRemoved([]);
+      await submitIntake({ ...answers, resume_files: stored.map((a) => a.path), priority_locations: locationRules(entries) });
       setRefused([]);
       saved.ok();
       onSent();
@@ -377,7 +401,7 @@ export default function Setup({
           </Field>
 
           <SetupHeading title="Your resume">Attach your resume, paste its text, or both. Pasting always works.</SetupHeading>
-          <Field problem={problems.attach}>
+          <Field problem={problems.attach} hint="PDF, Word (.docx), .txt or .md, up to 8 MB">
             <div className="setup-attach">
               <button className="btn" type="button" onClick={() => fileInput.current?.click()}>
                 Attach files
@@ -394,16 +418,7 @@ export default function Setup({
                 }}
               />
             </div>
-            <ResumeFiles
-              stored={stored}
-              picked={picked}
-              refused={refused}
-              onRemoveStored={(path) => {
-                setStored((s) => s.filter((p) => p !== path));
-                setRemoved((r) => [...r, path]);
-              }}
-              onRemovePicked={(i) => setPicked((p) => p.filter((_, j) => j !== i))}
-            />
+            <ResumeFiles attachments={attachments} refused={refused} onRemove={remove} />
           </Field>
           <Field label={<label htmlFor={`${id}-resume`}>Or paste it here</label>}>
             <textarea
