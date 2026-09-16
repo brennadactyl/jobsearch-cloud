@@ -234,6 +234,9 @@ describe("the setup form", () => {
     expect(sent.roles[0]).toMatchObject({ name: "Engineering", titles: "Staff backend engineer" });
 
     expect(await screen.findByText("You're all set — it's building tonight")).toBeInTheDocument();
+    // A first run can finish healthily with nothing in it, so the banner says so
+    // rather than leaving an empty tracker to read as a broken one.
+    expect(screen.getByText(/may well open empty.*real result/s)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send changes" })).toBeInTheDocument();
     expect(screen.getAllByRole("status").some((s) => s.textContent === "Sent")).toBe(true);
     expect(screen.queryByRole("link", { name: /tracker/i })).toBeNull();

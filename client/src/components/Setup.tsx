@@ -187,8 +187,9 @@ function Banner({ intake, staleRunHours }: { intake: Intake | null; staleRunHour
   return (
     <div className="setup-status" role="status">
       <strong>You're all set — it's building tonight</strong>
-      Your tracker will be ready in the morning. You can keep changing anything below until then; the last version you
-      send is the one it uses.
+      Your tracker will be ready in the morning, and it may well open empty. An empty day is a real result here — nothing
+      gets padded in — and it fills as the nightly runs find things. You can keep changing anything below until then;
+      the last version you send is the one it uses.
     </div>
   );
 }
