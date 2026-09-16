@@ -109,17 +109,21 @@ A table with one row per search, plus a row for applications added by hand
 - Rows are sorted by the configured track order, not by any rate, so a row
   stays where you expect it.
 
-Below the table, the same breakdown by location tier, laid out on the table's
-grid so the two read as one card: one row per `priority_locations` rule plus
-"Other", the tier name in the search column's width, a stacked bar across the
-remaining width, and the tier's total in a fixed right column.
+Below the table, the same breakdown by location tier: one row per
+`priority_locations` rule plus "Other".
 
-- **Segments:** Applied, Open and Not a fit, all filled - Applied `--accent`,
-  Open `--accent` at reduced opacity, Not a fit `--line` - with a 2px gap
-  between them. No outlined segment: an outline reads as empty.
-- **Bar length is relative to the largest tier.**
-- **One legend, above the rows**, not repeated under each bar. A segment's
-  count is in its tooltip and the table view.
+- **Every bar is the same length.** Each is 100% of its own tier, split into
+  Applied, Open and Not a fit, so a row shows where that tier's postings went;
+  the tier's total at the end of the bar carries its size.
+- **The tier name sits in a narrow column**, as wide as the longest tier name
+  needs, and the bar takes the rest of the width up to the total.
+- **Its breakdown sits under its bar**: `Applied 8 · Open 98 · Not a fit 17`,
+  each with its swatch, each count a link through its drill. That replaces a
+  shared legend.
+- **Segments are filled:** Applied `--accent`, Open `--accent` at reduced
+  opacity, Not a fit `--line`, with a 2px gap. No outlined segment: an outline
+  reads as empty.
+- A tier with nothing in it shows an empty track and its 0.
 - Each segment opens its rows through a `tier:<index>:<segment>` drill. Applied
   counts applications (hand-added included, `To Apply` excluded), tiered by the
   application's own location; Open and Not a fit count leads, with no screened
