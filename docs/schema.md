@@ -425,9 +425,12 @@ One row per account that has sent the first-run setup form, keyed by
 - `answers` is the form's answers as JSON, stored as sent. `POST /api/intake`
   checks only what the onboarding run cannot work without, and keeps every other
   field for the run to read.
-- `status` is `pending` until the onboarding run has built the search, then
-  `done` or `failed`. `done` is final.
+- `status` is how far the write-up has got, not whether the tracker exists: the
+  send itself builds the tracks and the settings the form owns, so an account is
+  usable from the moment its row appears. `pending` means the overnight run has
+  still to write the prose, then `done` or `failed`. `done` is final.
 - `status_note` is plain text the run wrote for the person.
-- `sent_at` is when the current attempt began: the first send, or a send after a
-  failure. Editing a pending setup leaves it alone, so a late run cannot be
-  hidden by an edit. `updated_at` moves on every change.
+- `sent_at` is when the setup was sent. There is no second send - `POST
+  /api/intake` refuses one whatever the status - so it never moves, and the
+  retry bound counts from it: a `failed` setup stops being offered to the run
+  three days after it. `updated_at` moves on every change.
