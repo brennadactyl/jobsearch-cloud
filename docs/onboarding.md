@@ -94,6 +94,12 @@ attempts: a night the machine was off still spends one of the three days.
 
 `done` is final - `POST /api/intake/complete` refuses to change it.
 
+The tracker's notice follows the status (`SetupNotice` in `client/src/App.tsx`):
+`pending` promises tonight's run, `failed` shows the run's note. A `pending`
+intake whose `sent_at` is older than the account's `stale_run_hours`
+(`setupOverdue`) stops promising tonight and says the run may not have
+happened, since repeating the promise would renew it every day it stays false.
+
 ## Slots
 
 A new search is scheduled inside the night, between this run and the
