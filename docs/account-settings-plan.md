@@ -79,7 +79,7 @@ file, pasted text, or both.
 - **Which resume a search uses is a choice, not prose.** Each search gets a
   picker listing the account's readable resumes, stored in the answers as that
   role's `resume`. The run does not choose: it writes `resume_line` naming the
-  file the answer names, and  refuses a `resume_line` that
+  file the answer names, and `POST /api/writeup` refuses a `resume_line` that
   names a different file. One resume can drive several searches.
 - **The last readable resume cannot be removed** while no text is pasted: a
   search with nothing to screen against is the failure this rule exists to
