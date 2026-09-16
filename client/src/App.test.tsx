@@ -92,6 +92,20 @@ describe("the shell", () => {
     expect(alpha.querySelector(".tabwarn")).toBeFalsy();
   });
 
+  it("selects only the open tab, even when one track key starts another", async () => {
+    // "Senior & Staff" stayed lit on "Principal & Above"'s page for exactly this.
+    const [alpha, beta] = fixture.tracks;
+    vi.mocked(client.getData).mockResolvedValue({
+      ...fixture,
+      tracks: [{ ...alpha, key: "staff" }, { ...beta, key: "staff-principal" }],
+    });
+    window.history.pushState({}, "", "/t/staff-principal");
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    const selected = screen.getAllByRole("tab").filter((t) => t.getAttribute("aria-selected") === "true");
+    expect(selected.map((t) => t.textContent)).toEqual([expect.stringMatching(/^Beta roles/)]);
+  });
+
   it("marks the Applications tab when a posting could not be read", async () => {
     renderApp();
     await screen.findByRole("heading", { name: "Fixture Search" });
