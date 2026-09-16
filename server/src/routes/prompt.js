@@ -20,7 +20,7 @@ export async function handleGetPrompt({ db, user, params }) {
   if (!track) return unknownTrack(key);
 
   // A track with `fed_by` set is a tab, not a search: a sibling's run fills it
-  // (migrations/0003_branched_tracks.sql), and a prompt for it would be a
+  // (docs/glossary.md#searches-and-tracks), and a prompt for it would be a
   // second, near-identical search of the same job boards.
   // setup-scheduler.ps1 registers no task for one, so this is reached by a
   // hand-run or by a task registered before the track was fed.
@@ -38,7 +38,7 @@ export async function handleGetPrompt({ db, user, params }) {
   // resume" - and a run would carry out that hollow search all night and report
   // success. `role_search_line` is what says which roles to look for, so a
   // track without it is not written up, whatever else has been filled in
-  // (docs/instant-setup-plan.md). Every track starts in this state now: the
+  // (docs/onboarding.md#why-it-is-split-this-way). Every track starts in this state now: the
   // setup form creates it, and the overnight run writes it up.
   if (!track.role_search_line) {
     return json(

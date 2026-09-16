@@ -31,7 +31,7 @@ export async function handleGetConfig({ db }) {
  * rules - as a side effect of every night it ran. This route makes "the run
  * leaves those alone" a guarantee: db.writeUpTrack builds its UPDATE from
  * WRITEUP_FIELDS and WRITEUP_SETTINGS, so a form-owned field is unreachable
- * here whatever the body says (docs/instant-setup-plan.md).
+ * here whatever the body says (docs/onboarding.md#why-it-is-split-this-way).
  *
  * An unaccepted key is refused rather than dropped, naming the key: a run that
  * tries to rename a tab should hear that it can't, not wonder later why the

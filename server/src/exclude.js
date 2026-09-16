@@ -40,7 +40,7 @@ const WHOLE_NAME_MAX = 2;
 
 /**
  * Exported because company_fetch keys its rows on this
- * (migrations/0010_company_fetch.sql). Keep one normalizer: a second would let
+ * (docs/glossary.md#companies-and-the-rotation). Keep one normalizer: a second would let
  * an exclusion and a shared-intel lookup silently disagree on the same name.
  */
 export function normalize(name) {

@@ -1,6 +1,6 @@
 /**
  * Invites and setup intake: the data behind invite signup and first-run setup
- * (docs/onboarding-plan.md).
+ * (docs/onboarding.md).
  *
  * Not methods on Db, which is bound to one user and can only see that user's
  * rows. An invite belongs to no one until it is used, signup runs before there
@@ -214,7 +214,7 @@ function parseAnswers(text) {
  */
 export async function pendingIntakes(d1) {
   // A failed setup is retried on the following nights with the same answers,
-  // and gives up after three (docs/instant-setup-plan.md). The bound is here,
+  // and gives up after three (docs/onboarding.md#retries). The bound is here,
   // in what the run is handed, rather than in the run's own memory: a run that
   // forgot, or a second machine, would otherwise retry a setup that has already
   // been abandoned, and the person would keep being told tonight is the night.

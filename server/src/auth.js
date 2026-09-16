@@ -143,7 +143,7 @@ export function bearer(request) {
  * user isn't one.
  *
  * `demo` is included because a route has to refuse a demo account before it
- * writes anything shared (migrations/0012_demo_account.sql), and this is the
+ * writes anything shared (demo account, docs/glossary.md#accounts), and this is the
  * one lookup every request already makes.
  * @param {D1Database} d1
  * @param {string} token
@@ -202,7 +202,7 @@ export async function deleteSession(d1, token) {
  * @param {string} name
  * @param {string} password
  * @param {boolean} [demo] whether the account's data is invented
- *   (migrations/0012_demo_account.sql). Omitted, a new account is a person and
+ *   (docs/glossary.md#accounts). Omitted, a new account is a person and
  *   an existing one keeps what it was, so a password reset never changes it.
  * @returns {Promise<{id: string, name: string, created: boolean, demo: boolean}>}
  */
@@ -234,7 +234,7 @@ export async function upsertUser(d1, name, password, demo) {
  * appears here, which is what the delete below removes.
  *
  * Not `company_fetch`: the company list is shared by every account
- * (migrations/0011_one_company_list.sql), so what this person's runs learned
+ * (docs/glossary.md#companies-and-the-rotation), so what this person's runs learned
  * about reaching a company stays when they go. Their own record of which
  * companies they swept, in `company_sweeps`, is theirs and goes.
  */

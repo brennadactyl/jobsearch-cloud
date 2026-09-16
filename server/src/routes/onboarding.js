@@ -1,5 +1,5 @@
 /**
- * Invite signup and first-run setup (docs/onboarding-plan.md).
+ * Invite signup and first-run setup (docs/onboarding.md).
  *
  * Three kinds of caller, and the route table (./index.js) keeps them apart:
  * - a new person with only an invite link: the invite check and signup are
@@ -40,7 +40,7 @@ const PRONOUNS = ["", "she/her", "he/him", "they/them"];
 const ANSWER_STRINGS = ["page_title", "pronouns", "resume_text", "work_scope", "location_limits", "locations_first", "never_work_for", "preferences"];
 // A track key is a slug of the role name, fixed at creation: renaming a role
 // later changes the label only, so no lead is orphaned
-// (docs/instant-setup-plan.md).
+// (docs/onboarding.md#why-it-is-split-this-way).
 const KEY_MAX = 40;
 // One send per account, so the refusal is the same whatever state the setup is
 // in - and it says what to do instead, since there is no re-send.
@@ -126,7 +126,7 @@ export async function handlePostIntake({ request, db, docs, user }) {
   const body = await readJson(request);
   if (body instanceof Response) return body;
 
-  // Write-once, whatever state the setup is in (docs/instant-setup-plan.md).
+  // Write-once, whatever state the setup is in (docs/onboarding.md#why-it-is-split-this-way).
   // There is no re-send: the tracker's own config is how a search changes after
   // this, so nothing a person does can put an account back to `pending`.
   if (await db.getIntake()) return json(ALREADY_SENT, 409);
@@ -193,7 +193,7 @@ function tracksFromRoles(roles) {
  * Whether the places someone ranked first are anywhere they said they can work.
  *
  * Checked here rather than left to the overnight run, because the person is
- * still on the form and can fix it (docs/instant-setup-plan.md). Both answers
+ * still on the form and can fix it (docs/onboarding.md#why-it-is-split-this-way). Both answers
  * are free text against computed rules, so the test is deliberately loose: a
  * location counts as inside the scope when the scope mentions its label or one
  * of the terms the page derived from it, and the refusal only fires when not

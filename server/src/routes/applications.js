@@ -89,7 +89,7 @@ export async function handleDeleteApplication({ request, db }) {
 // An application can be added as just a URL; a nightly run reads the posting
 // and fills in the rest. There is nothing for the person to drive: every
 // application with a link and a gap is read once, and a flag records that it
-// was. See migrations/0009_application_autofill.sql for the flag,
+// was. See docs/glossary.md#applications-and-the-fill for the flag,
 // db.getAutofillQueue for which rows qualify, ../prompt.js's
 // buildAutofillPrompt for what the run is told, and server/README.md for the
 // long form.
@@ -167,7 +167,7 @@ export async function handleReportAutofill({ request, db }) {
  * An id that isn't the caller's doesn't match and isn't counted.
  *
  * Not a retry, and nothing calls it on a schedule. A row is read once by
- * design (migrations/0009_application_autofill.sql); this is for when the
+ * design (docs/glossary.md#applications-and-the-fill); this is for when the
  * reader itself has improved, a judgement made by whoever changed it - hence
  * explicit ids, not a "re-read every failure" switch that could be wired to a
  * schedule. The page has no control for it: a person facing an unreadable row

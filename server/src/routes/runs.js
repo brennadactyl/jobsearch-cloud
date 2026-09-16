@@ -1,7 +1,7 @@
 /**
- * The record that one track's scheduled search finished - see
- * ../../migrations/0001_schema.sql for why this is an explicit call rather
- * than something inferred from /api/leads.
+ * The record that one track's scheduled search finished - see "run record" in
+ * docs/glossary.md#runs-and-scheduling for why this is an explicit call rather than something
+ * inferred from /api/leads.
  */
 
 import { json, readJson } from "../http.js";
