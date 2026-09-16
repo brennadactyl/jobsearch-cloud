@@ -429,8 +429,9 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
   );
 }
 
-// Every segment filled: an outlined one reads as an empty box.
-const TIER_TONES: Record<string, string> = { applied: "s-accent", open: "s-accent-dim", "not-a-fit": "s-line" };
+// Every segment filled: an outlined one reads as an empty box. Not a fit is the
+// quietest, but not --line, which is too close to an empty tier's track.
+const TIER_TONES: Record<string, string> = { applied: "s-accent", open: "s-accent-dim", "not-a-fit": "s-ink3-dim" };
 
 function TierChart({ data }: { data: TrackerData }) {
   const bars = tierBars(data);
