@@ -90,25 +90,35 @@ A table with one row per search, plus a row for applications added by hand
 - A removed posting is a `screened` row for the search with `added_by = 'hand'`
   or the reason `posting taken down`. The `screened` schema in `api/schema.ts`
   gains `added_by`. `/api/data` already returns it.
-- **No rate columns.** Each rate sits in the cell it is a rate of: Applied reads
-  `7 · 6%` (of Found) and Responded reads `1 · 14%` (of Applied), the percentage
-  in muted ink. Under 3 applications Responded shows the count alone. Rates are
-  whole percentages, and the tooltip carries the fraction (`4 of 57`).
-- **The table is as wide as its content**, not the card: the search column
-  takes what its names and run stamps need, and the number columns sit close
-  enough to read across.
+- **Rates sit beside their counts, in their own narrow column.** Applied and
+  Responded each head two cells: the count, right-aligned and linked, then its
+  rate in muted ink, right-aligned. Counts line up with counts and rates with
+  rates down every row. A rate that isn't shown (no applications, or under 3
+  for Responded) leaves its cell empty - no dot, no dash. The tooltip carries
+  the fraction. No meters.
+- **The table fills the card.** The search column takes the remaining width;
+  every number column has a fixed width, so the numbers sit together at the
+  right rather than spread across gaps, and nothing leaves the card's right side
+  empty.
 - Rows are sorted by the configured track order, not by any rate, so a row
   stays where you expect it.
 
-Below the table, the same breakdown by location tier: one horizontal stacked
-bar per `priority_locations` rule plus "Other", split into Applied, Open and
-Not a fit. Applied counts applications (hand-added included, `To Apply`
-excluded), tiered by the application's own location. Open and Not a fit count
-leads, with no screened rows. Each segment opens its rows through a
-`tier:<index>:<segment>` drill. The Not a fit segment's target carries
-`filter: "All"`, since the leads tab's default Open view hides those rows. The segments use `--accent`, `--accent-soft` and `--line`, with a
-2px gap between them and direct labels. Bar length is relative to the largest
-tier and spans the card, with the tier's count at the end of its bar.
+Below the table, the same breakdown by location tier, laid out on the table's
+grid so the two read as one card: one row per `priority_locations` rule plus
+"Other", the tier name in the search column's width, a stacked bar across the
+remaining width, and the tier's total in a fixed right column.
+
+- **Segments:** Applied, Open and Not a fit, all filled - Applied `--accent`,
+  Open `--accent` at reduced opacity, Not a fit `--line` - with a 2px gap
+  between them. No outlined segment: an outline reads as empty.
+- **Bar length is relative to the largest tier.**
+- **One legend, above the rows**, not repeated under each bar. A segment's
+  count is in its tooltip and the table view.
+- Each segment opens its rows through a `tier:<index>:<segment>` drill. Applied
+  counts applications (hand-added included, `To Apply` excluded), tiered by the
+  application's own location; Open and Not a fit count leads, with no screened
+  rows. The Not a fit target carries `filter: "All"`, since the leads tab's
+  default Open view hides those rows.
 
 ## 3. Pipeline flow and waiting
 
