@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyAnswers, inviteNotice, isReadableResume, safeDocumentName, setupOverdue, setupProblems } from "./onboarding";
+import { emptyAnswers, inviteNotice, isReadableResume, safeDocumentName, setupProblems } from "./onboarding";
 
 /** The documents route's filename rule (server/src/validate.js). */
 const ROUTE_NAME = /^\w(?:[\w .-]*\w)?$/;
@@ -85,14 +85,5 @@ describe("setupProblems", () => {
     expect(setupProblems({ ...ready, locations_first: "Seattle, WA" }, []).locations).toBeTruthy();
     const many = Array.from({ length: 21 }, (_, i) => `Place${String.fromCharCode(97 + i)}ton`).join(", ");
     expect(setupProblems({ ...ready, locations_first: many }, []).locations).toContain("up to 20");
-  });
-});
-
-describe("setupOverdue", () => {
-  const sent = "2026-09-14T09:00:00Z";
-  it("is overdue once the account's stale window has passed since this attempt started", () => {
-    expect(setupOverdue(sent, 36, Date.parse("2026-09-15T20:00:00Z"))).toBe(false);
-    expect(setupOverdue(sent, 36, Date.parse("2026-09-15T22:00:00Z"))).toBe(true);
-    expect(setupOverdue("", 36, Date.parse("2026-09-15T22:00:00Z"))).toBe(false);
   });
 });

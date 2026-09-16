@@ -25,6 +25,14 @@ Kept by whoever is holding the product manager role.
   file every server feature edits, and it mixes per-person data with the one
   list every account shares.
 
+- **One CLI-failure check for all three runners.** `run-search`, `run-fill` and
+  `run-onboarding` each find the CLI and recognise "not logged in" their own way,
+  and the wordings have drifted, so a new CLI message can fail the fill silently
+  while the searches catch it. Detection becomes one shared helper; what each
+  run does about it stays its own. Onboarding stops putting an operator's login
+  problem on a person's page: it leaves the intake pending and fails loudly in
+  the log. Owner: Prompt Bro, as its own change with a stub-CLI test per wording.
+
 ## Worth doing, unscheduled
 
 - **[Split user tokens from machine tokens](token-split-plan.md)** - planned;

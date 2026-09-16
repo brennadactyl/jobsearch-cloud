@@ -29,6 +29,9 @@ import {
 
 export type DrillScope = "leads" | "apps";
 
+/** An application still at Applied this many days or more after it was sent has gone quiet. */
+export const GONE_QUIET_DAYS = 14;
+
 /** What a drill may read besides the row: some rules ask about another table. */
 export interface DrillContext {
   settings: Settings;
@@ -74,10 +77,10 @@ const base: Record<string, Drill> = {
   },
   "gone-quiet": {
     scope: "apps",
-    label: () => "Applied 14+ days ago, no reply",
+    label: () => `Applied ${GONE_QUIET_DAYS}+ days ago, no reply`,
     test: (a) => {
       const d = daysSince(a.dateApplied);
-      return a.status === "Applied" && d !== null && d > 14;
+      return a.status === "Applied" && d !== null && d >= GONE_QUIET_DAYS;
     },
   },
   /**
