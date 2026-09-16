@@ -22,11 +22,27 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][string]$Name,
-  [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
+  [string]$DataDir,
   [string]$DeploymentFile
 )
 
 $ErrorActionPreference = "Stop"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder is resolved here instead.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
+# A missing script folder is fine when -DataDir is given, so only a missing data folder is refused.
+if (-not $DataDir) {
+  $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
+             elseif ($scriptDir) { Join-Path $scriptDir "..\private" }
+             else { "" }
+}
+if (-not $DataDir -and -not $DeploymentFile) {
+  throw "No data folder to read deployment.json from. Pass -DataDir or -DeploymentFile, or set JOB_SEARCH_DATA_DIR."
+}
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 if (-not $DeploymentFile) { $DeploymentFile = Join-Path $DataDir "deployment.json" }

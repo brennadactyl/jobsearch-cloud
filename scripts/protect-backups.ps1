@@ -67,7 +67,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$repoDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+# The same resolution the other scripts use. Here it also names the two scripts
+# registered as scheduled tasks below, and one of them runs as SYSTEM, so an
+# empty path is refused rather than turned into a task that runs nothing.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
+if (-not $scriptDir) {
+    throw "Can't work out where this script lives, so it can't find archive-backups.ps1 or backup-tracker.ps1. Run it by its full path."
+}
+$repoDir = (Resolve-Path (Join-Path $scriptDir "..")).Path
 if (-not $SourceDir) { $SourceDir = Join-Path $repoDir "private\backups" }
 
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -104,7 +114,7 @@ Step "Locking permissions (Administrators + SYSTEM full, everyone else read)"
 
 # ---- 2. The SYSTEM-executed copy of the archiver --------------------------
 Step "Copying archive-backups.ps1 into $binDir (SYSTEM must not run a user-writable script)"
-$srcScript = Join-Path $PSScriptRoot "archive-backups.ps1"
+$srcScript = Join-Path $scriptDir "archive-backups.ps1"
 if (-not (Test-Path $srcScript)) { throw "archive-backups.ps1 not found next to this script." }
 Copy-Item $srcScript (Join-Path $binDir "archive-backups.ps1") -Force
 $runScript = Join-Path $binDir "archive-backups.ps1"
@@ -113,7 +123,7 @@ $runScript = Join-Path $binDir "archive-backups.ps1"
 # Interactive logon, like the search tasks: no stored password, so it runs only
 # while that user is logged in.
 Step "Registering '$ExportTaskName' to run as $env:USERNAME daily at $ExportAt"
-$exportScript = Join-Path $PSScriptRoot "backup-tracker.ps1"
+$exportScript = Join-Path $scriptDir "backup-tracker.ps1"
 if (-not (Test-Path $exportScript)) { throw "backup-tracker.ps1 not found next to this script." }
 $exportAction = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument ("-NoProfile -ExecutionPolicy Bypass -File `"{0}`" -RepoDir `"{1}`"" -f $exportScript, $repoDir)
