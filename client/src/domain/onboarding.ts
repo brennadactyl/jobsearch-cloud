@@ -23,8 +23,8 @@ export function inviteNotice(reason: InviteReason | string): string {
   }
 }
 
-/** A headless run reads plain text; a PDF, Word file or image needs its text pasted too. */
-export const READABLE_RESUME_EXTENSIONS = ["txt", "md"] as const;
+/** A headless run reads text and PDFs; a Word file, RTF or image needs its text pasted too. */
+export const READABLE_RESUME_EXTENSIONS = ["txt", "md", "pdf"] as const;
 
 export function isReadableResume(filename: string): boolean {
   const ext = filename.toLowerCase().split(".").pop() ?? "";
@@ -82,7 +82,7 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
   const found: SetupProblems = {};
   if (!answers.resume_text.trim()) {
     if (!files.length) found.attach = "Attach your resume or paste its text.";
-    else if (!files.some(isReadableResume)) found.attach = "We can't read PDF or Word files overnight. Paste the text too.";
+    else if (!files.some(isReadableResume)) found.attach = "We can't read Word files overnight. Paste the text too.";
   }
   const entries = parseLocations(answers.locations_first);
   const tooMany = tooManyLocations(entries);

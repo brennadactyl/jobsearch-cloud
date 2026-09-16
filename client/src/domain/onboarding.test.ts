@@ -13,9 +13,12 @@ describe("inviteNotice", () => {
 });
 
 describe("isReadableResume", () => {
-  it("reads only plain text overnight", () => {
-    expect(["resume.txt", "Resume.MD"].every(isReadableResume)).toBe(true);
-    expect(["resume.pdf", "resume.docx", "resume.doc", "resume.rtf", "resume.pages", "scan.png", "txt"].some(isReadableResume)).toBe(false);
+  it("reads text and PDFs overnight", () => {
+    expect(["resume.txt", "Resume.MD", "resume.pdf", "Resume.PDF"].every(isReadableResume)).toBe(true);
+  });
+
+  it("holds out for pasted text on a format the run can't open", () => {
+    expect(["resume.docx", "resume.doc", "resume.rtf", "resume.pages", "scan.png", "txt"].some(isReadableResume)).toBe(false);
   });
 });
 
@@ -45,11 +48,16 @@ describe("setupProblems", () => {
     expect(setupProblems(ready, [])).toEqual({});
   });
 
-  it("refuses PDF or Word files alone, and lets them through once text is pasted", () => {
+  it("sends a PDF on its own, since the run reads it", () => {
     const noText = { ...ready, resume_text: "" };
-    expect(setupProblems(noText, ["resume.pdf", "resume.docx"]).attach).toBe("We can't read PDF or Word files overnight. Paste the text too.");
-    expect(setupProblems(noText, ["resume.pdf", "resume.txt"]).attach).toBeUndefined();
-    expect(setupProblems(ready, ["resume.pdf"]).attach).toBeUndefined();
+    expect(setupProblems(noText, ["resume.pdf"]).attach).toBeUndefined();
+  });
+
+  it("refuses a Word file alone, and lets it through once text is pasted", () => {
+    const noText = { ...ready, resume_text: "" };
+    expect(setupProblems(noText, ["resume.docx"]).attach).toBe("We can't read Word files overnight. Paste the text too.");
+    expect(setupProblems(noText, ["resume.docx", "resume.txt"]).attach).toBeUndefined();
+    expect(setupProblems(ready, ["resume.docx"]).attach).toBeUndefined();
     expect(setupProblems(noText, []).attach).toBe("Attach your resume or paste its text.");
   });
 
