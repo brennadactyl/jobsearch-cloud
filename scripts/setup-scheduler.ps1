@@ -55,6 +55,7 @@ param(
 $ErrorActionPreference = "Stop"
 $runScript = Join-Path $PSScriptRoot "run-search.ps1"
 $fillScript = Join-Path $PSScriptRoot "run-fill.ps1"
+$fillName = "JobSearch-Applications"
 $onboardingScript = Join-Path $PSScriptRoot "run-onboarding.ps1"
 $ONBOARDING_TASK = "JobSearch-Onboarding"
 
@@ -255,9 +256,14 @@ foreach ($person in $people) {
 # Its name carries no user id, which keeps it clear of every "JobSearch-<id>-"
 # prefix. It still goes into $registered, because a single-user machine owns the
 # bare "JobSearch-" prefix and would otherwise remove it as stale.
-if ($people.Count -gt 0) {
+#
+# A -User run leaves it alone, like JobSearch-Onboarding below: it is set up for
+# one person, and its -DataDir can be a folder holding only them, which would
+# otherwise repoint the whole machine's fill at that folder.
+if ($User) {
+    Write-Host "`n$fillName left as it is (-User run)."
+} elseif ($people.Count -gt 0) {
     Write-Host "`n== Registering the application fill (one task, all accounts) ==" -ForegroundColor Cyan
-    $fillName = "JobSearch-Applications"
     if (Register-JobSearchTask -Name $fillName -Script $fillScript -Arguments "-DataDir `"$DataDir`"" -Time $FILL_TIME) {
         Write-Host "  $fillName - daily at $FILL_TIME (every account under $DataDir, applications added by URL)"
         $registered += $fillName
