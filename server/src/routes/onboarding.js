@@ -23,6 +23,7 @@ import {
   mintInvite,
   mintSearchToken,
   pendingIntakes,
+  retriesEndAt,
   revokeInvite,
   signupWithInvite,
 } from "../onboarding.js";
@@ -103,10 +104,16 @@ export async function handleSignup({ request, env }) {
 
 /**
  * GET /api/intake - requires a Bearer token -> `{ intake: null }` or
- * `{ intake: { answers, status, status_note, sent_at, updated_at } }`.
+ * `{ intake: { answers, status, status_note, sent_at, updated_at, retries_end_at } }`.
+ *
+ * `retries_end_at` is the first instant a failed setup is no longer handed to
+ * the overnight run (../onboarding.js's retriesEndAt), as an ISO instant, or ""
+ * without a `sent_at`. It is sent whatever the status, so the page can stop
+ * promising another night once it has passed.
  */
 export async function handleGetIntake({ db }) {
-  return json({ intake: await db.getIntake() });
+  const intake = await db.getIntake();
+  return json({ intake: intake && { ...intake, retries_end_at: retriesEndAt(intake.sent_at) } });
 }
 
 /**
