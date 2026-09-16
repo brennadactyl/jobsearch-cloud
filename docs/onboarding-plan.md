@@ -207,10 +207,11 @@ Defaults cover everything else: `doc_file`, `doc_summary`,
 **Where the new search starts its rotation.** Seeded companies are appended to
 the end of the shared list, and a new track's cursor is 0, so without this a
 person's own companies are the last ones their search reaches - about a week on
-today's list. After seeding, the onboarding run sets the new track's
-`sweep_cursor` to the position of the first company it added. The rotation wraps,
-so nothing else is skipped. The server needs a way to set it; how is Backend
-Buddy's call.
+today's list. The seeding call carries `start_here: true`, and the
+server sets that track's `sweep_cursor` to the lowest position among the
+companies that call added, returning it as `cursor`. The rotation wraps, so
+nothing else is skipped. `start_here` with a dated `on` is a 400, and a call
+that added nothing leaves the cursor alone.
 
 A search has no company list of its own. It covers its nightly batch from the
 shared list, plus discovery, so `target_companies` stays empty and neither the
