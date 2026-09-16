@@ -318,14 +318,11 @@ if (-not (Enter-RunLock)) {
         "The machine was busy with another run for $RUN_LOCK_MAX_WAIT_MINUTES minutes. See $logFile."
 }
 
-$claude = Get-Command claude -ErrorAction SilentlyContinue
-if (-not $claude) {
-    $fallback = Join-Path $env:APPDATA "npm\claude.cmd"
-    if (Test-Path $fallback) { $claude = $fallback } else {
-        Stop-Run "the claude CLI is not on PATH or at $fallback - nothing was searched or synced" "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
-    }
+. (Join-Path $scriptDir "claude-cli.ps1")
+$claudePath = Find-ClaudeCli
+if (-not $claudePath) {
+    Stop-Run "the claude CLI is not on PATH or in npm's global folder - nothing was searched or synced" "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
 }
-$claudePath = if ($claude -is [System.Management.Automation.CommandInfo]) { $claude.Source } else { $claude }
 
 # A prompt fetch failure is fatal: a stale or empty prompt would look like a
 # search that ran and found nothing.
@@ -585,32 +582,21 @@ Log "----- end output -----"
 
 $exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
 
-# The CLI exiting cleanly is not the same as the CLI having done anything. An
-# unauthenticated CLI prints "Not logged in - Please run /login" and exits 0, so
-# the job completes, nothing is searched or synced, and Task Scheduler records a
-# success.
+# The CLI exiting cleanly is not the same as the CLI having done anything (see
+# claude-cli.ps1). Checked against the output rather than by pre-flighting the
+# credential: the token is read by the CLI in a child process, and what matters
+# is whether that process could use it, not whether this one can see it.
 #
-# Checked against the output rather than by pre-flighting the credential: the
-# token is read by the CLI in a child process, and what matters is whether that
-# process could use it, not whether this one can see it.
+# For a search, any failure is recorded against the track, so its tab says the
+# search didn't run rather than showing a stale stamp.
 $outputText = if ($output) { ($output | Out-String).Trim() } else { "" }
 # Carried into the failed-run record, so the tracker says why.
-$failureReason = if ($jobState -ne "Completed") { "the run did not complete (job state: $jobState)" } else { "" }
-if (-not $outputText) {
-    Log "ERROR: the CLI produced no output at all - nothing was searched or synced"
-    $failureReason = "the CLI produced no output - nothing was searched or synced"
-    $exitCode = 1
-} elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error|Failed to authenticate|Invalid bearer token|401") {
-    Log "ERROR: the CLI is not authenticated - nothing was searched or synced."
-    Log "       Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
-    $failureReason = "the CLI is not authenticated - nothing was searched or synced"
-    $exitCode = 1
-} elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
-    # The launcher failed and the CLI never started. The message comes from the
-    # shim rather than the CLI, so the authentication patterns miss it.
-    Log "ERROR: the CLI failed to start - nothing was searched or synced."
-    Log "       See the output above; a launcher failure is not a search result."
-    $failureReason = "the CLI failed to start - nothing was searched or synced"
+$failureReason = ""
+$failure = Get-CliFailure $outputText $jobState
+if ($failure) {
+    $failureReason = "$($failure.Message) - nothing was searched or synced"
+    Log "ERROR: $failureReason"
+    if ($failure.Hint) { Log "       $($failure.Hint)" }
     $exitCode = 1
 }
 
