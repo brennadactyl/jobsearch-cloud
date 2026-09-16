@@ -32,14 +32,13 @@ is stored but shows on no tab.
 **fed_by / root / feed group / branched search** - a track
 with `fed_by` set names a sibling whose search files postings into this tab too,
 so one search can fill several tabs. The track that actually runs is the
-**root**. The root plus every track fed by it is one **feed group**, and the
-rules for both are in `server/src/tracks.js`; such a search is **branched**. Only one
-level is followed, so `fed_by` should name a track that runs its own search
+**root**. The root plus every track fed by it is one **feed group**
+(`server/src/tracks.js` works out both); such a search is **branched**. Only
+one level is followed, so `fed_by` should name a track that runs its own search
 (`POST /api/config` checks only that it names another track in the list). A
-fed track gets no scheduled task,
-and `GET /api/prompt/<key>` refuses it with 409. Screened rows and dedup work
-across the whole group, so a posting one tab already holds isn't added to
-another.
+fed track gets no scheduled task, and `GET /api/prompt/<key>` refuses it with
+409. Screened rows and dedup work across the whole group, so a posting one tab
+already holds isn't added to another.
 
 **drift** - a run reporting under a track key that no configured track has,
 because the task or prompt and the config have fallen out of step. The server
