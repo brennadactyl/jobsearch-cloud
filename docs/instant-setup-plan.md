@@ -50,7 +50,8 @@ This split is the whole design, and nothing may cross it.
 - **`done`** - the run has written the prose and registered the tasks.
 - **`failed`** - the run couldn't, with its note. The tracker still renders.
 
-Re-sending answers sets `pending` again, so tonight's run revisits the prose.
+The answers are write-once. POST /api/intake accepts one intake per account and
+refuses a replacement, so no state returns to `pending` by a person's hand.
 
 ## A half-built search must not run
 
@@ -69,11 +70,14 @@ Deterministic refusals, not instructions:
 ## What the person sees
 
 - **On send:** the tracker, with their tabs and title, and a banner that
-  tonight's run fills in the rest. No waiting screen.
-- **Later:** the form becomes a settings screen reached from the tracker,
-  holding the same answers. The intake row stays for that.
-- **On failure:** the tracker with the run's note, and the settings screen
-  reachable to fix what caused it.
+  tonight's run fills in the rest. No waiting screen, and no way back to the
+  form: the first send is the only send, and the button says "Start my search".
+- **On failure:** the tracker with the run's note. The run retries on the
+  following nights with the same answers, up to three nights, then stops and
+  the note says to ask whoever invited them. Nothing a person could retype
+  reaches the search, so a retry loop is the only thing worth offering.
+- **Changing the search afterwards** is what it is today: the tracker's own
+  config and the job-search-setup skill, not this form.
 
 ## Order of work
 
