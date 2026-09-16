@@ -3,9 +3,18 @@
  * should say, not just how to format a number.
  */
 
-/** Whole days since a YYYY-MM-DD or ISO date, or null if there isn't one. Never negative. */
+/**
+ * Whole days since a YYYY-MM-DD or ISO date, or null if there isn't one. Never
+ * negative.
+ *
+ * A bare date is a calendar day, so it counts calendar days to today: it goes
+ * up at local midnight. Read as a UTC instant it would go up at 5pm in Pacific
+ * time instead, a day early for the rest of the evening.
+ */
 export function daysSince(d: string | null | undefined): number | null {
   if (!d) return null;
+  const day = localDay(d);
+  if (day) return Math.max(0, daysBetween(day, localToday()));
   const t = Date.parse(d);
   if (Number.isNaN(t)) return null;
   return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
