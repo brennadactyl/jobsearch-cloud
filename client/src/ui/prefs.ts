@@ -145,6 +145,17 @@ export function selectRow(scope: string, id: string): void {
 }
 
 /**
+ * Opens or closes a Grid row's details. Either also selects the row, since it is
+ * the row Detail view should land on when you switch there.
+ */
+export function toggleGridRow(scope: string, id: number): void {
+  setPrefs({
+    expanded: { ...current.expanded, [id]: !current.expanded[id] },
+    selected: { ...current.selected, [scope]: String(id) },
+  });
+}
+
+/**
  * The selected row while it is in the list, otherwise the first; Detail shows it
  * and Grid highlights it. Never stored: a render can see a new row's selection
  * before the row, and storing the fallback would overwrite that selection.
