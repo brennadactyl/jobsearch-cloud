@@ -18,6 +18,7 @@
 
 import { json, CORS_HEADERS } from "../http.js";
 import { parseDocumentList } from "../db.js";
+import { searchRootOf } from "../tracks.js";
 import { badDocumentPath, isDocumentPath, unknownTrack } from "../validate.js";
 
 /**
@@ -103,7 +104,10 @@ export async function handleListDocuments({ docs, db, url }) {
 
   const track = await db.getTrack(search);
   if (!track) return unknownTrack(search);
-  const runs = (track.fed_by && (await db.getTrack(track.fed_by))) || track;
+  // A fed tab reads the documents of the search that fills it. A root that has
+  // gone missing falls back to the tab itself.
+  const rootKey = searchRootOf(track);
+  const runs = rootKey === track.key ? track : (await db.getTrack(rootKey)) || track;
 
   const listed = parseDocumentList(runs.documents);
   if (listed.length === 0) {

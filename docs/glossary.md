@@ -29,12 +29,11 @@ person's tracks plus three built-in ones: Overview, Applications and All leads
 (`client/src/domain/tabs.ts`). A lead whose `search` is not a configured track
 is stored but shows on no tab.
 
-**fed_by / root / feed group / search family / branched search** - a track
+**fed_by / root / feed group / branched search** - a track
 with `fed_by` set names a sibling whose search files postings into this tab too,
 so one search can fill several tabs. The track that actually runs is the
-**root**. The root plus every track fed by it is one **feed group** - also
-called a **search family** (both names are in `server/src/db.js` and
-`server/src/routes/screened.js`); such a search is **branched**. Only one
+**root**. The root plus every track fed by it is one **feed group**, and the
+rules for both are in `server/src/tracks.js`; such a search is **branched**. Only one
 level is followed, so `fed_by` should name a track that runs its own search
 (`POST /api/config` checks only that it names another track in the list). A
 fed track gets no scheduled task,
@@ -71,7 +70,7 @@ the req id and, with the host, is the identity. Otherwise the path and query
 are, minus tracking parameters. It exists because one posting is reachable by
 several URLs.
 
-**re-check** - each night a search family re-opens some of its open leads to
+**re-check** - each night a feed group re-opens some of its open leads to
 confirm they are still posted. The share is sized so every open lead comes round
 within 14 nights, capped at 20 per run. A lead confirmed within the last 7 days
 is skipped. The constants are in `server/src/routes/screened.js`.

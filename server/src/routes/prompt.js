@@ -5,6 +5,7 @@
 
 import { json, text } from "../http.js";
 import { buildAutofillPrompt, buildSearchPrompt } from "../prompt.js";
+import { tracksFedBy } from "../tracks.js";
 import { unknownTrack } from "../validate.js";
 
 /**
@@ -52,7 +53,7 @@ export async function handleGetPrompt({ db, user, params }) {
 
   // The tabs this run fills besides its own. Passing them turns the prompt
   // multi-tab: dedup for every key, a filing step, and a run record each.
-  const feeds = config.tracks.filter((t) => t.fed_by === key);
+  const feeds = tracksFedBy(config.tracks, key);
 
   return text(buildSearchPrompt({ user, track, settings: config.settings, feeds }));
 }
