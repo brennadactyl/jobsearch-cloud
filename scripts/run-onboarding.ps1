@@ -355,7 +355,7 @@ $MODEL_TIMEOUT_MINUTES = 25
 # Every note below is read by the person on their own page, so each says what
 # they can do, and never what a run was doing when it broke.
 $NOTE_GENERIC = "Setting your search up didn't finish tonight. It will be tried again tomorrow night, and there's nothing you need to do unless this message is still here after that."
-$NOTE_RESUME = "Your resume couldn't be read overnight, so your search wasn't built yet. A Word, RTF or Pages file, or a picture of a resume, can't be opened with nobody there - a PDF or a .txt can. Ask whoever invited you to help get a readable copy in."
+$NOTE_RESUME = "Your resume couldn't be read overnight, so your search wasn't built yet. An older Word .doc, an RTF or Pages file, or a picture of a resume, can't be opened with nobody there - a PDF, a Word .docx or a .txt can. Ask whoever invited you to help get a readable copy in."
 $NOTE_NO_SCOPE = "Your setup doesn't say where you can work, so there was nowhere for your search to look and it wasn't built yet. Ask whoever invited you to help fill that in."
 $NOTE_NO_SLOT = "There's no room left in the nightly schedule on the machine that runs these searches, so yours couldn't be added. Let whoever invited you know - this one needs their attention, not yours."
 
@@ -371,6 +371,27 @@ function Get-SafeName([string]$name) {
 function Get-DocumentPaths($token) {
     $listing = Api GET "/api/documents" $token $null
     return @($listing.documents | ForEach-Object { [string]$_.path })
+}
+
+# The text the server extracted from a stored Word file, as it is stored: the
+# .txt beside it with the same base name, matched ignoring case the way the
+# server pairs them. $null when there is none - a .docx stored before
+# extraction existed and not yet backfilled.
+function Get-ExtractedTextPath([string]$docxPath, [string[]]$storedPaths) {
+    $wanted = ($docxPath -replace '\.docx$', '') + ".txt"
+    foreach ($stored in $storedPaths) {
+        if ($stored -ieq $wanted) { return $stored }
+    }
+    return $null
+}
+
+function Save-StagedDocument([string]$path, [string]$token, [string]$stage) {
+    $dest = Join-Path $stage ("resumes\" + [System.IO.Path]::GetFileName($path))
+    Invoke-WithRetry "GET /api/documents/$path" {
+        Invoke-WebRequest -Uri "$TrackerUrl/api/documents/$path" -OutFile $dest `
+            -Headers @{ Authorization = "Bearer $token" } -UserAgent $API_USER_AGENT `
+            -TimeoutSec 60 -UseBasicParsing -ErrorAction Stop
+    } | Out-Null
 }
 
 $KEY_PATTERN = '^[a-z0-9]+(-[a-z0-9]+)*$'
@@ -489,33 +510,56 @@ foreach ($item in $queue) {
         New-Item -ItemType Directory -Force -Path (Join-Path $stage "resumes") | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $stage "out\docs") | Out-Null
 
-        # Only the formats the model turn can read are staged. A PDF is one of
-        # them: the confined turn's Read tool opens a staged PDF and reads the
-        # text out of it. A .docx, .rtf,
-        # .pages or an image is left in the tracker, because staging one puts a
-        # file in front of the model it cannot read, and the search it then
-        # writes comes from the answers alone, silently.
+        # Only what the model turn can read is staged. A PDF is: the confined
+        # turn's Read tool opens it and reads the text out. A Word .docx is read
+        # through the .txt the server extracts from it on upload - the .docx
+        # itself never reaches the model, and the .txt is what the search is
+        # pointed at. A .docx with no .txt beside it, a .doc, an .rtf, a .pages
+        # file or an image is left in the tracker, because staging something the
+        # model cannot read builds the search from the answers alone, silently.
+        $storedPaths = Get-DocumentPaths $personToken
         $readable = @()
         foreach ($path in @($answers.resume_files)) {
             $path = [string]$path
-            if ($path -notmatch '\.(txt|md|pdf)$') { continue }
-            $dest = Join-Path $stage ("resumes\" + [System.IO.Path]::GetFileName($path))
-            Invoke-WithRetry "GET /api/documents/$path" {
-                Invoke-WebRequest -Uri "$TrackerUrl/api/documents/$path" -OutFile $dest `
-                    -Headers @{ Authorization = "Bearer $personToken" } -UserAgent $API_USER_AGENT `
-                    -TimeoutSec 60 -UseBasicParsing -ErrorAction Stop
-            } | Out-Null
+            if ($path -match '\.docx$') {
+                $text = Get-ExtractedTextPath $path $storedPaths
+                if (-not $text) {
+                    Log "      $path has no extracted text beside it - left unstaged"
+                    continue
+                }
+                $path = $text
+            } elseif ($path -notmatch '\.(txt|md|pdf)$') {
+                continue
+            }
+            # A person who attached both X.docx and its own X.txt names one file
+            # twice.
+            if ($readable -contains $path) { continue }
+            Save-StagedDocument $path $personToken $stage
             $readable += $path
         }
 
         $resumeText = [string]$answers.resume_text
-        if ($resumeText.Trim()) {
+        $pastedName = (Get-SafeName $name) + "_Resume.txt"
+        $pastedPath = "resumes/$pastedName"
+        # The server owns the .txt beside a stored .docx of the same base name
+        # and refuses a write to it. When their pasted resume would land there,
+        # their Word file already is that text - so the search reads the
+        # extracted copy and the pasted text stays in their answers.
+        $pastedDocx = $pastedPath -replace '\.txt$', '.docx'
+        $pastedCollides = @($storedPaths | Where-Object { $_ -ieq $pastedDocx }).Count -gt 0
+        if ($resumeText.Trim() -and $pastedCollides) {
+            $resumePath = Get-ExtractedTextPath $pastedDocx $storedPaths
+            if (-not $resumePath) {
+                Stop-Person "their pasted resume collides with a Word file whose text was never extracted" $NOTE_RESUME
+            }
+            if ($readable -notcontains $resumePath) { Save-StagedDocument $resumePath $personToken $stage }
+            Log "      their pasted resume would overwrite the text of their Word file - reading $resumePath instead"
+        } elseif ($resumeText.Trim()) {
             # Uploaded as well as staged: the nightly run reads the resume from
             # the tracker, like every other document, and `resume_line` names
             # this path.
-            $resumeName = (Get-SafeName $name) + "_Resume.txt"
-            $resumePath = "resumes/$resumeName"
-            Write-Utf8 (Join-Path $stage "resumes\$resumeName") $resumeText
+            $resumePath = $pastedPath
+            Write-Utf8 (Join-Path $stage "resumes\$pastedName") $resumeText
             Invoke-WithRetry "PUT /api/documents/$resumePath" {
                 Invoke-WebRequest -Uri "$TrackerUrl/api/documents/$resumePath" -Method Put `
                     -Headers @{ Authorization = "Bearer $personToken" } -UserAgent $API_USER_AGENT `
