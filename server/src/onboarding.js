@@ -15,6 +15,9 @@ import { getUserById, getUserByName, hashPassword, hashToken, newSessionToken } 
 export const INVITE_DAYS_DEFAULT = 14;
 export const INVITE_DAYS_MAX = 30;
 const DAY_MS = 86400000;
+// How many nights a failed setup is retried before the run gives up and the
+// note tells the person to ask whoever invited them.
+export const RETRY_NIGHTS = 3;
 
 /**
  * @typedef {{id: number, code_hash: string, note: string, created_at: string,
@@ -210,13 +213,26 @@ function parseAnswers(text) {
  * @param {D1Database} d1
  */
 export async function pendingIntakes(d1) {
+  // A failed setup is retried on the following nights with the same answers,
+  // and gives up after three (docs/instant-setup-plan.md). The bound is here,
+  // in what the run is handed, rather than in the run's own memory: a run that
+  // forgot, or a second machine, would otherwise retry a setup that has already
+  // been abandoned, and the person would keep being told tonight is the night.
+  //
+  // Counted from `sent_at`, the instant the current attempt began, because
+  // nothing stores an attempt count - an `attempts` column is the better shape
+  // and is its own change. Until then a night the machine was off spends one of
+  // the three.
+  const giveUpBefore = new Date(Date.now() - RETRY_NIGHTS * DAY_MS).toISOString();
   const rows = await d1
     .prepare(
       `SELECT i.user_id, u.name, i.status, i.status_note, i.sent_at, i.updated_at, i.answers
          FROM intake i JOIN users u ON u.id = i.user_id
-        WHERE i.status IN ('pending', 'failed')
+        WHERE i.status = 'pending'
+           OR (i.status = 'failed' AND i.sent_at > ?)
         ORDER BY i.sent_at, i.user_id`
     )
+    .bind(giveUpBefore)
     .all();
   return rows.results.map((r) => ({
     user: { id: r.user_id, name: r.name },
