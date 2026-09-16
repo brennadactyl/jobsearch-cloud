@@ -43,10 +43,13 @@ import {
   type ColumnPoint,
 } from "./charts";
 
+/** One headline figure above the Overview: a count, what it counts, and the rows it opens. */
 interface TileSpec extends DrillTarget {
-  k: string;
-  f: string;
-  hi?: boolean;
+  title: string;
+  footnote: string;
+  /** Its figure takes the accent colour (`.tile.hi`). */
+  highlighted?: boolean;
+  /** Colour of the figure itself, when it stands for something coloured elsewhere. */
   color?: string;
 }
 
@@ -71,48 +74,48 @@ export default function Overview({
   const trackCount = data.tracks.length;
 
   const tiles: TileSpec[] = [
-    { k: "Untriaged", f: "leads marked New", hi: true, tab: ALL_LEADS, filter: "New" },
-    { k: topLabel, f: "still open", color: "var(--pri-0)", tab: ALL_LEADS, drill: "top-geo-open" },
-    { k: "Open leads", f: `across ${trackCount} tracked search${trackCount === 1 ? "" : "es"}`, tab: ALL_LEADS },
+    { title: "Untriaged", footnote: "leads marked New", highlighted: true, tab: ALL_LEADS, filter: "New" },
+    { title: topLabel, footnote: "still open", color: "var(--pri-0)", tab: ALL_LEADS, drill: "top-geo-open" },
+    { title: "Open leads", footnote: `across ${trackCount} tracked search${trackCount === 1 ? "" : "es"}`, tab: ALL_LEADS },
     {
-      k: "Applied",
-      f: toApply ? `plus ${toApply} still to apply` : "in your Applications tab",
+      title: "Applied",
+      footnote: toApply ? `plus ${toApply} still to apply` : "in your Applications tab",
       tab: "applications",
       drill: "applied",
     },
-    { k: "In conversation", f: "screen or loop stage", tab: "applications", drill: "in-conversation" },
-    { k: "Gone quiet", f: `applied ${GONE_QUIET_DAYS}+ days ago`, tab: "applications", drill: "gone-quiet" },
+    { title: "In conversation", footnote: "screen or loop stage", tab: "applications", drill: "in-conversation" },
+    { title: "Gone quiet", footnote: `applied ${GONE_QUIET_DAYS}+ days ago`, tab: "applications", drill: "gone-quiet" },
   ];
 
   return (
     <TipLayer>
       <div className="tiles">
         {tiles.map((t) => {
-          const v = drillCount(t, src);
+          const count = drillCount(t, src);
           const inner = (
             <>
               <div className="k">
-                {t.k}
-                {!!v && (
+                {t.title}
+                {!!count && (
                   <span className="go" aria-hidden="true">
                     ›
                   </span>
                 )}
               </div>
               <div className="v mono" style={t.color ? { color: t.color } : undefined}>
-                {v}
+                {count}
               </div>
-              <div className="f">{t.f}</div>
+              <div className="f">{t.footnote}</div>
             </>
           );
           // A tile counting zero has nothing to open and says so by being
           // disabled - derived from the count, so it comes back on its own.
-          return v ? (
-            <Link key={t.k} className={`tile${t.hi ? " hi" : ""}`} to={pathForTarget(t)}>
+          return count ? (
+            <Link key={t.title} className={`tile${t.highlighted ? " hi" : ""}`} to={pathForTarget(t)}>
               {inner}
             </Link>
           ) : (
-            <button key={t.k} type="button" className={`tile${t.hi ? " hi" : ""}`} disabled title="Nothing to open yet">
+            <button key={t.title} type="button" className={`tile${t.highlighted ? " hi" : ""}`} disabled title="Nothing to open yet">
               {inner}
             </button>
           );
