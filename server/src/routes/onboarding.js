@@ -357,8 +357,9 @@ export async function handleMintSearchToken({ request, env }) {
 
 /**
  * POST /api/intake/complete - ADMIN_TOKEN. Body `{ user, status: "done"|"failed",
- * note? }` -> `{ user, status, status_note, updated_at }`; 404 for an account
- * that never sent a setup; 409 once done. `note` is shown to the person as
+ * note? }`, where `user` is the account id, not its name -> `{ user, status,
+ * status_note, updated_at }`; 404 for an account that never sent a setup; 409
+ * once done. `note` is shown to the person as
  * written, as plain text.
  */
 export async function handleCompleteIntake({ request, env }) {

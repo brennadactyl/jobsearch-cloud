@@ -390,7 +390,7 @@ The operator's scripts and the onboarding run, each with **`ADMIN_TOKEN` as the 
 - `GET /api/invites` -> `{ invites: [{ id, note, created_at, expires_at, used_at, revoked_at, user, state }] }`, newest first. `user` is the account an invite created, or `null`; `state` is `open`, `used`, `expired` or `revoked`. No code is ever returned.
 - `POST /api/invites/revoke` - body `{ id }` -> `{ id, state: "revoked" }`, and repeating it is harmless. `404` for no such invite, `409` for one already used.
 - `GET /api/intake/pending` -> `{ intakes: [{ user: { id, name }, status, status_note, sent_at, updated_at, answers }] }`: every `pending` or `failed` setup, oldest attempt first.
-- `POST /api/intake/complete` - body `{ user, status: "done"|"failed", note? }` -> `{ user, status, status_note, updated_at }`. `note`, at most 500 characters, is shown to the person as written. `done` is final, so a later call is `409`; `404` for an account that never sent a setup.
+- `POST /api/intake/complete` - body `{ user, status: "done"|"failed", note? }`, where `user` is the account id rather than its name, -> `{ user, status, status_note, updated_at }`. `note`, at most 500 characters, is shown to the person as written. `done` is final, so a later call is `409`; `404` for an account that never sent a setup.
 - `POST /api/tokens` - body `{ user }` -> `201 { token, user, label: "scheduled-search", replaced }`: a long-lived search token for that account. It replaces the account's previous search token in the same transaction, so an account has exactly one; browser sessions are untouched. `404` for no such account, `403` for a demo account. **This token reaches everything the account owns** - see [Security notes](#security-notes).
 
 ### Data
