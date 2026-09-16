@@ -63,10 +63,16 @@ answers - an account set up by the skill has no intake row at all.
 - **Each resume says which tabs it drives**: the searches whose `documents` list
   holds its path, plus any tab filled by one of them (`fed_by`). A resume no
   search lists reads "not used by any search".
-- **Each search gets a picker** of the account's readable resumes. Choosing one
-  writes that search's `documents` entry through `POST /api/settings`, and takes
-  effect on the search's next run, which downloads what the list names. One
-  resume can drive several searches.
+- **Uploading and choosing are two steps.** A file uploads the moment it is
+  selected, so its word count or refusal shows straight away, and it joins the
+  list as "not used by any search". Nothing a search reads changes yet.
+- **Each search gets a picker** of the account's readable resumes. Changing one
+  marks the section unsaved; **Save** writes every changed search's `documents`
+  entry at once, through `POST /api/settings`, and **Discard** puts the pickers
+  back. The new resume takes effect on each search's next run. One resume can
+  drive several searches.
+- **Leaving with unsaved choices** asks first. A file uploaded in that visit and
+  never chosen stays in the list, not used by any search, and can be removed.
 - **The daily prompt reads the resume the list names**, not a file named inside
   `resume_line`. `resume_line` keeps only how this search frames the resume, so
   swapping a file never leaves prose pointing at the old one.
