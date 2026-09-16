@@ -104,6 +104,11 @@ $logDir = Join-Path $workDir "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $logFile = Join-Path $logDir "$Task.log"
 
+# Where this run's part of the log begins, and the name the uploaded copy of it
+# carries: the start of the run, in UTC. See Send-RunLog.
+$runLogOffset = if (Test-Path $logFile) { (Get-Item $logFile).Length } else { 0 }
+$runStarted = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH-mm-ssZ")
+
 # -Encoding utf8 on every writer to this log (here and the claude-output append
 # below). Windows PowerShell 5.1's Out-File defaults to UTF-16LE, and mixing
 # encodings in one file makes grep report it as binary and Get-Content decode
@@ -249,12 +254,47 @@ function Add-RunNote($text) {
 # Every fatal path before the CLI runs exits through here, so none can skip
 # recording. The checks above - data dir, user folder, credentials - cannot use
 # it, since there is no tracker to record to yet.
+# ---- This run's log, off this machine. ------------------------------------
+#
+# Uploads the part of the log this run wrote (PUT /api/logs), so what a search
+# did is kept with the tracker rather than only on the machine that ran it. It
+# is the last thing a run does, whether it succeeded or failed, so the upload
+# carries everything the run logged before it.
+#
+# A failed upload is a warning in the local log and never changes the run's
+# result: the search has already happened, and the local log still has all of
+# it. The same name on every attempt means a retry replaces its own copy.
+function Send-RunLog {
+    try {
+        $all = [System.IO.File]::ReadAllBytes($logFile)
+        # A log file that shrank since the run began was replaced, so all of it
+        # is this run's.
+        $from = if ($runLogOffset -le $all.Length) { $runLogOffset } else { 0 }
+        # Out-File marks a new file as UTF-8 with three bytes at its very start;
+        # the uploaded copy is labelled UTF-8 already, and a reader would show them.
+        if ($from -eq 0 -and $all.Length -ge 3 -and $all[0] -eq 0xEF -and $all[1] -eq 0xBB -and $all[2] -eq 0xBF) { $from = 3 }
+        $length = $all.Length - $from
+        if ($length -le 0) { return }
+        $part = New-Object byte[] $length
+        [Array]::Copy($all, $from, $part, 0, $length)
+        $null = Invoke-WithRetry "PUT /api/logs/$Task/$runStarted" {
+            Invoke-WebRequest -Uri "$trackerUrl/api/logs/$Task/$runStarted" -Method Put `
+                -Headers @{ Authorization = "Bearer $trackerToken" } `
+                -Body $part -ContentType "text/plain; charset=utf-8" -UseBasicParsing -ErrorAction Stop
+        }
+        Log ("run log:          uploaded {0:N0} bytes as {1}" -f $length, $runStarted)
+    } catch {
+        Log "WARNING: couldn't upload this run's log ($(Get-HttpStatus $_)): $($_.Exception.Message) - it is still in $logFile"
+    }
+}
+
 function Stop-Run($reason, $userMessage) {
     Log "ERROR: $reason"
     Record-FailedRun $reason
     # Guarded: the early fatal checks can reach this before the queue below is
     # even loaded, and a run that never took the lock has nothing to give back.
     if (Get-Command Exit-RunLock -ErrorAction SilentlyContinue) { Exit-RunLock }
+    Send-RunLog
     Write-Error $userMessage
     exit 1
 }
@@ -681,8 +721,10 @@ if ($runDir -and $manifest.Count -gt 0) {
             }
             $exitCode = 1
             # Recorded before the Write-Error below, which ends the script (see
-            # "Recording a failed run" above).
+            # "Recording a failed run" above) - and the log sent for the same
+            # reason.
             Record-FailedRun $failureReason
+            Send-RunLog
             if ($status -eq 412) {
                 Write-Error "'$rel' was modified during the run. This run's copy is at $rescue - merge it by hand; nothing was overwritten."
             } else {
@@ -708,5 +750,6 @@ Log "finished $Task - job state: $jobState, elapsed: ${elapsed}s, waited for the
 Log "===== done ====="
 
 Exit-RunLock
+Send-RunLog
 
 exit $exitCode

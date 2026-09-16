@@ -470,6 +470,40 @@ JSON. All four routes answer 503 on a deployment with no `DOCS` bucket.
 - `PUT /api/documents/<path>` - raw body, optional `If-Match` -> `{ path, etag, bytes }`. With `If-Match`, a stale etag is a 412 and nothing is written - send it whenever the write follows an earlier read, so an edit made in between isn't erased. Without it the write is unconditional (the import script and the setup skill). 8 MB maximum; anything larger is a 413.
 - `DELETE /api/documents/<path>` -> `{ path, deleted }`, or 404 for a path this person doesn't have.
 
+### Run logs
+
+What each nightly search did, kept with the tracker rather than only on the
+machine that ran it. `scripts/run-search.ps1` uploads the part of its log that
+one run wrote, as its last act, whether the run succeeded or failed; a failed
+upload is a warning in the local log and never changes the run's result.
+
+Stored in the same R2 bucket as documents but outside their prefix, at
+`logs/<user-id>/<track>/<started>.log` (`src/r2.js`, `RunLogs`). Every search
+downloads every document in its account before it starts, so a log among the
+documents would be pulled down by every night after it. And a bucket lifecycle
+rule matches a key from its start, so one rule on `logs/` expires them for every
+account - see "Keeping 30 days of run logs" below. Deleting an account deletes
+its logs too.
+
+`<started>` is when the run began, in UTC: `2026-09-16T08-00-01Z`. All three
+routes answer 404 for a track this person doesn't have and 503 on a deployment
+with no `DOCS` bucket.
+
+- `PUT /api/logs/<track>/<started>` - the log as the raw body -> `{ track, started, bytes }`. Uploading the same run again replaces its log, so a retried upload leaves one. 2 MB maximum (413); a start time in any other shape is a 400.
+- `GET /api/logs/<track>` -> `{ track, logs: [{started, bytes, uploaded}] }`, newest first.
+- `GET /api/logs/<track>/<started>` -> the log, as `text/plain`, or 404 for a run with no log.
+
+**Keeping 30 days of run logs.** Nothing in the Worker deletes old logs; a
+lifecycle rule on the bucket does, once, for every account:
+
+```bash
+npx wrangler r2 bucket lifecycle add job-search-tracker-docs run-logs-30-days logs/ --expire-days 30
+```
+
+It matches only keys starting `logs/`, so documents - which start with a user
+id - are never touched by it. `npx wrangler r2 bucket lifecycle list
+job-search-tracker-docs` shows what is set.
+
 ### Config and prompts
 
 - `GET /api/config` -> `{ tracks: [{key, label, full_description, sort_order, last_run, ...search config}], settings }` - this person's config: the track tabs, labels, display title, priority-location rules and staleness threshold the client renders from, plus the per-track search config and prose settings the prompt is composed from. Each track's `last_run` is its `search_runs` row (`{at, on, status, leads_added, screened_added, delisted, note}`; all-empty means never recorded).
