@@ -59,6 +59,11 @@ leads, applications, page titles and location rules.
   `src/auth.js` are the two files that write sessions.
 - `src/db.js` - all D1 access for a person's own data. Every instance is
   bound to one user id at construction, so no query can forget to filter.
+- `src/companies.js` - `CompanyList`, the company list every account shares
+  (`company_fetch`) and what is known about reaching each company. It belongs
+  to no user, so it is kept out of `Db`; session routes receive it as
+  `ctx.companyList`. Each search's own record of the list - last swept, notes,
+  its cursor - stays on `Db`.
 - `src/r2.js` - all R2 access for their documents: resumes, and the per-track
   baseline doc the nightly search reads and edits. Every key is prefixed with
   the owner's id at construction, so no method can address another person's
