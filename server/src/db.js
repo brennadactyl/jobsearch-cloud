@@ -156,6 +156,7 @@
 import { normalize as normalizeCompany } from "./exclude.js";
 import { searchRootKey } from "./tracks.js";
 import { canonicalUrl } from "./url.js";
+import { dateDaysAgo, today } from "./validate.js";
 
 // The route modules validate against these same lists, so validation and
 // storage share one definition.
@@ -249,6 +250,8 @@ export const DEFAULT_SETTINGS = {
   applications_label: "Applications",
   // The built-in cross-track leads tab.
   all_leads_label: "All leads",
+  // The page falls back to the same number (DEFAULT_STALE_RUN_HOURS in
+  // client/src/api/schema.ts).
   stale_run_hours: 36,
   priority_locations: [],
   // A list rather than a sentence in a track's prose, so "is X excluded?" is a
@@ -266,10 +269,6 @@ export const DEFAULT_SETTINGS = {
   footer_note: "",
   pronouns: "they/them",
 };
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // Every column an application row is created with. Both insert paths
 // (insertApplication, and the transaction in
@@ -598,7 +597,7 @@ export class Db {
     );
     const found = batches.flatMap((b) => b.results);
     const WALL_MIN_DATES = 2, WALL_SERVED_DAYS = 7;
-    const wallFreshFrom = new Date(Date.now() - WALL_SERVED_DAYS * 86400000).toISOString().slice(0, 10);
+    const wallFreshFrom = dateDaysAgo(WALL_SERVED_DAYS);
     const out = new Map();
     for (const r of found) {
       if (r.retracted_on) {

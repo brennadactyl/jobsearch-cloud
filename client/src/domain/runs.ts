@@ -3,7 +3,7 @@
  * nothing" apart from "stopped running"; lead counts and badges look the same
  * in both cases.
  */
-import type { LastRun, Settings } from "../api/schema";
+import { DEFAULT_STALE_RUN_HOURS, type LastRun, type Settings } from "../api/schema";
 import { hoursSince } from "./format";
 
 export type RunState = "ok" | "stale" | "error" | "never";
@@ -13,7 +13,7 @@ export function runState(run: LastRun | null | undefined, settings: Settings): R
   if (!run || !run.at) return "never";
   if (run.status === "error") return "error";
   const h = hoursSince(run.at);
-  const limit = Number(settings.stale_run_hours) || 36;
+  const limit = Number(settings.stale_run_hours) || DEFAULT_STALE_RUN_HOURS;
   return h === null || h > limit ? "stale" : "ok";
 }
 

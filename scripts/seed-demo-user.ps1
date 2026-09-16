@@ -90,6 +90,7 @@ if (-not (Test-Path $DataFile)) {
 $data = Get-Content -Raw -Path $DataFile -Encoding UTF8 | ConvertFrom-Json
 
 if ($Password) {
+    # The server's floor (PASSWORD_MIN_LENGTH in server/src/auth.js, which lists every copy).
     if ($Password.Length -lt 12) {
         Write-Error "The API requires a password of at least 12 characters."
         exit 1

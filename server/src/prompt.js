@@ -18,8 +18,9 @@
  */
 
 // Unset falls back to they/them: the server knows nothing about a name beyond
-// the name.
-const PRONOUNS = {
+// the name. POST /api/intake accepts exactly these keys, and the page offers
+// the same three (PRONOUNS in client/src/api/schema.ts).
+export const PRONOUNS = {
   "she/her": { subj: "she", obj: "her", poss: "her" },
   "he/him": { subj: "he", obj: "him", poss: "his" },
   "they/them": { subj: "they", obj: "them", poss: "their" },

@@ -5,6 +5,7 @@
  */
 import { useEffect, useState, type FormEvent } from "react";
 import { changePassword, UnauthorizedError } from "../api/client";
+import { MIN_PASSWORD } from "../domain/onboarding";
 
 type Msg = { text: string; tone: "good" | "bad" | "" } | null;
 
@@ -37,8 +38,8 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
     // Checked here as well as on the server, so the common typos answer
     // instantly and without sending the password anywhere.
     if (!current) return setMsg({ text: "Enter your current password.", tone: "bad" });
-    if (next.length < 12) {
-      return setMsg({ text: "Your new password needs to be at least 12 characters.", tone: "bad" });
+    if (next.length < MIN_PASSWORD) {
+      return setMsg({ text: `Your new password needs to be at least ${MIN_PASSWORD} characters.`, tone: "bad" });
     }
     if (next !== confirm) return setMsg({ text: "Those two new passwords don’t match.", tone: "bad" });
 
