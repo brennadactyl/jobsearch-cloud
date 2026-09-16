@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
 import { getData, getIntake, login, logout, session, UnauthorizedError } from "./api/client";
+import type { Intake } from "./api/schema";
 import InviteGate from "./components/InviteGate";
 import Setup from "./components/Setup";
 import Shell from "./components/Shell";
@@ -89,8 +90,35 @@ function Gate({ notice, focusPassword, onSignedIn }: GateState & { onSignedIn: (
   );
 }
 
+/**
+ * What a tracker built minutes ago says about the half its first run still owes
+ * it: the searches exist and the tabs work, but nothing has been looked for yet.
+ * Nothing here needs the person to act - a failed run retries on its own - so
+ * it is a note on their own tracker rather than a screen in front of it.
+ */
+function SetupNotice({ intake }: { intake: Intake | null }) {
+  if (!intake || intake.status === "done") return null;
+  if (intake.status === "failed") {
+    return (
+      <div className="setup-status bad" role="status">
+        <strong>Tonight's run couldn't finish your setup</strong>
+        {intake.status_note || "The run stopped before it finished writing your searches."} It tries again tonight —
+        your tracker works in the meantime, and there's nothing you need to do.
+      </div>
+    );
+  }
+  return (
+    <div className="setup-status" role="status">
+      <strong>Your searches are set up — tonight's run fills in the rest</strong>
+      It reads your resume, writes how each search describes what you want, and starts looking. The first morning may
+      well be empty: an empty day is a real result here, and nothing gets padded in.
+    </div>
+  );
+}
+
 function Tracker({ onSignOut }: { onSignOut: () => void }) {
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { data, error, isPending } = useQuery({
     queryKey: ["data"],
     queryFn: getData,
@@ -106,12 +134,13 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
     if (error instanceof UnauthorizedError) session.end(error.message);
   }, [error]);
 
-  // An account with no tracks hasn't had its search built yet. The setup form
-  // says what to search for, or what became of it; once the run is done the
-  // tracker takes over. A failed intake read shows the tracker, which works
-  // empty, rather than a form served on a guess.
+  // An account with no tracks hasn't sent its setup answers: sending builds the
+  // tracks, in the same write as the intake row. So no tracks means the form,
+  // and the answers having been sent means the tracker - including the night
+  // the run has yet to finish, which the notice covers. A failed intake read
+  // shows the tracker, which works empty, rather than a form served on a guess.
   const needsSetup = !!data && data.tracks.length === 0;
-  const intake = useQuery({ queryKey: ["intake"], queryFn: getIntake, enabled: needsSetup, retry: false });
+  const intake = useQuery({ queryKey: ["intake"], queryFn: getIntake, retry: false });
 
   if (isPending || (needsSetup && intake.isPending)) {
     return (
@@ -132,11 +161,24 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
     );
   }
 
-  if (needsSetup && !intake.isError && intake.data?.status !== "done") {
-    return <Setup data={data} intake={intake.data ?? null} onSignOut={onSignOut} />;
+  if (needsSetup && !intake.isError && !intake.data) {
+    return (
+      <Setup
+        data={data}
+        onSent={() => void queryClient.invalidateQueries()}
+        onSignOut={onSignOut}
+      />
+    );
   }
 
-  return <Shell data={data} isOverview={location.pathname === "/"} onSignOut={onSignOut} />;
+  return (
+    <Shell
+      data={data}
+      isOverview={location.pathname === "/"}
+      notice={<SetupNotice intake={intake.data ?? null} />}
+      onSignOut={onSignOut}
+    />
+  );
 }
 
 function Root() {

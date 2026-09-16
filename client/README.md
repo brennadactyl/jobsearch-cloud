@@ -69,11 +69,13 @@ accepts, then the answers go to `/api/intake`. The preferred locations are
 turned into ranked matching rules on the page (`src/domain/locations.ts`) and
 sent with the answers.
 
-That night the onboarding run builds the search from the answers. Until it has,
-the form stays editable and says where things are: building tonight, not run
-within the account's stale window, or the run's own note when it failed. Once
-the run is done, the tracker replaces the form. See
-[`../docs/onboarding-plan.md`](../docs/onboarding-plan.md).
+Sending builds the searches, so the tracker exists straight away and the page
+reads it back and hands over: their title, their tabs, their location tiers,
+empty until the night. A notice on the tracker says what that night's run still
+owes them, or carries the run's own note when it couldn't finish — it retries by
+itself, and there is nothing to answer. The send is write-once, so there is no
+way back to the form and no second send; the server refuses one. See
+[`../docs/instant-setup-plan.md`](../docs/instant-setup-plan.md).
 
 ## One-time setup
 
@@ -175,8 +177,8 @@ tests cover:
 - **`src/domain/locations.test.ts`** — how each preferred location becomes a
   matching rule, against the ways postings spell places, and what gets flagged.
 - **`src/domain/onboarding.test.ts`** and **`src/onboarding.test.tsx`** — invite
-  signup, the setup form's checks, file naming, the banners and when the tracker
-  takes over.
+  signup, the setup form's checks, file naming, the hand-over to the tracker on
+  send, and what the tracker's notice says while the first run is still owed.
 - **`src/parity.test.tsx`** and **`src/review.test.tsx`** — detail-pane, grid,
   copy, focus, selection and save-indicator behaviour.
 
