@@ -102,7 +102,9 @@ Read by `scripts\new-invite.ps1`, `scripts\set-password.ps1` and the nightly
 task only while this file holds an `admin_token`.
 
 `admin_token` creates accounts, mints invites and resets **anyone's** password.
-Leave this file off any machine that does not provision people.
+It also mints search tokens (`POST /api/tokens`), which read and write
+everything the account they name owns. Leave this file off any machine that does
+not provision people.
 
 ## Prompts are not stored here
 

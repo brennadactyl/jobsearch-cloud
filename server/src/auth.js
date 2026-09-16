@@ -117,6 +117,21 @@ export async function hashToken(token) {
   return toBase64(new Uint8Array(digest));
 }
 
+/**
+ * Whether a request carries the deployment's ADMIN_TOKEN. Both sides are hashed
+ * before comparing, so the comparison runs over equal-length strings and its
+ * timing says nothing about how much of a guess was right. A deployment with no
+ * ADMIN_TOKEN configured has no admin, rather than one whose secret is empty.
+ * @param {Request} request
+ * @param {{ADMIN_TOKEN?: string}} env
+ * @returns {Promise<boolean>}
+ */
+export async function isAdminRequest(request, env) {
+  const given = bearer(request);
+  if (!env.ADMIN_TOKEN || !given) return false;
+  return timingSafeEqual(await hashToken(given), await hashToken(env.ADMIN_TOKEN));
+}
+
 export function bearer(request) {
   const header = request.headers.get("Authorization") || "";
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";

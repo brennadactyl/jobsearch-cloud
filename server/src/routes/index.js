@@ -1,13 +1,15 @@
 /**
- * The route table: which method and path map to which handler, in two lists
- * split by whether the caller is known yet.
+ * The route table: which method and path map to which handler, in three lists
+ * split by what the caller has to be.
  *
  * That split is the whole access-control story, and it is a list rather than a
- * flag on each row so it cannot be got wrong by omission. PUBLIC_ROUTES is
- * three entries long and every one of them is there for a stated reason;
- * anything not in it is in SESSION_ROUTES, where ../index.js has already
- * resolved the bearer token to a person and built the `Db` scoped to them. A
- * route added later inherits that by default rather than by remembering to.
+ * flag on each row so it cannot be got wrong by omission. PUBLIC_ROUTES is short
+ * and every entry is there for a stated reason. ADMIN_ROUTES all require the
+ * deployment's ADMIN_TOKEN, which ../index.js checks once for the whole list
+ * before any of them runs. Everything else is in SESSION_ROUTES, where
+ * ../index.js has already resolved the bearer token to a person and built the
+ * `Db` scoped to them. A route added later inherits one of those by default
+ * rather than by remembering to.
  *
  * Every handler takes one context object (see ../index.js's Ctx) and returns a
  * Response, so adding an endpoint is one line here and one exported function in
@@ -43,25 +45,64 @@ import {
 } from "./documents.js";
 import { handleDelistUrls, handleMarkVerified } from "./delisting.js";
 import { handleAddLeads, handleDeleteLeads, handleSetLeadStatus } from "./leads.js";
+import {
+  handleCheckInvite,
+  handleCompleteIntake,
+  handleGetIntake,
+  handleListInvites,
+  handleMintInvite,
+  handleMintSearchToken,
+  handlePendingIntakes,
+  handlePostIntake,
+  handleRevokeInvite,
+  handleSignup,
+} from "./onboarding.js";
 import { handleGetAutofillPrompt, handleGetPrompt } from "./prompt.js";
 import { handleRecordRun } from "./runs.js";
 import { handleAddScreened, handleGetDedup, handleUnscreen } from "./screened.js";
 import { handleUpdate } from "./update.js";
 
 /**
- * The routes that run before anyone is known. Three of them, and no more:
- * exchanging a password for a token, provisioning a user with the admin
- * secret, and purging a retired search with the same secret. The last two
- * name their subject in the body rather than being the caller, which is why a
- * session would be the wrong credential for them - and sitting here means a
- * session token is not even a candidate credential.
+ * The routes that run before anyone is known.
+ *
+ * - Exchanging a password for a token.
+ * - Checking an invite and signing up with it: the person holding an invite link
+ *   has no account yet, so there is nothing else they could present. Each
+ *   answers only to a code worth 32 random bytes, and signup changes nothing
+ *   unless that code is an open invite.
+ * - Provisioning a user and purging a retired search, each with ADMIN_TOKEN
+ *   checked inside the handler. They name their subject in the body rather than
+ *   being the caller, so a session would be the wrong credential - and sitting
+ *   here means a session token is not even a candidate credential. Newer admin
+ *   routes are in ADMIN_ROUTES, where the check is the router's rather than each
+ *   handler's.
  *
  * @type {Array<[string, string|RegExp, Function]>}
  */
 export const PUBLIC_ROUTES = [
   ["POST", "/api/login", handleLogin],
+  ["GET", /^\/api\/invite\/([^/]+)$/, handleCheckInvite],
+  ["POST", "/api/signup", handleSignup],
   ["POST", "/api/users", handleUpsertUser],
   ["POST", "/api/purge", handlePurgeSearch],
+];
+
+/**
+ * The routes only the operator's scripts and the onboarding run call. Every one
+ * requires ADMIN_TOKEN as the bearer, checked by ../index.js before dispatch, so
+ * a handler here cannot forget it and a session token is refused whoever it
+ * belongs to. None has a person to scope to: they work across accounts through
+ * ../onboarding.js.
+ *
+ * @type {Array<[string, string|RegExp, Function]>}
+ */
+export const ADMIN_ROUTES = [
+  ["POST", "/api/invites", handleMintInvite],
+  ["GET", "/api/invites", handleListInvites],
+  ["POST", "/api/invites/revoke", handleRevokeInvite],
+  ["GET", "/api/intake/pending", handlePendingIntakes],
+  ["POST", "/api/intake/complete", handleCompleteIntake],
+  ["POST", "/api/tokens", handleMintSearchToken],
 ];
 
 /**
@@ -85,6 +126,10 @@ export const SESSION_ROUTES = [
   // A session route, not an admin one: the caller is the account's owner, and
   // the handler also requires their current password.
   ["POST", "/api/password", handleChangePassword],
+  // A person's own first-run setup. The admin routes under /api/intake/ are
+  // matched first, from ADMIN_ROUTES, and these two paths are exact.
+  ["GET", "/api/intake", handleGetIntake],
+  ["POST", "/api/intake", handlePostIntake],
   ["GET", "/api/data", handleGetData],
   ["GET", "/api/config", handleGetConfig],
   ["POST", "/api/config", handleSetConfig],

@@ -192,12 +192,28 @@ Cloudflare's own environment.
 
 ## Accounts
 
-There is no sign-up page. Whoever operates the deployment creates accounts
-with the `ADMIN_TOKEN` secret.
+There are two ways in, and the operator starts both with the `ADMIN_TOKEN`
+secret: an invite link, where the person chooses their own name and password
+and describes the search they want, or an account created directly.
 
 Anyone signed in changes their own password from the tracker page - see
 [Changing your own password](#changing-your-own-password). The admin path is
 for new accounts and forgotten passwords.
+
+**Invite someone** - mint an invite and send them the link:
+
+```bash
+curl -s -X POST "$TRACKER_URL/api/invites" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"note":"who it is for","days":14}'
+```
+
+Returns `{"id", "code", "note", "created_at", "expires_at"}`. The code appears
+only in this response; the database keeps its hash. The link is the tracker
+page's URL with `?invite=<code>`: it signs the person up and takes them to
+first-run setup, and the overnight onboarding run builds their search from what
+they send. `GET /api/invites` shows what became of each invite, and
+`POST /api/invites/revoke` withdraws one that hasn't been used.
 
 **Create someone (or reset their password)** - the same call either way:
 
@@ -296,18 +312,36 @@ Used by the search scripts (see
 [`../private.example/README.md`](../private.example/README.md)) and by the
 client ([`../client/`](../client/)).
 
-Every route except the three marked otherwise needs `Authorization: Bearer
-<session token>`, and every one of them is **scoped to whoever that token
+Every route not marked **no auth** or **`ADMIN_TOKEN`** needs `Authorization: Bearer
+<session token>`, and every one of those is **scoped to whoever that token
 belongs to**. There is no user id in any request: another person's lead id,
 application id or track key doesn't resolve, and comes back as a 404.
 
 ### Auth
 
 - `POST /api/login` - **no auth** - body `{ name, password, label? }` -> `{ token, user: { id, name } }`, or `401` for both a wrong password and an unknown name (keep them indistinguishable, or the reply enumerates accounts). `label` records what the token is for (`"browser"`, `"scheduled-search"`) so it can be revoked by purpose; defaults to `"browser"`. Tokens don't expire.
+- `GET /api/invite/:code` - **no auth** -> `{ valid: true, expires_at }` or `{ valid: false, reason: "invalid"|"used"|"expired"|"revoked" }`. An unknown code and a malformed one both read `invalid`.
+- `POST /api/signup` - **no auth** - body `{ code, name, password }` -> `201 { token, user: { id, name } }`, a browser session. `410 { error, reason }` for an invite that can't be used; `400 { error, field }` for a name (1-60 characters, trimmed) or a password under 12 characters; `409 { error, field: "name" }` for a name already taken, which leaves the invite open. The invite is checked first, so a caller without a working link learns nothing about which names exist. Claiming the invite and creating the account are one transaction: one link makes one account, and signup never touches an existing one.
 - `POST /api/logout` - revokes **only the token that made the request**.
 - `POST /api/users` - **`ADMIN_TOKEN` as the Bearer, not a session** - body `{ name, password, demo? }` -> `{ id, name, created, demo }`: creates an account with a fresh GUID (`201`), or sets an existing name's password (`200`), which makes it the password reset too. Minimum 12 characters. `demo: true` marks an account whose data is invented, which `POST /api/coverage` then refuses; omitted, a new account is a person and an existing one keeps what it was. See [Accounts](#accounts).
 - `POST /api/password` - body `{ currentPassword, newPassword, signOutOthers? }` -> `{ ok, signedOut }`. Changes the caller's own password; needs the current password as well as the session. `403` for a wrong current password, `400` for a new one under 12 characters or identical to the old. Other sessions survive unless `signOutOthers: true`, which revokes only this person's other `browser`-labelled sessions and reports how many in `signedOut`. See [Changing your own password](#changing-your-own-password).
 - `GET /api/me` -> `{ id, name }` - who this token belongs to.
+
+### Invites and first-run setup
+
+A person's own setup, with their session:
+
+- `GET /api/intake` -> `{ intake: null }` or `{ intake: { answers, status, status_note, sent_at, updated_at } }`.
+- `POST /api/intake` - body `{ answers }` -> `{ intake }`, stored as `pending`. The answers are kept whole, as sent. Only what the onboarding run cannot work without is checked: 1-10 `roles`, each with a `name` and `titles`; a resume, as non-empty `resume_text` or a `resume_files` path under `resumes/` that exists; and `priority_locations` rules shaped `[{label, allOf?, anyOf?}]`, at most 20, labels 1-60 characters, at most 20 terms of 1-80 characters each. `400 { error, field }` otherwise, `409` once setup is done, `403` for a demo account. Editing a pending setup keeps `sent_at`; sending again after a failure starts a new attempt and resets it.
+
+The operator's scripts and the onboarding run, each with **`ADMIN_TOKEN` as the Bearer**. The router checks it once for the whole list, so a session token is refused whoever holds it:
+
+- `POST /api/invites` - body `{ note?, days? }` -> `201 { id, code, note, created_at, expires_at }`. `note` is at most 200 characters; `days` is 1-30, default 14. The code appears only here.
+- `GET /api/invites` -> `{ invites: [{ id, note, created_at, expires_at, used_at, revoked_at, user, state }] }`, newest first. `user` is the account an invite created, or `null`; `state` is `open`, `used`, `expired` or `revoked`. No code is ever returned.
+- `POST /api/invites/revoke` - body `{ id }` -> `{ id, state: "revoked" }`, and repeating it is harmless. `404` for no such invite, `409` for one already used.
+- `GET /api/intake/pending` -> `{ intakes: [{ user: { id, name }, status, status_note, sent_at, updated_at, answers }] }`: every `pending` or `failed` setup, oldest attempt first.
+- `POST /api/intake/complete` - body `{ user, status: "done"|"failed", note? }` -> `{ user, status, status_note, updated_at }`. `note`, at most 500 characters, is shown to the person as written. `done` is final, so a later call is `409`; `404` for an account that never sent a setup.
+- `POST /api/tokens` - body `{ user }` -> `201 { token, user, label: "scheduled-search", replaced }`: a long-lived search token for that account. It replaces the account's previous search token in the same transaction, so an account has exactly one; browser sessions are untouched. `404` for no such account, `403` for a demo account. **This token reaches everything the account owns** - see [Security notes](#security-notes).
 
 ### Data
 
@@ -444,3 +478,11 @@ The full procedure - choosing a port, starting the dev worker, deploying - is
   token, stored in plaintext in `tracker.json`, can rewrite config or delete
   leads just as a browser session can. A separate route list for machine
   credentials is planned, not built.
+- **The invite routes are public and unthrottled**, like `/api/login`. The code
+  is what keeps them safe: 32 random bytes, of which only the SHA-256 is stored,
+  so guessing one is not a practical attack and a leaked backup holds no usable
+  invite. Signup changes nothing without an open code.
+- **`ADMIN_TOKEN` reaches every account's data.** It creates accounts and resets
+  passwords, and `POST /api/tokens` mints a session that reads and writes
+  everything an account owns. Treat it, and the `deployment.json` that holds it,
+  as the keys to every account on the deployment.

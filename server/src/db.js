@@ -361,6 +361,55 @@ export class Db {
   }
 
   /**
+   * This person's setup, or null if they have never sent one.
+   * @returns {Promise<{answers: Object, status: string, status_note: string, sent_at: string, updated_at: string}|null>}
+   */
+  async getIntake() {
+    const row = await this.d1
+      .prepare("SELECT answers, status, status_note, sent_at, updated_at FROM intake WHERE user_id = ?")
+      .bind(this.userId)
+      .first();
+    if (!row) return null;
+    let answers;
+    try {
+      answers = JSON.parse(row.answers);
+    } catch {
+      answers = {};
+    }
+    return { answers, status: row.status, status_note: row.status_note, sent_at: row.sent_at, updated_at: row.updated_at };
+  }
+
+  /**
+   * Store this person's setup answers and put the setup back in the queue for
+   * the onboarding run.
+   *
+   * `sent_at` marks the start of an attempt: the first send sets it, and so does
+   * a send that follows a failure, while an edit to a setup still waiting keeps
+   * it - the page's warning about a late run counts from when the person first
+   * asked. A finished setup is never reopened.
+   * @param {string} answersJson
+   * @returns {Promise<boolean>} false when the setup is already done
+   */
+  async saveIntake(answersJson) {
+    const now = new Date().toISOString();
+    const result = await this.d1
+      .prepare(
+        `INSERT INTO intake (user_id, answers, status, status_note, sent_at, updated_at)
+         VALUES (?, ?, 'pending', '', ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           answers = excluded.answers,
+           sent_at = CASE WHEN intake.status = 'failed' THEN excluded.sent_at ELSE intake.sent_at END,
+           status = 'pending',
+           status_note = '',
+           updated_at = excluded.updated_at
+         WHERE intake.status <> 'done'`
+      )
+      .bind(this.userId, answersJson, now, now)
+      .run();
+    return (result.meta.changes || 0) > 0;
+  }
+
+  /**
    * Every lead in a search family - a track and the tabs it fills - with what
    * choosing tonight's re-checks needs (routes/screened.js). The family is one
    * set because one run re-checks for all of it.

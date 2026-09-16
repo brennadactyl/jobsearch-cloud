@@ -1953,5 +1953,203 @@ const staleWall = (await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).j
 check("an earned wall last seen more than seven days ago is not served, so the next run re-tests it",
   !!staleWall && (!staleWall.known || staleWall.known.wall === undefined), JSON.stringify(staleWall));
 
+console.log("\n== invites and signup ==");
+// A new person's only credential is an invite code, and the two routes that take
+// one are public and unthrottled - so this is about what a code, or a guess at
+// one, can and cannot do.
+const invRun = Date.now().toString(36);
+const invAdmin = (method, path, body) => req(method, path, { admin: true, body });
+check("minting an invite needs ADMIN_TOKEN: no token is refused",
+  (await req("POST", "/api/invites", { body: {} })).status === 401);
+check("and so is a session token",
+  (await req("POST", "/api/invites", { token: A_TOK, body: {} })).status === 401);
+check("and so is a wrong admin token",
+  (await req("GET", "/api/invites", { token: ADMIN + "x" })).status === 401);
+const minted = await invAdmin("POST", "/api/invites", { note: `verify ${invRun}` });
+check("an invite is minted with a 43-character code, open for 14 days",
+  minted.status === 201 && /^[A-Za-z0-9_-]{43}$/.test(minted.json.code) &&
+  Math.round((Date.parse(minted.json.expires_at) - Date.parse(minted.json.created_at)) / 86400000) === 14,
+  JSON.stringify(minted.json));
+check("days outside 1-30 are refused with the documented message",
+  (await invAdmin("POST", "/api/invites", { days: 31 })).json.error === "days must be a whole number from 1 to 30");
+check("a note over 200 characters is refused",
+  (await invAdmin("POST", "/api/invites", { note: "x".repeat(201) })).json.error === "note must be at most 200 characters");
+check("an open invite checks as valid",
+  (await req("GET", `/api/invite/${minted.json.code}`)).json.valid === true);
+// The right length and alphabet, never minted.
+const guess = minted.json.code.slice(0, 42) + (minted.json.code.endsWith("A") ? "B" : "A");
+check("a wrong code of the right shape is refused as invalid",
+  JSON.stringify((await req("GET", `/api/invite/${guess}`)).json) === JSON.stringify({ valid: false, reason: "invalid" }));
+const guessSignup = await req("POST", "/api/signup", { body: { code: guess, name: `Guess ${invRun}`, password: "guess-long-password" } });
+check("and signing up with it creates nothing",
+  guessSignup.status === 410 && guessSignup.json.reason === "invalid" &&
+  (await req("POST", "/api/login", { body: { name: `Guess ${invRun}`, password: "guess-long-password" } })).status !== 200,
+  JSON.stringify(guessSignup.json));
+
+const existingName = `Existing ${invRun}`;
+await req("POST", "/api/users", { admin: true, body: { name: existingName, password: "existing-long-password" } });
+const takenName = existingName.toUpperCase();
+const taken = await req("POST", "/api/signup", { body: { code: minted.json.code, name: takenName, password: "takeover-long-password" } });
+check("signup cannot take an existing name, in any case, and says so in the page's words",
+  taken.status === 409 && taken.json.field === "name" &&
+  taken.json.error === `The name “${takenName}” is already taken here — pick another.`, JSON.stringify(taken.json));
+check("and it does not reset that account's password",
+  (await req("POST", "/api/login", { body: { name: existingName, password: "existing-long-password" } })).status === 200 &&
+  (await req("POST", "/api/login", { body: { name: existingName, password: "takeover-long-password" } })).status !== 200);
+check("a taken name leaves the invite open for another try",
+  (await req("GET", `/api/invite/${minted.json.code}`)).json.valid === true);
+const newName = `New ${invRun}`;
+const shortPw = await req("POST", "/api/signup", { body: { code: minted.json.code, name: newName, password: "short" } });
+check("a short password is refused beside its field, and spends nothing",
+  shortPw.status === 400 && shortPw.json.field === "password" &&
+  (await req("GET", `/api/invite/${minted.json.code}`)).json.valid === true);
+const signed = await req("POST", "/api/signup", { body: { code: minted.json.code, name: newName, password: "new-long-password" } });
+check("an open invite and a free name make an account, signed in",
+  signed.status === 201 && !!signed.json.token && signed.json.user.name === newName &&
+  (await req("GET", "/api/me", { token: signed.json.token })).json.name === newName, JSON.stringify(signed.json));
+const N_TOK = signed.json.token, N_ID = signed.json.user.id;
+check("a spent invite checks as used",
+  JSON.stringify((await req("GET", `/api/invite/${minted.json.code}`)).json) === JSON.stringify({ valid: false, reason: "used" }));
+const spentAgain = await req("POST", "/api/signup", { body: { code: minted.json.code, name: `Second ${invRun}`, password: "second-long-password" } });
+check("and signing up with it again fails, creating nothing",
+  spentAgain.status === 410 && spentAgain.json.reason === "used" &&
+  (await req("POST", "/api/login", { body: { name: `Second ${invRun}`, password: "second-long-password" } })).status !== 200);
+
+// Three signups racing one invite: one account, however they interleave.
+const raceCode = (await invAdmin("POST", "/api/invites", { note: `race ${invRun}` })).json.code;
+const racers = await Promise.all([1, 2, 3].map((i) =>
+  req("POST", "/api/signup", { body: { code: raceCode, name: `Racer ${invRun}-${i}`, password: "racer-long-password" } })));
+const raceLogins = await Promise.all([1, 2, 3].map((i) =>
+  req("POST", "/api/login", { body: { name: `Racer ${invRun}-${i}`, password: "racer-long-password" } })));
+check("signups racing one invite make exactly one account",
+  racers.filter((r) => r.status === 201).length === 1 &&
+  racers.filter((r) => r.status === 410 && r.json.reason === "used").length === 2 &&
+  raceLogins.filter((r) => r.status === 200).length === 1,
+  JSON.stringify(racers.map((r) => [r.status, r.json && r.json.reason])));
+
+const revokable = (await invAdmin("POST", "/api/invites", { note: `revoke ${invRun}` })).json;
+const revoked = await invAdmin("POST", "/api/invites/revoke", { id: revokable.id });
+check("an unused invite can be revoked, and revoking it again is harmless",
+  revoked.status === 200 && revoked.json.state === "revoked" &&
+  (await invAdmin("POST", "/api/invites/revoke", { id: revokable.id })).status === 200);
+check("a revoked invite checks as revoked and signs nobody up",
+  (await req("GET", `/api/invite/${revokable.code}`)).json.reason === "revoked" &&
+  (await req("POST", "/api/signup", { body: { code: revokable.code, name: `Revoked ${invRun}`, password: "revoked-long-password" } })).json.reason === "revoked");
+check("a used invite cannot be revoked",
+  (await invAdmin("POST", "/api/invites/revoke", { id: minted.json.id })).status === 409);
+const noSuchInvite = await invAdmin("POST", "/api/invites/revoke", { id: 999999999 });
+check("revoking an unknown invite 404s with the documented message",
+  noSuchInvite.status === 404 && noSuchInvite.json.error === "no such invite");
+
+const ledger = (await invAdmin("GET", "/api/invites")).json.invites;
+const ledgerRow = (id) => ledger.find((i) => i.id === id);
+check("the ledger shows each invite's fate and the account it made, newest first",
+  ledgerRow(minted.json.id)?.state === "used" && ledgerRow(minted.json.id)?.user?.name === newName &&
+  ledgerRow(revokable.id)?.state === "revoked" && ledgerRow(revokable.id)?.user === null &&
+  ledger.every((i, k) => k === 0 || i.created_at <= ledger[k - 1].created_at),
+  JSON.stringify(ledgerRow(minted.json.id)));
+check("and never a code",
+  !JSON.stringify(ledger).includes(minted.json.code) && ledger.every((i) => !("code" in i) && !("code_hash" in i)));
+
+console.log("\n== first-run setup ==");
+const intakeRole = { name: "Engineering", titles: "Senior Software Engineer", company_kinds: "", rule_outs: "", min_pay: "" };
+const baseAnswers = {
+  page_title: `${newName}'s Job Search`, pronouns: "", resume_text: "Ten years of backend engineering.",
+  resume_files: [], location_limits: "", locations_first: "Seattle, Remote",
+  priority_locations: [{ label: "Seattle", anyOf: ["seattle"] }, { label: "Remote", anyOf: ["remote"] }],
+  roles: [intakeRole], never_work_for: "", preferences: "",
+};
+const postIntake = (tok, answers) => req("POST", "/api/intake", { token: tok, body: { answers } });
+check("a new account has no setup yet",
+  JSON.stringify((await req("GET", "/api/intake", { token: N_TOK })).json) === JSON.stringify({ intake: null }));
+check("setup needs at least one role",
+  (await postIntake(N_TOK, { ...baseAnswers, roles: [] })).json.field === "roles");
+check("and each role needs the roles to search for",
+  (await postIntake(N_TOK, { ...baseAnswers, roles: [{ ...intakeRole, titles: " " }] })).json.field === "roles");
+check("setup needs a resume the run can find, and a named file that doesn't exist is not one",
+  (await postIntake(N_TOK, { ...baseAnswers, resume_text: "", resume_files: ["resumes/missing.pdf"] })).json.field === "resume");
+for (const [why, rules] of [
+  ["an unknown field", [{ label: "Seattle", anyOf: ["seattle"], tier: "high" }]],
+  ["an empty label", [{ label: "", anyOf: ["seattle"] }]],
+  ["no terms", [{ label: "Seattle", anyOf: [] }]],
+  ["more than twenty rules", Array.from({ length: 21 }, (_, i) => ({ label: `L${i}`, anyOf: ["x"] }))],
+  ["a term that isn't text", [{ label: "Seattle", anyOf: [42] }]],
+]) {
+  check(`a malformed location rule is refused: ${why}`,
+    (await postIntake(N_TOK, { ...baseAnswers, priority_locations: rules })).json.field === "priority_locations");
+}
+check("a refused setup stores nothing",
+  (await req("GET", "/api/intake", { token: N_TOK })).json.intake === null);
+
+const sentIntake = await postIntake(N_TOK, baseAnswers);
+check("a complete setup is stored as pending, with the answers exactly as sent",
+  sentIntake.status === 200 && sentIntake.json.intake.status === "pending" && !!sentIntake.json.intake.sent_at &&
+  JSON.stringify(sentIntake.json.intake.answers) === JSON.stringify(baseAnswers), JSON.stringify(sentIntake.json));
+await new Promise((resolve) => setTimeout(resolve, 15));
+const editedIntake = await postIntake(N_TOK, { ...baseAnswers, preferences: "Small teams" });
+check("editing a waiting setup replaces the answers and keeps when it was first sent",
+  editedIntake.json.intake.answers.preferences === "Small teams" &&
+  editedIntake.json.intake.sent_at === sentIntake.json.intake.sent_at &&
+  editedIntake.json.intake.updated_at > sentIntake.json.intake.updated_at,
+  JSON.stringify({ first: sentIntake.json.intake.sent_at, edited: editedIntake.json.intake }));
+check("one person's setup is invisible to another",
+  (await req("GET", "/api/intake", { token: B_TOK })).json.intake === null);
+await req("PUT", `/api/documents/resumes/${invRun}.txt`, { token: N_TOK, raw: "Resume as a file.", type: "text/plain" });
+check("a resume file counts once it exists under resumes/",
+  (await postIntake(N_TOK, { ...baseAnswers, resume_text: "", resume_files: [`resumes/${invRun}.txt`] })).status === 200);
+
+const demoIntake = await req("POST", "/api/users", { admin: true, body: { name: `Demo intake ${invRun}`, password: "demo-intake-password", demo: true } });
+const DI_TOK = (await req("POST", "/api/login", { body: { name: `Demo intake ${invRun}`, password: "demo-intake-password" } })).json.token;
+check("a demo account cannot send setup", (await postIntake(DI_TOK, baseAnswers)).status === 403);
+
+const queue = await invAdmin("GET", "/api/intake/pending");
+const queued = queue.json.intakes.find((i) => i.user.id === N_ID);
+check("the onboarding run sees the waiting setup with its answers",
+  queue.status === 200 && !!queued && queued.user.name === newName && queued.status === "pending" &&
+  queued.answers.roles[0].titles === "Senior Software Engineer", JSON.stringify(queued));
+
+const failedRun = await invAdmin("POST", "/api/intake/complete", { user: N_ID, status: "failed", note: "We couldn't read your resume." });
+const afterFail = (await req("GET", "/api/intake", { token: N_TOK })).json.intake;
+check("a failed run's note reaches the person as written",
+  failedRun.status === 200 && afterFail.status === "failed" && afterFail.status_note === "We couldn't read your resume.");
+await new Promise((resolve) => setTimeout(resolve, 15));
+const resentIntake = await postIntake(N_TOK, baseAnswers);
+check("sending again after a failure starts a new attempt: pending, note cleared, sent_at moved",
+  resentIntake.json.intake.status === "pending" && resentIntake.json.intake.status_note === "" &&
+  resentIntake.json.intake.sent_at > afterFail.sent_at, JSON.stringify(resentIntake.json.intake));
+check("marking a setup done closes it",
+  (await invAdmin("POST", "/api/intake/complete", { user: N_ID, status: "done" })).status === 200 &&
+  (await postIntake(N_TOK, baseAnswers)).json.error === "setup is already done");
+check("done is final: completing it again is refused",
+  (await invAdmin("POST", "/api/intake/complete", { user: N_ID, status: "failed", note: "late" })).status === 409);
+check("completing an account that never sent a setup 404s",
+  (await invAdmin("POST", "/api/intake/complete", { user: "00000000-0000-4000-8000-000000000000", status: "done" })).status === 404);
+check("a done setup leaves the run's queue",
+  !(await invAdmin("GET", "/api/intake/pending")).json.intakes.some((i) => i.user.id === N_ID));
+
+const searchTok1 = await invAdmin("POST", "/api/tokens", { user: N_ID });
+check("a search token is minted for the account, labelled scheduled-search",
+  searchTok1.status === 201 && searchTok1.json.label === "scheduled-search" && searchTok1.json.replaced === 0 &&
+  (await req("GET", "/api/me", { token: searchTok1.json.token })).json.name === newName,
+  JSON.stringify({ ...searchTok1.json, token: undefined }));
+const searchTok2 = await invAdmin("POST", "/api/tokens", { user: N_ID });
+check("minting again replaces the last search token rather than adding to it",
+  searchTok2.json.replaced === 1 &&
+  (await req("GET", "/api/me", { token: searchTok1.json.token })).status === 401 &&
+  (await req("GET", "/api/me", { token: searchTok2.json.token })).status === 200);
+check("and leaves the person's browser session alone",
+  (await req("GET", "/api/me", { token: N_TOK })).status === 200);
+check("no search token for an account that doesn't exist, or a demo account",
+  (await invAdmin("POST", "/api/tokens", { user: "00000000-0000-4000-8000-000000000000" })).status === 404 &&
+  (await invAdmin("POST", "/api/tokens", { user: demoIntake.json.id })).status === 403);
+
+for (const [method, path] of [
+  ["POST", "/api/invites"], ["GET", "/api/invites"], ["POST", "/api/invites/revoke"],
+  ["GET", "/api/intake/pending"], ["POST", "/api/intake/complete"], ["POST", "/api/tokens"],
+]) {
+  check(`${method} ${path} refuses a session token`,
+    (await req(method, path, { token: N_TOK, body: method === "POST" ? {} : undefined })).status === 401);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -85,10 +85,10 @@ Every screen works at phone width and in both themes.
 Two tables, and routes grouped by who calls them. Resume files use the existing
 `/api/documents/<path>` route under `resumes/`. Setup stores only answers.
 
-**Migrations**, numbered after the latest on main when written (0014 today).
-- `0015_invites.sql`: `invites` with `code_hash`, `note`, `created_at`,
-  `expires_at` (14 days, at most 30), `used_at` and `user_id`. Only the hash
-  of a code is stored.
+**Migrations**
+- `0015_invites.sql`: `invites` with `id`, `code_hash`, `note`, `created_at`,
+  `expires_at` (14 days, at most 30), `used_at`, `used_by` (the account an
+  invite created) and `revoked_at`. Only the hash of a code is stored.
 - `0016_intake.sql`: `intake`, one row per user, with `answers` (JSON),
   `status` (`pending` | `done` | `failed`), `status_note`, `sent_at` and
   `updated_at`.
@@ -97,25 +97,43 @@ Two tables, and routes grouped by who calls them. Resume files use the existing
 
 | Route | Does |
 |---|---|
-| `GET /api/invite/<code>` | `{ valid }`, or `{ valid: false, reason }` for not valid, already used, or expired |
-| `POST /api/signup` | `{ code, name, password }` → `201 { token, user }`. Creates only, never updates an existing user. Claims the invite conditionally, so one link makes one account. A taken name puts the invite back and answers with the server's wording |
+| `GET /api/invite/<code>` | `{ valid, expires_at }`, or `{ valid: false, reason }` with `invalid`, `used`, `expired` or `revoked` |
+| `POST /api/signup` | `{ code, name, password }` → `201 { token, user }`. Creates only, never updates an existing user. Claims the invite and creates the account in one transaction, so one link makes one account. `410 { reason }` for an invite that can't be used; `400`/`409 { error, field }` for the name or password. A taken name leaves the invite open and answers with the mockup's wording |
 
 **Session token**
 
 | Route | Does |
 |---|---|
-| `GET /api/intake` | the person's intake or `null`, including `sent_at` |
-| `POST /api/intake` | stores answers. Requires at least one role with a name and titles, and resume text or a file under `resumes/`. Replaces while `pending` or `failed`; refused once `done` |
+| `GET /api/intake` | the person's intake or `null`: `answers`, `status`, `status_note`, `sent_at`, `updated_at` |
+| `POST /api/intake` | stores answers (below). Requires at least one role with a name and titles, resume text or an existing file under `resumes/`, and well-formed `priority_locations`. Replaces while `pending`, keeping `sent_at`, or `failed`, resetting it; refused once `done` |
 
 **`ADMIN_TOKEN`**
 
 | Route | Does |
 |---|---|
-| `POST /api/invites` | mints a code, shown once |
-| `GET /api/invites` | the ledger: note, created, expires, used by |
-| `GET /api/intake/pending` | every `pending` or `failed` intake with its user |
-| `POST /api/tokens` | mints a long-lived search token for a user |
-| `POST /api/intake/complete` | `{ user, status, note }` sets `done` or `failed` |
+| `POST /api/invites` | `{ note, days }` mints a code, shown once |
+| `GET /api/invites` | the ledger, newest first: note, created, expires, used, revoked, the account made, and a computed `state` |
+| `POST /api/invites/revoke` | `{ id }` withdraws an unused invite |
+| `GET /api/intake/pending` | every `pending` or `failed` intake with its user and answers, oldest attempt first |
+| `POST /api/tokens` | `{ user }` mints a long-lived `scheduled-search` token, replacing the account's previous one |
+| `POST /api/intake/complete` | `{ user, status, note }` sets `done` or `failed`; `done` is final |
+
+The admin routes are one list, checked once by the router.
+
+**Answers.** Stored whole, as the form sends them:
+
+| Key | Holds |
+|---|---|
+| `page_title` | text |
+| `pronouns` | `""`, `she/her`, `he/him` or `they/them` |
+| `resume_text` | pasted resume text |
+| `resume_files` | document paths under `resumes/` |
+| `location_limits` | "Anywhere you can't take a job?" |
+| `locations_first` | the ranked places, as typed |
+| `priority_locations` | `[{label, allOf?, anyOf?}]`, computed by the page |
+| `roles` | `[{name, titles, company_kinds, rule_outs, min_pay}]` |
+| `never_work_for` | text |
+| `preferences` | text |
 
 `verify-local.mjs` gains checks for:
 - signup can't take or reset an existing account
@@ -123,6 +141,9 @@ Two tables, and routes grouped by who calls them. Resume files use the existing
 - two signups racing one invite make one account
 - one person's intake is invisible to another
 - the admin routes refuse a session token
+- a wrong invite code of the right shape is refused
+- a revoked invite fails with its own reason
+- a malformed location rule is refused
 
 ## Client
 

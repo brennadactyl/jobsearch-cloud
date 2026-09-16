@@ -8,11 +8,11 @@
  * handler an unscoped binding in their place.
  */
 
-import { bearer, getSessionUser } from "./auth.js";
+import { bearer, getSessionUser, isAdminRequest } from "./auth.js";
 import { Db } from "./db.js";
 import { corsPreflight, CORS_HEADERS, unauthorized } from "./http.js";
 import { Docs } from "./r2.js";
-import { matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./routes/index.js";
+import { ADMIN_ROUTES, matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./routes/index.js";
 
 /**
  * What every handler receives - one shape for all of them, so ./routes/index.js
@@ -39,6 +39,17 @@ export default {
     if (open) {
       return open.handler({
         request, env, url, params: open.params, token: "", user: null, db: null, docs: null,
+      });
+    }
+
+    // The admin list is checked as a list: ADMIN_TOKEN or 401, before any handler
+    // in it runs. Matched before the session is resolved, because no person's
+    // session is ever the credential for these.
+    const admin = matchRoute(ADMIN_ROUTES, request.method, url.pathname);
+    if (admin) {
+      if (!(await isAdminRequest(request, env))) return unauthorized();
+      return admin.handler({
+        request, env, url, params: admin.params, token: "", user: null, db: null, docs: null,
       });
     }
 
