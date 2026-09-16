@@ -22,7 +22,47 @@ import { saved, useSaved } from "../ui/saved";
 
 type Refused = { name: string; reason: string };
 
+/** Where a message sits on the form: a problem slot, or "form" beside the send button. */
+type ProblemSlot = keyof SetupProblems | "form";
+
 const TIER_COLOURS = ["var(--pri-0)", "var(--pri-1)", "var(--pri-2)", "var(--pri-3)", "var(--pri-4)"];
+
+/**
+ * The answer a server refusal names (its `field`), mapped to the part of the form
+ * that shows the message. A refusal naming anything else, or nothing, shows
+ * beside the send button.
+ */
+const PROBLEM_SLOT_FOR_FIELD: Readonly<Record<string, ProblemSlot>> = {
+  roles: "role-0",
+  resume: "attach",
+  priority_locations: "locations",
+  work_scope: "work_scope",
+};
+
+function problemSlotFor(field: string | undefined): ProblemSlot {
+  return field && Object.hasOwn(PROBLEM_SLOT_FOR_FIELD, field) ? PROBLEM_SLOT_FOR_FIELD[field] : "form";
+}
+
+/** The filename part of a stored document path: "resumes/cv.pdf" is "cv.pdf". */
+function fileNameOf(path: string): string {
+  return path.slice(path.indexOf("/") + 1);
+}
+
+/**
+ * Brings the stored resumes in line with the form before the answers are sent:
+ * deletes the ones removed, uploads the ones picked, and returns every path the
+ * answers should name. A failed delete is ignored - the answers stop naming the
+ * file either way.
+ */
+async function syncResumeFiles(stored: string[], removed: string[], picked: File[]): Promise<string[]> {
+  for (const path of removed) await deleteDocument(path).catch(() => undefined);
+  const uploaded: string[] = [];
+  for (const file of picked) {
+    const res = await putDocument(`resumes/${safeDocumentName(file.name)}`, file);
+    uploaded.push(res.path);
+  }
+  return [...new Set([...stored, ...uploaded])];
+}
 
 function Field({
   label,
@@ -52,7 +92,8 @@ function Field({
   );
 }
 
-function Section({ title, children }: { title: string; children?: ReactNode }) {
+/** A heading that opens one part of the form, with an optional line under it. */
+function SetupHeading({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="setup-sec">
       <h2>{title}</h2>
@@ -71,7 +112,7 @@ function LocationReadback({ entries }: { entries: LocationEntry[] }) {
         <div className="key setup-readback">
           {ranked.map((e, r) => (
             <span key={`${r}-${e.text}`}>
-              <i style={{ background: r < 5 ? TIER_COLOURS[r] : "var(--ink3)" }} />
+              <i style={{ background: TIER_COLOURS[r] ?? "var(--ink3)" }} />
               {r + 1}. {e.text}
               {e.means && ` — ${e.means}`}
             </span>
@@ -84,6 +125,49 @@ function LocationReadback({ entries }: { entries: LocationEntry[] }) {
         </p>
       ))}
     </>
+  );
+}
+
+/** The resume files the form will send: already stored, picked this visit, and any refused for size. */
+function ResumeFiles({
+  stored,
+  picked,
+  refused,
+  onRemoveStored,
+  onRemovePicked,
+}: {
+  stored: string[];
+  picked: File[];
+  refused: Refused[];
+  onRemoveStored: (path: string) => void;
+  onRemovePicked: (index: number) => void;
+}) {
+  if (stored.length === 0 && picked.length === 0 && refused.length === 0) return null;
+  return (
+    <div className="setup-files">
+      {stored.map((path) => (
+        <div className="setup-file" key={path}>
+          <span>{fileNameOf(path)}</span>
+          <button className="setup-rm" type="button" onClick={() => onRemoveStored(path)}>
+            remove
+          </button>
+        </div>
+      ))}
+      {picked.map((file, i) => (
+        <div className="setup-file" key={`${file.name}-${i}`}>
+          <span>{file.name}</span>
+          <button className="setup-rm" type="button" onClick={() => onRemovePicked(i)}>
+            remove
+          </button>
+        </div>
+      ))}
+      {refused.map((r, i) => (
+        <div className="setup-file" key={`refused-${i}`}>
+          <span>{r.name}</span>
+          <p className="field-err">{r.reason}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -184,7 +268,7 @@ export default function Setup({
   const [removed, setRemoved] = useState<string[]>([]);
   const [picked, setPicked] = useState<File[]>([]);
   const [refused, setRefused] = useState<Refused[]>([]);
-  const [problems, setProblems] = useState<SetupProblems & { form?: string }>({});
+  const [problems, setProblems] = useState<Partial<Record<ProblemSlot, string>>>({});
   const [sending, setSending] = useState(false);
 
   const entries = parseLocations(answers.locations_first);
@@ -192,7 +276,7 @@ export default function Setup({
   const setRole = (i: number, patch: Partial<RoleAnswer>) =>
     setAnswers((a) => ({ ...a, roles: a.roles.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
 
-  const fileNames = [...stored.map((p) => p.slice(p.indexOf("/") + 1)), ...picked.map((f) => f.name)];
+  const fileNames = [...stored.map(fileNameOf), ...picked.map((f) => f.name)];
 
   function pick(files: FileList | null) {
     if (!files) return;
@@ -217,13 +301,7 @@ export default function Setup({
     setSending(true);
     saved.saving("Sending…");
     try {
-      for (const path of removed) await deleteDocument(path).catch(() => undefined);
-      const uploaded: string[] = [];
-      for (const file of picked) {
-        const res = await putDocument(`resumes/${safeDocumentName(file.name)}`, file);
-        uploaded.push(res.path);
-      }
-      const resumeFiles = [...new Set([...stored, ...uploaded])];
+      const resumeFiles = await syncResumeFiles(stored, removed, picked);
       await submitIntake({ ...answers, resume_files: resumeFiles, priority_locations: locationRules(entries) });
       setStored(resumeFiles);
       setPicked([]);
@@ -234,17 +312,7 @@ export default function Setup({
     } catch (err) {
       const failure = failureOf(err);
       if (failure?.status === 401) return;
-      const where =
-        failure?.field === "roles"
-          ? "role-0"
-          : failure?.field === "resume"
-            ? "attach"
-            : failure?.field === "priority_locations"
-              ? "locations"
-              : failure?.field === "work_scope"
-                ? "work_scope"
-                : "form";
-      setProblems({ [where]: failure?.message ?? (err instanceof Error ? err.message : String(err)) });
+      setProblems({ [problemSlotFor(failure?.field)]: failure?.message ?? (err instanceof Error ? err.message : String(err)) });
       saved.message("Couldn't send — try again");
     } finally {
       setSending(false);
@@ -308,7 +376,7 @@ export default function Setup({
             </div>
           </Field>
 
-          <Section title="Your resume">Attach your resume, paste its text, or both. Pasting always works.</Section>
+          <SetupHeading title="Your resume">Attach your resume, paste its text, or both. Pasting always works.</SetupHeading>
           <Field problem={problems.attach}>
             <div className="setup-attach">
               <button className="btn" type="button" onClick={() => fileInput.current?.click()}>
@@ -326,39 +394,16 @@ export default function Setup({
                 }}
               />
             </div>
-            {(stored.length > 0 || picked.length > 0 || refused.length > 0) && (
-              <div className="setup-files">
-                {stored.map((path) => (
-                  <div className="setup-file" key={path}>
-                    <span>{path.slice(path.indexOf("/") + 1)}</span>
-                    <button
-                      className="setup-rm"
-                      type="button"
-                      onClick={() => {
-                        setStored((s) => s.filter((p) => p !== path));
-                        setRemoved((r) => [...r, path]);
-                      }}
-                    >
-                      remove
-                    </button>
-                  </div>
-                ))}
-                {picked.map((file, i) => (
-                  <div className="setup-file" key={`${file.name}-${i}`}>
-                    <span>{file.name}</span>
-                    <button className="setup-rm" type="button" onClick={() => setPicked((p) => p.filter((_, j) => j !== i))}>
-                      remove
-                    </button>
-                  </div>
-                ))}
-                {refused.map((r, i) => (
-                  <div className="setup-file" key={`refused-${i}`}>
-                    <span>{r.name}</span>
-                    <p className="field-err">{r.reason}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+            <ResumeFiles
+              stored={stored}
+              picked={picked}
+              refused={refused}
+              onRemoveStored={(path) => {
+                setStored((s) => s.filter((p) => p !== path));
+                setRemoved((r) => [...r, path]);
+              }}
+              onRemovePicked={(i) => setPicked((p) => p.filter((_, j) => j !== i))}
+            />
           </Field>
           <Field label={<label htmlFor={`${id}-resume`}>Or paste it here</label>}>
             <textarea
@@ -370,10 +415,10 @@ export default function Setup({
             />
           </Field>
 
-          <Section title="Where you'll work">
+          <SetupHeading title="Where you'll work">
             Three different questions: everywhere you could work, anything ruled out inside that, and what you'd most
             like.
-          </Section>
+          </SetupHeading>
           <Field
             label={<label htmlFor={`${id}-scope`}>Where can you work?</label>}
             problem={problems.work_scope}
@@ -416,10 +461,10 @@ export default function Setup({
             <LocationReadback entries={entries} />
           </Field>
 
-          <Section title="What to look for">
+          <SetupHeading title="What to look for">
             One block per kind of role, and each is its own nightly search. Most people want one; add another if you're
             running two genuinely different searches, like engineering and product.
-          </Section>
+          </SetupHeading>
           {answers.roles.map((role, i) => (
             <RoleBlock
               key={i}
@@ -436,7 +481,7 @@ export default function Setup({
             </button>
           </div>
 
-          <Section title="Anything else" />
+          <SetupHeading title="Anything else" />
           <Field
             label={<label htmlFor={`${id}-never`}>Companies you'd never work for</label>}
             hint="These are never searched and never shown, at all."
