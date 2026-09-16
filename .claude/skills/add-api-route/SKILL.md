@@ -47,6 +47,9 @@ Three rules:
   without them reaches the browser as an opaque network failure.
 - **Never touch `env.DB`.** Every read and write of a person's own data goes
   through a method on `Db` (`../db.js`). Add a method there if none fits.
+  The company list every account shares is the one exception to "own data":
+  it goes through `ctx.companyList` (`CompanyList`, `../companies.js`), which
+  is deliberately not user-scoped. Never add a shared-table query to `Db`.
 - **Never check ownership.** `ctx.db` is bound to one user id at
   construction, so another user's lead id does not resolve, their track key
   reads as unconfigured, their rows are not in the result set. The handler's
