@@ -2214,23 +2214,23 @@ check("the right id with another account's name is refused, and removes nothing"
 
 const dryDel = await delAdmin("DELETE", `/api/users/${GONE_ID}`, { name: goneName, dryRun: true });
 check("a dry run counts what would go, and goes through with nothing",
-  dryDel.json.dryRun === true && dryDel.json.wouldDelete.tracks === 1 && dryDel.json.wouldDelete.leads === 1 &&
-  dryDel.json.wouldDelete.documents === 1 &&
+  dryDel.json.dryRun === true && dryDel.json.wouldDelete?.tracks === 1 && dryDel.json.wouldDelete?.leads === 1 &&
+  dryDel.json.wouldDelete?.documents === 1 &&
   (await req("GET", "/api/me", { token: GONE_TOK })).status === 200,
-  JSON.stringify(dry.json));
+  JSON.stringify(dryDel.json));
 
 // The state a run that died between the two halves leaves: documents gone,
 // rows still there. Deleting again has to finish it rather than refuse.
 await req("DELETE", `/api/documents/resumes/gone_${delRun}.txt`, { token: GONE_TOK });
 const delResult = await delAdmin("DELETE", `/api/users/${GONE_ID}`, { name: goneName });
 check("a delete that follows a half-finished one completes it",
-  delResult.status === 200 && delResult.json.deleted.documents === 0 && delResult.json.deleted.tracks === 1,
+  delResult.status === 200 && delResult.json.deleted?.documents === 0 && delResult.json.deleted?.tracks === 1,
   JSON.stringify(delResult.json));
 check("it reports what it removed, per table, the way /api/purge does",
-  delResult.json.deleted.leads === 1 && delResult.json.deleted.applications === 1 &&
-  delResult.json.deleted.screened === 1 && delResult.json.deleted.search_runs === 1 &&
-  delResult.json.deleted.company_sweeps === 1 && delResult.json.deleted.intake === 1 &&
-  delResult.json.deleted.meta >= 1 && delResult.json.deleted.sessions === 1,
+  delResult.json.deleted?.leads === 1 && delResult.json.deleted?.applications === 1 &&
+  delResult.json.deleted?.screened === 1 && delResult.json.deleted?.search_runs === 1 &&
+  delResult.json.deleted?.company_sweeps === 1 && delResult.json.deleted?.intake === 1 &&
+  delResult.json.deleted?.meta >= 1 && delResult.json.deleted?.sessions === 1,
   JSON.stringify(delResult.json.deleted));
 check("the account is gone: its token is dead and its name can't sign in",
   (await req("GET", "/api/me", { token: GONE_TOK })).status === 401 &&
@@ -2243,9 +2243,9 @@ check("and deleting it again is a 404, since there is nothing left to delete",
 const delStayData = await req("GET", "/api/data", { token: STAY_TOK });
 const delStayDocs = await req("GET", "/api/documents", { token: STAY_TOK });
 check("the other account still has its session, rows and documents",
-  delStayData.status === 200 && delStayData.json.leads.length === 1 &&
-  (delStayDocs.json.documents || []).some((d) => d.path === `resumes/stay_${delRun}.txt`),
-  JSON.stringify({ leads: delStayData.json.leads.length, docs: (delStayDocs.json.documents || []).length }));
+  delStayData.status === 200 && delStayData.json.leads?.length === 1 &&
+  (delStayDocs.json?.documents || []).some((d) => d.path === `resumes/stay_${delRun}.txt`),
+  JSON.stringify({ leads: delStayData.json.leads?.length, docs: (delStayDocs.json?.documents || []).length }));
 check("the shared company list is untouched - those facts are everyone's",
   (await delListLength()) === delSharedBefore,
   JSON.stringify({ before: delSharedBefore, after: await delListLength() }));

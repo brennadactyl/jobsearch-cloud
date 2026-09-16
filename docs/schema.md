@@ -410,7 +410,9 @@ no usable invite.
   operator asks otherwise, and never more than 30.
 - An invite is used once. `used_at` and `used_by` are set in the same
   transaction that creates the account, and `used_by` holds that account's
-  `id`.
+  `id`. Deleting the account clears `used_by` and leaves `used_at`, which is a
+  state an unused invite cannot be in - both are `''` there - so the ledger
+  still shows the invite was spent, and by no account that still exists.
 - What became of an invite is worked out rather than stored: used if `used_at`
   is set, otherwise revoked if `revoked_at` is, otherwise expired once
   `expires_at` has passed.
