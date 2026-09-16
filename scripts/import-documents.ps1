@@ -143,6 +143,14 @@ foreach ($acct in $accounts) {
                 Write-Host "  SKIP  $rel - reserved Windows device name"
                 $skipped++; continue
             }
+            # The server writes a .docx's text beside it as a .txt of the same name
+            # and refuses an upload to that path, so a restored backup holds a copy
+            # of text the .docx upload is about to write again. Not counted as
+            # skipped: nothing is missing from the tracker.
+            if ($ext -eq ".txt" -and (Test-Path -LiteralPath (Join-Path $dir "$($file.BaseName).docx"))) {
+                Write-Host "  --    $rel - read from $($file.BaseName).docx, which writes it"
+                continue
+            }
             if (-not $CONTENT_TYPES.ContainsKey($ext)) {
                 Write-Host "  SKIP  $rel - no content type for '$ext' (known: $($CONTENT_TYPES.Keys -join ', '))"
                 $skipped++; continue
@@ -170,16 +178,28 @@ foreach ($acct in $accounts) {
                 $r = Invoke-WebRequest -Uri "$url/api/documents/$rel" -Method Put `
                         -Headers $headers -Body $body -ContentType $CONTENT_TYPES[$ext] `
                         -UseBasicParsing -ErrorAction Stop
-                $reported = ($r.Content | ConvertFrom-Json).bytes
+                $reply    = $r.Content | ConvertFrom-Json
+                $reported = $reply.bytes
                 if ($reported -ne $file.Length) {
                     Write-Host ("  WARN  {0} - stored {1:N0} bytes, sent {2:N0}" -f $rel, $reported, $file.Length)
                 }
                 Write-Host ("  ok    {0,-46} {1,9:N0} bytes" -f $rel, $file.Length)
+                # Only a resume .docx is answered with `words`: what the server
+                # extracted, so a poor extraction shows here rather than overnight.
+                if ($reply.words) { Write-Host "        $($file.Name) - $($reply.words) words read" }
                 $uploaded++; $bytesSent += $file.Length
             } catch {
                 $status = $null
                 if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
-                Write-Host "  FAIL  $rel (HTTP $status) - $($_.Exception.Message)"
+                # PS 5.1 has already read the response body by the time it throws,
+                # so the server's reason is only in ErrorDetails.
+                $reason = $_.Exception.Message
+                $errBody = if ($_.ErrorDetails) { $_.ErrorDetails.Message } else { "" }
+                if ($errBody) {
+                    $reason = $errBody
+                    try { $parsed = $errBody | ConvertFrom-Json; if ($parsed.error) { $reason = $parsed.error } } catch { }
+                }
+                Write-Host "  FAIL  $rel (HTTP $status) - $reason"
                 $failed++
             }
         }
