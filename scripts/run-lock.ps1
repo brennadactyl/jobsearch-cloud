@@ -39,7 +39,7 @@ $script:runLockWaitedSeconds = 0
 <#
 Waits for the machine, and takes it. Returns $true when this run holds the lock
 and $false when it gave up waiting - the caller decides what giving up means,
-since a search records a failed run and the onboarding build tells a person.
+since a search records a failed run and the fill logs it and fails its task.
 
 `Log` is expected to exist in the caller: these lines belong in that run's log,
 next to what it was doing.
