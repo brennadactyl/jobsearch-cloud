@@ -26,6 +26,7 @@ reference docs above are the authority.
 - [`react-adoption-plan.md`](react-adoption-plan.md) — the tracker page rebuilt in React, beside the one that ships
 - [`rotation-always-on-plan.md`](rotation-always-on-plan.md) — every search rotates through its companies
 - [`one-company-list-plan.md`](one-company-list-plan.md) — one global company list that every search indexes into
+- [`token-split-plan.md`](token-split-plan.md) — a machine’s token can report findings, not act as the person
 - [`account-settings-plan.md`](account-settings-plan.md) — a person edits their own search where the password dialog already is
 - [`instant-setup-plan.md`](instant-setup-plan.md) — the tracker exists the moment setup is sent; the night writes only the prose
 - [`overview-collapsible-plan.md`](overview-collapsible-plan.md) — Momentum moves to the bottom; every Overview section and chart folds, remembered per browser
