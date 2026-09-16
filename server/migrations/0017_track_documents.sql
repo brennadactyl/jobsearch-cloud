@@ -1,0 +1,28 @@
+-- tracks.documents: the documents one search reads, so a run downloads those
+-- and not everything its person has.
+--
+-- A run fetched every document in its account before starting. For a person
+-- with one search that is about right; for a person with two it handed each
+-- search the other's tracking doc, every other resume, and any reference file
+-- in the account, whether that search's config mentioned it or not.
+--
+-- The files a search reads were named only inside `resume_line`, which is prose
+-- the prompt reads verbatim ("Read resumes/X.txt; the .docx is the same
+-- resume"). Choosing files by parsing that prose would be guessing, so the list
+-- is its own field:
+--
+--   documents  JSON array of document paths this search reads besides its own
+--              tracking doc, which `doc_file` already names - its resume, and
+--              any reference file. '[]' until written.
+--
+-- GET /api/documents?search=<key> serves a track's `doc_file` plus this list,
+-- and refuses a track whose list is empty (routes/documents.js): a search with
+-- no resume is a hollow search, and a refusal is louder than a run that quietly
+-- reads nothing. So every existing track needs its list written before its next
+-- run. A tab filled by another search (`fed_by`) is served that search's list.
+--
+-- A download list, not a permission: every search in an account uses the same
+-- token, so a run can still ask for any of its person's documents by path. What
+-- one person's token can never reach is another person's documents (src/r2.js).
+
+ALTER TABLE tracks ADD COLUMN documents TEXT NOT NULL DEFAULT '[]';

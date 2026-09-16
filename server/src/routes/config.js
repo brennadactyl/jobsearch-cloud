@@ -7,7 +7,7 @@
 
 import { WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
 import { json, readJson } from "../http.js";
-import { unknownTrack } from "../validate.js";
+import { trackDocumentsError, unknownTrack } from "../validate.js";
 
 /**
  * GET /api/config - requires a Bearer token -> `{ tracks[], settings }`.
@@ -60,12 +60,18 @@ export async function handleWriteUp({ request, db }) {
         400
       );
     }
-    if (sent !== "search" && typeof body[sent] !== "string") {
+    // `documents` is the one list among the run's fields; everything else is
+    // prose the prompt reads.
+    if (sent === "documents") {
+      const problem = trackDocumentsError(body.documents);
+      if (problem) return json({ error: problem, field: "documents" }, 400);
+    } else if (sent !== "search" && typeof body[sent] !== "string") {
       return json({ error: `${sent} must be text`, field: sent }, 400);
     }
   }
 
-  const written = await db.writeUpTrack(key, body);
+  const fields = "documents" in body ? { ...body, documents: JSON.stringify([...new Set(body.documents)]) } : body;
+  const written = await db.writeUpTrack(key, fields);
   if (written === null) return unknownTrack(key);
   return json({ written });
 }
@@ -98,6 +104,10 @@ export async function handleSetConfig({ request, db }) {
     for (const t of valid) {
       if (t.fed_by && (t.fed_by === t.key || !keys.has(t.fed_by))) {
         return json({ error: `track "${t.key}" is fed_by "${t.fed_by}", which is not another track in this list` }, 400);
+      }
+      if (t.documents !== undefined) {
+        const problem = trackDocumentsError(t.documents);
+        if (problem) return json({ error: `track "${t.key}": ${problem}`, field: "documents" }, 400);
       }
     }
     // Each track carries its display fields and, optionally, its search

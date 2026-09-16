@@ -311,10 +311,14 @@ if (-not $promptBody) {
     Stop-Run "the tracker returned an empty prompt for $Task" "The tracker returned an empty prompt for '$Task'."
 }
 
-# ---- Materialize this person's documents into a throwaway directory. -------
+# ---- Materialize this search's documents into a throwaway directory. -------
 #
 # Wiped and refilled every run, so the search reads what the tracker holds and
 # a run's scratch never accumulates in the durable folder.
+#
+# Only this search's documents: its tracking doc and the files its track lists
+# (GET /api/documents?search=). A person with two searches keeps each one's
+# resumes and tracking doc out of the other's run.
 #
 # $manifest maps path -> the etag the file arrived with and its SHA-256. The
 # write-back sends any docs\ file whose hash changed, conditional on that etag.
@@ -331,8 +335,8 @@ if ($UseLocalFiles) {
 } else {
     $index = $null
     try {
-        $index = Invoke-WithRetry "GET /api/documents" {
-            Invoke-RestMethod -Uri "$trackerUrl/api/documents" -Headers $headers -ErrorAction Stop
+        $index = Invoke-WithRetry "GET /api/documents?search=$Task" {
+            Invoke-RestMethod -Uri "$trackerUrl/api/documents?search=$([uri]::EscapeDataString($Task))" -Headers $headers -ErrorAction Stop
         }
     } catch {
         $status = Get-HttpStatus $_
@@ -341,11 +345,21 @@ if ($UseLocalFiles) {
             # server/README.md): run against whatever is on disk.
             Log "documents:        not configured on this deployment - running against $workDir as-is"
         } else {
-            Stop-Run "couldn't list documents ($status): $($_.Exception.Message)" "Couldn't list documents for '$Task' ($status). The search needs its baseline doc and resume."
+            # The tracker's reason - a track with no documents listed is a 409
+            # that says so - is in the response body, which Windows PowerShell
+            # keeps in ErrorDetails.
+            $why = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+            Stop-Run "couldn't list this search's documents ($status): $why" "Couldn't list documents for '$Task' ($status): $why"
         }
     }
 
     if ($index) {
+        # A document the track lists that isn't in the tracker. Refused like a
+        # failed download: the search would run without a file it was set up to
+        # read, most likely its resume.
+        if ($index.missing -and $index.missing.Count -gt 0) {
+            Stop-Run "this search lists documents the tracker doesn't have: $($index.missing -join ', ')" "Search '$Task' lists documents that aren't in the tracker: $($index.missing -join ', '). Upload them, or correct the track's documents list. Refusing to search against a partial profile."
+        }
         # Zero documents is refused: with no baseline doc and no resume the
         # search screens every posting against nothing and reports success,
         # which looks like a quiet night. Usually the import has not been run.
