@@ -151,6 +151,11 @@ foreach ($acct in $accounts) {
                 Write-Host "  --    $rel - read from $($file.BaseName).docx, which writes it"
                 continue
             }
+            if ($ext -eq ".doc") {
+                # Word 97-2003 is binary, with no fixed way to read its text, so the server refuses it too.
+                Write-Host "  SKIP  $rel - an older Word file: save it as .docx or PDF and import that"
+                $skipped++; continue
+            }
             if (-not $CONTENT_TYPES.ContainsKey($ext)) {
                 Write-Host "  SKIP  $rel - no content type for '$ext' (known: $($CONTENT_TYPES.Keys -join ', '))"
                 $skipped++; continue
