@@ -3,7 +3,7 @@
  *
  * Sending builds them, so this is the last thing they see before their own
  * tracker: the send is write-once and there is no way back here
- * (docs/instant-setup-plan.md). What the answers can't settle - the prose the
+ * (docs/onboarding.md#why-it-is-split-this-way). What the answers can't settle - the prose the
  * daily prompt reads - the overnight run writes.
  */
 import { useId, useRef, useState, type ReactNode } from "react";

@@ -176,7 +176,7 @@ export async function handleDeleteLeads({ request, db }) {
       continue;
     }
     // 'hand': a person clearing their own board isn't a run's work, so the
-    // screened row isn't counted as one (migrations/0007_screened_added_by.sql).
+    // screened row isn't counted as one (docs/glossary.md#postings).
     if (await db.deleteLeadAndScreen(lead, reason, null, "hand")) removed++;
   }
 

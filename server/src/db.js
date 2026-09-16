@@ -74,7 +74,7 @@
  * @property {string} dateWithdrawn
  * @property {string} autofill - '' | 'filled' | 'failed'; whether the nightly fill has read
  *   this row's posting. Server bookkeeping: no route takes it from a caller. See
- *   migrations/0009_application_autofill.sql.
+ *   docs/glossary.md#applications-and-the-fill.
  * @property {string} autofill_note - why a read failed or came back partial; '' otherwise.
  *   Shown on the row
  */
@@ -90,7 +90,7 @@
  * @property {string} location
  * @property {string} reason
  * @property {string} date - YYYY-MM-DD, date screened
- * @property {string} added_by - 'run', 'hand', or '' (migrations/0007_screened_added_by.sql)
+ * @property {string} added_by - 'run', 'hand', or '' (docs/glossary.md#postings)
  * @property {string} found - YYYY-MM-DD the removed lead was found, or '' (migrations/0014_screened_found.sql)
  */
 
@@ -188,7 +188,7 @@ export const TRACK_CONFIG_FIELDS = [
 
 /**
  * The track fields the overnight run owns, and the only ones POST /api/writeup
- * can write (docs/instant-setup-plan.md).
+ * can write (docs/onboarding.md#why-it-is-split-this-way).
  *
  * The complement is what the setup form owns - `label`, `sort_order` and the
  * settings - and nothing is in both lists. `fed_by` is in neither: pairing tabs
@@ -407,7 +407,7 @@ export class Db {
   /**
    * The setup form's whole effect, in one batch, which D1 runs as one
    * transaction: the answers, the settings the form owns, and one track per
-   * role block (docs/instant-setup-plan.md).
+   * role block (docs/onboarding.md#why-it-is-split-this-way).
    *
    * One transaction because the page decides between the form and the tracker
    * by whether an intake exists. A state where the answers are stored and the
@@ -472,7 +472,7 @@ export class Db {
 
   /**
    * Write the overnight run's half of one track: the prose and the schedule,
-   * never the form's fields (docs/instant-setup-plan.md).
+   * never the form's fields (docs/onboarding.md#why-it-is-split-this-way).
    *
    * The UPDATE is built from WRITEUP_FIELDS, not from the caller's keys, so
    * `label`, `sort_order` and the settings the form owns cannot be reached
@@ -547,7 +547,7 @@ export class Db {
    *
    * Not user-scoped, by design: the caller supplies names and gets back facts
    * about websites, nothing derived from any user's rows. See
-   * migrations/0010_company_fetch.sql and 0011_one_company_list.sql.
+   * docs/glossary.md#companies-and-the-rotation.
    *
    * A retracted row comes back with its fields blanked and only the retraction
    * visible, so a reader cannot use a withdrawn fact by forgetting to check one
@@ -702,7 +702,7 @@ export class Db {
    * companies it had already passed.
    *
    * Not scoped to this.userId: the list is shared by every account, by design -
-   * see 0011_one_company_list.sql.
+   * see docs/glossary.md#companies-and-the-rotation.
    * @param {{company: string, position: number}[]} items
    * @returns {Promise<number>} how many joined
    */
@@ -722,7 +722,7 @@ export class Db {
   /**
    * The list in log order, with this search's own record of each company.
    *
-   * The list is global (company_fetch, 0011_one_company_list.sql); what this
+   * The list is global (company_fetch, docs/glossary.md#companies-and-the-rotation); what this
    * search did with each company - when it last tried, what it noted - is its
    * own, in company_sweeps. Ordered by `position`, a fixed place per company,
    * never by date. routes/coverage.js picks a run's slice from the cursor.
@@ -1099,7 +1099,7 @@ export class Db {
    *
    * Only `added_by = 'run'` screened rows count, so a person clearing postings
    * off their board isn't reported as the search's work
-   * (migrations/0007_screened_added_by.sql).
+   * (docs/glossary.md#postings).
    *
    * Each key counts only its own rows; a multi-tab run calls this once per tab.
    *
@@ -1197,7 +1197,7 @@ export class Db {
    *
    * A row is already known if its canonical URL (./url.js) matches a lead or a
    * screened row anywhere in the same feed group: the track that runs a search
-   * plus the tabs it fills (`fed_by`, migrations/0003_branched_tracks.sql).
+   * plus the tabs it fills (`fed_by`, docs/glossary.md#searches-and-tracks).
    * Scoped to one track, a posting filed under one tab and sorted into a
    * sibling tab the next night would read as new and be added twice.
    *
@@ -1625,7 +1625,7 @@ export class Db {
   /**
    * Which applications a nightly run should read, as `{id, link}` only: the
    * result lands in the run's context. Derived from each row's own state;
-   * nothing is queued. See migrations/0009_application_autofill.sql.
+   * nothing is queued. See docs/glossary.md#applications-and-the-fill.
    *
    * `autofill = ''` limits each row to one read, so an unreadable posting
    * doesn't return nightly. Only a blank company, title or location qualifies
@@ -1714,7 +1714,7 @@ export class Db {
 
   /**
    * Records that a run opened the link and couldn't read it. Final: a failed
-   * read isn't retried (migrations/0009_application_autofill.sql).
+   * read isn't retried (docs/glossary.md#applications-and-the-fill).
    *
    * The note is shown on the row; without it a failed row looks like one not
    * yet read. Stored as the run wrote it.
@@ -1783,7 +1783,7 @@ export class Db {
    * @param {string|null} date - YYYY-MM-DD the posting was confirmed dead (the run's own local date), or null for today
    * @param {'run'|'hand'} addedBy - 'run' for a search reporting a posting gone,
    *   'hand' for a person clearing it off their board. Required, not defaulted:
-   *   countRunActivity counts only 'run' (migrations/0007_screened_added_by.sql).
+   *   countRunActivity counts only 'run' (docs/glossary.md#postings).
    * @returns {Promise<boolean>} true if the lead row was actually deleted
    */
   async deleteLeadAndScreen(lead, reason, date, addedBy) {

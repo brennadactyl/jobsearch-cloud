@@ -94,7 +94,7 @@ export async function handleUpsertUser({ request, env }) {
   if (password.length < 12) return json({ error: "password must be at least 12 characters" }, 400);
 
   // `demo` marks an account whose data is invented, which keeps it off the
-  // company list every account shares (migrations/0012_demo_account.sql).
+  // company list every account shares (demo account, docs/glossary.md#accounts).
   // Anything but a boolean means "not saying", and leaves an existing account
   // as it was.
   const demo = typeof body.demo === "boolean" ? body.demo : undefined;

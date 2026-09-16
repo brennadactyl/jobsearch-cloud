@@ -127,7 +127,7 @@ export async function handleGetDedup({ db, params, url }) {
  * unknown track (nothing inserted).
  *
  * Records postings the search looked at and decided NOT to add as a lead (see
- * migrations/0001_schema.sql). Deduped like handleAddLeads, but no
+ * docs/glossary.md#postings). Deduped like handleAddLeads, but no
  * touchUpdated(): the page doesn't show screened rows, so they shouldn't bump
  * its "last updated" banner.
  *
@@ -148,7 +148,7 @@ export async function handleAddScreened({ request, db }) {
 
   // A screened row belongs to the search that did the screening, not to the
   // tab the posting would have been filed under. For a branched search
-  // (`fed_by`, migrations/0003_branched_tracks.sql) nothing displays screened
+  // (`fed_by`, docs/glossary.md#searches-and-tracks) nothing displays screened
   // rows per tab and step 1b reads them back as one set, so they are filed
   // under the feeding track below, whatever key the run sent.
   const { tracks, settings } = await db.getTracksAndSettings();
@@ -183,7 +183,7 @@ export async function handleAddScreened({ request, db }) {
 
   // One hop, not a walk to a root: a fed track is a tab, and the track that
   // fills it runs its own search, so `fed_by` chains have no meaning in the
-  // model (see migrations/0003_branched_tracks.sql) and none exist. Resolving
+  // model (see docs/glossary.md#searches-and-tracks) and none exist. Resolving
   // repeatedly would only be guessing at what a chain ought to mean.
   const fedBy = new Map(tracks.map((t) => [t.key, t.fed_by || ""]));
   const filed = allowed.map((item) => ({ ...item, search: fedBy.get(item.search) || item.search }));
