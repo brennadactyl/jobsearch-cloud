@@ -100,9 +100,10 @@ export default function Shell({
                 to={t.path}
                 className="tab"
                 role="tab"
-                aria-selected={
-                  t.path === "/" ? location.pathname === "/" : location.pathname.startsWith(t.path)
-                }
+                // Exactly its own path. Every tab page sits at one path with no
+                // pages under it, and a prefix test would light two track tabs
+                // whose keys share a start ("staff", "staff-principal").
+                aria-selected={location.pathname === t.path}
               >
                 {t.label}
                 {t.warn && <i className={`tabwarn ${t.warn.cls}`} title={t.warn.title} />}
