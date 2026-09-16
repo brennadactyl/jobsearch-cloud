@@ -46,6 +46,10 @@ search is using.
 
 - The accepted resume formats become `.pdf`, `.docx`, `.txt` and `.md`, from the
   one constant the setup form and the account panel share.
+- **A resume uploads the moment it is attached**, in the setup form as in the
+  account panel, so a refusal or a word count arrives while the person is still
+  on the form. Removing an attached file before sending deletes it from storage.
+  A `.doc` is refused on the page when picked, before any upload.
 - After a Word upload, the file shows its word count, e.g. `Brenna_Resume.docx ·
   612 words read`, so a bad extraction is visible, not discovered overnight.
 - **`.doc` (Word 97-2003) is still refused**, with "Save it as .docx or PDF and
