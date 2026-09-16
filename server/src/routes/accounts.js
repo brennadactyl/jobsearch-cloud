@@ -15,7 +15,6 @@
  */
 
 import {
-  bearer,
   countAccountRows,
   createSession,
   deleteAccount,
@@ -27,7 +26,7 @@ import {
   upsertUser,
   verifyPassword,
 } from "../auth.js";
-import { json, readJson, unauthorized } from "../http.js";
+import { json, readJson } from "../http.js";
 import { Docs } from "../r2.js";
 
 /**
@@ -80,9 +79,6 @@ export async function handleLogout({ env, token }) {
  * a forgotten password, which /api/password can't do without the current one.
  */
 export async function handleUpsertUser({ request, env }) {
-  const admin = env.ADMIN_TOKEN;
-  if (!admin || bearer(request) !== admin) return unauthorized();
-
   const body = await readJson(request);
   if (body instanceof Response) return body;
 

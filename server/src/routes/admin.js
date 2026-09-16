@@ -8,9 +8,9 @@
  * never queries d1 directly.
  */
 
-import { bearer, getUserByName } from "../auth.js";
+import { getUserByName } from "../auth.js";
 import { Db } from "../db.js";
-import { json, readJson, unauthorized } from "../http.js";
+import { json, readJson } from "../http.js";
 
 /**
  * POST /api/purge - requires the ADMIN_TOKEN secret as Bearer. Body
@@ -33,9 +33,6 @@ import { json, readJson, unauthorized } from "../http.js";
  * deleted and a typo naming a live search is an error, not a delete.
  */
 export async function handlePurgeSearch({ request, env }) {
-  const admin = env.ADMIN_TOKEN;
-  if (!admin || bearer(request) !== admin) return unauthorized();
-
   const body = await readJson(request);
   if (body instanceof Response) return body;
 

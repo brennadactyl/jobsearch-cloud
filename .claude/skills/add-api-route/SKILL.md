@@ -17,22 +17,22 @@ Read `server/README.md`'s "Code layout" section and the header comment on
 `server/src/routes/index.js` holds three arrays, and the split is the whole
 access-control story. `server/src/index.js` matches them in this order:
 
-- `PUBLIC_ROUTES` runs before anyone is known. **Keep it short**: each entry
-  is justified in the comment above the array - exchanging a password for a
-  token, checking an invite and signing up with it, and the two older admin
-  routes (provisioning a user, purging a retired search) that check
-  `ADMIN_TOKEN` inside the handler. A new entry needs its own justification
-  there.
-- `ADMIN_ROUTES` requires `ADMIN_TOKEN`, checked once by the router before any
-  of them runs, so a session token is refused whoever it belongs to. A new
-  operator route goes here, not in `PUBLIC_ROUTES`. These get no `ctx.db`:
-  they name their subject in the body or path.
+- `PUBLIC_ROUTES` runs before anyone is known: exchanging a password for a
+  token, checking an invite, and signing up with one. **Keep it that short.** A
+  new entry needs its justification in the comment above the array, and no
+  entry takes `ADMIN_TOKEN`.
+- `ADMIN_ROUTES` requires the deployment's `ADMIN_TOKEN`, checked once by the
+  router for the whole list before any handler runs, so a session token is
+  refused whoever it belongs to and a handler here never checks it. Operator
+  routes go here: provisioning and deleting accounts, purging a search,
+  invites, the setup queue, minting search tokens. These get no `ctx.db`: they
+  name the account they act on in the body or path.
 - `SESSION_ROUTES` is everything else. By the time one of these runs,
   `ctx.user` is the person the bearer token resolved to and `ctx.db` is a `Db`
   that can only see their rows.
 
-A route not in `PUBLIC_ROUTES` is authenticated by default; never add a
-per-route auth flag.
+A route not in `PUBLIC_ROUTES` or `ADMIN_ROUTES` needs a session by default;
+never add a per-route auth flag or check a token inside a handler.
 
 ## 2. Write the handler
 
