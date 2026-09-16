@@ -2519,12 +2519,12 @@ check("logs require a session",
   (await req("GET", "/api/logs/LOGS")).status === 401 &&
   (await req("PUT", `/api/logs/LOGS/${earlier}`, { raw: "x", type: "text/plain" })).status === 401);
 
-// Every search downloads every document in its account before it starts. A log
-// that appeared there would be pulled down by every night after it. A real
-// document is put first, so an empty list can't pass for a correct one.
+// A log is not a document: it must not appear in the list the backup copies and
+// the documents routes edit. A real document is put first, so an empty list
+// can't pass for a correct one.
 await req("PUT", `/api/documents/docs/tracked_LOGS_${logRun}_postings.md`, { token: logA.token, raw: "# Baseline", type: "text/markdown" });
 const logDocs = (await req("GET", "/api/documents", { token: logA.token })).json.documents || [];
-check("logs never appear among the documents a run downloads",
+check("logs never appear among a person's documents",
   logDocs.length === 1 && logDocs[0].path === `docs/tracked_LOGS_${logRun}_postings.md`,
   JSON.stringify(logDocs.map((d) => d.path)));
 

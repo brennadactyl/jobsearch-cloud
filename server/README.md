@@ -478,9 +478,9 @@ one run wrote, as its last act, whether the run succeeded or failed; a failed
 upload is a warning in the local log and never changes the run's result.
 
 Stored in the same R2 bucket as documents but outside their prefix, at
-`logs/<user-id>/<track>/<started>.log` (`src/r2.js`, `RunLogs`). Every search
-downloads every document in its account before it starts, so a log among the
-documents would be pulled down by every night after it. And a bucket lifecycle
+`logs/<user-id>/<track>/<started>.log` (`src/r2.js`, `RunLogs`). Everything under
+a person's own prefix is a document - listed, backed up and editable through the
+document routes - and a log is none of those. And a bucket lifecycle
 rule matches a key from its start, so one rule on `logs/` expires them for every
 account - see "Keeping 30 days of run logs" below. Deleting an account deletes
 its logs too.

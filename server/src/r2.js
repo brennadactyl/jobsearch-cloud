@@ -183,9 +183,10 @@ async function deleteUnder(bucket, prefix) {
  *
  * In the same bucket as documents but outside their prefix, at
  * `logs/<user-id>/<track>/<started>.log`, for two reasons:
- * - Every search downloads every document in its account before it starts
- *   (scripts/run-search.ps1). Logs under `<user-id>/` would join that list, and
- *   each night would pull down every night before it.
+ * - Everything under `<user-id>/` is a document: listed by GET /api/documents,
+ *   copied by every backup, and editable through the documents routes. A log is
+ *   none of those, and a month of them would bury a person's resumes in their
+ *   own document list.
  * - One bucket rule on the `logs/` prefix expires them for every account after
  *   30 days, the same window the backups keep (README.md, "Backups"). A rule
  *   can only match from the start of a key, so logs have to start with `logs/`.
