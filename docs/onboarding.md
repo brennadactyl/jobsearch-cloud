@@ -95,10 +95,16 @@ attempts: a night the machine was off still spends one of the three days.
 `done` is final - `POST /api/intake/complete` refuses to change it.
 
 The tracker's notice follows the status (`SetupNotice` in `client/src/App.tsx`):
-`pending` promises tonight's run, `failed` shows the run's note. A `pending`
-intake whose `sent_at` is older than the account's `stale_run_hours`
-(`setupOverdue`) stops promising tonight and says the run may not have
-happened, since repeating the promise would renew it every day it stays false.
+
+- `pending` promises tonight's run. Once `sent_at` is older than the account's
+  `stale_run_hours` (`setupOverdue`), it stops promising tonight and says the
+  run may not have happened, since repeating the promise would renew it every
+  day it stays false.
+- `failed` shows the run's note. Once `GET /api/intake`'s `retries_end_at` has
+  passed (`retriesEnded`), it says the run has stopped trying and to ask
+  whoever invited them, because the stored note can still promise another
+  night. The server sends the cutoff so the page never holds its own copy of
+  the retry window.
 
 ## Slots
 
