@@ -11,6 +11,11 @@
  * What one search did with each company - when it last tried, what it noted,
  * where its cursor is - is that search's own, and stays on Db
  * (getCoverage, recordSweeps, getSweepCursor, setSweepCursor).
+ *
+ * addCompanies and upsertCompanyFetch change what every account's searches are
+ * served, so a caller refuses a demo account before either write, as
+ * routes/coverage.js does (demo account, docs/glossary.md#accounts): a demo's
+ * companies are invented.
  */
 
 import { ID_CHUNK } from "./db.js";

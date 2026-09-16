@@ -1,11 +1,15 @@
 /**
  * The worker's entry point: the CORS preflight, resolving who is calling,
- * building the `Db`, `Docs` and `RunLogs` scoped to them, and dispatching to the route
- * table in ./routes/index.js.
+ * building the `Db`, `Docs` and `RunLogs` scoped to them and the shared
+ * `CompanyList`, and dispatching to the route table in ./routes/index.js.
  *
  * Access control is that scoped construction (see ./db.js): a handler reaches
- * a user's data only through the `Db` and `Docs` it is handed. Never hand a
- * handler an unscoped binding in their place.
+ * a user's data only through the `Db`, `Docs` and `RunLogs` it is handed.
+ * Never hand a handler an unscoped binding in their place.
+ *
+ * `CompanyList` is the one store a handler gets unscoped, on purpose: no row in
+ * it belongs to anyone (see ./companies.js), so there is nothing to scope it
+ * to. It stands beside the scoped stores, never in place of one.
  */
 
 import { bearer, getSessionUser, isAdminRequest } from "./auth.js";
