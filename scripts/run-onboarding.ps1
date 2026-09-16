@@ -1,0 +1,797 @@
+<#
+.SYNOPSIS
+  Builds a search for everyone who asked for one on the tracker page - one run
+  for the whole machine, nightly, before the night's searches.
+
+.DESCRIPTION
+  The last step of self-service onboarding, and the one nobody watches. Someone
+  opens an invite link, creates their own account and fills in the setup form
+  (docs/onboarding-plan.md). This turns their answers into a working daily
+  search: their folder, their credential, their config, their track docs and
+  their scheduled tasks.
+
+  ---- What is mechanical, and what is not.
+
+  Everything that either works or throws happens here: minting each person's
+  search token, writing tracker.json, downloading their resume, picking a
+  schedule slot nothing else on this machine uses, posting the config, and
+  registering the tasks.
+
+  What goes to a model is the part that needs judgement - reading a resume,
+  turning "senior backend, Seattle or remote" into the prose the daily prompt
+  reads verbatim, writing the track doc. That turn runs confined: a staged
+  folder holding the person's answers, their readable resume and the doc
+  template, with tools that can only read and write inside it. It gets no
+  token, no shell and no network, and what it writes is data this script
+  validates before any of it reaches the tracker. A model that writes nonsense
+  costs the person a night; it cannot write to their account.
+
+  ---- Done and failed are read from the tracker, not from the model.
+
+  A person is done when the tracker says their tracks and their docs exist and
+  this machine has their tasks. Anyone still pending when their turn ends is
+  marked failed with a note written for them, so their own page stops saying
+  their tracker is being built and says what happened instead. A failed setup
+  stays in the queue, so the next night tries again - and when the fix is
+  theirs (a resume nothing headless can read), the note says so.
+
+  Logs to <DataDir>\logs\onboarding.log - the machine's log, like the
+  applications fill, because this run is nobody's in particular either.
+
+.PARAMETER DataDir
+  The private data folder, one folder per person. Defaults to
+  JOB_SEARCH_DATA_DIR, then a "private" folder beside this repo.
+
+.PARAMETER User
+  Build only this account id, of those waiting. For running it by hand; the
+  scheduled task passes none.
+
+.PARAMETER WhatIfOnly
+  Print who is waiting and the slots they would get, then stop. Nothing is
+  minted, written or posted. Not -WhatIf: that name is PowerShell's own and
+  behaves differently.
+
+.EXAMPLE
+  .\run-onboarding.ps1
+  .\run-onboarding.ps1 -WhatIfOnly
+  .\run-onboarding.ps1 -User f6d1e62d-e325-4c52-908a-91bb5850c776
+#>
+param(
+    [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
+
+    [string]$User,
+
+    [switch]$WhatIfOnly
+)
+
+$ErrorActionPreference = "Stop"
+
+if (-not (Test-Path $DataDir)) {
+    Write-Error "Data dir not found: $DataDir`nSet -DataDir, or the JOB_SEARCH_DATA_DIR environment variable, to your private job-search data folder."
+    exit 1
+}
+$DataDir = (Resolve-Path $DataDir).Path
+
+# This run stages a folder per person at
+# <DataDir>\<36-char id>\.onboarding\out\docs\tracked_<key>_postings.md, which
+# is about 125 characters past the data dir. Past Windows' 260-character limit
+# the model turn still writes the file - Node is long-path aware - and
+# PowerShell then cannot see it, so the run reports a doc the model wrote as
+# missing. Refused up front, where the fix is one short path.
+if ($DataDir.Length -gt 120) {
+    Write-Error "Data dir path is too long ($($DataDir.Length) characters): $DataDir`nA setup stages files about 125 characters deeper, past Windows' 260-character limit. Use a shorter folder."
+    exit 1
+}
+
+$logDir = Join-Path $DataDir "logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$logFile = Join-Path $logDir "onboarding.log"
+
+# -Encoding utf8 on every writer to this log, for the reason run-search.ps1
+# gives: 5.1's Out-File defaults to UTF-16LE, and a log written in two encodings
+# reads as binary and decodes to a stale tail.
+function Log($msg) {
+    "$(Get-Date -Format o) - $msg" | Out-File -Append -Encoding utf8 -FilePath $logFile
+}
+
+function Write-Utf8($path, $text) {
+    [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+Log "===== starting onboarding run ====="
+Log "data dir:         $DataDir"
+
+# ---- Credentials. ----------------------------------------------------------
+#
+# The URL and the admin token are read from one file, together. Taking them from
+# different places is how an operator credential gets aimed at the wrong
+# deployment, and the error that produces ("check it matches ADMIN_TOKEN")
+# describes neither of them.
+$deployFile = Join-Path $DataDir "deployment.json"
+if (-not (Test-Path $deployFile)) {
+    Log "ERROR: no $deployFile - this run reads the setup queue, which is admin-only"
+    Write-Error @"
+No $deployFile. This run reads the setup queue, which spans every account and so
+needs the deployment's ADMIN_TOKEN:
+
+  { "url": "https://<your worker>", "admin_token": "<the ADMIN_TOKEN secret>" }
+
+That file lives in your private data folder, which is never committed.
+"@
+    exit 1
+}
+try {
+    $deployment = Get-Content -Raw -Path $deployFile | ConvertFrom-Json
+} catch {
+    Log "ERROR: $deployFile is not valid JSON"
+    Write-Error "$deployFile is not valid JSON."
+    exit 1
+}
+$TrackerUrl = [string]$deployment.url
+$AdminToken = [string]$deployment.admin_token
+if (-not $TrackerUrl -or -not $AdminToken) {
+    Log "ERROR: $deployFile needs both a url and an admin_token"
+    Write-Error "$deployFile needs both a `"url`" and an `"admin_token`"."
+    exit 1
+}
+$TrackerUrl = $TrackerUrl.TrimEnd("/")
+Log "tracker:          $TrackerUrl"
+
+# Cloudflare refuses some default agents with a 403 whose body is
+# `error code: 1010`, which looks exactly like a refused token. Unattended,
+# that is a misdiagnosis nobody is there to correct.
+$API_USER_AGENT = "job-search-onboarding"
+
+$RetryAttempts = 4
+$RetryBackoff = @(2, 5, 12)
+
+function Get-HttpStatus($err) {
+    $resp = $err.Exception.Response
+    if (-not $resp) { return 0 }
+    try { return [int]$resp.StatusCode } catch { return 0 }
+}
+
+function Test-Transient($status) {
+    if ($status -eq 503) { return $false }
+    return ($status -eq 0 -or $status -eq 429 -or $status -ge 500)
+}
+
+function Invoke-WithRetry($what, $action) {
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            return & $action
+        } catch {
+            $status = Get-HttpStatus $_
+            if ($attempt -ge $RetryAttempts -or -not (Test-Transient $status)) { throw }
+            $wait = $RetryBackoff[[Math]::Min($attempt - 1, $RetryBackoff.Count - 1)]
+            Log "transient failure on $what ($status) - retrying in ${wait}s (attempt $attempt of $RetryAttempts)"
+            Start-Sleep -Seconds $wait
+        }
+    }
+}
+
+# $Token is who the call is: the admin token for the queue, the tokens route and
+# the completion; the person's own for everything that writes their data.
+function Api($Method, $Path, $Token, $Body) {
+    Invoke-WithRetry "$Method $Path" {
+        $req = @{ Uri = "$TrackerUrl$Path"; Method = $Method; TimeoutSec = 60
+                  Headers = @{ Authorization = "Bearer $Token" }
+                  UserAgent = $API_USER_AGENT; ErrorAction = "Stop" }
+        if ($null -ne $Body) {
+            $req.Body = ($Body | ConvertTo-Json -Depth 12 -Compress)
+            $req.ContentType = "application/json; charset=utf-8"
+        }
+        Invoke-RestMethod @req
+    }
+}
+
+# ---- The queue. ------------------------------------------------------------
+try {
+    $queue = @((Api GET "/api/intake/pending" $AdminToken $null).intakes)
+} catch {
+    $status = Get-HttpStatus $_
+    $hint = if ($status -eq 401) { "the admin token was refused - check it matches the ADMIN_TOKEN secret on the worker" }
+            elseif ($status -eq 404) { "this deployment has no setup routes yet - deploy server/ first" }
+            else { $_.Exception.Message }
+    Log "ERROR: couldn't read the setup queue ($status): $hint"
+    Write-Error "Couldn't read the setup queue ($status): $hint"
+    exit 1
+}
+
+if ($User) { $queue = @($queue | Where-Object { $_.user.id -eq $User }) }
+
+if ($queue.Count -eq 0) {
+    # The ordinary result on almost every night: a machine where nobody new
+    # signed up is not a machine with a problem.
+    Log "nobody waiting - nothing to do"
+    Log "===== done ====="
+    exit 0
+}
+Log "waiting:          $($queue.Count) ($(($queue | ForEach-Object { $_.user.name }) -join ', '))"
+
+# ---- A slot in the night. --------------------------------------------------
+#
+# Every search on this machine shares one CLI and one Claude account, so two at
+# once is two fighting. The rule is arithmetic, and it lives here rather than in
+# the model's turn: a model asked to pick a free time has to be told every time
+# already taken anyway.
+#
+# The night is bounded by this run (00:00, up to two hours) and the application
+# fill (06:30). Inside it a new search goes 45 minutes after the latest one
+# already scheduled, on the quarter hour, and never within 45 minutes of the
+# 03:15 backup or of anyone else's run. Past 05:45 there is no room, and the
+# person is told that rather than given a slot that collides.
+$NIGHT_FIRST = 60      # 01:00, after this run's own two-hour window
+$NIGHT_LAST = 345      # 05:45, clear of the fill
+$SPACING = 45
+$GRID = 15
+$BACKUP_AT = 195       # 03:15, scripts/backup-tracker.ps1
+$FILL_AT = 390         # 06:30, scripts/run-fill.ps1
+
+function ConvertTo-Minutes([string]$t) {
+    if ($t -match '^(\d{1,2}):(\d{2})$') { return [int]$Matches[1] * 60 + [int]$Matches[2] }
+    return -1
+}
+
+function ConvertTo-Clock([int]$m) {
+    "{0:00}:{1:00}" -f [math]::Floor($m / 60), ($m % 60)
+}
+
+function Get-NightSlot([int[]]$taken) {
+    $night = @($taken | Where-Object { $_ -ge 0 -and $_ -lt $FILL_AT })
+    $candidate = $NIGHT_FIRST
+    foreach ($t in $night) { if ($t + $SPACING -gt $candidate) { $candidate = $t + $SPACING } }
+    if ($candidate % $GRID) { $candidate += $GRID - ($candidate % $GRID) }
+    while ($candidate -le $NIGHT_LAST) {
+        $clear = $true
+        if ([Math]::Abs($candidate - $BACKUP_AT) -lt $SPACING) { $clear = $false }
+        foreach ($t in $night) { if ([Math]::Abs($candidate - $t) -lt $SPACING) { $clear = $false } }
+        if ($clear) { return $candidate }
+        $candidate += $GRID
+    }
+    return -1
+}
+
+# What is already scheduled, asked of each account rather than of Task
+# Scheduler: the config is what setup-scheduler.ps1 registers from, so it is the
+# list that decides collisions. Anyone in tonight's queue is left out - a retry
+# re-picks their slots from scratch.
+$waiting = @($queue | ForEach-Object { $_.user.id })
+$taken = @()
+foreach ($dir in (Get-ChildItem $DataDir -Directory | Sort-Object Name)) {
+    if ($waiting -contains $dir.Name) { continue }
+    $trackerFile = Join-Path $dir.FullName "tracker.json"
+    if (-not (Test-Path $trackerFile)) { continue }
+    try {
+        $t = Get-Content -Raw -Path $trackerFile | ConvertFrom-Json
+        $cfg = Api GET "/api/config" $t.token $null
+        foreach ($track in $cfg.tracks) {
+            $m = ConvertTo-Minutes ([string]$track.schedule_time)
+            if ($m -ge 0) { $taken += $m }
+        }
+    } catch {
+        # Nothing here can proceed on a guess: an unreadable config is a set of
+        # run times this run cannot see, and a slot handed out on top of one of
+        # them breaks a search that already works.
+        Log "ERROR: couldn't read $($dir.Name)'s schedule - $($_.Exception.Message)"
+        Write-Error "Couldn't read $($dir.Name)'s schedule, so a free slot can't be worked out. Nothing was built."
+        exit 1
+    }
+}
+$taken = @($taken | Sort-Object -Unique)
+Log "slots in use:     $(if ($taken.Count) { ($taken | ForEach-Object { ConvertTo-Clock $_ }) -join ', ' } else { '(none)' })"
+
+if ($WhatIfOnly) {
+    $preview = @($taken)
+    foreach ($item in $queue) {
+        $roles = @($item.answers.roles)
+        $slots = @()
+        foreach ($role in $roles) {
+            $slot = Get-NightSlot $preview
+            if ($slot -lt 0) { $slots += "(no room left)"; continue }
+            $preview += $slot
+            $slots += (ConvertTo-Clock $slot)
+        }
+        Log "--- $($item.user.name) ($($item.user.id)) - $($item.status), sent $($item.sent_at)"
+        Log "      roles: $(($roles | ForEach-Object { $_.name }) -join ', ')"
+        Log "      slots: $($slots -join ', ')"
+    }
+    Log "-WhatIfOnly: nothing was minted, written or posted"
+    Log "===== done ====="
+    Write-Host "Would build $($queue.Count) setup(s). See $logFile."
+    exit 0
+}
+
+# ---- What the model turn needs. --------------------------------------------
+$claude = Get-Command claude -ErrorAction SilentlyContinue
+if (-not $claude) {
+    $fallback = Join-Path $env:APPDATA "npm\claude.cmd"
+    if (Test-Path $fallback) { $claude = $fallback } else {
+        Log "ERROR: the claude CLI is not on PATH or at $fallback - nothing was built"
+        Write-Error "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
+        exit 1
+    }
+}
+$claudePath = if ($claude -is [System.Management.Automation.CommandInfo]) { $claude.Source } else { $claude }
+
+# Pointed at rather than copied: a second copy of the setup procedure in a
+# here-string is how this repo last ended up with docs describing a shape the
+# code had moved on from.
+$skillDir = if ($env:CLAUDE_PLUGIN_ROOT) {
+    Join-Path $env:CLAUDE_PLUGIN_ROOT ".claude\skills\job-search-setup"
+} else {
+    Join-Path (Split-Path -Parent $PSScriptRoot) ".claude\skills\job-search-setup"
+}
+$skillFile = Join-Path $skillDir "SKILL.md"
+$templateFile = Join-Path $skillDir "templates\tracked-postings.template.md"
+foreach ($f in @($skillFile, $templateFile)) {
+    if (-not (Test-Path $f)) {
+        Log "ERROR: setup instructions not found at $f"
+        Write-Error "Couldn't find $f. This run reads the job-search-setup skill from the checkout it lives in."
+        exit 1
+    }
+}
+Log "skill:            $skillDir"
+Log "claude CLI:       $claudePath"
+Log "CLAUDE_CODE_OAUTH_TOKEN set: $([bool]$env:CLAUDE_CODE_OAUTH_TOKEN)"
+
+# One person's turn. Long enough for several roles and a resume; short enough
+# that one stuck turn doesn't eat the night's other setups or the 2-hour task
+# limit.
+$MODEL_TIMEOUT_MINUTES = 25
+
+# Every note below is read by the person on their own page, so each says what
+# they can do, and never what a run was doing when it broke.
+$NOTE_GENERIC = "Setting your search up didn't finish tonight. It will be tried again tomorrow night, and there's nothing you need to do unless this message is still here after that."
+$NOTE_RESUME = "We couldn't read your resume overnight: only .txt and .md files can be read, and no text was pasted. Paste the text of your resume into the setup form and send it again."
+$NOTE_NO_SLOT = "There's no room left in the nightly schedule on the machine that runs these searches, so yours couldn't be added. Let whoever invited you know - this one needs their attention, not yours."
+
+# "Jordan O'Neil" -> "Jordan-O-Neil". The documents route takes word characters,
+# spaces, dots and hyphens, and refuses a name that doesn't start and end with
+# one of them (server/src/validate.js).
+function Get-SafeName([string]$name) {
+    $safe = ($name -replace '[^A-Za-z0-9]+', '-').Trim('-')
+    if (-not $safe) { $safe = "Resume" }
+    return $safe
+}
+
+function Get-DocumentPaths($token) {
+    $listing = Api GET "/api/documents" $token $null
+    return @($listing.documents | ForEach-Object { [string]$_.path })
+}
+
+$KEY_PATTERN = '^[a-z0-9]+(-[a-z0-9]+)*$'
+# Only these reach the config. A model that invents a field, or fills in one
+# this script owns (schedule_time, target_companies, fed_by), has it dropped
+# rather than posted.
+$MODEL_TRACK_FIELDS = @(
+    "label", "full_description", "role_search_line", "search_note", "resume_line",
+    "fit_clause", "fit_disqualifier", "fit_filter_step", "intro_note", "doc_summary"
+)
+$MODEL_SETTING_FIELDS = @("geo_scope_line", "scope_clause", "scope_disqualifier")
+
+# ---- Build each person. ----------------------------------------------------
+$built = @()
+$exitCode = 0
+
+foreach ($item in $queue) {
+    $id = [string]$item.user.id
+    $name = [string]$item.user.name
+    $answers = $item.answers
+    $roles = @($answers.roles)
+    $personNote = $NOTE_GENERIC
+    $done = $false
+
+    Log "--- $name ($id) - $($item.status), sent $($item.sent_at), $($roles.Count) role(s)"
+
+    # Sets the note this person sees before giving up on them. A note is only
+    # worth writing where it tells them something they can act on; everything
+    # else keeps the generic one.
+    function Stop-Person($reason, $note) {
+        if ($note) { $script:personNote = $note }
+        throw $reason
+    }
+
+    try {
+        $userDir = Join-Path $DataDir $id
+        New-Item -ItemType Directory -Force -Path $userDir | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $userDir "logs") | Out-Null
+
+        # ---- Their slots, before anything with a side effect.
+        #
+        # A refusal here costs nothing, while minting replaces the account's
+        # previous search token - which is worth doing only once there is room
+        # to run a search at all.
+        $slots = @()
+        foreach ($role in $roles) {
+            $slot = Get-NightSlot $taken
+            if ($slot -lt 0) { Stop-Person "no free schedule slot left on this machine" $NOTE_NO_SLOT }
+            $taken += $slot
+            $slots += $slot
+        }
+        Log "      slots: $(($slots | ForEach-Object { ConvertTo-Clock $_ }) -join ', ')"
+
+        # ---- Their credential.
+        #
+        # POST /api/tokens kills the account's previous search token, so
+        # tracker.json is written from the response before anything else runs.
+        # A crash between the two leaves a folder whose credential is dead, and
+        # nothing on the tracker says so.
+        $trackerFile = Join-Path $userDir "tracker.json"
+        $personToken = ""
+        if (Test-Path $trackerFile) {
+            try {
+                $stored = Get-Content -Raw -Path $trackerFile | ConvertFrom-Json
+                if ([string]$stored.url -eq $TrackerUrl -and $stored.token) {
+                    $me = Api GET "/api/me" ([string]$stored.token) $null
+                    if ([string]$me.id -eq $id) {
+                        $personToken = [string]$stored.token
+                        Log "      tracker.json already holds a working token - reusing it"
+                    }
+                }
+            } catch {
+                Log "      the token in tracker.json doesn't work any more - minting a new one"
+            }
+        }
+        if (-not $personToken) {
+            $minted = Api POST "/api/tokens" $AdminToken @{ user = $id }
+            Write-Utf8 $trackerFile ((@{ url = $TrackerUrl; token = $minted.token } | ConvertTo-Json))
+            $personToken = [string]$minted.token
+            Log "      minted a search token (replaced $($minted.replaced)) and wrote tracker.json"
+        }
+
+        # ---- The staged folder the model turn sees, and nothing else.
+        $stage = Join-Path $userDir ".onboarding"
+        if (Test-Path $stage) { Remove-Item -Recurse -Force -Path $stage }
+        New-Item -ItemType Directory -Force -Path (Join-Path $stage "resumes") | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $stage "out\docs") | Out-Null
+
+        # Only the formats a headless run can read are staged. A .pdf or .docx
+        # is left in the tracker: staging one would put a file in front of the
+        # model that it cannot read, and the resume it then writes from is the
+        # answers alone, silently.
+        $readable = @()
+        foreach ($path in @($answers.resume_files)) {
+            $path = [string]$path
+            if ($path -notmatch '\.(txt|md)$') { continue }
+            $dest = Join-Path $stage ("resumes\" + [System.IO.Path]::GetFileName($path))
+            Invoke-WithRetry "GET /api/documents/$path" {
+                Invoke-WebRequest -Uri "$TrackerUrl/api/documents/$path" -OutFile $dest `
+                    -Headers @{ Authorization = "Bearer $personToken" } -UserAgent $API_USER_AGENT `
+                    -TimeoutSec 60 -UseBasicParsing -ErrorAction Stop
+            } | Out-Null
+            $readable += $path
+        }
+
+        $resumeText = [string]$answers.resume_text
+        if ($resumeText.Trim()) {
+            # Uploaded as well as staged: the nightly run reads the resume from
+            # the tracker, like every other document, and `resume_line` names
+            # this path.
+            $resumeName = (Get-SafeName $name) + "_Resume.txt"
+            $resumePath = "resumes/$resumeName"
+            Write-Utf8 (Join-Path $stage "resumes\$resumeName") $resumeText
+            Invoke-WithRetry "PUT /api/documents/$resumePath" {
+                Invoke-WebRequest -Uri "$TrackerUrl/api/documents/$resumePath" -Method Put `
+                    -Headers @{ Authorization = "Bearer $personToken" } -UserAgent $API_USER_AGENT `
+                    -ContentType "text/plain; charset=utf-8" `
+                    -Body ([System.Text.Encoding]::UTF8.GetBytes($resumeText)) `
+                    -TimeoutSec 60 -UseBasicParsing -ErrorAction Stop
+            } | Out-Null
+            Log "      wrote their pasted resume to $resumePath"
+        } elseif ($readable.Count -gt 0) {
+            $resumePath = $readable[0]
+            Log "      resume: $resumePath"
+        } else {
+            Stop-Person "no readable resume - only unreadable attachments and no pasted text" $NOTE_RESUME
+        }
+
+        Write-Utf8 (Join-Path $stage "answers.json") ($answers | ConvertTo-Json -Depth 12)
+        Copy-Item -Path $templateFile -Destination (Join-Path $stage "template.md") -Force
+        Copy-Item -Path $skillFile -Destination (Join-Path $stage "setup-skill.md") -Force
+
+        $roleLines = @()
+        for ($i = 0; $i -lt $roles.Count; $i++) {
+            $roleLines += "  $($i + 1). $($roles[$i].name) - titles: $($roles[$i].titles)"
+        }
+
+        # The turn's whole world is this folder: answers.json, the staged
+        # resume, template.md and setup-skill.md, with out\ to write into.
+        $prompt = @"
+IMPORTANT: this is one single non-interactive headless run. The process exits as
+soon as your turn ends and nobody reads anything after that. There is no
+follow-up turn and nobody to ask, so make every call yourself, from what this
+person wrote on the form, and don't end your turn with work outstanding.
+
+You are writing the search config and track docs for one person who filled in
+the setup form on a job tracker. Everything you need is in this folder, and you
+can only read and write inside it - there is no network, no shell and no
+tracker access. A script takes what you write here, checks it and posts it.
+
+Read first:
+  answers.json     - what they typed, verbatim
+  resumes\         - their resume, as text
+  setup-skill.md   - how this deployment's search config is written. Its
+                     "Intake mode" section is written for this run and maps
+                     each answer onto a field; step 4 has the field-by-field
+                     detail of how each one reads.
+  template.md      - the track doc template. Every {{PLACEHOLDER}} must be
+                     replaced; anything left reaches the live doc.
+
+Write exactly these files:
+  out\config.json
+  out\docs\tracked_<key>_postings.md   - one per role, filled from template.md
+
+out\config.json:
+{
+  "tracks": [
+    {
+      "key": "<lowercase-hyphenated slug, unique in this file>",
+      "label": "<the tab label - short>",
+      "full_description": "<what belongs in this tab>",
+      "role_search_line": "<the titles to search for, as it reads mid-sentence>",
+      "search_note": "<optional: how those companies are searched>",
+      "resume_line": "<the whole read-the-resume instruction, naming $resumePath>",
+      "fit_clause": "<optional>",
+      "fit_disqualifier": "<optional>",
+      "fit_filter_step": "<optional: only for a real pivot>",
+      "intro_note": "<optional>",
+      "doc_summary": "<what this track's doc holds>"
+    }
+  ],
+  "settings": {
+    "geo_scope_line": "<a paragraph with worked examples, from their location limits; empty for no limit>",
+    "scope_clause": "<the short version, as it reads mid-sentence>",
+    "scope_disqualifier": "<the mirror of it, for the disqualified list>"
+  },
+  "excluded_companies": ["<one per company they said they'd never work for>"],
+  "named_companies": ["<companies they named as ones they want searched>"]
+}
+
+One track per role in answers.json, in the same order:
+$($roleLines -join "`n")
+
+Rules for this run:
+- No search keeps a company list. The kinds of employer they like go in the
+  track doc's candidate profile, as guidance for discovery; a company they
+  named goes in named_companies, which the script puts on the shared list
+  every search already reads. Never write companies into the config prose or
+  into a doc as a list to sweep.
+- Don't set schedule_time, target_companies, fed_by, doc_file, sort_order,
+  display_title, pronouns or priority_locations. The script owns those.
+- Their pay floor, if they gave one, screens on a *stated* range only: a range
+  topping out below it disqualifies, and no published range does not.
+- Their rule-outs become fit_clause / fit_disqualifier, and only a genuine
+  pivot needs fit_filter_step. Keep a caveat at the level of the gap they
+  described: an over-literal one silently hides work they asked for, and
+  nobody is watching to catch it.
+- Write every field as the finished sentence the search should read. The daily
+  prompt uses them verbatim.
+- If their answers don't say enough for a role, still write the track from what
+  they did say. A thin search they can see and correct beats no search at all.
+"@
+
+        Log "      prompt: $($prompt.Length) chars; running the model turn (timeout ${MODEL_TIMEOUT_MINUTES}m)"
+
+        # --tools narrows the turn to file tools, --allowedTools confines those
+        # to this folder, and --strict-mcp-config keeps any configured MCP
+        # server out of it. Verified 2026-09-15: the turn's tool list comes back
+        # as exactly Edit, Glob, Grep, Read, Write, and a read outside the
+        # working directory is refused. `Edit(./**)` is what permits writes;
+        # `Write(./**)` is not a valid rule.
+        $job = Start-Job -ScriptBlock {
+            param($claudePath, $prompt, $cwd)
+            Set-Location $cwd
+            # The CLI writes UTF-8; without this PowerShell decodes its stdout
+            # with the console's OEM codepage and mangles it before the log.
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            # On stdin, not as an argument: Windows caps a command line at ~32k
+            # characters, and over it the shim fails while the job still
+            # completes.
+            $prompt | & $claudePath -p --tools Read Edit Write Glob Grep `
+                --allowedTools "Read(./**)" "Edit(./**)" --strict-mcp-config 2>&1
+        } -ArgumentList $claudePath, $prompt, $stage
+
+        $turnStart = Get-Date
+        $finished = Wait-Job $job -Timeout ($MODEL_TIMEOUT_MINUTES * 60)
+        if (-not $finished) {
+            Stop-Job $job
+            $output = Receive-Job $job -ErrorAction SilentlyContinue
+            Remove-Job $job -Force
+            if ($output) { $output | Out-String | Out-File -Append -Encoding utf8 -FilePath $logFile }
+            Stop-Person "the model turn was still running after $MODEL_TIMEOUT_MINUTES minutes - stopped" $null
+        }
+        $output = Receive-Job $job -ErrorAction SilentlyContinue
+        $jobState = $job.State
+        Remove-Job $job -Force
+        Log "      ----- claude output -----"
+        if ($output) { $output | Out-String | Out-File -Append -Encoding utf8 -FilePath $logFile }
+        Log "      ----- end output ----- ($([int]((Get-Date) - $turnStart).TotalSeconds)s, job $jobState)"
+
+        # A clean exit is not the same as having done anything: an
+        # unauthenticated CLI prints "Not logged in" and exits 0.
+        $outputText = if ($output) { ($output | Out-String).Trim() } else { "" }
+        if (-not $outputText) {
+            Stop-Person "the CLI produced no output at all - nothing was written" $null
+        } elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error|Failed to authenticate|Invalid bearer token") {
+            Log "      ERROR: the CLI is not authenticated. Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
+            Stop-Person "the CLI is not authenticated - nothing was written" $null
+        } elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
+            Stop-Person "the CLI failed to start - nothing was written" $null
+        }
+
+        # ---- What it wrote, checked before any of it is posted.
+        $configFile = Join-Path $stage "out\config.json"
+        if (-not (Test-Path $configFile)) { Stop-Person "the model turn wrote no out\config.json" $null }
+        try {
+            $draft = Get-Content -Raw -Path $configFile | ConvertFrom-Json
+        } catch {
+            Stop-Person "out\config.json is not valid JSON" $null
+        }
+
+        $draftTracks = @($draft.tracks)
+        if ($draftTracks.Count -ne $roles.Count) {
+            Stop-Person "the model turn wrote $($draftTracks.Count) track(s) for $($roles.Count) role(s)" $null
+        }
+
+        $tracks = @()
+        $seen = @()
+        for ($i = 0; $i -lt $draftTracks.Count; $i++) {
+            $d = $draftTracks[$i]
+            $key = [string]$d.key
+            if ($key -notmatch $KEY_PATTERN -or $key.Length -gt 40) { Stop-Person "track $($i + 1) has an unusable key: '$key'" $null }
+            if ($seen -contains $key) { Stop-Person "two tracks share the key '$key'" $null }
+            $seen += $key
+            foreach ($required in @("label", "role_search_line", "resume_line")) {
+                if (-not ([string]$d.$required).Trim()) { Stop-Person "track '$key' has no $required" $null }
+            }
+            if (([string]$d.resume_line) -notlike "*$resumePath*") {
+                Stop-Person "track '$key' has a resume_line that doesn't name $resumePath" $null
+            }
+
+            $track = @{
+                key = $key
+                sort_order = $i
+                schedule_time = (ConvertTo-Clock $slots[$i])
+                doc_file = "docs/tracked_${key}_postings.md"
+                # Deliberately empty, and not the model's to fill: a list stored
+                # on a track used to be swept every night on top of the run's
+                # own batch of the shared list.
+                target_companies = ""
+                fed_by = ""
+            }
+            foreach ($field in $MODEL_TRACK_FIELDS) { $track[$field] = [string]$d.$field }
+
+            $docFile = Join-Path $stage "out\docs\tracked_${key}_postings.md"
+            if (-not (Test-Path $docFile)) { Stop-Person "track '$key' has no doc at out\docs\tracked_${key}_postings.md" $null }
+            $docText = Get-Content -Raw -Path $docFile
+            if (-not $docText -or $docText.Length -lt 500) { Stop-Person "track '$key' has a doc too short to be the filled template" $null }
+            if ($docText -match '\{\{') { Stop-Person "track '$key' has a doc with an unfilled {{PLACEHOLDER}}" $null }
+
+            $tracks += , @{ Config = $track; DocPath = $track.doc_file; DocText = $docText }
+        }
+
+        # ---- Post it, as them.
+        foreach ($t in $tracks) {
+            Invoke-WithRetry "PUT /api/documents/$($t.DocPath)" {
+                Invoke-WebRequest -Uri "$TrackerUrl/api/documents/$($t.DocPath)" -Method Put `
+                    -Headers @{ Authorization = "Bearer $personToken" } -UserAgent $API_USER_AGENT `
+                    -ContentType "text/markdown; charset=utf-8" `
+                    -Body ([System.Text.Encoding]::UTF8.GetBytes($t.DocText)) `
+                    -TimeoutSec 60 -UseBasicParsing -ErrorAction Stop
+            } | Out-Null
+            Log "      wrote $($t.DocPath) ($($t.DocText.Length) chars)"
+        }
+
+        $pageTitle = [string]$answers.page_title
+        if (-not $pageTitle.Trim()) { $pageTitle = "$name's Job Search" }
+        $pronouns = [string]$answers.pronouns
+        if (-not $pronouns.Trim()) { $pronouns = "they/them" }
+
+        $configBody = @{
+            tracks = @($tracks | ForEach-Object { $_.Config })
+            display_title = $pageTitle
+            pronouns = $pronouns
+            # Stored exactly as the page computed them: the rules are ordered,
+            # and the first that matches a posting's location text is its rank.
+            priority_locations = @($answers.priority_locations)
+            excluded_companies = @($draft.excluded_companies | Where-Object { ([string]$_).Trim() })
+        }
+        foreach ($field in $MODEL_SETTING_FIELDS) { $configBody[$field] = [string]$draft.settings.$field }
+        Api POST "/api/config" $personToken $configBody | Out-Null
+        Log "      posted config: $(($seen) -join ', ')"
+
+        # The companies they named, onto the one shared list every search reads.
+        # Undated, so nothing is marked swept tonight.
+        #
+        # `start_here` puts this track's cursor at the first company this call
+        # added, so their own names are what night one covers rather than
+        # whatever the rotation happened to be pointing at. Only the server
+        # knows those positions - new companies are appended in shuffled order
+        # within the call - which is why it rides on this call instead of
+        # being computed here. Nothing added (every name was already on the
+        # list) leaves the cursor alone, and comes back as `added: 0`.
+        $named = @($draft.named_companies | Where-Object { ([string]$_).Trim() } | Select-Object -First 30)
+        if ($named.Count -gt 0) {
+            try {
+                $recorded = Api POST "/api/coverage" $personToken @{
+                    search = $seen[0]; on = ""; start_here = $true
+                    swept = @($named | ForEach-Object { @{ company = [string]$_ } })
+                }
+                Log "      shared list: $($recorded.added) added of $($named.Count) named; cursor $($recorded.cursor)"
+            } catch {
+                # Their search works without this; the names are in their answers
+                # and their doc, and the next run's discovery step finds them.
+                Log "      WARNING: couldn't add the companies they named - $($_.Exception.Message)"
+            }
+        }
+
+        # ---- Their scheduled tasks.
+        #
+        # A separate process: setup-scheduler.ps1 ends with `exit`, which would
+        # end this run too if it were dot-sourced or called in-process.
+        $scheduler = Join-Path $PSScriptRoot "setup-scheduler.ps1"
+        & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scheduler `
+            -DataDir $DataDir -User $id *>&1 | Out-File -Append -Encoding utf8 -FilePath $logFile
+        if ($LASTEXITCODE -ne 0) { Stop-Person "setup-scheduler.ps1 exited $LASTEXITCODE" $null }
+
+        # ---- Done is what the tracker and this machine say, not what the
+        # model reported.
+        $after = Api GET "/api/config" $personToken $null
+        foreach ($t in $tracks) {
+            $live = @($after.tracks | Where-Object { $_.key -eq $t.Config.key })
+            if ($live.Count -eq 0) { Stop-Person "track '$($t.Config.key)' isn't in the config after posting it" $null }
+            if ([string]$live[0].schedule_time -ne $t.Config.schedule_time) {
+                Stop-Person "track '$($t.Config.key)' came back scheduled at $($live[0].schedule_time), not $($t.Config.schedule_time)" $null
+            }
+        }
+        $docPaths = Get-DocumentPaths $personToken
+        foreach ($t in $tracks) {
+            if ($docPaths -notcontains $t.DocPath) { Stop-Person "$($t.DocPath) isn't in their documents after writing it" $null }
+        }
+        if ($docPaths -notcontains $resumePath) { Stop-Person "$resumePath isn't in their documents" $null }
+
+        $prefix = "JobSearch-" + $(if ($id.Length -ge 8) { $id.Substring(0, 8) } else { $id }) + "-"
+        $tasks = @(Get-ScheduledTask -TaskName "$prefix*" -ErrorAction SilentlyContinue)
+        if ($tasks.Count -lt $tracks.Count) {
+            Stop-Person "only $($tasks.Count) of $($tracks.Count) scheduled task(s) are registered" $null
+        }
+        Log "      tasks: $(($tasks | ForEach-Object { $_.TaskName }) -join ', ')"
+
+        $done = $true
+    } catch {
+        Log "      ERROR: $($_.Exception.Message)"
+        $exitCode = 1
+    }
+
+    # ---- Tell them, either way.
+    #
+    # Left alone, a pending setup keeps promising a tracker in the morning
+    # forever. 'failed' both says what happened and keeps them in tomorrow
+    # night's queue.
+    try {
+        $fresh = @((Api GET "/api/intake/pending" $AdminToken $null).intakes | Where-Object { $_.user.id -eq $id })
+        if ($fresh.Count -gt 0 -and [string]$fresh[0].updated_at -ne [string]$item.updated_at) {
+            # They sent new answers while this was running. What was just built
+            # is from the old ones, so it stays pending and tomorrow night
+            # builds what they actually asked for.
+            Log "      their answers changed while this ran - left pending, so tomorrow builds the new ones"
+            continue
+        }
+        if ($done) {
+            Api POST "/api/intake/complete" $AdminToken @{ user = $id; status = "done" } | Out-Null
+            Log "      $name is set up"
+            $built += $name
+        } else {
+            Api POST "/api/intake/complete" $AdminToken @{ user = $id; status = "failed"; note = $personNote } | Out-Null
+            Log "      marked failed, and they were told: $personNote"
+        }
+    } catch {
+        Log "      WARNING: couldn't record the outcome for $name - $($_.Exception.Message)"
+        $exitCode = 1
+    }
+}
+
+Log "finished - built $($built.Count) of $($queue.Count)$(if ($built.Count) { ": $($built -join ', ')" })"
+Log "===== done ====="
+exit $exitCode
