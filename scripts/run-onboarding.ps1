@@ -32,8 +32,8 @@
   this machine has their tasks. Anyone still pending when their turn ends is
   marked failed with a note written for them, so their own page stops saying
   their tracker is being built and says what happened instead. A failed setup
-  stays in the queue, so the next night tries again - and when the fix is
-  theirs (a resume nothing headless can read), the note says so.
+  stays in the queue, so the next night tries again - and when it needs a
+  person (a resume nothing headless can read), the note says who to ask.
 
   Logs to <DataDir>\logs\onboarding.log - the machine's log, like the
   applications fill, because this run is nobody's in particular either.
@@ -343,8 +343,8 @@ $MODEL_TIMEOUT_MINUTES = 25
 # Every note below is read by the person on their own page, so each says what
 # they can do, and never what a run was doing when it broke.
 $NOTE_GENERIC = "Setting your search up didn't finish tonight. It will be tried again tomorrow night, and there's nothing you need to do unless this message is still here after that."
-$NOTE_RESUME = "We couldn't read your resume overnight: a Word, RTF or Pages file, or an image, can't be read with nobody there to open it. Attach it as a PDF or a .txt instead, or paste the text into the setup form, and send it again."
-$NOTE_NO_SCOPE = "Your setup doesn't say where you can work, so there was nowhere for the search to look. Open the setup form, answer `"Where can you work?`", and send it again."
+$NOTE_RESUME = "Your resume couldn't be read overnight, so your search wasn't built yet. A Word, RTF or Pages file, or a picture of a resume, can't be opened with nobody there - a PDF or a .txt can. Ask whoever invited you to help get a readable copy in."
+$NOTE_NO_SCOPE = "Your setup doesn't say where you can work, so there was nowhere for your search to look and it wasn't built yet. Ask whoever invited you to help fill that in."
 $NOTE_NO_SLOT = "There's no room left in the nightly schedule on the machine that runs these searches, so yours couldn't be added. Let whoever invited you know - this one needs their attention, not yours."
 
 # "Jordan O'Neil" -> "Jordan-O-Neil". The documents route takes word characters,
