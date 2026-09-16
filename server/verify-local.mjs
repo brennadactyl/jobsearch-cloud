@@ -816,7 +816,13 @@ const c2 = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
 const cycleTotal = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.total;
 const reached = new Set();
 let servedTwiceEarly = 0;
-for (let guard = 0; guard < 200 && reached.size < cycleTotal; guard++) {
+// Enough slices to walk the whole list, plus room for the wrap, rather than a
+// flat count: the list is shared and a local database that has been verified
+// against for a while holds thousands of companies, which a fixed 200 slices
+// cannot reach - and the check would then report a broken rotation when what
+// ran out was the loop.
+const cycleSlices = Math.ceil(cycleTotal / 24) + 5;
+for (let guard = 0; guard < cycleSlices && reached.size < cycleTotal; guard++) {
   const s = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
   for (const c of s.companies) {
     if (reached.size === cycleTotal) break;
@@ -834,7 +840,7 @@ const furthest = whole.reduce((a, c) => (c.position > a.position ? c : a));
 // Only a served company moves the cursor, so read along to the slice holding
 // the end of the log and record it up to that company.
 let endSlice = [];
-for (let guard = 0; guard < 200; guard++) {
+for (let guard = 0; guard < cycleSlices; guard++) {
   endSlice = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json.companies;
   if (endSlice.some((c) => c.company === furthest.company)) break;
   await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
@@ -923,6 +929,74 @@ check("a company found by discovery appends to the end of the log",
 check("positions stay dense and unique after an append",
   new Set(rotAll.map((c) => c.position)).size === rotAll.length,
   JSON.stringify(rotAll.map((c) => c.position).slice(-4)));
+
+console.log("\n== a new search starts at the companies its person named ==");
+// Seeded companies append past the end of the shared list and a new track's
+// cursor is 0, so without start_here a new person's own companies are the last
+// ones their search reaches - a cycle of nights away (docs/onboarding-plan.md).
+const rotCursorBefore = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json.cursor;
+const NEW = ROT + "N", OLD = ROT + "O", AGAIN = ROT + "A";
+await req("POST", "/api/config", { token: C_TOK, body: { tracks: [
+  { key: ROT, label: "Rot" }, { key: EX, label: "Ex" },
+  { key: NEW, label: "New" }, { key: OLD, label: "Old" }, { key: AGAIN, label: "Again" }] } });
+
+// The control first: a new search seeded the ordinary way starts at the front
+// of the shared list, which is what this flag exists to change.
+const oldNames = ["Ash", "Birch", "Cedar"].map((n) => `Old ${rotStamp}-${n}`);
+await req("POST", "/api/coverage", { token: C_TOK, body: { search: OLD, on: "",
+  swept: oldNames.map((company) => ({ company })) } });
+const oldFirst = (await req("GET", `/api/coverage/${OLD}`, { token: C_TOK })).json;
+const listLow = Math.min(...(await req("GET", `/api/coverage/${OLD}?all=1`, { token: C_TOK })).json.companies
+  .map((c) => c.position));
+check("seeded without the flag, a new search starts at the front of the shared list",
+  oldFirst.cursor === 0 && oldFirst.companies[0].position === listLow &&
+  !oldNames.includes(oldFirst.companies[0].company),
+  JSON.stringify({ cursor: oldFirst.cursor, firstServed: oldFirst.companies[0].position, listLow }));
+
+const named = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"].map((n) => `New ${rotStamp}-${n}`);
+const seedRes = await req("POST", "/api/coverage", { token: C_TOK, body: { search: NEW, on: "",
+  start_here: true, swept: named.map((company) => ({ company })) } });
+const newAll = (await req("GET", `/api/coverage/${NEW}?all=1`, { token: C_TOK })).json.companies;
+const seededPos = newAll.filter((c) => named.includes(c.company)).map((c) => c.position);
+check("seeding with start_here sets the new search's cursor to the first company it added",
+  seedRes.json.added === named.length && seededPos.length === named.length &&
+  seedRes.json.cursor === Math.min(...seededPos),
+  JSON.stringify({ added: seedRes.json.added, cursor: seedRes.json.cursor, seeded: seededPos.sort((a, b) => a - b) }));
+const firstNight = (await req("GET", `/api/coverage/${NEW}`, { token: C_TOK })).json;
+check("so night one serves the companies the person named, before the rest of the list",
+  firstNight.cursor === seedRes.json.cursor &&
+  firstNight.companies.slice(0, named.length).every((c) => named.includes(c.company)),
+  JSON.stringify({ served: firstNight.companies.slice(0, named.length + 1).map((c) => c.company) }));
+// The rotation wraps, so starting late skips nothing: the companies before the
+// seeded block are reached after it, not never.
+check("and the rest of the list follows rather than being skipped",
+  firstNight.companies.length > named.length &&
+  firstNight.companies[named.length].position < Math.min(...seededPos),
+  JSON.stringify({ afterTheNamed: firstNight.companies[named.length], seededFrom: Math.min(...seededPos) }));
+
+// Two rules moving one number is two answers to one question: a dated report
+// advances the cursor past what it swept, and this flag sets it backwards.
+const datedStart = await req("POST", "/api/coverage", { token: C_TOK, body: { search: NEW, on: day,
+  start_here: true, swept: [{ company: named[0] }] } });
+const afterRefusal = (await req("GET", `/api/coverage/${NEW}?all=1`, { token: C_TOK })).json;
+check("start_here sent with a date is refused, not quietly ignored",
+  datedStart.status === 400 && /start_here/.test(datedStart.json.error || ""),
+  JSON.stringify({ status: datedStart.status, error: datedStart.json.error }));
+check("and the refused call records no sweep and leaves the cursor where it was",
+  afterRefusal.cursor === seedRes.json.cursor &&
+  afterRefusal.companies.find((c) => c.company === named[0]).last_swept === "",
+  JSON.stringify({ cursor: afterRefusal.cursor, expected: seedRes.json.cursor }));
+
+// Every name already on the shared list: there is no block to start at, since
+// those companies sit wherever the list already put them.
+const againRes = await req("POST", "/api/coverage", { token: C_TOK, body: { search: AGAIN, on: "",
+  start_here: true, swept: named.map((company) => ({ company })) } });
+check("start_here with nothing new to add leaves the cursor alone, and `added: 0` says why",
+  againRes.json.added === 0 && againRes.json.cursor === 0,
+  JSON.stringify({ added: againRes.json.added, cursor: againRes.json.cursor }));
+check("and starting one search where its person's companies are does not move another's",
+  (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json.cursor === rotCursorBefore,
+  JSON.stringify({ before: rotCursorBefore }));
 
 console.log("\n== branched tracks ==");
 // One search, several tabs: a track with fed_by is a tab the named sibling's
