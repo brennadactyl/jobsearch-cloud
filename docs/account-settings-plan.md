@@ -66,6 +66,10 @@ answers - an account set up by the skill has no intake row at all.
 - **Uploading and choosing are two steps.** A file uploads the moment it is
   selected, so its word count or refusal shows straight away, and it joins the
   list as "not used by any search". Nothing a search reads changes yet.
+- **Pasted text is a resume too.** A paste box beside Attach takes the text and
+  a name, and stores it as `resumes/<name>.txt` the moment it is added - the
+  same step as an upload, with the same word count. It then joins the list and
+  the pickers like any other file.
 - **Each search gets a picker** of the account's readable resumes. Changing one
   marks the section unsaved; **Save** writes every changed search's `documents`
   entry at once, through `POST /api/settings`, and **Discard** puts the pickers
