@@ -134,14 +134,14 @@ export const priorityLocationSchema = z.object({
   anyOf: z.array(z.string()).optional(),
 });
 
+/** The server's default too (DEFAULT_SETTINGS in server/src/db.js); used wherever a stored value is missing or zero. */
+export const DEFAULT_STALE_RUN_HOURS = 36;
+
 /**
  * Mirrors DEFAULT_SETTINGS in server/src/db.js. Every key defaults, because a
  * freshly created database has posted no config and must still render a usable
  * page - the same reason the server defaults them.
  */
-/** The server's default too (DEFAULT_SETTINGS in server/src/db.js); used wherever a stored value is missing or zero. */
-export const DEFAULT_STALE_RUN_HOURS = 36;
-
 export const settingsSchema = z.object({
   display_title: z.string().default("Job Search Tracker"),
   overview_label: z.string().default("Overview"),
