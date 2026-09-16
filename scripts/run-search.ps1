@@ -58,7 +58,9 @@ $ErrorActionPreference = "Stop"
 # A param default is evaluated before $PSScriptRoot is reliably set, so the
 # script's own folder is resolved here instead. It also finds run-lock.ps1 and
 # the tracker helper this run copies into its work dir.
-$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
 if (-not $scriptDir) {
     throw "Can't work out where this script lives, so it can't find run-lock.ps1 or tracker.ps1. Run it by its full path."
 }

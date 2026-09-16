@@ -80,7 +80,9 @@ $ErrorActionPreference = "Stop"
 # A param default is evaluated before $PSScriptRoot is reliably set, so the
 # script's own folder is resolved here instead. Everything below hangs off the
 # repo root, so an empty one would write a backup somewhere nobody looks.
-$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
 if (-not $RepoDir) {
     if (-not $scriptDir) {
         throw "Can't work out where this script lives, so it can't find the repo. Pass -RepoDir, or run it by its full path."

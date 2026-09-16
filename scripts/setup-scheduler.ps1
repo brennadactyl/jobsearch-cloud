@@ -59,7 +59,9 @@ $ErrorActionPreference = "Stop"
 # from another directory fails inside Join-Path, naming a line rather than the
 # folder it could not find. The sibling scripts below are found the same way,
 # and they are what the registered tasks run.
-$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
 if (-not $scriptDir) {
     throw "Can't work out where this script lives, so the tasks would be registered against nothing. Run it by its full path."
 }

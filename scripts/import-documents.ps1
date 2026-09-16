@@ -40,7 +40,9 @@ $ErrorActionPreference = "Stop"
 
 # A param default is evaluated before $PSScriptRoot is reliably set, so the
 # script's own folder is resolved here instead.
-$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
 if (-not $DataDir) {
     $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
                elseif ($scriptDir) { Join-Path $scriptDir "..\private" }

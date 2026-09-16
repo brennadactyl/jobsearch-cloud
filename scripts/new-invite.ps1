@@ -58,7 +58,9 @@ $ErrorActionPreference = "Stop"
 # script's own folder is resolved here instead. Otherwise running this by path
 # from another directory fails inside Join-Path, naming a line rather than the
 # folder it could not find.
-$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
 if (-not $DataDir) {
     $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
                elseif ($scriptDir) { Join-Path $scriptDir "..\private" }
