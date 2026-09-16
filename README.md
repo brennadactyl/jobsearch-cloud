@@ -78,6 +78,7 @@ server/                        API only - Cloudflare Worker + D1, no HTML served
   src/validate.js               the checks more than one route makes
   src/auth.js                   passwords, session tokens, who a token belongs to
   src/db.js                     all D1 access for a person's own data
+  src/companies.js              the company list every account shares - not scoped to a user
   src/r2.js                     all R2 access for their documents - resumes, baseline docs
   src/prompt.js                 composes each track's daily search prompt from its config
   migrations/                   the D1 schema, applied via `wrangler d1 migrations apply`

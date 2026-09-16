@@ -19,6 +19,11 @@ Two kinds of thing get written:
 | Membership - the company is on the list | `company_fetch` row, appended after the last position | every search |
 | Fetch facts - `board`, `endpoint`, `url_shape` | the same `company_fetch` row | every search, in `companies.json` |
 
+Both are written by `POST /api/coverage`, through `CompanyList` in
+`server/src/companies.js` (`addCompanies` and `upsertCompanyFetch`). If this
+work needs a server change, that file is the shared list's code; `db.js` holds
+only each search's own record of it.
+
 **Company facts do not go in `target_companies` or a track doc.** Not the board,
 not the endpoint, not "the JD is in the JSON". A fact written into one search's
 prose or doc reaches that search only, and disagrees with the list the day

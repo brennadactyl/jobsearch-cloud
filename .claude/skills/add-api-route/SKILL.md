@@ -1,6 +1,6 @@
 ---
 name: add-api-route
-description: Add or change an endpoint on this repo's tracker API (server/src/routes/) - which of the three route lists it belongs in, why handlers never build a Response or touch D1 themselves, where the contract gets documented, and the cross-user isolation checks the change owes verify-local.mjs. Use when adding, changing or removing an /api/ endpoint, a handler in server/src/routes/, or a Db method in server/src/db.js.
+description: Add or change an endpoint on this repo's tracker API (server/src/routes/) - which of the three route lists it belongs in, why handlers never build a Response or touch D1 themselves, where the contract gets documented, and the cross-user isolation checks the change owes verify-local.mjs. Use when adding, changing or removing an /api/ endpoint, a handler in server/src/routes/, a Db method in server/src/db.js, or a CompanyList method in server/src/companies.js.
 ---
 
 # Adding or changing an API route
@@ -47,6 +47,9 @@ Three rules:
   without them reaches the browser as an opaque network failure.
 - **Never touch `env.DB`.** Every read and write of a person's own data goes
   through a method on `Db` (`../db.js`). Add a method there if none fits.
+  The company list every account shares is the one exception to "own data":
+  it goes through `ctx.companyList` (`CompanyList`, `../companies.js`), which
+  is deliberately not user-scoped. Never add a shared-table query to `Db`.
 - **Never check ownership.** `ctx.db` is bound to one user id at
   construction, so another user's lead id does not resolve, their track key
   reads as unconfigured, their rows are not in the result set. The handler's
@@ -96,13 +99,21 @@ in order.
 - Method is checked before path, so a GET to a POST-only path falls to the 404
   rather than being answered by the wrong handler.
 
-## 4. Add a `Db` method if you need one
+## 4. Add a `Db` or `CompanyList` method if you need one
 
-In `server/src/db.js`, following what is there: filter on `this.userId` in
-every statement, add or extend the `@typedef` for any row shape you change,
-and keep the "why" comment with it. If the route writes, refuse the whole
-request rather than drop bad rows - a partial insert makes a nightly run
-believe it filed rows it did not, and it never looks for those postings again.
+A person's own rows: `server/src/db.js`, following what is there. Filter on
+`this.userId` in every statement, add or extend the `@typedef` for any row
+shape you change, and keep the "why" comment with it.
+
+The company list every account shares (`company_fetch`: membership, positions,
+fetch facts, walls): `server/src/companies.js`, on `CompanyList`, reached as
+`ctx.companyList`. It has no user to filter on, which is exactly why it is not
+on `Db`. What one search did with a company - `company_sweeps`, its cursor - is
+that search's own and stays on `Db`.
+
+Either way, if the route writes, refuse the whole request rather than drop bad
+rows - a partial insert makes a nightly run believe it filed rows it did not,
+and it never looks for those postings again.
 
 ## 5. Add checks to `verify-local.mjs` - this is not optional
 

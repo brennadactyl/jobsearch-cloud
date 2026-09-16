@@ -721,7 +721,7 @@ check("a track that has never swept anything still gets both rotation commands",
 check("step 9d names every field a sweep can carry, wall included",
   sweSteps.includes("{company, board, endpoint, url_shape, wall, note}"));
 // A reported board or endpoint clears a company's wall for every search
-// (db.js upsertCompanyFetch, `works`), and companies.json hands every run the
+// (companies.js upsertCompanyFetch, `works`), and companies.json hands every run the
 // board it already knows. tracker.ps1 drops those fields from a row that also
 // reports a wall, but a failed fetch with no wall recorded is caught by one
 // sentence only - this one. Without it, echoing a known board on a night the

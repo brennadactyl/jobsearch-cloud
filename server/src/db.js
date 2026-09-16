@@ -13,7 +13,8 @@
  * access check.
  *
  * Users and sessions live in auth.js: resolving which user is calling has to
- * happen before a user-scoped Db exists.
+ * happen before a user-scoped Db exists. The company list every account shares
+ * lives in companies.js, whose rows belong to no user.
  *
  * There is no build step, so the @typedef blocks below are the type contract
  * that editors and `tsc --checkJs` read.
@@ -156,7 +157,7 @@
 import { normalize as normalizeCompany } from "./exclude.js";
 import { searchRootKey } from "./tracks.js";
 import { canonicalUrl } from "./url.js";
-import { dateDaysAgo, today } from "./validate.js";
+import { today } from "./validate.js";
 
 // The route modules validate against these same lists, so validation and
 // storage share one definition.
@@ -300,7 +301,7 @@ function applicationValues(fields) {
 // statement with more than 100 bound parameters, and a single call can carry
 // more ids or names than that, so callers split the list across statements in
 // one batch. 90 leaves room for the statement's other bindings.
-const ID_CHUNK = 90;
+export const ID_CHUNK = 90;
 
 export class Db {
   /**
@@ -559,183 +560,11 @@ export class Db {
   }
 
   // ---------------------------------------------------- company sweeps --
-
-  /**
-   * Shared facts for a set of company names, keyed by normalize().
-   *
-   * Not user-scoped, by design: the caller supplies names and gets back facts
-   * about websites, nothing derived from any user's rows. See
-   * docs/glossary.md#companies-and-the-rotation.
-   *
-   * A retracted row comes back with its fields blanked and only the retraction
-   * visible, so a reader cannot use a withdrawn fact by forgetting to check one
-   * more field.
-   *
-   * A row with no facts is left out. Every listed company has a row, most of
-   * them bare membership, and an empty entry would claim something is known
-   * about a company nothing has looked at.
-   *
-   * A wall is served only when recorded on at least two separate dates and
-   * last recorded within seven days. Otherwise it is left out rather than
-   * flagged, so a run meeting an expired wall simply fetches, which is the
-   * re-test.
-   *
-   * @param {string[]} names @returns {Promise<Map<string, Object>>} by company_key
-   */
-  async getCompanyFetch(names) {
-    const keys = [...new Set(names.map(normalizeCompany).filter(Boolean))];
-    if (keys.length === 0) return new Map();
-    // Chunked by ID_CHUNK: routes/coverage.js's `?all=1` asks for the whole list.
-    const chunks = [];
-    for (let i = 0; i < keys.length; i += ID_CHUNK) chunks.push(keys.slice(i, i + ID_CHUNK));
-    const batches = await this.d1.batch(
-      chunks.map((chunk) =>
-        this.d1
-          .prepare(`SELECT * FROM company_fetch WHERE company_key IN (${chunk.map(() => "?").join(",")})`)
-          .bind(...chunk)
-      )
-    );
-    const found = batches.flatMap((b) => b.results);
-    const WALL_MIN_DATES = 2, WALL_SERVED_DAYS = 7;
-    const wallFreshFrom = dateDaysAgo(WALL_SERVED_DAYS);
-    const out = new Map();
-    for (const r of found) {
-      if (r.retracted_on) {
-        out.set(r.company_key, { retracted_on: r.retracted_on, retracted_note: r.retracted_note || "" });
-        continue;
-      }
-      const facts = {
-        board: r.board || "",
-        endpoint: r.endpoint || "",
-        url_shape: r.url_shape || "",
-        dead_signal: r.dead_signal || "",
-        note: r.note || "",
-        verified_on: r.verified_on || "",
-      };
-      const wallServed = !!r.wall && r.wall_dates >= WALL_MIN_DATES && r.wall_last_on >= wallFreshFrom;
-      if (wallServed) {
-        facts.wall = r.wall;
-        facts.wall_last_on = r.wall_last_on;
-      }
-      if (facts.board || facts.endpoint || facts.url_shape || facts.dead_signal || facts.note || wallServed) {
-        out.set(r.company_key, facts);
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Record what a run learned about reaching a company.
-   *
-   * Non-empty-wins, field by field: a run that confirmed an endpoint but has
-   * nothing to say about the dead signal must not wipe what an earlier run
-   * established, or the shared table degrades every time a run is terse.
-   *
-   * `wall` counts separate dates, not reports - two runs meeting one wall on one
-   * day are one piece of evidence. A reported board or endpoint clears it, since
-   * a fetch that worked settles the question. And only a positive fact moves
-   * `verified_on`: meeting a wall is not confirming the row works.
-   *
-   * A row already retracted is left alone. Re-asserting a withdrawn fact is a
-   * decision a person makes by clearing the retraction, not something a run
-   * should be able to do by rediscovering the same wrong thing.
-   *
-   * @param {Array<{company: string, board?: string, endpoint?: string,
-   *   url_shape?: string, dead_signal?: string, note?: string, wall?: string}>} rows
-   * @param {string} on YYYY-MM-DD, or "" for a fact nobody dated, which is
-   *   stamped with the server's date: `verified_on` records when a fact was
-   *   established. A wall never arrives undated - routes/coverage.js refuses
-   *   that before calling this.
-   */
-  async upsertCompanyFetch(rows, on) {
-    const date = on || today();
-    const useful = rows.filter(
-      (r) =>
-        normalizeCompany(r.company) &&
-        (r.board || r.endpoint || r.url_shape || r.dead_signal || r.note || r.wall)
-    );
-    if (useful.length === 0) return { written: 0 };
-
-    const works = "(excluded.board <> '' OR excluded.endpoint <> '')";
-    const positive =
-      "(excluded.board <> '' OR excluded.endpoint <> '' OR excluded.url_shape <> '' OR excluded.dead_signal <> '')";
-    const stmt = this.d1.prepare(
-      `INSERT INTO company_fetch
-         (company_key, display_name, board, endpoint, url_shape, dead_signal, note, verified_on,
-          wall, wall_first_on, wall_last_on, wall_dates)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(company_key) DO UPDATE SET
-         display_name  = CASE WHEN company_fetch.display_name = '' THEN excluded.display_name ELSE company_fetch.display_name END,
-         board         = CASE WHEN excluded.board <> ''       THEN excluded.board       ELSE company_fetch.board END,
-         endpoint      = CASE WHEN excluded.endpoint <> ''    THEN excluded.endpoint    ELSE company_fetch.endpoint END,
-         url_shape     = CASE WHEN excluded.url_shape <> ''   THEN excluded.url_shape   ELSE company_fetch.url_shape END,
-         dead_signal   = CASE WHEN excluded.dead_signal <> '' THEN excluded.dead_signal ELSE company_fetch.dead_signal END,
-         note          = CASE WHEN excluded.note <> ''        THEN excluded.note        ELSE company_fetch.note END,
-         verified_on   = CASE WHEN ${positive} THEN excluded.verified_on ELSE company_fetch.verified_on END,
-         wall          = CASE WHEN ${works} THEN ''
-                              WHEN excluded.wall <> '' THEN excluded.wall
-                              ELSE company_fetch.wall END,
-         wall_first_on = CASE WHEN ${works} THEN ''
-                              WHEN excluded.wall <> '' AND company_fetch.wall_first_on = '' THEN excluded.wall_last_on
-                              ELSE company_fetch.wall_first_on END,
-         wall_last_on  = CASE WHEN ${works} THEN ''
-                              WHEN excluded.wall <> '' THEN excluded.wall_last_on
-                              ELSE company_fetch.wall_last_on END,
-         wall_dates    = CASE WHEN ${works} THEN 0
-                              WHEN excluded.wall <> '' AND company_fetch.wall_last_on = excluded.wall_last_on THEN company_fetch.wall_dates
-                              WHEN excluded.wall <> '' THEN company_fetch.wall_dates + 1
-                              ELSE company_fetch.wall_dates END
-       WHERE company_fetch.retracted_on = ''`
-    );
-    const res = await this.d1.batch(
-      useful.map((r) => {
-        const isPositive = !!(r.board || r.endpoint || r.url_shape || r.dead_signal);
-        const wall = r.board || r.endpoint ? "" : r.wall || "";
-        return stmt.bind(
-          normalizeCompany(r.company),
-          String(r.company).trim(),
-          r.board || "",
-          r.endpoint || "",
-          r.url_shape || "",
-          r.dead_signal || "",
-          r.note || "",
-          isPositive ? date : "",
-          wall,
-          wall ? date : "",
-          wall ? date : "",
-          wall ? 1 : 0
-        );
-      })
-    );
-    return { written: res.reduce((n, x) => n + (x.meta.changes || 0), 0) };
-  }
-
-  /**
-   * Put companies on the list.
-   *
-   * Membership only: what a row says about the company's website is written by
-   * upsertCompanyFetch, on the same call, dated or not. A company
-   * already on the list keeps its place and its name: a position is assigned
-   * once, when a company joins, and never moves, or the cursor would step over
-   * companies it had already passed.
-   *
-   * Not scoped to this.userId: the list is shared by every account, by design -
-   * see docs/glossary.md#companies-and-the-rotation.
-   * @param {{company: string, position: number}[]} items
-   * @returns {Promise<number>} how many joined
-   */
-  async addCompanies(items) {
-    const rows = items.filter((i) => normalizeCompany(i.company));
-    if (rows.length === 0) return 0;
-    const stmt = this.d1.prepare(
-      `INSERT INTO company_fetch (company_key, display_name, position) VALUES (?, ?, ?)
-       ON CONFLICT(company_key) DO NOTHING`
-    );
-    const res = await this.d1.batch(
-      rows.map((i) => stmt.bind(normalizeCompany(i.company), String(i.company).trim(), i.position))
-    );
-    return res.reduce((n, x) => n + (x.meta.changes || 0), 0);
-  }
+  //
+  // This search's own record of the shared company list: when it last tried
+  // each company, and how far along the list its cursor is. The list itself,
+  // and what is known about reaching each company, belong to every account and
+  // live in ./companies.js.
 
   /**
    * The list in log order, with this search's own record of each company.

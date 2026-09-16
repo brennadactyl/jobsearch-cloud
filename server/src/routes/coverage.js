@@ -65,7 +65,7 @@ export async function upcomingCompanies(db, key, count) {
  * 404 rather than an empty list for an unknown key: empty would read as
  * "nothing to sweep", and the run would search nothing.
  */
-export async function handleGetCoverage({ db, params, url }) {
+export async function handleGetCoverage({ db, companyList, params, url }) {
   const key = params[0];
   const all = url.searchParams.get("all") === "1";
   if (!(await db.trackExists(key))) return unknownTrack(key);
@@ -80,7 +80,7 @@ export async function handleGetCoverage({ db, params, url }) {
   if (all) {
     // `known` here too, so a person reading the whole table sees the shared
     // facts rather than concluding there are none.
-    const allIntel = await db.getCompanyFetch(eligible.map((c) => c.company));
+    const allIntel = await companyList.getCompanyFetch(eligible.map((c) => c.company));
     return json({
       companies: eligible.map((c) => {
         const known = allIntel.get(normalize(c.company));
@@ -107,7 +107,7 @@ export async function handleGetCoverage({ db, params, url }) {
   // (docs/glossary.md#companies-and-the-rotation). Attached here rather than served by a
   // route of its own, because a run skips a second call on a busy night. Keyed
   // by company, so nothing about anyone's rotation travels with it.
-  const intel = await db.getCompanyFetch(companies.map((c) => c.company));
+  const intel = await companyList.getCompanyFetch(companies.map((c) => c.company));
   const withIntel = companies.map((c) => {
     const known = intel.get(normalize(c.company));
     return known ? { ...c, known } : c;
@@ -135,7 +135,7 @@ export async function handleGetCoverage({ db, params, url }) {
  * of the list starves. A company not yet on the shared list joins it, so it is
  * in every search's rotation from then on.
  */
-export async function handleRecordSweeps({ request, db, user }) {
+export async function handleRecordSweeps({ request, db, companyList, user }) {
   // A demo account's companies are invented, and this route writes the list
   // every account's searches are served from (membership via addCompanies,
   // facts via upsertCompanyFetch; demo account in docs/glossary.md#accounts). Refused
@@ -189,7 +189,7 @@ export async function handleRecordSweeps({ request, db, user }) {
   if (allowed.length === 0) return json({ recorded: 0, excluded, on });
 
   // A wall is dated evidence: it is served only after two separate dates, and
-  // only while the last is fresh (db.getCompanyFetch). An undated one is not a
+  // only while the last is fresh (companyList.getCompanyFetch). An undated one is not a
   // weaker wall, it is nothing that would sit in the column looking like one.
   // Refused rather than dropped, so a caller that thinks it recorded a wall
   // hears that it didn't.
@@ -240,7 +240,7 @@ export async function handleRecordSweeps({ request, db, user }) {
   const joining = new Map(
     fresh.map((i) => [normalize(i.company), { company: i.company, position: nextPos++ }])
   );
-  const added = await db.addCompanies([...joining.values()]);
+  const added = await companyList.addCompanies([...joining.values()]);
 
   // A row reporting a `wall` beside a `board` or `endpoint` contradicts itself:
   // a wall means no route to the listings worked, a board or endpoint is one
@@ -283,7 +283,7 @@ export async function handleRecordSweeps({ request, db, user }) {
   // `on || today()`): `verified_on` records when a fact was established, not
   // whose night it was.
   const withheld = allowed.filter(contradicts).length;
-  const shared = await db.upsertCompanyFetch(
+  const shared = await companyList.upsertCompanyFetch(
     allowed.filter((i) => !contradicts(i)).map((i) => ({
       company: i.company,
       board: typeof i.board === "string" ? i.board : "",

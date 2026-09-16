@@ -1,14 +1,19 @@
 /**
  * The worker's entry point: the CORS preflight, resolving who is calling,
- * building the `Db`, `Docs` and `RunLogs` scoped to them, and dispatching to the route
- * table in ./routes/index.js.
+ * building the `Db`, `Docs` and `RunLogs` scoped to them and the shared
+ * `CompanyList`, and dispatching to the route table in ./routes/index.js.
  *
  * Access control is that scoped construction (see ./db.js): a handler reaches
- * a user's data only through the `Db` and `Docs` it is handed. Never hand a
- * handler an unscoped binding in their place.
+ * a user's data only through the `Db`, `Docs` and `RunLogs` it is handed.
+ * Never hand a handler an unscoped binding in their place.
+ *
+ * `CompanyList` is the one store a handler gets unscoped, on purpose: no row in
+ * it belongs to anyone (see ./companies.js), so there is nothing to scope it
+ * to. It stands beside the scoped stores, never in place of one.
  */
 
 import { bearer, getSessionUser, isAdminRequest } from "./auth.js";
+import { CompanyList } from "./companies.js";
 import { Db } from "./db.js";
 import { corsPreflight, CORS_HEADERS, unauthorized } from "./http.js";
 import { Docs, RunLogs } from "./r2.js";
@@ -26,6 +31,7 @@ import { ADMIN_ROUTES, matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./route
  * @property {string} token the caller's bearer token ("" on a public route)
  * @property {Object|null} user the person the token resolved to, or null
  * @property {Db|null} db a Db scoped to that person, or null on a public route
+ * @property {CompanyList|null} companyList the company list every account shares, or null on a public route
  * @property {Docs|null} docs their documents in R2, scoped the same way
  * @property {RunLogs|null} runLogs their nightly run logs in R2, scoped the same way
  */
@@ -39,7 +45,7 @@ export default {
     const open = matchRoute(PUBLIC_ROUTES, request.method, url.pathname);
     if (open) {
       return open.handler({
-        request, env, url, params: open.params, token: "", user: null, db: null, docs: null, runLogs: null,
+        request, env, url, params: open.params, token: "", user: null, db: null, companyList: null, docs: null, runLogs: null,
       });
     }
 
@@ -50,7 +56,7 @@ export default {
     if (admin) {
       if (!(await isAdminRequest(request, env))) return unauthorized();
       return admin.handler({
-        request, env, url, params: admin.params, token: "", user: null, db: null, docs: null, runLogs: null,
+        request, env, url, params: admin.params, token: "", user: null, db: null, companyList: null, docs: null, runLogs: null,
       });
     }
 
@@ -71,6 +77,7 @@ export default {
       token,
       user,
       db: new Db(env.DB, user.id),
+      companyList: new CompanyList(env.DB),
       docs: new Docs(env.DOCS, user.id),
       runLogs: new RunLogs(env.DOCS, user.id),
     });

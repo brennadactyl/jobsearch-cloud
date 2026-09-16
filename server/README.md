@@ -20,20 +20,21 @@ leads, applications, page titles and location rules.
 ## Code layout
 
 - `src/index.js` - the entry point: the CORS preflight (`OPTIONS`), resolving
-  the caller's session, building the one `Db` scoped to that person, and
-  dispatching to the route table. It knows about no individual endpoint.
+  the caller's session, building the `Db` scoped to that person and the shared
+  `CompanyList`, and dispatching to the route table. It knows about no
+  individual endpoint.
 - `src/routes/index.js` - the route table: which method and path map to which
-  handler, in three lists by credential. `PUBLIC_ROUTES` need none (or check
-  `ADMIN_TOKEN` inside the handler), `ADMIN_ROUTES` require `ADMIN_TOKEN` and
-  `SESSION_ROUTES` require a session token; `src/index.js` tries them in that
-  order. Adding an endpoint is one line here plus one exported function in the
-  module beside it.
+  handler, in three lists by credential. `PUBLIC_ROUTES` need none,
+  `ADMIN_ROUTES` require `ADMIN_TOKEN` and `SESSION_ROUTES` require a session
+  token; `src/index.js` tries them in that order. Adding an endpoint is one
+  line here plus one exported function in the module beside it.
 - `src/routes/*.js` - one module per resource (`leads.js`, `applications.js`,
   `screened.js`, `config.js`, `coverage.js`, `runs.js`, `prompt.js`,
   `data.js`, `documents.js`, `accounts.js`, `admin.js`, `update.js`,
   `delisting.js`, `onboarding.js`). Each holds its endpoints' parsing,
   validation and response shaping, with each endpoint's contract documented on
-  its handler. Session routes are handed a `Db` and never query D1 themselves.
+  its handler. Session routes are handed a `Db` (and `coverage.js` the
+  `CompanyList`) and never query D1 themselves.
   The routes that act before there is a session or across accounts -
   `accounts.js` and `onboarding.js` - pass `env.DB` to `src/auth.js` and
   `src/onboarding.js`, and `admin.js` builds its own `Db` for the user it
@@ -59,6 +60,11 @@ leads, applications, page titles and location rules.
   `src/auth.js` are the two files that write sessions.
 - `src/db.js` - all D1 access for a person's own data. Every instance is
   bound to one user id at construction, so no query can forget to filter.
+- `src/companies.js` - `CompanyList`, the company list every account shares
+  (`company_fetch`) and what is known about reaching each company. It belongs
+  to no user, so it is kept out of `Db`; session routes receive it as
+  `ctx.companyList`. Each search's own record of the list - last swept, notes,
+  its cursor - stays on `Db`.
 - `src/r2.js` - all R2 access for their documents: resumes, and the per-track
   baseline doc the nightly search reads and edits. Every key is prefixed with
   the owner's id at construction, so no method can address another person's
