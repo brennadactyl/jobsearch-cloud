@@ -38,6 +38,14 @@ export function pathForTab(id: string): string {
   return `/t/${encodeURIComponent(id)}`;
 }
 
+/** The tab's current URL with its drill removed and every other parameter kept, for a drill chip's clear link. */
+export function pathWithoutDrill(id: string, params: URLSearchParams): string {
+  const next = new URLSearchParams(params);
+  next.delete("drill");
+  const query = next.toString();
+  return pathForTab(id) + (query ? `?${query}` : "");
+}
+
 export function buildTabs(
   leads: readonly Lead[],
   applications: readonly Application[],

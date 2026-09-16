@@ -1,4 +1,4 @@
-import { Fragment, useState, type MouseEvent } from "react";
+import { Fragment, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Application, TrackerData } from "../api/schema";
 import { useAddApplication, useDeleteApplication } from "../api/mutations";
@@ -8,12 +8,13 @@ import { applicationColumns } from "../domain/export";
 import { daysSince, hostOf, safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { appComparator, fillState, type FillState } from "../domain/rows";
-import { buildTracks, pathForTab } from "../domain/tabs";
+import { buildTracks, pathWithoutDrill } from "../domain/tabs";
 import { revealSelectedRow } from "../ui/hooks";
 import { saved } from "../ui/saved";
-import { selectRow, setPrefs, shownRow, usePrefs } from "../ui/prefs";
+import { selectRow, setPrefs, shownRow, toggleGridRow, usePrefs } from "../ui/prefs";
 import { DrillChip, ExportButton, GeoBadge, GeoKey, Pill, SortSelect, TrashIcon, ViewSwitch } from "./bits";
 import { AppFactsCards, AutofillNote, NotesBlock } from "./facts";
+import { ExpandableRow, SelectableRow } from "./listRows";
 import { AppStatusSelect, EditableField, StageDateModal, type PendingStage } from "./writes";
 
 export default function ApplicationsTab({ data }: { data: TrackerData }) {
@@ -54,13 +55,6 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
 
   const all = appRows(data.applications).sort(appComparator(prefs.appSort));
   const rows = all.filter((a) => drillKeeps(drill, "apps", a, data));
-
-  const clearTo = () => {
-    const next = new URLSearchParams(params);
-    next.delete("drill");
-    const q = next.toString();
-    return pathForTab("applications") + (q ? `?${q}` : "");
-  };
 
   const toolbar = (
     <>
@@ -107,7 +101,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
         <GeoKey settings={settings} />
         {drill && (
           <div className="chips">
-            <DrillChip drill={drill} ctx={data} clearTo={clearTo()} />
+            <DrillChip drill={drill} ctx={data} clearTo={pathWithoutDrill("applications", params)} />
           </div>
         )}
       </div>
@@ -168,19 +162,11 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
             const d = daysSince(a.dateApplied);
             const label = a.company || hostOf(a.link) || "Untitled";
             return (
-              <div
+              <SelectableRow
                 key={a.id}
-                className={`md-row${a.id === sel.id ? " sel" : ""}${g ? ` ${g.p}` : ""}`}
-                role="button"
-                tabIndex={0}
-                aria-pressed={a.id === sel.id}
-                onClick={() => selectRow("applications", String(a.id))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    selectRow("applications", String(a.id));
-                  }
-                }}
+                selected={a.id === sel.id}
+                tierClass={g ? g.p : ""}
+                onSelect={() => selectRow("applications", String(a.id))}
               >
                 <div className="md-row-top">
                   <span className="co">{label}</span>
@@ -203,7 +189,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
                     )
                   )}
                 </div>
-              </div>
+              </SelectableRow>
             );
           })}
         </div>
@@ -258,11 +244,6 @@ function groupsFor(rows: Application[], applicationsLabel: string) {
   return specs
     .map((g) => ({ ...g, rows: rows.filter((a) => fillState(a) === g.key) }))
     .filter((g) => g.rows.length);
-}
-
-/** A click on a row toggles it - except a click on an actual control, which does its own thing. */
-function isControl(e: MouseEvent) {
-  return !!(e.target as HTMLElement).closest("input,select,textarea,a,button");
 }
 
 function AppsGrid({
@@ -345,22 +326,10 @@ function AppsGrid({
                       .filter(Boolean)
                       .join(" ");
                     const ph = grp.key === "waiting" ? "Reads overnight" : grp.key === "stuck" ? "Type it in" : "";
-                    // Opening or closing a row is what "highlights" it: it is the
-                    // row Detail view lands on when you switch there.
-                    const toggle = () =>
-                      setPrefs({
-                        expanded: { ...prefs.expanded, [a.id]: !open },
-                        selected: { ...prefs.selected, applications: String(a.id) },
-                      });
+                    const toggle = () => toggleGridRow("applications", a.id);
                     return (
                       <Fragment key={a.id}>
-                        <tr
-                          data-expand={a.id}
-                          className={cls || undefined}
-                          onClick={(e) => {
-                            if (!isControl(e)) toggle();
-                          }}
-                        >
+                        <ExpandableRow id={a.id} className={cls} onToggle={toggle}>
                           <td>
                             <EditableField
                               row={a}
@@ -425,7 +394,7 @@ function AppsGrid({
                           <td>
                             <RemoveApp app={a} />
                           </td>
-                        </tr>
+                        </ExpandableRow>
                         {open && (
                           <tr className="more-row">
                             <td colSpan={COLS}>

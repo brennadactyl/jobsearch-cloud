@@ -3,7 +3,7 @@
  * has - its run stamp, the empty state explaining why a search found nothing -
  * is skipped for the pooled tab rather than faked.
  */
-import { Fragment, type MouseEvent } from "react";
+import { Fragment } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { Lead, TrackerData } from "../api/schema";
 import { useDeleteLead, useMoveLead, type LeavingView } from "../api/mutations";
@@ -14,11 +14,12 @@ import { safeUrl } from "../domain/format";
 import { geo } from "../domain/geo";
 import { leadComparator } from "../domain/rows";
 import { runState } from "../domain/runs";
-import { buildTracks, pathForTab, trackCountLine } from "../domain/tabs";
+import { buildTracks, pathForTab, pathWithoutDrill, trackCountLine } from "../domain/tabs";
 import { revealSelectedRow } from "../ui/hooks";
-import { selectRow, setPrefs, shownRow, usePrefs } from "../ui/prefs";
+import { selectRow, shownRow, toggleGridRow, usePrefs } from "../ui/prefs";
 import { DrillChip, ExportButton, GeoBadge, GeoKey, Pill, RunStamp, SortSelect, TrashIcon, ViewSwitch } from "./bits";
 import { LeadFactsCard, NotesBlock } from "./facts";
+import { ExpandableRow, SelectableRow } from "./listRows";
 import { EditableField, LeadStatusSelect } from "./writes";
 
 export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackKey: string }) {
@@ -109,7 +110,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
               {f}
             </button>
           ))}
-          <DrillChip drill={drill} ctx={data} clearTo={clearDrillTo(trackKey, params)} />
+          <DrillChip drill={drill} ctx={data} clearTo={pathWithoutDrill(trackKey, params)} />
         </div>
         <ViewSwitch />
         <ExportButton rows={rows} columns={leadColumns(tracks, settings)} label={scopeLabel} />
@@ -228,19 +229,11 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
           {rows.map((l) => {
             const g = geo(l.location, settings.priority_locations);
             return (
-              <div
+              <SelectableRow
                 key={l.id}
-                className={`md-row${l.id === sel.id ? " sel" : ""}${g ? ` ${g.p}` : ""}`}
-                role="button"
-                tabIndex={0}
-                aria-pressed={l.id === sel.id}
-                onClick={() => selectRow(trackKey, String(l.id))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    selectRow(trackKey, String(l.id));
-                  }
-                }}
+                selected={l.id === sel.id}
+                tierClass={g ? g.p : ""}
+                onSelect={() => selectRow(trackKey, String(l.id))}
               >
                 <div className="md-row-top">
                   <span className="co">{l.company}</span>
@@ -259,7 +252,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
                     {LABELS.found} <span className="mono">{l.found}</span>
                   </span>
                 </div>
-              </div>
+              </SelectableRow>
             );
           })}
         </div>
@@ -274,13 +267,6 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   );
 }
 
-function clearDrillTo(trackKey: string, params: URLSearchParams): string {
-  const next = new URLSearchParams(params);
-  next.delete("drill");
-  const q = next.toString();
-  return pathForTab(trackKey) + (q ? `?${q}` : "");
-}
-
 /**
  * The grid is for a fast scan without scrolling, so it shows a deliberately
  * short list of columns - Detail view has the rest. Comp earns the one extra
@@ -288,11 +274,6 @@ function clearDrillTo(trackKey: string, params: URLSearchParams): string {
  * second look.
  */
 const LEAD_GRID_FIELDS: readonly (readonly [string, string])[] = [["comp", "Comp range"]];
-
-/** A click on a row toggles it - except a click on an actual control, which does its own thing. */
-function isControl(e: MouseEvent) {
-  return !!(e.target as HTMLElement).closest("input,select,textarea,a,button");
-}
 
 function LeadsGrid({
   rows,
@@ -338,23 +319,11 @@ function LeadsGrid({
             const cls = [g ? g.p : "", l.id === shownId ? "gr-sel" : ""]
               .filter(Boolean)
               .join(" ");
-            // Opening or closing a row is what "highlights" it: it is the row
-            // Detail view lands on when you switch there.
-            const toggle = () =>
-              setPrefs({
-                expanded: { ...prefs.expanded, [l.id]: !open },
-                selected: { ...prefs.selected, [trackKey]: String(l.id) },
-              });
+            const toggle = () => toggleGridRow(trackKey, l.id);
             const url = safeUrl(l.url);
             return (
               <Fragment key={l.id}>
-                <tr
-                  data-expand={l.id}
-                  className={cls || undefined}
-                  onClick={(e) => {
-                    if (!isControl(e)) toggle();
-                  }}
-                >
+                <ExpandableRow id={l.id} className={cls} onToggle={toggle}>
                   <td className="co cc" title={l.company}>
                     {l.company}
                   </td>
@@ -393,7 +362,7 @@ function LeadsGrid({
                       {open ? "Hide" : "Details"}
                     </button>
                   </td>
-                </tr>
+                </ExpandableRow>
                 {open && (
                   <tr className="more-row">
                     <td colSpan={cols}>
