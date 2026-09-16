@@ -147,8 +147,9 @@ foreach ($acct in $accounts) {
             # and refuses an upload to that path, so a restored backup holds a copy
             # of text the .docx upload is about to write again. Not counted as
             # skipped: nothing is missing from the tracker.
-            if ($ext -eq ".txt" -and (Test-Path -LiteralPath (Join-Path $dir "$($file.BaseName).docx"))) {
-                Write-Host "  --    $rel - read from $($file.BaseName).docx, which writes it"
+            $pairedDocx = if ($ext -eq ".txt") { @(Get-ChildItem $dir -File -Filter "$($file.BaseName).docx" -ErrorAction SilentlyContinue)[0] }
+            if ($pairedDocx) {
+                Write-Host "  --    $rel - read from $($pairedDocx.Name), which writes it"
                 continue
             }
             if ($ext -eq ".doc") {
