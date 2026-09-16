@@ -2537,5 +2537,148 @@ check("deleting an account counts its logs and takes them with it",
 check("and leaves the other account's logs alone",
   (await req("GET", "/api/logs/LOGS", { token: logB.token })).json?.logs?.length === 1);
 
+console.log("\n== Word resumes are read on upload ==");
+// docs/word-resumes-plan.md. The fixtures are real zip files built byte by byte
+// here, so the worker's own reader and its DecompressionStream do the opening -
+// including the two shapes Word and zip tools really write: an entry streamed
+// with its sizes only in the central directory, and an entry stored uncompressed.
+const { crc32, deflateRawSync } = await import("node:zlib");
+function zipOf(files) {
+  const locals = [], central = [];
+  let offset = 0;
+  for (const { name, data: text, stored, streamed } of files) {
+    const data = Buffer.from(text, "utf8");
+    const body = stored ? data : deflateRawSync(data);
+    const nameBytes = Buffer.from(name, "utf8");
+    const crc = crc32(data);
+    const flags = streamed ? 0x8 : 0;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(flags, 6);
+    local.writeUInt16LE(stored ? 0 : 8, 8);
+    // A streamed entry's local header carries no sizes; they follow the data.
+    local.writeUInt32LE(streamed ? 0 : crc, 14);
+    local.writeUInt32LE(streamed ? 0 : body.length, 18); local.writeUInt32LE(streamed ? 0 : data.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    const descriptor = streamed ? Buffer.alloc(16) : Buffer.alloc(0);
+    if (streamed) {
+      descriptor.writeUInt32LE(0x08074b50, 0); descriptor.writeUInt32LE(crc, 4);
+      descriptor.writeUInt32LE(body.length, 8); descriptor.writeUInt32LE(data.length, 12);
+    }
+    locals.push(local, nameBytes, body, descriptor);
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0); entry.writeUInt16LE(20, 4); entry.writeUInt16LE(20, 6);
+    entry.writeUInt16LE(flags, 8); entry.writeUInt16LE(stored ? 0 : 8, 10); entry.writeUInt32LE(crc, 16);
+    entry.writeUInt32LE(body.length, 20); entry.writeUInt32LE(data.length, 24);
+    entry.writeUInt16LE(nameBytes.length, 28); entry.writeUInt32LE(offset, 42);
+    central.push(entry, nameBytes);
+    offset += local.length + nameBytes.length + body.length + descriptor.length;
+  }
+  const centralBytes = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralBytes.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, centralBytes, end]);
+}
+const wordXml = (body) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+  `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`;
+const para = (text) => `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
+const contentTypes = { name: "[Content_Types].xml", data: `<?xml version="1.0"?><Types/>` };
+const summary = "Staff engineer with twelve years building payment systems, data pipelines and the teams that run them. " +
+  "Led the rewrite of a settlement service handling four million transactions a day, cut incident volume by half, " +
+  "and mentored eleven engineers into senior roles across three product groups in two countries.";
+const plainDocx = (extra = "") => zipOf([contentTypes, { name: "word/document.xml", streamed: true,
+  data: wordXml(para("Jane Example") + para("Seattle &amp; remote") + para(summary + extra)) }]);
+const plainText = `Jane Example\nSeattle & remote\n${summary}`;
+const tableDocx = zipOf([contentTypes, { name: "word/document.xml", stored: true, data: wordXml(para(summary) +
+  `<w:tbl><w:tr><w:tc>${para("Skill")}${para("set")}</w:tc><w:tc>${para("Years")}</w:tc></w:tr>` +
+  `<w:tr><w:tc>${para("Go")}</w:tc><w:tc>${para("5")}</w:tc></w:tr></w:tbl>`) }]);
+const imageDocx = zipOf([contentTypes, { name: "word/document.xml",
+  data: wordXml(`<w:p><w:r><w:drawing><wp:inline/></w:drawing></w:r></w:p>`) }]);
+
+const wordUser = async (tag) => {
+  const name = `Word ${tag} ${Date.now()}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: `word-${tag}-long-password` } });
+  return { name, token: (await req("POST", "/api/login", { body: { name, password: `word-${tag}-long-password` } })).json.token };
+};
+const W = await wordUser("a"), WB = await wordUser("b");
+const putDoc = (who, path, body, type, ifMatch) => req("PUT", `/api/documents/${path}`, { token: who.token, raw: body, type, ifMatch });
+const getText = async (who, path) => (await req("GET", `/api/documents/${path}`, { token: who.token })).text;
+const wordPaths = async (who) => ((await req("GET", "/api/documents", { token: who.token })).json?.documents || []).map((d) => d.path).sort();
+const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+const plain = await putDoc(W, "resumes/Jane_Resume.docx", plainDocx(), DOCX_TYPE);
+check("a Word resume is read on upload, and the reply says which file and how many words",
+  plain.status === 200 && plain.json?.text_path === "resumes/Jane_Resume.txt" &&
+  plain.json?.words === plainText.split(/\s+/).filter(Boolean).length && !!plain.json?.etag,
+  JSON.stringify(plain.json));
+check("the text is paragraphs in order, one per line, entities decoded - from a streamed entry",
+  (await getText(W, "resumes/Jane_Resume.txt")) === plainText, JSON.stringify(await getText(W, "resumes/Jane_Resume.txt")));
+check("the Word file itself is stored as sent",
+  (await wordPaths(W)).join() === "resumes/Jane_Resume.docx,resumes/Jane_Resume.txt");
+
+const table = await putDoc(W, "resumes/Table_Resume.docx", tableDocx, DOCX_TYPE);
+check("a table reads as a line per row with its cells tab-joined, a cell's paragraphs kept together - from a stored entry",
+  table.status === 200 && (await getText(W, "resumes/Table_Resume.txt")).endsWith("\nSkill set\tYears\nGo\t5"),
+  JSON.stringify(await getText(W, "resumes/Table_Resume.txt")));
+
+const image = await putDoc(W, "resumes/Scanned_Resume.docx", imageDocx, DOCX_TYPE);
+check("a Word file with no text in it - a scanned image - is refused, saying so, and nothing is stored",
+  image.status === 422 && image.json?.words === 0 && /scanned image/.test(image.json?.error || "") &&
+  !(await wordPaths(W)).some((p) => p.startsWith("resumes/Scanned_Resume")), JSON.stringify(image.json));
+const notZip = await putDoc(W, "resumes/Renamed.docx", "this is plain text with a .docx name", DOCX_TYPE);
+check("a file that isn't really a .docx is refused with a reason, and nothing is stored",
+  notZip.status === 422 && /Renamed\.docx/.test(notZip.json?.error || "") &&
+  !(await wordPaths(W)).some((p) => p.startsWith("resumes/Renamed")), JSON.stringify(notZip.json));
+const oldWord = await putDoc(W, "resumes/Old_Resume.doc", "not really a doc", "application/msword");
+check("an older Word file is refused, asking for .docx or PDF",
+  oldWord.status === 415 && /Save it as \.docx or PDF and attach that/.test(oldWord.json?.error || ""), JSON.stringify(oldWord.json));
+
+const handEdit = await putDoc(W, "resumes/Jane_Resume.txt", "a hand-edited replacement", "text/plain");
+check("writing the text directly is refused, naming the Word file it is read from",
+  handEdit.status === 409 && handEdit.json?.paired_with === "resumes/Jane_Resume.docx" &&
+  handEdit.json?.error === "This text is read from Jane_Resume.docx - replace that file instead.", JSON.stringify(handEdit.json));
+check("and so is a name differing only in case, which is the same file on the disk a run uses",
+  (await putDoc(W, "resumes/jane_resume.txt", "sneaky", "text/plain")).status === 409 &&
+  (await getText(W, "resumes/Jane_Resume.txt")) === plainText);
+check("removing the text on its own is refused the same way",
+  (await req("DELETE", "/api/documents/resumes/Jane_Resume.txt", { token: W.token })).status === 409);
+
+const staleWrite = await putDoc(W, "resumes/Jane_Resume.docx", plainDocx(" Also speaks Portuguese."), DOCX_TYPE, "not-the-etag");
+check("a Word upload with a stale If-Match writes neither file",
+  staleWrite.status === 412 && (await getText(W, "resumes/Jane_Resume.txt")) === plainText);
+const replaced = await putDoc(W, "resumes/Jane_Resume.docx", plainDocx(" Also speaks Portuguese."), DOCX_TYPE, plain.json?.etag);
+check("replacing the Word file replaces its text",
+  replaced.status === 200 && (await getText(W, "resumes/Jane_Resume.txt")).endsWith("Also speaks Portuguese.") &&
+  replaced.json?.words === plain.json?.words + 3, JSON.stringify(replaced.json));
+
+// A text file already stored under another case of the name is the same file
+// on a run's disk; the Word upload takes it over rather than leaving two.
+await putDoc(W, "resumes/cased_resume.txt", "an older pasted resume", "text/plain");
+const cased = await putDoc(W, "resumes/Cased_Resume.docx", plainDocx(), DOCX_TYPE);
+check("a Word upload replaces a text file of the same name in another case",
+  cased.status === 200 && (await wordPaths(W)).includes("resumes/Cased_Resume.txt") &&
+  !(await wordPaths(W)).includes("resumes/cased_resume.txt"), JSON.stringify(await wordPaths(W)));
+
+check("a .docx outside resumes/ is stored as a file and not read",
+  (await putDoc(W, "reference/Notes.docx", plainDocx(), DOCX_TYPE)).json?.text_path === undefined &&
+  !(await wordPaths(W)).includes("reference/Notes.txt"));
+check("another person's resume text isn't paired with this person's Word file",
+  (await putDoc(WB, "resumes/Jane_Resume.txt", "someone else's resume", "text/plain")).status === 200 &&
+  (await getText(W, "resumes/Jane_Resume.txt")).endsWith("Also speaks Portuguese."));
+
+const removed = await req("DELETE", "/api/documents/resumes/Jane_Resume.docx", { token: W.token });
+check("removing the Word file removes its text with it",
+  removed.status === 200 && JSON.stringify(removed.json?.removed) === JSON.stringify(["resumes/Jane_Resume.txt"]) &&
+  !(await wordPaths(W)).some((p) => p.startsWith("resumes/Jane_Resume")), JSON.stringify(removed.json));
+check("and a text file left unpaired can then be written directly",
+  (await putDoc(W, "resumes/Jane_Resume.txt", "pasted instead", "text/plain")).status === 200);
+
+const wordId = (await req("GET", "/api/me", { token: W.token })).json.id;
+const beforeDelete = (await wordPaths(W)).length;
+const wordGone = await req("DELETE", `/api/users/${wordId}`, { admin: true, body: { name: W.name } });
+check("deleting the account takes every Word file and its text with it",
+  wordGone.status === 200 && wordGone.json?.deleted?.documents === beforeDelete && beforeDelete >= 5,
+  JSON.stringify({ before: beforeDelete, deleted: wordGone.json?.deleted?.documents }));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
