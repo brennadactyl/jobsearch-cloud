@@ -1,6 +1,6 @@
 # Account settings, where the password already is
 
-"Signed in as <name>" opens an account panel. Changing your password is one
+"My account" in the header opens an account panel. Changing your password is one
 section of it; the rest is the search you described when you signed up, editable
 for as long as you have the account.
 
@@ -114,8 +114,9 @@ A `pending` intake with reason `edit` is a rewrite, not a build:
 
 ## What the person sees
 
-- **The header button is unchanged**: "Signed in as <name>". The dialog it opens
-  gains sections, with Password first, then the search.
+- **The header button reads "My account"**, replacing "Signed in as <name>". The
+  panel it opens names the account at the top - "Signed in as <name>" - and
+  holds Password first, then the search.
 - **Each section saves on its own**, through the header's save indicator, the
   same as any other write on the page.
 - **No deleting or adding a search here.** Adding a role is a new search with a
