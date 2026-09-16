@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import * as client from "./api/client";
 import { NOW, data } from "./domain/fixture";
-import { OVERVIEW_FOLD_IDS } from "./domain/overview";
+import { OVERVIEW_FOLD_IDS, payoff } from "./domain/overview";
+import { pathForTarget } from "./domain/tabs";
 import { clearPrefs, readOverviewCollapsed, setPrefs } from "./ui/prefs";
 
 async function renderOverview() {
@@ -112,6 +113,77 @@ describe("which searches pay off", () => {
     const applied = beta.querySelectorAll("td")[4];
     expect(applied.textContent).toBe("0");
     expect(applied.querySelector("a")).toBeNull();
+  });
+
+  it("has no rate columns: each rate sits in the cell it's a rate of", async () => {
+    await renderOverview();
+    const table = screen.getByRole("table", { name: "Which searches pay off" });
+    const headers = within(table).getAllByRole("columnheader").map((th) => th.textContent);
+    expect(headers).not.toContain("Apply rate");
+    expect(headers).not.toContain("Response rate");
+    expect(headers).toHaveLength(6);
+  });
+
+  it("puts the apply rate after the Applied count, with the count as the link and the fraction in the tooltip", async () => {
+    await renderOverview();
+    const { rows, total } = payoff(data);
+    const row = rows.find((r) => r.found && r.applied.n > 0) ?? total;
+    const { n: applied } = row.applied;
+    const found = row.found!.n;
+    expect(applied).toBeGreaterThan(0);
+
+    const table = screen.getByRole("table", { name: "Which searches pay off" });
+    const tr = row === total ? table.querySelector("tr.total")! : within(table).getByRole("link", { name: row.label }).closest("tr")!;
+    const cell = tr.querySelectorAll("td")[4];
+    expect(cell.textContent).toBe(`${applied} · ${Math.round((applied / found) * 100)}%`);
+    expect(cell.querySelector("a")!.textContent).toBe(String(applied));
+    const pct = cell.querySelector(".rate")!;
+    expect(pct.closest("a")).toBeNull();
+    expect(pct).toHaveAttribute("aria-label", expect.stringContaining(`${applied} of ${found}`));
+  });
+
+  it("keeps every count link opening exactly its count, with no rate inside the link", async () => {
+    await renderOverview();
+    const table = screen.getByRole("table", { name: "Which searches pay off" });
+    const { rows, total } = payoff(data);
+    const expected = [...rows, total].flatMap((r) =>
+      [r.open, r.notAFit, r.applied, r.responded].filter((c) => c && c.n && c.target).map((c) => [pathForTarget(c!.target!), c!.n]),
+    );
+    const links = [...table.querySelectorAll("td.num a")].map((a) => [a.getAttribute("href"), Number(a.textContent)]);
+    // The drill invariant, as rendered: each link's text is its count, and that
+    // count is what its target opens.
+    expect(links).toEqual(expected);
+    expect(table.querySelector("a .rate")).toBeNull();
+  });
+
+  it("shows Responded as the count alone under three applications", async () => {
+    await renderOverview();
+    const table = screen.getByRole("table", { name: "Which searches pay off" });
+    for (const r of payoff(data).rows.filter((row) => row.key && row.applied.n < 3)) {
+      const cell = within(table).getByRole("link", { name: r.label }).closest("tr")!.querySelectorAll("td")[5];
+      expect(cell.textContent, r.label).toBe(String(r.responded.n));
+    }
+  });
+});
+
+describe("by location", () => {
+  it("sets each tier's total at the end of its bar, and scales every bar to the largest", async () => {
+    await renderOverview();
+    const tiers = data.settings.priority_locations.map((r) => r.label).concat("Other");
+    const bars = tiers.map((t) => {
+      const group = screen.getByRole("group", { name: t });
+      const segments = [...group.querySelectorAll(".hseg")].reduce((s, el) => s + Number(el.getAttribute("data-n")), 0);
+      return { segments, end: Number(group.querySelector(".hbar-end")!.textContent), width: group.querySelector<HTMLElement>(".hbar")!.style.width };
+    });
+    for (const b of bars) expect(b.end).toBe(b.segments);
+    const max = Math.max(...bars.map((b) => b.end));
+    // The browser may reorder the calc(), so read the parts rather than the string:
+    // room for the widest total's digits, and this bar's share of the largest.
+    for (const b of bars) {
+      expect(b.width, b.width).toContain(`${String(max).length}ch + 8px`);
+      const share = b.width.match(/(?<![\w.])(\d*\.?\d+(?:e-\d+)?)(?![\d.]*(?:ch|px|%))/)![1];
+      expect(Number(share), b.width).toBeCloseTo(b.end / max);
+    }
   });
 });
 

@@ -469,6 +469,11 @@ a.ch-col:hover{background:var(--surface2)}
 .hrow-head .mono{font-size:12px;font-weight:400;color:var(--ink3)}
 .offer-row{margin:14px 0 0}
 .hbar{display:flex;gap:2px;height:14px;min-width:6px}
+/* A bar with its total straight after it. The mono font makes a digit 1ch, which
+   is how StackedBar reserves the total's room. */
+.hbar-line{display:flex;align-items:center;gap:8px;
+  font:12px "IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.hbar-end{flex:none;color:var(--ink3)}
 .hseg{display:block;flex-basis:0;min-width:3px;height:100%;border-radius:3px}
 a.hseg:hover{outline:1px solid var(--ink3);outline-offset:1px}
 .hseg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -496,15 +501,16 @@ a.seglabel:hover{color:var(--accent)}
    whole table fits a mid-width window and a phone sees the first figures
    without scrolling. The name column is wide enough that a stamp breaks once,
    not at every part. */
+/* As wide as its content, not the card: stretched, the number columns sit in
+   gaps too wide to read a row across. */
+.ch-table .payoff{width:auto}
 .ch-table .payoff th{white-space:normal;vertical-align:bottom;line-height:1.3}
 .ch-table .payoff td:first-child{white-space:normal;min-width:13em}
 .payoff-run{margin-top:3px}
 .payoff-run .runstamp{font-size:11.5px;flex-wrap:wrap;column-gap:4px}
 @media (max-width:640px){.ch-table .payoff td:first-child{min-width:10em}}
 .cnt.plain{cursor:help;border-bottom:1px dotted var(--ink3)}
-.rate{display:inline-flex;align-items:center;gap:8px;cursor:help}
-.rate-meter{display:inline-block;width:32px;height:5px;border-radius:99px;background:var(--surface2);overflow:hidden}
-.rate-meter i{display:block;height:100%;background:var(--accent)}
+.rate{color:var(--ink3);cursor:help}
 
 .waitlist{list-style:none;margin:0;padding:0}
 .waitlist li+li{border-top:1px solid var(--line)}
