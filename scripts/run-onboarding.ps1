@@ -344,6 +344,7 @@ $MODEL_TIMEOUT_MINUTES = 25
 # they can do, and never what a run was doing when it broke.
 $NOTE_GENERIC = "Setting your search up didn't finish tonight. It will be tried again tomorrow night, and there's nothing you need to do unless this message is still here after that."
 $NOTE_RESUME = "We couldn't read your resume overnight: a Word, RTF or Pages file, or an image, can't be read with nobody there to open it. Attach it as a PDF or a .txt instead, or paste the text into the setup form, and send it again."
+$NOTE_NO_SCOPE = "Your setup doesn't say where you can work, so there was nowhere for the search to look. Open the setup form, answer `"Where can you work?`", and send it again."
 $NOTE_NO_SLOT = "There's no room left in the nightly schedule on the machine that runs these searches, so yours couldn't be added. Let whoever invited you know - this one needs their attention, not yours."
 
 # "Jordan O'Neil" -> "Jordan-O-Neil". The documents route takes word characters,
@@ -369,6 +370,20 @@ $MODEL_TRACK_FIELDS = @(
     "fit_clause", "fit_disqualifier", "fit_filter_step", "intro_note", "doc_summary"
 )
 $MODEL_SETTING_FIELDS = @("geo_scope_line", "scope_clause", "scope_disqualifier")
+
+# The distinctive words of a free-text answer about places, for checking that
+# what came back was written from the answer it was supposed to be written from.
+# Four letters and up: "US", "or" and "to" are in every sentence, and "WA" is in
+# none of the prose that matters.
+function Get-PlaceWords([string]$text) {
+    return @(($text -split '[^A-Za-z]+') | Where-Object { $_.Length -ge 4 } | ForEach-Object { $_.ToLower() } | Sort-Object -Unique)
+}
+
+function Test-MentionsAny([string]$haystack, [string[]]$words) {
+    $lower = $haystack.ToLower()
+    foreach ($w in $words) { if ($lower.Contains($w)) { return $true } }
+    return $false
+}
 
 # ---- Build each person. ----------------------------------------------------
 $built = @()
@@ -488,6 +503,13 @@ foreach ($item in $queue) {
             Stop-Person "no readable resume - only unreadable attachments and no pasted text" $NOTE_RESUME
         }
 
+        # Where they can work is the one answer a search cannot be built
+        # without: with no scope there is nothing to look inside, and every
+        # other answer only narrows or ranks.
+        $scopeAnswer = [string]$answers.work_scope
+        $limitsAnswer = [string]$answers.location_limits
+        if (-not $scopeAnswer.Trim()) { Stop-Person "no work_scope answer - nothing says where this search may look" $NOTE_NO_SCOPE }
+
         Write-Utf8 (Join-Path $stage "answers.json") ($answers | ConvertTo-Json -Depth 12)
         Copy-Item -Path $templateFile -Destination (Join-Path $stage "template.md") -Force
         Copy-Item -Path $skillFile -Destination (Join-Path $stage "setup-skill.md") -Force
@@ -543,10 +565,11 @@ out\config.json:
     }
   ],
   "settings": {
-    "geo_scope_line": "<a paragraph with worked examples, from their location limits; empty for no limit>",
-    "scope_clause": "<the short version, as it reads mid-sentence>",
-    "scope_disqualifier": "<the mirror of it, for the disqualified list>"
+    "geo_scope_line": "<a paragraph with worked examples, written from work_scope: where the search MAY look>",
+    "scope_clause": "<the same scope, short, as it reads mid-sentence>",
+    "scope_disqualifier": "<written from location_limits: what puts a posting out, for the disqualified list>"
   },
+  "preferred_inside": ["<each priority_locations label that lies inside work_scope, by its exact label>"],
   "excluded_companies": ["<one per company they said they'd never work for>"],
   "named_companies": ["<companies they named as ones they want searched>"]
 }
@@ -555,6 +578,18 @@ One track per role in answers.json, in the same order:
 $($roleLines -join "`n")
 
 Rules for this run:
+- **Two different answers, two different fields.** `work_scope` ("Where can you
+  work?") is the ONLY thing that sets the scope: it becomes geo_scope_line and
+  scope_clause, and they say where the search may look. `location_limits`
+  ("Anywhere you can't take a job?") is an exclusion and becomes
+  scope_disqualifier alone. Never scope a search to a place someone ruled out,
+  and never let an exclusion narrow the scope to itself - a search scoped to
+  the one state they can't work in screens out everything it finds, all night,
+  and reports a quiet night.
+- `preferred_inside` lists which of their ranked places actually lie inside
+  work_scope, by the exact label from answers.json. If none of them do, say so
+  with an empty list rather than stretching the scope to fit: the script stops
+  and asks them to fix the two answers.
 - No search keeps a company list. The kinds of employer they like go in the
   track doc's candidate profile, as guidance for discovery; a company they
   named goes in named_companies, which the script puts on the shared list
@@ -631,6 +666,45 @@ Rules for this run:
         } catch {
             Stop-Person "out\config.json is not valid JSON" $null
         }
+
+        # ---- Is the scope the scope they asked for?
+        #
+        # A search scoped to a place someone ruled out finds nothing, every
+        # night, and reports a quiet night rather than a broken one - so the
+        # scope prose is checked against the answer it was supposed to come
+        # from, before any of it is posted.
+        $scopeWords = Get-PlaceWords $scopeAnswer
+        $limitWords = Get-PlaceWords $limitsAnswer
+        $scopeProse = "$([string]$draft.settings.geo_scope_line) $([string]$draft.settings.scope_clause)"
+        if ($scopeWords.Count -gt 0 -and -not (Test-MentionsAny $scopeProse $scopeWords)) {
+            Stop-Person "the scope came back naming none of the places in their work_scope answer" $null
+        }
+        # An exclusion that reached neither the disqualifier nor the scope has
+        # been dropped; one that reached the scope has been inverted into it.
+        if ($limitWords.Count -gt 0) {
+            $disqProse = [string]$draft.settings.scope_disqualifier
+            if (-not (Test-MentionsAny $disqProse $limitWords)) {
+                Stop-Person "what they can't take didn't reach scope_disqualifier" $null
+            }
+            $onlyLimits = @($limitWords | Where-Object { $scopeWords -notcontains $_ })
+            if ($onlyLimits.Count -gt 0 -and (Test-MentionsAny ([string]$draft.settings.scope_clause) $onlyLimits)) {
+                Stop-Person "the scope clause is built from what they ruled out, not from where they can work" $null
+            }
+        }
+        # Whether a ranked place lies inside the scope needs geography, so the
+        # model says which ones do and this checks the claim is about their
+        # actual places. None inside means a search that can only screen
+        # everything out: their two answers disagree, and only they can settle it.
+        $labels = @($answers.priority_locations | ForEach-Object { [string]$_.label } | Where-Object { $_ })
+        $inside = @($draft.preferred_inside | ForEach-Object { [string]$_ } | Where-Object { $labels -contains $_ })
+        if ($labels.Count -gt 0 -and $inside.Count -eq 0) {
+            $where = if ($scopeAnswer.Length -gt 90) { $scopeAnswer.Substring(0, 90) + "..." } else { $scopeAnswer }
+            $liked = ($labels -join ", ")
+            if ($liked.Length -gt 90) { $liked = $liked.Substring(0, 90) + "..." }
+            Stop-Person "none of their preferred locations lie inside their work_scope answer" `
+                "The places you put first ($liked) are outside where you said you can work ($where), so a search built from them would rule out everything it found. Check those two answers on the setup form and send it again."
+        }
+        Log "      scope: preferred locations inside it - $(if ($inside.Count) { $inside -join ', ' } else { '(none ranked)' })"
 
         $draftTracks = @($draft.tracks)
         if ($draftTracks.Count -ne $roles.Count) {
