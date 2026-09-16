@@ -80,6 +80,16 @@ check("unknown name and wrong password are indistinguishable",
   wrongName.status === 401 && wrongPass.status === 401 && wrongName.json.error === wrongPass.json.error);
 check("a session token is not accepted as the admin token",
   (await req("POST", "/api/users", { token: A_TOK, body: { name: "sneaky", password: "aaaaaaaaaaaaa" } })).status === 401);
+
+// Where a route sits decides who checks its token, and both lists above answer
+// 401 to a session token, so only the table itself shows an operator route has
+// stayed under the router's check rather than a handler's.
+const routeTable = await import("./src/routes/index.js");
+const routeListed = (list, method, path) => list.some(([m, p]) => m === method && String(p) === String(path));
+check("provisioning an account and purging a search are admin routes, checked by the router",
+  routeListed(routeTable.ADMIN_ROUTES, "POST", "/api/users") && routeListed(routeTable.ADMIN_ROUTES, "POST", "/api/purge"));
+check("no public route is an operator route",
+  !routeTable.PUBLIC_ROUTES.some(([, p]) => ["/api/users", "/api/purge", "/api/invites", "/api/tokens"].includes(String(p))));
 check("no token at all is 401", (await req("GET", "/api/data")).status === 401);
 check("a made-up token is 401", (await req("GET", "/api/data", { token: "not-a-real-token" })).status === 401);
 
