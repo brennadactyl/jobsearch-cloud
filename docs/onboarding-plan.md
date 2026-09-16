@@ -194,7 +194,7 @@ needs judgement.
 | Call it | track `label`, and a slug `key` unique in the account |
 | What roles? | `role_search_line` (a noun phrase of titles) and `full_description` |
 | Kinds of companies | the track doc's candidate profile, as guidance for discovery. It never becomes a list of employers the search sweeps |
-| Named companies | added to the shared company list once the tracks exist, with `/api/coverage` under one of the new track keys and `on: ""`. Never kept on the search |
+| Named companies | added to the shared company list once the tracks exist, with `/api/coverage` under one of the new track keys and `on: ""`. Never kept on the search. The new search then starts its rotation at the first of them (see below) |
 | Rules a job out | `fit_clause`, `fit_disqualifier`, `fit_filter_step` |
 | Lowest acceptable pay | added to the fit filter step: a stated lower pay screens a posting out; no stated pay keeps it |
 | Companies never to work for | `excluded_companies` |
@@ -203,6 +203,14 @@ needs judgement.
 Defaults cover everything else: `doc_file`, `doc_summary`,
 `doc_update_line`, `report_line`, `screened_examples`, notes,
 `location_guidance`, `stale_run_hours` and tab labels.
+
+**Where the new search starts its rotation.** Seeded companies are appended to
+the end of the shared list, and a new track's cursor is 0, so without this a
+person's own companies are the last ones their search reaches - about a week on
+today's list. After seeding, the onboarding run sets the new track's
+`sweep_cursor` to the position of the first company it added. The rotation wraps,
+so nothing else is skipped. The server needs a way to set it; how is Backend
+Buddy's call.
 
 A search has no company list of its own. It covers its nightly batch from the
 shared list, plus discovery, so `target_companies` stays empty and neither the
