@@ -142,7 +142,9 @@ describe("the setup form", () => {
     await screen.findByRole("heading", { name: "Set up your job search" });
   }
 
-  async function fillRole() {
+  /** The two answers a form can't send without: where work is possible, and one role. */
+  async function fillRequired() {
+    await userEvent.type(screen.getByLabelText("Where can you work?"), "Anywhere in the US, remote or around Denver");
     await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
     await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
   }
@@ -160,7 +162,7 @@ describe("the setup form", () => {
     const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(intake());
     vi.mocked(client.getIntake).mockResolvedValue(intake());
 
-    await fillRole();
+    await fillRequired();
     await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["%PDF"], "resume.pdf", { type: "application/pdf" }));
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
@@ -171,7 +173,7 @@ describe("the setup form", () => {
   it("refuses to send a Word file alone, beside Attach", async () => {
     const submit = vi.spyOn(client, "submitIntake");
     await openSetup();
-    await fillRole();
+    await fillRequired();
     await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["PK"], "resume.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
@@ -185,6 +187,20 @@ describe("the setup form", () => {
     Object.defineProperty(big, "size", { value: 11.4 * 1024 * 1024 });
     await userEvent.upload(screen.getByLabelText("Attach resume files"), big);
     expect(screen.getByText("Not attached: it's 11.4 MB, and files can be up to 8 MB.")).toBeInTheDocument();
+  });
+
+  it("asks where the person can work before it will send", async () => {
+    const submit = vi.spyOn(client, "submitIntake");
+    await openSetup();
+    await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
+    await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
+    // An exclusion answered on its own is what scoped a search to the one place
+    // its person had ruled out.
+    await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Nowhere in Texas");
+    await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+
+    expect(screen.getByText("Say where you can work — it's what the search searches.")).toBeInTheDocument();
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it("asks for a role beside the role block", async () => {
@@ -219,7 +235,7 @@ describe("the setup form", () => {
     const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(intake());
     vi.mocked(client.getIntake).mockResolvedValue(intake());
 
-    await fillRole();
+    await fillRequired();
     await userEvent.click(screen.getByRole("button", { name: "she/her" }));
     await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["hi"], "Sam's Resume (final).txt", { type: "text/plain" }));
     await userEvent.type(screen.getByLabelText("Which locations should come first?"), "Seattle, Remote US");
@@ -229,6 +245,7 @@ describe("the setup form", () => {
     expect(put).toHaveBeenCalledWith("resumes/Sam-s Resume -final.txt", expect.any(File));
     const sent = submit.mock.calls[0][0];
     expect(sent.pronouns).toBe("she/her");
+    expect(sent.work_scope).toBe("Anywhere in the US, remote or around Denver");
     expect(sent.resume_files).toEqual(["resumes/Sam-s Resume -final.txt"]);
     expect(sent.priority_locations.map((r) => r.label)).toEqual(["Seattle", "Remote US"]);
     expect(sent.roles[0]).toMatchObject({ name: "Engineering", titles: "Staff backend engineer" });
@@ -245,7 +262,7 @@ describe("the setup form", () => {
   it("puts a server refusal beside the field it names, and says it couldn't send", async () => {
     await openSetup();
     vi.spyOn(client, "submitIntake").mockRejectedValue(refusal(400, "describe at least one role", { field: "roles" }));
-    await fillRole();
+    await fillRequired();
     await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 

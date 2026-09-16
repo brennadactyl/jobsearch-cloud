@@ -42,10 +42,23 @@ describe("safeDocumentName", () => {
 });
 
 describe("setupProblems", () => {
-  const ready = { ...emptyAnswers("Sam"), resume_text: "Engineer", roles: [{ name: "Eng", titles: "Staff engineer", company_kinds: "", rule_outs: "", min_pay: "" }] };
+  const ready = {
+    ...emptyAnswers("Sam"),
+    resume_text: "Engineer",
+    work_scope: "Anywhere in the US",
+    roles: [{ name: "Eng", titles: "Staff engineer", company_kinds: "", rule_outs: "", min_pay: "" }],
+  };
 
   it("lets a complete form send", () => {
     expect(setupProblems(ready, [])).toEqual({});
+  });
+
+  it("holds out for where the person can work, which is the only answer that scopes the search", () => {
+    expect(setupProblems({ ...ready, work_scope: "  " }, []).work_scope).toBe(
+      "Say where you can work — it's what the search searches.",
+    );
+    // An exclusion is not a scope: on its own it still can't send.
+    expect(setupProblems({ ...ready, work_scope: "", location_limits: "Nowhere in Texas" }, [])).toHaveProperty("work_scope");
   });
 
   it("sends a PDF on its own, since the run reads it", () => {

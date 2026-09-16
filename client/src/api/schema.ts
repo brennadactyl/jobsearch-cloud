@@ -197,6 +197,7 @@ export const intakeAnswersSchema = z.object({
   pronouns: z.enum(["", ...PRONOUNS]).default(""),
   resume_text: str.default(""),
   resume_files: z.array(str).default([]),
+  work_scope: str.default(""),
   location_limits: str.default(""),
   locations_first: str.default(""),
   priority_locations: z.array(priorityLocationSchema).default([]),

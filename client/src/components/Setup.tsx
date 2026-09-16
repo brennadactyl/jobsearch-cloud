@@ -400,16 +400,31 @@ export default function Setup({
           </Field>
 
           <Section title="Where you'll work">
-            Two different questions: what's off the table entirely, and what you'd most like.
+            Three different questions: everywhere you could work, anything ruled out inside that, and what you'd most
+            like.
           </Section>
           <Field
+            label={<label htmlFor={`${id}-scope`}>Where can you work?</label>}
+            problem={problems.work_scope}
+            hint="This is the answer that sets where the search looks, so name the whole area you could take a job in — not only the part you'd prefer."
+          >
+            <textarea
+              id={`${id}-scope`}
+              rows={2}
+              placeholder="Anywhere in the US, remote or in the Denver area"
+              aria-invalid={problems.work_scope ? true : undefined}
+              value={answers.work_scope}
+              onChange={(e) => set("work_scope", e.target.value)}
+            />
+          </Field>
+          <Field
             label={<label htmlFor={`${id}-limits`}>Anywhere you can't take a job?</label>}
-            hint="Say it the way you'd say it to a person. Leave it empty if nowhere is ruled out."
+            hint="Optional, and only a rule-out: somewhere inside the area above that you still couldn't take. It never narrows where the search looks on its own — leave it empty if nothing is ruled out."
           >
             <textarea
               id={`${id}-limits`}
               rows={2}
-              placeholder="US only — I can't take a role that requires being in another country."
+              placeholder="Nothing that needs me on site in another state."
               value={answers.location_limits}
               onChange={(e) => set("location_limits", e.target.value)}
             />
