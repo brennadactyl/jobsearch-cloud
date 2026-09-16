@@ -50,6 +50,7 @@ scripts/
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
   import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
   setup-scheduler.ps1          registers every person's tracks as daily Windows Scheduled Tasks
+  new-invite.ps1               makes an invite link to add a person, lists what became of each, or revokes one
   set-password.ps1             resets an account's password with the ADMIN_TOKEN, typed at a prompt
   seed-demo-user.ps1           creates the demo account and fills it with invented postings
   demo-user.json               that invented data - the only fabricated content in this repo
@@ -209,20 +210,52 @@ curl -s "$TRACKER_URL/api/prompt/<track key>" -H "Authorization: Bearer <their t
 ## Adding another person
 
 One deployment holds any number of job searches, each with its own tracks,
-leads, page title and location rules, and its own sign-in. To add someone:
+leads, page title and location rules, and its own sign-in. Adding someone is
+sending them an invite link.
+
+**Once, on the machine that runs the searches:** put `deployment.json` in the
+data folder with the API URL, the tracker page's URL and the `ADMIN_TOKEN` (see
+[private.example/README.md](private.example/README.md#deploymentjson)), then
+run `scripts\setup-scheduler.ps1`. That registers `JobSearch-Onboarding`, which
+runs at midnight and sets up anyone who has signed up since.
+
+**For each person:**
+
+```powershell
+.\scripts\new-invite.ps1 -Note "Sam, from the climbing gym"
+```
+
+It prints a link that works once, for 14 days. Send it to them. They:
+
+1. open it and choose their own name and password;
+2. fill in the setup form on the tracker page: the roles they want, where they
+   can work, and their resume.
+
+That night the onboarding run creates their folder under `private\<their id>\`,
+posts their search config and track docs, and schedules their searches in a
+free slot later the same night. In the morning their tracker has leads. When
+the machine has no free overnight slot left, their setup is marked failed and
+the page tells them why, rather than stacking a search on top of another.
+
+`.\scripts\new-invite.ps1 -List` shows each invite's id and state (open, used,
+expired or revoked) and, once used, the account's name and user id, which names
+their folder. A lost link can't be shown again: stop it with
+`.\scripts\new-invite.ps1 -Revoke <id>` and mint another.
+
+Everyone's searches run on this machine, under its Claude account, one after
+another in their own slots.
+
+**Setting someone up by hand** - in person, or on a machine without the
+onboarding task:
 
 1. Create their account with the `ADMIN_TOKEN` - see
    [server/README.md](server/README.md#accounts). It returns their user id.
 2. Run the [job-search-setup](.claude/skills/job-search-setup/) skill for
-   them - it makes `private\<their id>\`, mints the token their scheduled
-   runs use, reads their resume, asks about their tracks and locations,
-   posts their config, and registers their scheduled tasks without touching
-   anyone else's.
+   them. It makes `private\<their id>\`, mints the token their scheduled runs
+   use, reads their resume, asks about their tracks and locations, posts their
+   config, and registers their scheduled tasks without touching anyone else's.
 
-They sign in on the same tracker URL with their own name and password.
-Their searches run on whichever machine holds their folder, under that
-machine's Claude account - so stagger everyone's `schedule_time`, since each
-run takes several minutes and they share one CLI.
+The same skill adds a track to an existing search later.
 
 The API keeps each person's data separate, but whoever administers the
 Cloudflare account can read all of it directly in D1.
