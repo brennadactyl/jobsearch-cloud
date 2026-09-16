@@ -471,7 +471,8 @@ switch ($Command) {
           # stays in this search's own row (see routes/coverage.js). The server
           # reads fields by name and drops the rest, so a new field is added
           # here in the same change as its server column. `dead_signal` is
-          # deliberately not sent - see prompt.js's step 9d.
+          # deliberately not sent - see prompt.js's step 9d, "RECORD WHAT YOU
+          # COVERED".
           foreach ($f in @("board", "endpoint", "url_shape", "wall", "note")) {
               $v = Field $r $f
               if ($v) { $row[$f] = $v }

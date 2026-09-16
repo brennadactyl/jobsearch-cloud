@@ -216,7 +216,8 @@ function Record-FailedRun($reason) {
 #
 # Every run reads its track doc in full, so the doc's size is a cost paid every
 # night, and it only grows. What runs append is mostly per-company fetch notes,
-# which belong on the shared company list through step 9d; a sentence in the
+# which belong on the shared company list through the prompt's step 9d ("RECORD
+# WHAT YOU COVERED"); a sentence in the
 # prompt saying so doesn't stop it, so the limit lives here. 1.5 KB fits a fit
 # refinement or a promoted company; a batch of fetch notes doesn't. A doc may
 # always shrink.

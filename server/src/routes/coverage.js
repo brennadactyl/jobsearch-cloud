@@ -17,8 +17,9 @@ import { excluderFor, isoDate, today, unknownTrack } from "../validate.js";
 // that all of them get skimmed. The list's length divided by this is how many
 // nights a full cycle takes.
 //
-// Before changing it, read run lengths and sweep counts, and step 9e of the
-// prompt, whose replacement loop adds to this number on a bad night.
+// Before changing it, read run lengths and sweep counts, and the prompt's step
+// 9e ("REPLACE THE COMPANIES YOU COULDN'T READ"), whose replacement loop adds to
+// this number on a bad night.
 //
 // A constant, not config: a setting nobody sets is a setting that goes stale.
 export const COVERAGE_BATCH = 24;

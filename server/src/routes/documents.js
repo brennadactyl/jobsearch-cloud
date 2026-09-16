@@ -1,6 +1,7 @@
 /**
  * This person's documents: their resumes, and the per-track baseline doc the
- * nightly search reads at step 1 and edits at step 8b.
+ * nightly search reads first (the prompt's step 1) and edits near the end (step
+ * 8b, docUpdateLine in ../prompt.js).
  *
  * Two conventions bend here, and only here. A document body is raw bytes in
  * both directions, so these handlers skip readJson() on the way in and
