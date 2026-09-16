@@ -20,8 +20,9 @@ leads, applications, page titles and location rules.
 ## Code layout
 
 - `src/index.js` - the entry point: the CORS preflight (`OPTIONS`), resolving
-  the caller's session, building the one `Db` scoped to that person, and
-  dispatching to the route table. It knows about no individual endpoint.
+  the caller's session, building the `Db` scoped to that person and the shared
+  `CompanyList`, and dispatching to the route table. It knows about no
+  individual endpoint.
 - `src/routes/index.js` - the route table: which method and path map to which
   handler, in three lists by credential. `PUBLIC_ROUTES` need none,
   `ADMIN_ROUTES` require `ADMIN_TOKEN` and `SESSION_ROUTES` require a session
@@ -32,7 +33,8 @@ leads, applications, page titles and location rules.
   `data.js`, `documents.js`, `accounts.js`, `admin.js`, `update.js`,
   `delisting.js`, `onboarding.js`). Each holds its endpoints' parsing,
   validation and response shaping, with each endpoint's contract documented on
-  its handler. Session routes are handed a `Db` and never query D1 themselves.
+  its handler. Session routes are handed a `Db` (and `coverage.js` the
+  `CompanyList`) and never query D1 themselves.
   The routes that act before there is a session or across accounts -
   `accounts.js` and `onboarding.js` - pass `env.DB` to `src/auth.js` and
   `src/onboarding.js`, and `admin.js` builds its own `Db` for the user it

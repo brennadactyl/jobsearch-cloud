@@ -109,9 +109,11 @@ The company list every account shares (`company_fetch`: membership, positions,
 fetch facts, walls): `server/src/companies.js`, on `CompanyList`, reached as
 `ctx.companyList`. It has no user to filter on, which is exactly why it is not
 on `Db`. What one search did with a company - `company_sweeps`, its cursor - is
-that search's own and stays on `Db`. If the route writes, refuse the whole
-request rather than drop bad rows - a partial insert makes a nightly run
-believe it filed rows it did not, and it never looks for those postings again.
+that search's own and stays on `Db`.
+
+Either way, if the route writes, refuse the whole request rather than drop bad
+rows - a partial insert makes a nightly run believe it filed rows it did not,
+and it never looks for those postings again.
 
 ## 5. Add checks to `verify-local.mjs` - this is not optional
 
