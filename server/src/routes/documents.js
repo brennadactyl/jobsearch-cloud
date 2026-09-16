@@ -31,12 +31,17 @@ import { badDocumentPath, isDocumentPath, unknownTrack } from "../validate.js";
  */
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 
-function tooLarge(bytes) {
+// `field: "resume"` marks the refusal of a resume, so the setup form can show it
+// beside the file it is about rather than at the top of the form.
+const RESUME_FIELD = { field: "resume" };
+
+function tooLarge(bytes, path) {
   return json(
     {
       error:
         `document is ${bytes} bytes; the limit is ${MAX_DOCUMENT_BYTES} ` +
         "(8 MB). Documents are re-downloaded by every nightly run and every backup.",
+      ...(path.startsWith("resumes/") ? RESUME_FIELD : {}),
     },
     413
   );
@@ -198,14 +203,14 @@ export async function handlePutDocument({ request, docs, params }) {
   // buffered length catches a chunked or understated one. Buffering before the
   // put is what keeps an oversized object from ever being written.
   const declared = Number(request.headers.get("content-length") || 0);
-  if (declared > MAX_DOCUMENT_BYTES) return tooLarge(declared);
+  if (declared > MAX_DOCUMENT_BYTES) return tooLarge(declared, path);
 
   const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > MAX_DOCUMENT_BYTES) return tooLarge(bytes.byteLength);
+  if (bytes.byteLength > MAX_DOCUMENT_BYTES) return tooLarge(bytes.byteLength, path);
 
   const resume = resumeParts(path);
   if (resume?.ext === "doc") {
-    return json({ error: `${resume.name} is an older Word file - Save it as .docx or PDF and attach that` }, 415);
+    return json({ error: `${resume.name} is an older Word file - Save it as .docx or PDF and attach that`, ...RESUME_FIELD }, 415);
   }
   if (resume?.ext === "txt") {
     const wordFile = await pairedWordFile(docs, resume);
@@ -220,13 +225,14 @@ export async function handlePutDocument({ request, docs, params }) {
       extracted = await docxText(bytes);
     } catch (err) {
       if (!(err instanceof DocxError)) throw err;
-      return json({ error: `${resume.name} ${err.message}` }, 422);
+      return json({ error: `${resume.name} ${err.message}`, ...RESUME_FIELD }, 422);
     }
     if (extracted.words < MIN_WORDS) {
       return json(
         {
           error: `${resume.name} has only ${extracted.words} words of text - if it is a scanned image or a template, attach a PDF or paste the text instead`,
           words: extracted.words,
+          ...RESUME_FIELD,
         },
         422
       );
@@ -314,7 +320,7 @@ async function pairedTextFiles(docs, resume) {
  */
 function textIsServerOwned(wordFile, action) {
   const name = wordFile.slice("resumes/".length);
-  return json({ error: `This text is read from ${name} - ${action} that file instead.`, paired_with: wordFile }, 409);
+  return json({ error: `This text is read from ${name} - ${action} that file instead.`, paired_with: wordFile, ...RESUME_FIELD }, 409);
 }
 
 /**

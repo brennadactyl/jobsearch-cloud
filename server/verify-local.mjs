@@ -2623,7 +2623,7 @@ check("a table reads as a line per row with its cells tab-joined, a cell's parag
 
 const image = await putDoc(W, "resumes/Scanned_Resume.docx", imageDocx, DOCX_TYPE);
 check("a Word file with no text in it - a scanned image - is refused, saying so, and nothing is stored",
-  image.status === 422 && image.json?.words === 0 && /scanned image/.test(image.json?.error || "") &&
+  image.status === 422 && image.json?.words === 0 && image.json?.field === "resume" && /scanned image/.test(image.json?.error || "") &&
   !(await wordPaths(W)).some((p) => p.startsWith("resumes/Scanned_Resume")), JSON.stringify(image.json));
 const notZip = await putDoc(W, "resumes/Renamed.docx", "this is plain text with a .docx name", DOCX_TYPE);
 check("a file that isn't really a .docx is refused with a reason, and nothing is stored",
@@ -2631,11 +2631,11 @@ check("a file that isn't really a .docx is refused with a reason, and nothing is
   !(await wordPaths(W)).some((p) => p.startsWith("resumes/Renamed")), JSON.stringify(notZip.json));
 const oldWord = await putDoc(W, "resumes/Old_Resume.doc", "not really a doc", "application/msword");
 check("an older Word file is refused, asking for .docx or PDF",
-  oldWord.status === 415 && /Save it as \.docx or PDF and attach that/.test(oldWord.json?.error || ""), JSON.stringify(oldWord.json));
+  oldWord.status === 415 && oldWord.json?.field === "resume" && /Save it as \.docx or PDF and attach that/.test(oldWord.json?.error || ""), JSON.stringify(oldWord.json));
 
 const handEdit = await putDoc(W, "resumes/Jane_Resume.txt", "a hand-edited replacement", "text/plain");
 check("writing the text directly is refused, naming the Word file it is read from",
-  handEdit.status === 409 && handEdit.json?.paired_with === "resumes/Jane_Resume.docx" &&
+  handEdit.status === 409 && handEdit.json?.paired_with === "resumes/Jane_Resume.docx" && handEdit.json?.field === "resume" &&
   handEdit.json?.error === "This text is read from Jane_Resume.docx - replace that file instead.", JSON.stringify(handEdit.json));
 check("and so is a name differing only in case, which is the same file on the disk a run uses",
   (await putDoc(W, "resumes/jane_resume.txt", "sneaky", "text/plain")).status === 409 &&
