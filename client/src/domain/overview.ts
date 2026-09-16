@@ -6,7 +6,7 @@
  */
 import type { Application, Lead, Screened, TrackerData } from "../api/schema";
 import { ALL_LEADS, DELISTED_REASON, LEAD_STATUS } from "./constants";
-import { ALL_FILTER, drillCount, drillRows, foundInWeek, isOpen, type DrillTarget, type RowSource } from "./drills";
+import { ALL_FILTER, drillCount, drillId, drillRows, foundInWeek, isOpen, type DrillTarget, type RowSource } from "./drills";
 import { lastWeeks, localToday } from "./format";
 import {
   FLOW_SEGMENT_LABELS,
@@ -70,11 +70,11 @@ export function momentum(data: TrackerData, now: Date = localToday()): Momentum 
   const removedCounted = data.screened.length === 0 || data.screened.some((s) => s.found != null);
   const found = weeks.map((monday) => {
     // "All": a posting found that week counts whatever has been decided about it since.
-    const target = { tab: ALL_LEADS, filter: ALL_FILTER, drill: `found-week:${monday}` };
+    const target = { tab: ALL_LEADS, filter: ALL_FILTER, drill: drillId.foundWeek(monday) };
     return { monday, current: monday === last, n: foundInWeek(data, monday), target, opens: drillCount(target, data) };
   });
   const applied = weeks.map((monday) => {
-    const target = { tab: "applications", drill: `applied-week:${monday}` };
+    const target = { tab: "applications", drill: drillId.appliedWeek(monday) };
     const n = drillCount(target, data);
     return { monday, current: monday === last, n, target, opens: n };
   });
@@ -140,8 +140,8 @@ export function payoff(data: TrackerData): { rows: PayoffRow[]; total: PayoffRow
       // A leads tab opens on Open when its URL names no filter.
       open: count({ tab: key }, data),
       notAFit: count({ tab: key, filter: "Not a fit" }, data),
-      applied: count({ tab: "applications", drill: `search-applied:${key}` }, data),
-      responded: count({ tab: "applications", drill: `search-responded:${key}` }, data),
+      applied: count({ tab: "applications", drill: drillId.searchApplied(key) }, data),
+      responded: count({ tab: "applications", drill: drillId.searchResponded(key) }, data),
     };
   });
   if (data.applications.some((a) => !a.leadId)) {
@@ -197,12 +197,12 @@ export function tierBars(data: TrackerData): TierBar[] {
   return tiers.map((t) => ({
     ...t,
     segments: [
-      { key: "applied", label: "Applied", target: { tab: "applications", drill: `tier:${t.key}:applied` } },
-      { key: "open", label: "Open", target: { tab: ALL_LEADS, drill: `tier:${t.key}:open` } },
+      { key: "applied", label: "Applied", target: { tab: "applications", drill: drillId.tier(t.key, "applied") } },
+      { key: "open", label: "Open", target: { tab: ALL_LEADS, drill: drillId.tier(t.key, "open") } },
       {
         key: "not-a-fit",
         label: "Not a fit",
-        target: { tab: ALL_LEADS, filter: ALL_FILTER, drill: `tier:${t.key}:not-a-fit` },
+        target: { tab: ALL_LEADS, filter: ALL_FILTER, drill: drillId.tier(t.key, "not-a-fit") },
       },
     ].map((s) => ({ ...s, n: drillCount(s.target, data) })),
   }));
@@ -219,13 +219,13 @@ export function flow(data: TrackerData): { bars: FlowBar[]; offer: Count } {
   const bars = FLOW_STAGES.map((s) => ({
     slug: s.slug,
     label: s.label,
-    reached: count({ tab: "applications", drill: `flow:${s.slug}:reached` }, data),
+    reached: count({ tab: "applications", drill: drillId.flow(s.slug, "reached") }, data),
     segments: FLOW_SEGMENTS.map((seg) => {
-      const target = { tab: "applications", drill: `flow:${s.slug}:${seg}` };
+      const target = { tab: "applications", drill: drillId.flow(s.slug, seg) };
       return { key: seg, label: FLOW_SEGMENT_LABELS[seg], n: drillCount(target, data), target };
     }),
   }));
-  const offer = count({ tab: "applications", drill: `flow:${FORWARD_STAGES[OFFER_INDEX].slug}:reached` }, data);
+  const offer = count({ tab: "applications", drill: drillId.flow(FORWARD_STAGES[OFFER_INDEX].slug, "reached") }, data);
   return { bars, offer };
 }
 
@@ -240,7 +240,7 @@ export function responseHistogram(data: TrackerData): Histogram {
   return {
     median: median(days),
     bins: RESPONSE_BINS.map((b) => {
-      const target = { tab: "applications", drill: `response-days:${b.key}` };
+      const target = { tab: "applications", drill: drillId.responseDays(b.key) };
       return { key: b.key, label: b.label, n: drillCount(target, data), target };
     }),
   };
