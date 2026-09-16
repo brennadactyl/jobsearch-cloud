@@ -21,28 +21,15 @@ export async function handleGetConfig({ db }) {
 }
 
 /**
- * POST /api/config - requires a Bearer token. Body `{ tracks?, display_title?,
- * overview_label?, applications_label?, all_leads_label?, stale_run_hours?,
- * priority_locations?, excluded_companies?, geo_scope_line?, scope_clause?,
- * scope_disqualifier?, location_guidance?, footer_note?, pronouns? }` ->
- * `{ tracks[], settings }`; 400 for an empty or invalid track list, a `fed_by`
- * that isn't another listed track, or a non-positive `stale_run_hours`.
- *
- * `tracks` replaces the whole track list, since setup writes the complete set
- * at once. Leads and applications under a removed track keep their `search`
- * and only lose their tab. search_runs stays 1:1 with the list: new tracks gain
- * a "never ran" row, removed tracks lose theirs.
- */
-/**
  * POST /api/writeup - requires a Bearer token. Body `{ search, <write-up
  * fields> }` -> `{ written: [field, ...] }`; 400 for a missing search or a key
  * this route does not accept, 404 for an unknown track.
  *
- * The overnight run's only way into a track's config. It exists because the run
- * used to GET the whole config, edit it and POST it back, which re-wrote the
- * setup form's fields - `label`, `sort_order`, the title, the location rules -
- * as a side effect of every night it ran. "The run leaves those alone" was a
- * promise; this is a guarantee: db.writeUpTrack builds its UPDATE from
+ * The overnight run's only way into a track's config. A run that read the whole
+ * config, edited it and posted it back through POST /api/config would re-write
+ * the setup form's fields - `label`, `sort_order`, the title, the location
+ * rules - as a side effect of every night it ran. This route makes "the run
+ * leaves those alone" a guarantee: db.writeUpTrack builds its UPDATE from
  * WRITEUP_FIELDS and WRITEUP_SETTINGS, so a form-owned field is unreachable
  * here whatever the body says (docs/instant-setup-plan.md).
  *
@@ -83,6 +70,19 @@ export async function handleWriteUp({ request, db }) {
   return json({ written });
 }
 
+/**
+ * POST /api/config - requires a Bearer token. Body `{ tracks?, display_title?,
+ * overview_label?, applications_label?, all_leads_label?, stale_run_hours?,
+ * priority_locations?, excluded_companies?, geo_scope_line?, scope_clause?,
+ * scope_disqualifier?, location_guidance?, footer_note?, pronouns? }` ->
+ * `{ tracks[], settings }`; 400 for an empty or invalid track list, a `fed_by`
+ * that isn't another listed track, or a non-positive `stale_run_hours`.
+ *
+ * `tracks` replaces the whole track list, since setup writes the complete set
+ * at once. Leads and applications under a removed track keep their `search`
+ * and only lose their tab. search_runs stays 1:1 with the list: new tracks gain
+ * a "never ran" row, removed tracks lose theirs.
+ */
 export async function handleSetConfig({ request, db }) {
   const body = await readJson(request);
   if (body instanceof Response) return body;
@@ -103,8 +103,9 @@ export async function handleSetConfig({ request, db }) {
     // Each track carries its display fields and, optionally, its search
     // config (TRACK_CONFIG_FIELDS in db.js - the role line, target companies,
     // candidate blurb and so on that prompt.js composes the daily prompt
-    // from). replaceTracks whitelists them itself; anything absent is stored
-    // as '' and simply doesn't appear in the prompt.
+    // from). replaceTracks whitelists them itself and keeps the stored value of
+    // any field a track leaves out, so renaming a tab doesn't blank its config;
+    // sending "" clears a field.
     await db.replaceTracks(valid);
   }
 

@@ -74,9 +74,9 @@ import { handleUpdate } from "./update.js";
  * - Provisioning a user and purging a retired search, each with ADMIN_TOKEN
  *   checked inside the handler. They name their subject in the body rather than
  *   being the caller, so a session would be the wrong credential - and sitting
- *   here means a session token is not even a candidate credential. Newer admin
- *   routes are in ADMIN_ROUTES, where the check is the router's rather than each
- *   handler's.
+ *   here means a session token is not even a candidate credential. A new admin
+ *   route belongs in ADMIN_ROUTES instead, where the router does the check
+ *   rather than each handler.
  *
  * @type {Array<[string, string|RegExp, Function]>}
  */
@@ -105,9 +105,9 @@ export const ADMIN_ROUTES = [
   ["GET", "/api/intake/pending", handlePendingIntakes],
   ["POST", "/api/intake/complete", handleCompleteIntake],
   ["POST", "/api/tokens", handleMintSearchToken],
-  // Deleting an account sits here rather than beside POST /api/users, which
-  // predates this list and checks the token inside the handler: a new admin
-  // route belongs where the router does the checking.
+  // Deleting an account sits here rather than beside POST /api/users in
+  // PUBLIC_ROUTES: the router checks the token for this list, so the handler
+  // cannot forget to.
   ["DELETE", /^\/api\/users\/([^/]+)$/, handleDeleteUser],
 ];
 

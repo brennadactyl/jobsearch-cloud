@@ -15,6 +15,16 @@ Kept by whoever is holding the product manager role.
   `sent_at` today, which is the right stop in the wrong unit. Counting nights is
   one column and one increment, and needs its own migration.
 
+- **Recover a failed setup.** A setup that fails on its own answers - a resume
+  that turns out unreadable - has no way forward today: the form is one-shot, so
+  the person cannot do what the failure note asks. [Account
+  settings](account-settings-plan.md) is the fix; until it ships the notes say
+  to ask whoever invited them.
+- **Split `db.js`, moving the shared company list into its own module**, ahead of
+  any work that touches the company list or coverage. At ~1,850 lines it is the
+  file every server feature edits, and it mixes per-person data with the one
+  list every account shares.
+
 ## Worth doing, unscheduled
 
 - **[Split user tokens from machine tokens](token-split-plan.md)** - planned;

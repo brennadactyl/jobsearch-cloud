@@ -315,8 +315,8 @@ if (-not $claude) {
 $claudePath = if ($claude -is [System.Management.Automation.CommandInfo]) { $claude.Source } else { $claude }
 
 # Pointed at rather than copied: a second copy of the setup procedure in a
-# here-string is how this repo last ended up with docs describing a shape the
-# code had moved on from.
+# here-string would drift from the skill, and the run would build configs in a
+# shape the code has moved on from.
 $skillDir = if ($env:CLAUDE_PLUGIN_ROOT) {
     Join-Path $env:CLAUDE_PLUGIN_ROOT ".claude\skills\job-search-setup"
 } else {
@@ -475,8 +475,8 @@ foreach ($item in $queue) {
         New-Item -ItemType Directory -Force -Path (Join-Path $stage "out\docs") | Out-Null
 
         # Only the formats the model turn can read are staged. A PDF is one of
-        # them: verified 2026-09-15 against the confined turn's own tools, which
-        # opened a staged PDF and read the text out of it. A .docx, .rtf,
+        # them: the confined turn's Read tool opens a staged PDF and reads the
+        # text out of it. A .docx, .rtf,
         # .pages or an image is left in the tracker, because staging one puts a
         # file in front of the model it cannot read, and the search it then
         # writes comes from the answers alone, silently.
@@ -628,8 +628,8 @@ Rules for this run:
 
         # --tools narrows the turn to file tools, --allowedTools confines those
         # to this folder, and --strict-mcp-config keeps any configured MCP
-        # server out of it. Verified 2026-09-15: the turn's tool list comes back
-        # as exactly Edit, Glob, Grep, Read, Write, and a read outside the
+        # server out of it. With these flags the turn's tool list is exactly
+        # Edit, Glob, Grep, Read, Write, and a read outside the
         # working directory is refused. `Edit(./**)` is what permits writes;
         # `Write(./**)` is not a valid rule.
         $job = Start-Job -ScriptBlock {

@@ -405,17 +405,6 @@ export class Db {
   }
 
   /**
-   * Store this person's setup answers and put the setup back in the queue for
-   * the onboarding run.
-   *
-   * `sent_at` marks the start of an attempt: the first send sets it, and so does
-   * a send that follows a failure, while an edit to a setup still waiting keeps
-   * it - the page's warning about a late run counts from when the person first
-   * asked. A finished setup is never reopened.
-   * @param {string} answersJson
-   * @returns {Promise<boolean>} false when the setup is already done
-   */
-  /**
    * The setup form's whole effect, in one batch, which D1 runs as one
    * transaction: the answers, the settings the form owns, and one track per
    * role block (docs/instant-setup-plan.md).
@@ -487,9 +476,9 @@ export class Db {
    *
    * The UPDATE is built from WRITEUP_FIELDS, not from the caller's keys, so
    * `label`, `sort_order` and the settings the form owns cannot be reached
-   * through this method whatever it is handed. That is the point of it: the
-   * run used to GET the config, edit it and POST the whole thing back, which
-   * re-wrote the form's fields as a side effect every night it ran.
+   * through this method whatever it is handed. That is the point of it: a run
+   * that read the whole config, edited it and posted it back would re-write the
+   * form's fields as a side effect every night it ran.
    *
    * The scope wording is per-account rather than per-track (WRITEUP_SETTINGS),
    * so it travels with the same call and lands in the same batch: a run that
@@ -529,25 +518,6 @@ export class Db {
     }
     await this.d1.batch(statements);
     return [...fields, ...settings];
-  }
-
-  async saveIntake(answersJson) {
-    const now = new Date().toISOString();
-    const result = await this.d1
-      .prepare(
-        `INSERT INTO intake (user_id, answers, status, status_note, sent_at, updated_at)
-         VALUES (?, ?, 'pending', '', ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           answers = excluded.answers,
-           sent_at = CASE WHEN intake.status = 'failed' THEN excluded.sent_at ELSE intake.sent_at END,
-           status = 'pending',
-           status_note = '',
-           updated_at = excluded.updated_at
-         WHERE intake.status <> 'done'`
-      )
-      .bind(this.userId, answersJson, now, now)
-      .run();
-    return (result.meta.changes || 0) > 0;
   }
 
   /**
