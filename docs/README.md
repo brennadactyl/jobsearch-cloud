@@ -25,6 +25,7 @@ reference docs above are the authority.
 - [`react-adoption-plan.md`](react-adoption-plan.md) — the tracker page rebuilt in React, beside the one that ships
 - [`rotation-always-on-plan.md`](rotation-always-on-plan.md) — every search rotates through its companies
 - [`one-company-list-plan.md`](one-company-list-plan.md) — one global company list that every search indexes into
+- [`instant-setup-plan.md`](instant-setup-plan.md) — the tracker exists the moment setup is sent; the night writes only the prose
 - [`overview-collapsible-plan.md`](overview-collapsible-plan.md) — Momentum moves to the bottom; every Overview section and chart folds, remembered per browser
 - [`hide-not-a-fit-plan.md`](hide-not-a-fit-plan.md) — leads tabs open on New and Reviewing; Not a fit is one chip away
 - [`overview-charts-plan.md`](overview-charts-plan.md) — the Overview shows momentum, which searches pay off, and where applications stall
