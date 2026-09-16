@@ -390,6 +390,46 @@ Get-ScheduledTask -TaskName "JobSearch-*" | ForEach-Object {
   Format-Table -AutoSize
 ```
 
+### Intake mode: the same setup, unattended
+
+`scripts/run-onboarding.ps1` runs this skill for someone who filled in the
+setup form instead of talking to an installer (`docs/onboarding-plan.md`). The
+turn is confined to one staged folder and has no tracker access, so the steps
+above still describe *what to write* - the difference is where the answers come
+from and where the output goes.
+
+| Step above | In intake mode |
+|---|---|
+| 1, provisioning | Already done. The account, folder, credential and documents exist. |
+| 2, the resume | `resumes\` in the folder holds their readable resume; the pasted-text copy is already uploaded. Draft the profile paragraph from it as usual. |
+| 3, asking | `answers.json` is the interview, already answered. Nothing is confirmed with anyone: decide from what they wrote. Where an answer is thin, write the search anyway - a thin search they can see and correct beats no search. |
+| 4, doc and config | Same fields, same template. They go in `out\` as files, not to the API. |
+| 5, confirming | Nobody to confirm with. Prefer the reading that surfaces more jobs: an over-tight fit filter hides work they asked for and nobody is watching. |
+| 6, posting | The script posts it, with their token, after checking it. |
+| 7, scheduling | The script does it. |
+
+The answers map onto the config like this:
+
+| Answer | Becomes |
+|---|---|
+| `page_title`, `pronouns`, `priority_locations` | `display_title`, `settings.pronouns`, `priority_locations` - the script writes these, not you |
+| `location_limits` | `geo_scope_line` (a paragraph with worked examples), `scope_clause`, `scope_disqualifier` |
+| each role's `name` | the track `label`, and a slug `key` |
+| each role's `titles` | `role_search_line` and `full_description` |
+| each role's `company_kinds` | the track doc's candidate profile, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
+| each role's `rule_outs` | `fit_clause` / `fit_disqualifier`, and `fit_filter_step` only for a real pivot |
+| each role's `min_pay` | part of the fit filter: a *stated* range topping out below it disqualifies; no published range does not |
+| `never_work_for` | `excluded_companies` |
+| `preferences` | the track doc's candidate profile, weighed - never turned into a rule-out |
+
+Write `out\config.json` in the shape the run's prompt gives, and one
+`out\docs\tracked_<key>_postings.md` per role. Leave `schedule_time`,
+`target_companies`, `fed_by`, `doc_file` and `sort_order` out: the script owns
+them, and it drops them if you send them. A track whose doc still holds a
+`{{PLACEHOLDER}}`, whose key isn't a lowercase-hyphenated slug, or whose
+`resume_line` doesn't name the staged resume is refused, and the person is told
+their setup didn't finish - so check those three before your turn ends.
+
 ### 8. Offer a test run
 
 Suggest running one new track now rather than waiting for its slot:
