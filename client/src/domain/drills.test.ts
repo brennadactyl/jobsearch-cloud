@@ -5,8 +5,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
-import { DRILLS, GONE_QUIET_DAYS, drillCount, drillKeeps, drillLabel, drillRows, leadRows, appRows, type DrillTarget } from "./drills";
+import { DRILLS, GONE_QUIET_DAYS, drillCount, drillId, drillKeeps, drillLabel, drillRows, findDrill, leadRows, appRows, type DrillTarget } from "./drills";
 import { NOW, applications, daysAgo, leads, settings, tracks } from "./fixture";
+import { FLOW_SEGMENTS, FLOW_STAGES, RESPONSE_BINS } from "./stages";
 
 const src = { leads, applications, settings, tracks, screened: [] };
 
@@ -133,6 +134,25 @@ describe("individual drills", () => {
     // A leads drill applied to an application filters nothing, rather than
     // throwing or silently emptying the list.
     expect(drillKeeps("in-conversation", "leads", leads[0], src)).toBe(true);
+  });
+});
+
+describe("drillId", () => {
+  // A builder and its parser can drift apart without the parity tests noticing:
+  // an id nothing parses filters nothing, and its count and rows still agree.
+  // Every builder needs an entry here, so a new one can't skip the check.
+  const built: Record<keyof typeof drillId, string[]> = {
+    foundWeek: [drillId.foundWeek("2026-09-07")],
+    appliedWeek: [drillId.appliedWeek("2026-09-07")],
+    searchApplied: [drillId.searchApplied("alpha")],
+    searchResponded: [drillId.searchResponded("alpha")],
+    tier: [drillId.tier("0", "applied"), drillId.tier("other", "open"), drillId.tier("1", "not-a-fit")],
+    flow: [drillId.flow(FLOW_STAGES[0].slug, "reached"), ...FLOW_SEGMENTS.map((seg) => drillId.flow(FLOW_STAGES[0].slug, seg))],
+    responseDays: RESPONSE_BINS.map((b) => drillId.responseDays(b.key)),
+  };
+
+  it.each(Object.entries(built))("builds %s ids that findDrill can read", (_name, ids) => {
+    for (const id of ids) expect(findDrill(id), id).toBeDefined();
   });
 });
 

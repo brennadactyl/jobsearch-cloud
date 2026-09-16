@@ -132,6 +132,30 @@ export const DRILLS: Readonly<Record<string, Drill>> = base;
 
 
 const TIER_SEGMENTS = ["applied", "open", "not-a-fit"] as const;
+type TierSegment = (typeof TIER_SEGMENTS)[number];
+
+/**
+ * Builds the id of a drill that takes a parameter: `<name>:<parameter>`, read
+ * back by the PARAMETERISED entry of the same name below. A chart or table asks
+ * for its target through these rather than writing the string, so each format
+ * is spelled out once, beside its parser.
+ */
+export const drillId = {
+  /** Postings found in the week starting `monday` (YYYY-MM-DD). */
+  foundWeek: (monday: string) => `found-week:${monday}`,
+  /** Applications sent in the week starting `monday` (YYYY-MM-DD). */
+  appliedWeek: (monday: string) => `applied-week:${monday}`,
+  /** Applications sent from a lead one search found. */
+  searchApplied: (trackKey: string) => `search-applied:${trackKey}`,
+  /** Of those, the ones that heard back. */
+  searchResponded: (trackKey: string) => `search-responded:${trackKey}`,
+  /** One segment of a location tier's bar; `tier` is a priority_locations rank or `other`, as tierKey returns. */
+  tier: (tier: string, segment: TierSegment) => `tier:${tier}:${segment}`,
+  /** One segment of a pipeline stage's bar, or `reached` for the whole bar. */
+  flow: (stageSlug: string, segment: FlowSegment | "reached") => `flow:${stageSlug}:${segment}`,
+  /** Applications whose first reply came within one RESPONSE_BINS range. */
+  responseDays: (binKey: string) => `response-days:${binKey}`,
+};
 
 /**
  * Drills that take a parameter. Each returns undefined for a parameter it
