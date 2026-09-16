@@ -17,9 +17,9 @@ Kept by whoever is holding the product manager role.
 
 ## Worth doing, unscheduled
 
-- **Split user tokens from machine tokens.** Every session token reaches every
-  route. A scheduled search's token, sitting in plaintext on a machine, can
-  rewrite config or delete leads.
+- **[Split user tokens from machine tokens](token-split-plan.md)** - planned;
+  unassigned. Every session token reaches every route today, so a search's
+  token on a machine can rewrite config or delete leads.
 - **Rate-limit `/api/login` and `/api/signup`.** Both are public and unthrottled;
   password length is the only defence. `server/README.md` says so in its own
   security notes.
