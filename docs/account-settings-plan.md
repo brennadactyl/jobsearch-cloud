@@ -90,8 +90,14 @@ answers - an account set up by the skill has no intake row at all.
 - **A search cannot be left without a readable resume.** Removing a file a
   search lists, or picking an unreadable one, is refused naming the search.
 - **The candidate profile catches up on the next run.** A changed resume marks
-  that search's profile stale, and its next run rewrites the profile section of
-  its doc from the new file before searching, then clears the mark.
+  that search's profile stale - per search, on the feed group's root, since one
+  resume can feed several searches framed differently. Its next run rewrites the
+  profile from the new file before searching. The runner enforces the boundary:
+  the section runs from a heading starting `## Candidate Profile` to the next
+  `## `, it may change freely, and everything else in the doc must come back
+  byte-identical or the write-back is refused. The runner, not the model, clears
+  the mark, and only once it has accepted the rewritten doc, so a refused refresh
+  tries again the next night.
 
 ## Server
 
