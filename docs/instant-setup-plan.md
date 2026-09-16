@@ -97,6 +97,14 @@ stops listing a `failed` intake more than three days after `sent_at`. An
 `attempts` column counting nights is the better shape and is a separate change,
 with its own migration.
 
+## Deploying
+
+Server and client ship in one sitting, server a few minutes ahead. This is not
+the usual server-first-then-whenever: `POST /api/intake` changes shape and
+becomes write-once, so a live page built for the old shape offers a send that
+the new server refuses. No compatibility shim - the window is minutes, and no
+invite goes out inside it.
+
 ## Order of work
 
 1. **Server** (Backend Buddy): POST /api/intake writes the form's half through
