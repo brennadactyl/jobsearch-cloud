@@ -469,15 +469,12 @@ a.ch-col:hover{background:var(--surface2)}
 .hrow-head .mono{font-size:12px;font-weight:400;color:var(--ink3)}
 .offer-row{margin:14px 0 0}
 .hbar{display:flex;gap:2px;height:14px;min-width:6px}
-/* A bar with its total straight after it. The mono font makes a digit 1ch, which
-   is how StackedBar reserves the total's room. */
-.hbar-line{display:flex;align-items:center;gap:8px;
-  font:12px "IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
-.hbar-end{flex:none;color:var(--ink3)}
 .hseg{display:block;flex-basis:0;min-width:3px;height:100%;border-radius:3px}
 a.hseg:hover{outline:1px solid var(--ink3);outline-offset:1px}
 .hseg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .s-accent{background:var(--accent)}
+/* A filled lighter accent, for a segment that has to read as present but lesser. */
+.s-accent-dim{background:color-mix(in srgb,var(--accent) 42%,transparent)}
 .s-soft{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
 .s-line{background:var(--line)}
 .s-crit{background:var(--crit)}
@@ -497,20 +494,69 @@ a.seglabel:hover{color:var(--accent)}
 .ch-table a:hover{border-bottom-color:var(--accent)}
 .ch-table a.jumplink{color:inherit;border-bottom:0;font-weight:600}
 .payoff tr.total td{font-weight:600;border-top:1px solid var(--line)}
-/* Headers wrap to two lines and the run stamp wraps under the name, so the
-   whole table fits a mid-width window and a phone sees the first figures
-   without scrolling. The name column is wide enough that a stamp breaks once,
-   not at every part. */
-/* As wide as its content, not the card: stretched, the number columns sit in
-   gaps too wide to read a row across. */
-.ch-table .payoff{width:auto}
+/* The searches card's grid, shared by its table and its location rows. The
+   number columns have fixed widths, so the numbers sit together at the right and
+   the search column takes the rest; a rate column follows each count it's a rate
+   of. In px, not em, so the table and the rows below resolve them the same. */
+/* --fit-w is Not a fit's column: wide enough for its three-word header on one line. */
+.searches-card{--num-w:66px;--fit-w:90px;--rate-w:48px}
+.ch-table .payoff{table-layout:fixed;min-width:calc(120px + 4 * var(--num-w) + var(--fit-w) + 2 * var(--rate-w))}
+.payoff col.w-num{width:var(--num-w)}
+.payoff col.w-fit{width:var(--fit-w)}
+.payoff col.w-rate{width:var(--rate-w)}
+/* Headers wrap to two lines and the run stamp wraps under the name. */
 .ch-table .payoff th{white-space:normal;vertical-align:bottom;line-height:1.3}
-.ch-table .payoff td:first-child{white-space:normal;min-width:13em}
+.ch-table .payoff td:first-child{white-space:normal}
+.ch-table .payoff .rate-cell{padding-left:0}
 .payoff-run{margin-top:3px}
 .payoff-run .runstamp{font-size:11.5px;flex-wrap:wrap;column-gap:4px}
-@media (max-width:640px){.ch-table .payoff td:first-child{min-width:10em}}
 .cnt.plain{cursor:help;border-bottom:1px dotted var(--ink3)}
 .rate{color:var(--ink3);cursor:help}
+/* On a phone the table stacks, so nothing scrolls sideways: each search is its
+   name and run stamp, then one wrapping line - "17 found · 12 open · 3 applied
+   18%". A count cell's word is its data-label; a separator goes before every
+   shown count but the row's first. Separators carry the only breakable spaces,
+   so a line wraps between counts, never inside one. */
+@media (max-width:640px){
+  .ch-table .payoff{display:block;min-width:0}
+  .payoff colgroup,.payoff thead{display:none}
+  .payoff tbody,.payoff tr{display:block}
+  .payoff tr{padding:10px 0;border-bottom:1px solid var(--line)}
+  .payoff tr:last-child{border-bottom:0}
+  .payoff tr.total{border-top:1px solid var(--line)}
+  .ch-table .payoff td,.payoff tr.total td{display:inline;padding:0;border:0;white-space:normal;line-height:1.8}
+  .ch-table .payoff td:first-child{display:block;margin-bottom:2px;line-height:1.5}
+  .payoff td.cnt-cell:not(:empty):not([data-lead])::before{content:"\00a0· ";color:var(--ink3)}
+  .payoff td.cnt-cell:not(:empty)::after{content:"\00a0" attr(data-label);color:var(--ink2);
+    font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif}
+  .payoff td.rate-cell:not(:empty)::before{content:"\00a0"}
+  .payoff-run .runstamp{display:inline}
+  .payoff-run .runstamp .rdot{display:inline-block;margin-right:6px;vertical-align:middle}
+}
+
+/* Location rows: the tier name in a column only as wide as the longest name
+   (capped, so one long name can't take the card), the bar across the rest, its
+   total after it, and that tier's breakdown under the bar. Each cell names its
+   column, so a breakdown always starts a new grid row under its own bar. */
+.tier-grid{display:grid;align-items:center;column-gap:14px;font-size:13px;
+  grid-template-columns:fit-content(40%) minmax(0,1fr) auto}
+.tier-row{display:contents}
+.tier-name{grid-column:1;font-weight:600;min-width:0;overflow-wrap:anywhere;margin-top:12px}
+.tier-bar{grid-column:2;margin-top:12px}
+.tier-total{grid-column:3;margin-top:12px;text-align:right;color:var(--ink2);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.tier-breakdown{grid-column:2 / -1;margin-top:5px}
+/* A tier with nothing in it still shows where its bar would be. */
+.tier-track:empty{background:var(--surface2);border-radius:3px}
+/* On a phone the name goes above its bar, the bar runs full width, and the
+   breakdown sits under it. */
+@media (max-width:640px){
+  .tier-grid{grid-template-columns:minmax(0,1fr) auto}
+  .tier-name{grid-column:1 / -1}
+  .tier-bar{grid-column:1;margin-top:4px}
+  .tier-total{grid-column:2;margin-top:4px}
+  .tier-breakdown{grid-column:1 / -1}
+}
 
 .waitlist{list-style:none;margin:0;padding:0}
 .waitlist li+li{border-top:1px solid var(--line)}

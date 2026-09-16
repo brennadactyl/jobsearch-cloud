@@ -4,6 +4,7 @@
  * the link, so what you clicked and what you land in are the same set. The
  * charts' series are built in `domain/overview.ts`.
  */
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { usePinnedLayout } from "../ui/hooks";
 import type { TrackerData } from "../api/schema";
@@ -268,7 +269,7 @@ function SearchesSection({
           including the days it finds nothing.
         </div>
       ) : (
-        <div className="card ch">
+        <div className="card ch searches-card">
           <PayoffTable data={data} tracks={tracks} />
           <TierChart data={data} />
         </div>
@@ -298,17 +299,35 @@ function CountCell({ c, tip }: { c: Count | null; tip: string }) {
 }
 
 /**
- * A count's rate, set after it in the same cell: "7 · 6%". Never the link - the
- * count beside it is what opens the rows. Nothing for a zero count, whose rate
- * is zero and says nothing the count doesn't.
+ * A count's rate, in its own cell after the count. Never a link - the count is
+ * what opens the rows. An empty cell for a zero count, whose rate says nothing
+ * the count doesn't, or for a whole below `min`.
  */
-function RateNote({ part, whole, min = 1, tip }: { part: number; whole: number; min?: number; tip: string }) {
+function RateCell({ part, whole, min = 1, tip }: { part: number; whole: number; min?: number; tip: string }) {
   const pct = part ? rate(part, whole, min) : null;
-  if (pct === null) return null;
   return (
-    <Mark n={0} tip={`${tip}: ${part} of ${whole}`} className="rate" focusable>
-      {` · ${pct}%`}
-    </Mark>
+    <td className="num rate-cell">
+      {pct !== null && (
+        <Mark n={0} tip={`${tip}: ${part} of ${whole}`} className="rate" focusable>
+          {pct}%
+        </Mark>
+      )}
+    </td>
+  );
+}
+
+/**
+ * The cell for one count column. On a phone the table stacks into a line per
+ * search - "17 found · 12 open" - so the cell carries its column's word for the
+ * stylesheet to show there, and the row's first shown count is marked so the
+ * separators start after it. The word stays out of the cell's text: on a wider
+ * screen the column header says it.
+ */
+function CountColumn({ label, lead, children }: { label: string; lead: boolean; children: ReactNode }) {
+  return (
+    <td className="num cnt-cell" data-label={label.toLowerCase().replace(/ /g, " ")} data-lead={lead ? "" : undefined}>
+      {children}
+    </td>
   );
 }
 
@@ -316,6 +335,8 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
   const { rows, total } = payoff(data);
   const line = (r: PayoffRow, isTotal = false) => {
     const name = isTotal ? "All searches" : r.label;
+    // Applied and Responded always show a figure, even 0; the others can be blank.
+    const lead = r.found ? "found" : r.open ? "open" : r.notAFit ? "notAFit" : "applied";
     return (
       <tr key={r.key || "hand"} className={isTotal ? "total" : undefined}>
         <td>
@@ -332,32 +353,36 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
             r.label
           )}
         </td>
-        <td className="num">
+        <CountColumn label={LABELS.found} lead={lead === "found"}>
           {r.found && (
             <Mark n={0} tip={foundTip(r.found.n, r.found.breakdown)} className="cnt plain" focusable>
               {r.found.n}
             </Mark>
           )}
-        </td>
-        <td className="num">
+        </CountColumn>
+        <CountColumn label={LABELS.open} lead={lead === "open"}>
           <CountCell c={r.open} tip={`${name} · ${LABELS.open}`} />
-        </td>
-        <td className="num">
+        </CountColumn>
+        <CountColumn label={LABELS.notAFit} lead={lead === "notAFit"}>
           <CountCell c={r.notAFit} tip={`${name} · ${LABELS.notAFit}`} />
-        </td>
-        <td className="num">
+        </CountColumn>
+        <CountColumn label={LABELS.applied} lead={lead === "applied"}>
           <CountCell c={r.applied} tip={`${name} · ${LABELS.applied}`} />
-          {r.found && <RateNote part={r.applied.n} whole={r.found.n} tip={`${name} · ${LABELS.applyRate}`} />}
-        </td>
-        <td className="num">
+        </CountColumn>
+        {r.found ? (
+          <RateCell part={r.applied.n} whole={r.found.n} tip={`${name} · ${LABELS.applyRate}`} />
+        ) : (
+          <td className="num rate-cell" />
+        )}
+        <CountColumn label={LABELS.responded} lead={false}>
           <CountCell c={r.responded} tip={`${name} · ${LABELS.responded}`} />
-          <RateNote
-            part={r.responded.n}
-            whole={r.applied.n}
-            min={MIN_FOR_RESPONSE_RATE}
-            tip={`${name} · ${LABELS.responseRate}`}
-          />
-        </td>
+        </CountColumn>
+        <RateCell
+          part={r.responded.n}
+          whole={r.applied.n}
+          min={MIN_FOR_RESPONSE_RATE}
+          tip={`${name} · ${LABELS.responseRate}`}
+        />
       </tr>
     );
   };
@@ -366,15 +391,31 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
       {() => (
         <div className="ch-table">
           <table className="payoff" aria-label="Which searches pay off">
+            {/* Fixed number columns, so the search column takes what's left and
+                the location rows below sit on the same grid. */}
+            <colgroup>
+              <col />
+              <col className="w-num" />
+              <col className="w-num" />
+              <col className="w-fit" />
+              <col className="w-num" />
+              <col className="w-rate" />
+              <col className="w-num" />
+              <col className="w-rate" />
+            </colgroup>
             <thead>
               <tr>
                 <th>{LABELS.search}</th>
                 <th className="num">{LABELS.found}</th>
                 <th className="num">{LABELS.open}</th>
-                {/* Headers wrap in a narrow window; "a fit" stays together so this one breaks once. */}
-                <th className="num">{LABELS.notAFit.replace(/ a /i, (m) => `${m.trimEnd()} `)}</th>
-                <th className="num">{LABELS.applied}</th>
-                <th className="num">{LABELS.responded}</th>
+                {/* One line: its column is wide enough, and a header broken in two reads as two. */}
+                <th className="num">{LABELS.notAFit.replace(/ /g, "\u00a0")}</th>
+                <th className="num" colSpan={2}>
+                  {LABELS.applied}
+                </th>
+                <th className="num" colSpan={2}>
+                  {LABELS.responded}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -388,13 +429,13 @@ function PayoffTable({ data, tracks }: { data: TrackerData; tracks: ReturnType<t
   );
 }
 
-const TIER_TONES: Record<string, string> = { applied: "s-accent", open: "s-soft", "not-a-fit": "s-line" };
+// Every segment filled: an outlined one reads as an empty box.
+const TIER_TONES: Record<string, string> = { applied: "s-accent", open: "s-accent-dim", "not-a-fit": "s-line" };
 
 function TierChart({ data }: { data: TrackerData }) {
   const bars = tierBars(data);
   if (!bars.length) return null;
   const totals = bars.map((b) => b.segments.reduce((s, x) => s + x.n, 0));
-  const max = Math.max(1, ...totals);
   const segs = (b: (typeof bars)[number], total: number): BarSegment[] =>
     b.segments.map((s) => ({
       ...s,
@@ -426,21 +467,40 @@ function TierChart({ data }: { data: TrackerData }) {
             ]}
           />
         ) : (
-          <div className="hbars">
-            {bars.map((b, i) => (
-              <div key={b.key}>
-                <div className="hrow-head">
-                  <span>{b.label}</span>
+          // Every bar is its own tier split into where its postings went, so bars
+          // compare shares, not sizes; the total at the end carries the size. The
+          // name column is only as wide as the longest name.
+          <div className="tier-grid">
+            {bars.map((b, i) => {
+              const segments = segs(b, totals[i]);
+              return (
+                <div key={b.key} className="tier-row">
+                  <span className="tier-name">{b.label}</span>
+                  <div className="tier-bar" role="group" aria-label={b.label}>
+                    <div className="hbar tier-track">
+                      {segments.map((s) =>
+                        s.n ? (
+                          <Mark key={s.key} n={s.n} target={s.target} tip={s.tip} className={`hseg ${s.tone}`} grow={s.n} />
+                        ) : null,
+                      )}
+                    </div>
+                  </div>
+                  <span className="tier-total">{totals[i]}</span>
+                  {totals[i] > 0 && (
+                    <div className="legend tier-breakdown">
+                      {segments
+                        .filter((s) => s.n)
+                        .map((s) => (
+                          <Mark key={s.key} n={s.n} target={s.target} tip={s.tip} className="seglabel">
+                            <b className={s.tone} />
+                            {s.label} <span className="mono">{s.n}</span>
+                          </Mark>
+                        ))}
+                    </div>
+                  )}
                 </div>
-                <StackedBar
-                  label={b.label}
-                  segments={segs(b, totals[i])}
-                  scale={totals[i] / max}
-                  end={totals[i]}
-                  endDigits={String(max).length}
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         )
       }

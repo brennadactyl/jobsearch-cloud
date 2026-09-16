@@ -14,8 +14,8 @@ import { OVERVIEW_FOLD_IDS, payoff } from "./domain/overview";
 import { pathForTarget } from "./domain/tabs";
 import { clearPrefs, readOverviewCollapsed, setPrefs } from "./ui/prefs";
 
-async function renderOverview() {
-  vi.spyOn(client, "getData").mockResolvedValue(data);
+async function renderOverview(payload = data) {
+  vi.spyOn(client, "getData").mockResolvedValue(payload);
   window.history.pushState({}, "", "/");
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -115,16 +115,18 @@ describe("which searches pay off", () => {
     expect(applied.querySelector("a")).toBeNull();
   });
 
-  it("has no rate columns: each rate sits in the cell it's a rate of", async () => {
+  it("heads Applied and Responded over two cells each: the count, then its rate", async () => {
     await renderOverview();
     const table = screen.getByRole("table", { name: "Which searches pay off" });
-    const headers = within(table).getAllByRole("columnheader").map((th) => th.textContent);
-    expect(headers).not.toContain("Apply rate");
-    expect(headers).not.toContain("Response rate");
-    expect(headers).toHaveLength(6);
+    const headers = within(table).getAllByRole("columnheader");
+    expect(headers.map((th) => th.textContent)).not.toContain("Apply rate");
+    const span = (label: string) => headers.find((th) => th.textContent === label)!.getAttribute("colspan");
+    expect(span("Applied")).toBe("2");
+    expect(span("Responded")).toBe("2");
+    for (const tr of within(table).getAllByRole("row").slice(1)) expect(tr.querySelectorAll("td")).toHaveLength(8);
   });
 
-  it("puts the apply rate after the Applied count, with the count as the link and the fraction in the tooltip", async () => {
+  it("puts the apply rate in its own cell after the count, with the count as the link and the fraction in the tooltip", async () => {
     await renderOverview();
     const { rows, total } = payoff(data);
     const row = rows.find((r) => r.found && r.applied.n > 0) ?? total;
@@ -134,12 +136,11 @@ describe("which searches pay off", () => {
 
     const table = screen.getByRole("table", { name: "Which searches pay off" });
     const tr = row === total ? table.querySelector("tr.total")! : within(table).getByRole("link", { name: row.label }).closest("tr")!;
-    const cell = tr.querySelectorAll("td")[4];
-    expect(cell.textContent).toBe(`${applied} · ${Math.round((applied / found) * 100)}%`);
-    expect(cell.querySelector("a")!.textContent).toBe(String(applied));
-    const pct = cell.querySelector(".rate")!;
-    expect(pct.closest("a")).toBeNull();
-    expect(pct).toHaveAttribute("aria-label", expect.stringContaining(`${applied} of ${found}`));
+    const [count, rateCell] = [tr.querySelectorAll("td")[4], tr.querySelectorAll("td")[5]];
+    expect(count.querySelector("a")!.textContent).toBe(String(applied));
+    expect(rateCell.textContent).toBe(`${Math.round((applied / found) * 100)}%`);
+    expect(rateCell.querySelector("a")).toBeNull();
+    expect(rateCell.querySelector(".rate")).toHaveAttribute("aria-label", expect.stringContaining(`${applied} of ${found}`));
   });
 
   it("keeps every count link opening exactly its count, with no rate inside the link", async () => {
@@ -156,34 +157,82 @@ describe("which searches pay off", () => {
     expect(table.querySelector("a .rate")).toBeNull();
   });
 
-  it("shows Responded as the count alone under three applications", async () => {
+  it("gives each count cell the word a phone's stacked line shows, and marks each row's first shown count", async () => {
     await renderOverview();
     const table = screen.getByRole("table", { name: "Which searches pay off" });
-    for (const r of payoff(data).rows.filter((row) => row.key && row.applied.n < 3)) {
-      const cell = within(table).getByRole("link", { name: r.label }).closest("tr")!.querySelectorAll("td")[5];
-      expect(cell.textContent, r.label).toBe(String(r.responded.n));
+    const words = ["found", "open", "not a fit", "applied", "responded"];
+    for (const tr of within(table).getAllByRole("row").slice(1)) {
+      const counts = [...tr.querySelectorAll("td.cnt-cell")];
+      expect(counts.map((td) => td.getAttribute("data-label"))).toEqual(words);
+      // The stacked line's separators start after this one, so it must be the first cell with a figure.
+      const lead = counts.filter((td) => td.hasAttribute("data-lead"));
+      expect(lead).toHaveLength(1);
+      expect(lead[0]).toBe(counts.find((td) => td.textContent !== ""));
+    }
+  });
+
+  it("leaves a rate's cell empty when there's no rate to show, with no dot or dash", async () => {
+    await renderOverview();
+    const table = screen.getByRole("table", { name: "Which searches pay off" });
+    for (const r of payoff(data).rows.filter((row) => row.key)) {
+      const cells = within(table).getByRole("link", { name: r.label }).closest("tr")!.querySelectorAll("td");
+      if (r.applied.n === 0) expect(cells[5].textContent, `${r.label} apply rate`).toBe("");
+      if (r.applied.n < 3) {
+        expect(cells[6].textContent, `${r.label} responded`).toBe(String(r.responded.n));
+        expect(cells[7].textContent, `${r.label} response rate`).toBe("");
+      }
     }
   });
 });
 
 describe("by location", () => {
-  it("sets each tier's total at the end of its bar, and scales every bar to the largest", async () => {
-    await renderOverview();
-    const tiers = data.settings.priority_locations.map((r) => r.label).concat("Other");
-    const bars = tiers.map((t) => {
+  const tierRows = (labels: string[]) =>
+    labels.map((t) => {
       const group = screen.getByRole("group", { name: t });
-      const segments = [...group.querySelectorAll(".hseg")].reduce((s, el) => s + Number(el.getAttribute("data-n")), 0);
-      return { segments, end: Number(group.querySelector(".hbar-end")!.textContent), width: group.querySelector<HTMLElement>(".hbar")!.style.width };
+      const row = group.parentElement!;
+      const segs = [...group.querySelectorAll(".hseg")];
+      return {
+        label: t,
+        segments: segs.map((el) => Number(el.getAttribute("data-n"))),
+        tones: segs.map((el) => el.className),
+        total: Number(row.querySelector(".tier-total")!.textContent),
+        width: group.querySelector<HTMLElement>(".hbar")!.style.width,
+        breakdown: row.querySelector(".tier-breakdown"),
+        track: group.querySelector(".tier-track")!,
+      };
     });
-    for (const b of bars) expect(b.end).toBe(b.segments);
-    const max = Math.max(...bars.map((b) => b.end));
-    // The browser may reorder the calc(), so read the parts rather than the string:
-    // room for the widest total's digits, and this bar's share of the largest.
-    for (const b of bars) {
-      expect(b.width, b.width).toContain(`${String(max).length}ch + 8px`);
-      const share = b.width.match(/(?<![\w.])(\d*\.?\d+(?:e-\d+)?)(?![\d.]*(?:ch|px|%))/)![1];
-      expect(Number(share), b.width).toBeCloseTo(b.end / max);
+  const labels = () => data.settings.priority_locations.map((r) => r.label).concat("Other");
+
+  it("gives every bar the full length, split within its own tier, with the tier's total beside it", async () => {
+    await renderOverview();
+    for (const r of tierRows(labels())) {
+      // No width of its own: a bar compares shares within its tier, and the total carries size.
+      expect(r.width, r.label).toBe("");
+      expect(r.total, r.label).toBe(r.segments.reduce((a, b) => a + b, 0));
     }
+  });
+
+  it("puts each tier's own breakdown under its bar, each count opening its rows, with no shared legend", async () => {
+    await renderOverview();
+    const block = screen.getByRole("heading", { name: /^By location/ }).closest(".ch-block") as HTMLElement;
+    expect(block.querySelector(".tier-legend")).toBeNull();
+    for (const r of tierRows(labels()).filter((row) => row.total > 0)) {
+      const marks = [...r.breakdown!.querySelectorAll(".seglabel")];
+      expect(marks.map((m) => Number(m.getAttribute("data-n"))), r.label).toEqual(r.segments);
+      for (const m of marks) expect(m.tagName, r.label).toBe("A");
+      // Filled segments only: an outline reads as an empty box.
+      for (const tone of r.tones) expect(tone).not.toMatch(/\bs-soft\b/);
+    }
+  });
+
+  it("shows an empty track and a 0 for a tier with nothing in it", async () => {
+    const nowhere = { label: "Nowhere yet", anyOf: ["no posting says this"] };
+    await renderOverview({ ...data, settings: { ...data.settings, priority_locations: [...data.settings.priority_locations, nowhere] } });
+    const [row] = tierRows([nowhere.label]);
+    expect(row.total).toBe(0);
+    expect(row.segments).toEqual([]);
+    expect(row.track).toBeEmptyDOMElement();
+    expect(row.breakdown).toBeNull();
   });
 });
 
