@@ -390,7 +390,16 @@ That creates the archive, sets its ownership and permissions, installs its own
 copy of the archiver inside it (a task running as SYSTEM must never execute a
 script you can edit), and registers both daily tasks: `JobSearchTracker-Backup`
 at 03:15 as you, and `JobSearchTracker-ArchiveBackups` at 03:45 as SYSTEM.
-Re-run it after changing `archive-backups.ps1`.
+Re-run it after changing `archive-backups.ps1`, and after moving the
+repository: the archive task is registered with the folder it copies from, and
+fails every night once that folder is gone.
+
+Each archive run ends by checking the date on the newest archived export, and
+writes `WARNING: ... backups have stopped reaching the archive` to
+`archive.log` when it is two or more days old. The check runs however the run
+went, including when the copy itself failed, since a failing archive task is
+the usual way backups stop arriving. Task Scheduler shows the run as `1` for an
+error and `2` for a warning.
 
 Keep backup task names outside `JobSearch-*`: `setup-scheduler.ps1` unregisters
 stale tasks under that prefix. The export runs only while you're logged in; the
