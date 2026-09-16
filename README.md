@@ -308,12 +308,26 @@ scripts keep copies outside Cloudflare:
 
 `backup-tracker.ps1` writes the working copy and the mirror every night. It
 checks each export before keeping it - right size, has tables, has rows, not
-dramatically smaller than yesterday's - and never deletes old backups.
+dramatically smaller than yesterday's.
 
 `archive-backups.ps1` copies new exports into the archive. That folder is owned
 by Administrators and read-only to everyone else, so an unelevated process - a
 scheduled task, a script, an AI agent - can read the backups but not write,
 rename, truncate or delete them. A task running as SYSTEM fills it.
+
+**Every copy keeps 30 days.** A deleted account's data then leaves the backups
+too: nothing of it is exported after the delete, and the last export that holds
+it ages out a month later. Each copy prunes on its own rule, by the date in the
+backup's name:
+
+- The working copy and the mirror are pruned by `backup-tracker.ps1`, and only
+  after a clean run - an export that landed and passed every check - so a
+  broken or suspect export never deletes the good backups before it.
+- The archive is pruned by its own SYSTEM task, and only while it holds an
+  export from inside the window, so an export that has stopped running cannot
+  empty it. Deleting from the working copy never deletes from the archive.
+
+`-RetentionDays` on either script changes the window; 0 keeps everything.
 
 Set it up once, from an **Administrator** PowerShell in the repo root:
 
