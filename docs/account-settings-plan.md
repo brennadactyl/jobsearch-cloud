@@ -1,5 +1,9 @@
 # Account settings, where the password already is
 
+Screens: [Resume updates mockup](https://claude.ai/artifact/DnjKE3FkU1DPu5REiEY156),
+version 7, approved. Built after [word-resumes-plan.md](word-resumes-plan.md)
+has shipped.
+
 "My account" in the header opens an account panel. Changing your password is one
 section of it; the rest is the search you described when you signed up, editable
 for as long as you have the account.
