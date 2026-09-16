@@ -168,6 +168,31 @@ describe("relWhen and daysSince", () => {
     expect(daysSince("not a date")).toBeNull();
     expect(relWhen(null)).toBe("");
   });
+
+  // Set in local clock terms, so these hold in any timezone the tests run in.
+  // Read as UTC midnight, a bare date's count went up at 5pm Pacific instead.
+  it("counts a bare date in calendar days, going up at local midnight and not before", () => {
+    vi.setSystemTime(new Date(2026, 8, 15, 23, 30));
+    expect(daysSince("2026-09-01")).toBe(14);
+    vi.setSystemTime(new Date(2026, 8, 16, 0, 30));
+    expect(daysSince("2026-09-01")).toBe(15);
+  });
+
+  it("gives the same count all day, morning to late evening", () => {
+    vi.setSystemTime(new Date(2026, 8, 15, 9, 0));
+    const morning = daysSince("2026-09-01");
+    vi.setSystemTime(new Date(2026, 8, 15, 22, 0));
+    expect(daysSince("2026-09-01")).toBe(morning);
+  });
+
+  it("still counts a full timestamp in whole 24-hour days", () => {
+    expect(daysSince(new Date(NOW - 2.5 * 86_400_000).toISOString())).toBe(2);
+  });
+
+  it("never counts a future date as negative", () => {
+    vi.setSystemTime(new Date(2026, 8, 1, 12, 0));
+    expect(daysSince("2026-09-05")).toBe(0);
+  });
 });
 
 describe("buildTabs", () => {
