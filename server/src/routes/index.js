@@ -45,6 +45,7 @@ import {
   handlePutDocument,
 } from "./documents.js";
 import { handleDelistUrls, handleMarkVerified } from "./delisting.js";
+import { handleGetRunLog, handleListRunLogs, handlePutRunLog } from "./logs.js";
 import { handleAddLeads, handleDeleteLeads, handleSetLeadStatus } from "./leads.js";
 import {
   handleCheckInvite,
@@ -174,6 +175,11 @@ export const SESSION_ROUTES = [
   ["GET", /^\/api\/documents\/(.+)$/, handleGetDocument],
   ["PUT", /^\/api\/documents\/(.+)$/, handlePutDocument],
   ["DELETE", /^\/api\/documents\/(.+)$/, handleDeleteDocument],
+  // A search's run logs (./logs.js), kept apart from the documents a run
+  // downloads. Also addressed by URI, so PUT carries the write.
+  ["GET", /^\/api\/logs\/([^/]+)$/, handleListRunLogs],
+  ["GET", /^\/api\/logs\/([^/]+)\/([^/]+)$/, handleGetRunLog],
+  ["PUT", /^\/api\/logs\/([^/]+)\/([^/]+)$/, handlePutRunLog],
 ];
 
 /**

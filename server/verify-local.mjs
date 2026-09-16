@@ -2458,5 +2458,84 @@ check("another person's search of the same name is served nothing of this person
 check("a search this person doesn't have is a 404",
   (await forSearch(SD, "NOPE")).status === 404);
 
+console.log("\n== run logs ==");
+// A search uploads its run's log as its last act, so a night's record doesn't
+// live only on the machine that ran it. Two accounts share a track key here on
+// purpose: a store keyed by track alone would hand one of them the other's log,
+// and "unknown track" would hide that.
+const logRun = Date.now();
+const logUser = async (tag) => {
+  const name = `Log ${tag} ${logRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: `log-${tag}-long-password` } });
+  const token = (await req("POST", "/api/login", { body: { name, password: `log-${tag}-long-password` } })).json.token;
+  await req("POST", "/api/config", { token, body: { tracks: [{ key: "LOGS", label: "Logs" }] } });
+  return { name, token };
+};
+const logA = await logUser("a"), logB = await logUser("b");
+const earlier = "2026-09-15T08-00-01Z", later = "2026-09-16T08-00-01Z";
+const putLog = (who, track, started, text) =>
+  req("PUT", `/api/logs/${track}/${started}`, { token: who.token, raw: text, type: "text/plain" });
+
+const firstPut = await putLog(logA, "LOGS", earlier, "===== starting LOGS =====\nfirst night\n");
+check("a run's log is stored under its track and start time",
+  firstPut.status === 200 && firstPut.json?.started === earlier && firstPut.json?.bytes > 0,
+  JSON.stringify(firstPut.json));
+await putLog(logA, "LOGS", later, "===== starting LOGS =====\nsecond night\n");
+const logList = await req("GET", "/api/logs/LOGS", { token: logA.token });
+check("a track's logs list newest first",
+  logList.status === 200 && (logList.json?.logs?.map((l) => l.started) || []).join() === `${later},${earlier}`,
+  JSON.stringify(logList.json));
+const oneLog = await req("GET", `/api/logs/LOGS/${earlier}`, { token: logA.token });
+check("and a log reads back exactly as it was written",
+  oneLog.status === 200 && oneLog.text === "===== starting LOGS =====\nfirst night\n" &&
+  (oneLog.headers.get("content-type") || "").startsWith("text/plain"), oneLog.text);
+
+// An upload retried after a lost response must leave one log, not two.
+await putLog(logA, "LOGS", earlier, "===== starting LOGS =====\nfirst night, sent again\n");
+const afterRetry = await req("GET", "/api/logs/LOGS", { token: logA.token });
+check("uploading the same run again replaces its log rather than adding one",
+  afterRetry.json?.logs?.length === 2 &&
+  ((await req("GET", `/api/logs/LOGS/${earlier}`, { token: logA.token })).text || "").includes("sent again"),
+  JSON.stringify(afterRetry.json?.logs));
+
+check("B, with a track of the same name, sees none of A's logs",
+  (await req("GET", "/api/logs/LOGS", { token: logB.token })).json?.logs?.length === 0 &&
+  (await req("GET", `/api/logs/LOGS/${earlier}`, { token: logB.token })).status === 404);
+await putLog(logB, "LOGS", earlier, "B's own night\n");
+check("and B writing a log with A's track and time leaves A's untouched",
+  ((await req("GET", `/api/logs/LOGS/${earlier}`, { token: logA.token })).text || "").includes("sent again") &&
+  (await req("GET", `/api/logs/LOGS/${earlier}`, { token: logB.token })).text === "B's own night\n");
+
+check("a log for a track this person doesn't have is a 404",
+  (await putLog(logA, "NOPE", earlier, "x")).status === 404 &&
+  (await req("GET", "/api/logs/NOPE", { token: logA.token })).status === 404);
+check("a start time in the wrong shape is a 400, before anything is written",
+  (await putLog(logA, "LOGS", "2026-09-16 08:00", "x")).status === 400 &&
+  (await putLog(logA, "LOGS", "..%2F..%2Fdocs", "x")).status === 400);
+check("a log over the size cap is refused whole",
+  (await putLog(logA, "LOGS", "2026-09-17T08-00-01Z", "x".repeat(2 * 1024 * 1024 + 1))).status === 413 &&
+  !(await req("GET", "/api/logs/LOGS", { token: logA.token })).json?.logs?.some((l) => l.started === "2026-09-17T08-00-01Z"));
+check("logs require a session",
+  (await req("GET", "/api/logs/LOGS")).status === 401 &&
+  (await req("PUT", `/api/logs/LOGS/${earlier}`, { raw: "x", type: "text/plain" })).status === 401);
+
+// A log is not a document: it must not appear in the list the backup copies and
+// the documents routes edit. A real document is put first, so an empty list
+// can't pass for a correct one.
+await req("PUT", `/api/documents/docs/tracked_LOGS_${logRun}_postings.md`, { token: logA.token, raw: "# Baseline", type: "text/markdown" });
+const logDocs = (await req("GET", "/api/documents", { token: logA.token })).json.documents || [];
+check("logs never appear among a person's documents",
+  logDocs.length === 1 && logDocs[0].path === `docs/tracked_LOGS_${logRun}_postings.md`,
+  JSON.stringify(logDocs.map((d) => d.path)));
+
+const logAId = (await req("GET", "/api/me", { token: logA.token })).json.id;
+const logDry = await req("DELETE", `/api/users/${logAId}`, { admin: true, body: { name: logA.name, dryRun: true } });
+const logGone = await req("DELETE", `/api/users/${logAId}`, { admin: true, body: { name: logA.name } });
+check("deleting an account counts its logs and takes them with it",
+  logDry.json.wouldDelete?.logs === 2 && logGone.json.deleted?.logs === 2,
+  JSON.stringify({ dry: logDry.json.wouldDelete?.logs, deleted: logGone.json.deleted?.logs }));
+check("and leaves the other account's logs alone",
+  (await req("GET", "/api/logs/LOGS", { token: logB.token })).json?.logs?.length === 1);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

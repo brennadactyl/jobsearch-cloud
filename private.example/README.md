@@ -33,7 +33,9 @@ Windows' 260-character limit that fails as "Could not find a part of the path".
 private/
   <user-id>/
     tracker.json                  {"url": "...", "token": "..."} - their own API URL and session token
-    logs/                         created by run-search.ps1 - one <key>.log per track
+    logs/                         created by run-search.ps1 - one <key>.log per track;
+                                  each run also uploads its own part to the
+                                  tracker (GET /api/logs/<key>), kept 30 days
     .run/<key>/                   created and WIPED by every run - the documents
                                   fetched from the tracker for that search, plus
                                   whatever scratch it writes. Never edit anything
