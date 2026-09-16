@@ -71,6 +71,16 @@ file, pasted text, or both.
   the candidate profile from it, and sets `resume_line` to name the file it
   read. Until then the search is still running against the old one, and the
   section says so.
+- **Each resume says which tabs it drives.** A search names the resume it is
+  screened against, so the row for `Alex_Engineering.pdf` reads "Engineering,
+  Platform" - both tabs, where the second is filled by the first's search
+  (`fed_by`). A resume no search names reads "not used by any search", which is
+  how an old one is recognised before it is removed.
+- **Which resume a search uses is a choice, not prose.** Each search gets a
+  picker listing the account's readable resumes, stored in the answers as that
+  role's `resume`. The run does not choose: it writes `resume_line` naming the
+  file the answer names, and  refuses a `resume_line` that
+  names a different file. One resume can drive several searches.
 - **The last readable resume cannot be removed** while no text is pasted: a
   search with nothing to screen against is the failure this rule exists to
   prevent, and it is refused with that reason.
