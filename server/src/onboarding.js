@@ -7,7 +7,7 @@
  * is a user, and the onboarding run reads every account's waiting setup - so
  * these take the D1 binding directly, as ./auth.js does for accounts and
  * sessions. A person's own read and write of their setup go through Db
- * (getIntake, saveIntake).
+ * (getIntake, createIntakeWithConfig).
  */
 
 import { getUserById, getUserByName, hashPassword, hashToken, newSessionToken } from "./auth.js";

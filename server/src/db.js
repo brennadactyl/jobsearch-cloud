@@ -405,17 +405,6 @@ export class Db {
   }
 
   /**
-   * Store this person's setup answers and put the setup back in the queue for
-   * the onboarding run.
-   *
-   * `sent_at` marks the start of an attempt: the first send sets it, and so does
-   * a send that follows a failure, while an edit to a setup still waiting keeps
-   * it - the page's warning about a late run counts from when the person first
-   * asked. A finished setup is never reopened.
-   * @param {string} answersJson
-   * @returns {Promise<boolean>} false when the setup is already done
-   */
-  /**
    * The setup form's whole effect, in one batch, which D1 runs as one
    * transaction: the answers, the settings the form owns, and one track per
    * role block (docs/instant-setup-plan.md).
@@ -529,25 +518,6 @@ export class Db {
     }
     await this.d1.batch(statements);
     return [...fields, ...settings];
-  }
-
-  async saveIntake(answersJson) {
-    const now = new Date().toISOString();
-    const result = await this.d1
-      .prepare(
-        `INSERT INTO intake (user_id, answers, status, status_note, sent_at, updated_at)
-         VALUES (?, ?, 'pending', '', ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           answers = excluded.answers,
-           sent_at = CASE WHEN intake.status = 'failed' THEN excluded.sent_at ELSE intake.sent_at END,
-           status = 'pending',
-           status_note = '',
-           updated_at = excluded.updated_at
-         WHERE intake.status <> 'done'`
-      )
-      .bind(this.userId, answersJson, now, now)
-      .run();
-    return (result.meta.changes || 0) > 0;
   }
 
   /**
