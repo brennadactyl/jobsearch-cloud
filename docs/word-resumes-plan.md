@@ -36,6 +36,12 @@ what a search reads; the `.docx` stays as the person's original.
 - **Replacing the `.docx` replaces the `.txt`.** Removing the `.docx` removes it.
   The pair is one resume in every list the person sees.
 
+**The extracted `.txt` belongs to the server.** A direct upload to the path that
+pairs with a stored `.docx` is refused: "This text is read from Resume.docx -
+replace that file instead." Otherwise a hand-edited text file could silently
+replace what was read from the Word file, and nothing would show which one a
+search is using.
+
 ## What the person sees
 
 - The accepted resume formats become `.pdf`, `.docx`, `.txt` and `.md`, from the
@@ -52,6 +58,17 @@ what a search reads; the `.docx` stays as the person's original.
   `.txt` wherever it names a resume.
 - A search's `documents` list names the `.txt`, so the daily search downloads
   and reads the extracted text.
+
+## Importing a folder
+
+`import-documents.ps1` uploads through the same route, so it gets extraction
+with no change to how it uploads. It does change in three ways:
+
+- It skips a `.txt` whose `.docx` is in the same folder, so re-importing a
+  restored backup does not collide with the pair the server writes.
+- A refusal prints the server's reason, not "HTTP 400".
+- A Word upload prints what was read, like the page: `Resume.docx - 612 words
+  read`.
 
 ## Verification
 
