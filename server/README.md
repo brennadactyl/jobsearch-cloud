@@ -23,10 +23,9 @@ leads, applications, page titles and location rules.
   the caller's session, building the one `Db` scoped to that person, and
   dispatching to the route table. It knows about no individual endpoint.
 - `src/routes/index.js` - the route table: which method and path map to which
-  handler, in three lists by credential. `PUBLIC_ROUTES` need none (or check
-  `ADMIN_TOKEN` inside the handler), `ADMIN_ROUTES` require `ADMIN_TOKEN` and
-  `SESSION_ROUTES` require a session token; `src/index.js` tries them in that
-  order. Adding an endpoint is one line here plus one exported function in the
+  handler, in three lists by credential. `PUBLIC_ROUTES` need none,
+  `ADMIN_ROUTES` require `ADMIN_TOKEN` and `SESSION_ROUTES` require a session
+  token; `src/index.js` tries them in that order. Adding an endpoint is one line here plus one exported function in the
   module beside it.
 - `src/routes/*.js` - one module per resource (`leads.js`, `applications.js`,
   `screened.js`, `config.js`, `coverage.js`, `runs.js`, `prompt.js`,
