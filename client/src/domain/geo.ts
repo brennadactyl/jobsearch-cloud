@@ -5,7 +5,7 @@
  *
  * Settings are passed in rather than read from a global, so these are testable.
  */
-import type { Lead, PriorityLocation, Settings } from "../api/schema";
+import type { Lead, PriorityLocation } from "../api/schema";
 
 export interface GeoMatch {
   /** CSS class for the tier stripe: pri0..pri4. */
@@ -34,8 +34,4 @@ export function geo(location: string | null | undefined, rules: readonly Priorit
 export function rank(l: Pick<Lead, "location">, rules: readonly PriorityLocation[]): number {
   const g = geo(l.location, rules);
   return g ? g.i : 999;
-}
-
-export function geoOf(location: string | null | undefined, settings: Settings): GeoMatch | null {
-  return geo(location, settings.priority_locations);
 }

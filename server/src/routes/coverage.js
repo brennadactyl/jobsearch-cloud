@@ -273,8 +273,8 @@ export async function handleRecordSweeps({ request, db, user }) {
   // Written whether or not `on` carries a date: `on` governs the sweep record
   // alone, so seeding (`on: ""`) stamps nothing and moves no cursor while what
   // the row says about reaching the company still reaches the shared list.
-  // Sharing only dated rows dropped what a person had verified by hand and left
-  // it in a per-search `note`, where no other search could read it. What a row
+  // Sharing only dated rows would leave what a person verified by hand in a
+  // per-search `note`, where no other search could read it. What a row
   // may claim is the caller's business: the server cannot tell a verified board
   // from a typed one, which is why the skills say to send only what was checked.
   //

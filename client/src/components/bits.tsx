@@ -4,7 +4,7 @@ import { exportFilename, toCsv, type Column } from "../domain/export";
 import { downloadFile } from "../ui/download";
 import { APP_SORTS, LEAD_SORTS, pillFor } from "../domain/constants";
 import { drillLabel, type DrillContext } from "../domain/drills";
-import { isoDay, relWhen, safeUrl } from "../domain/format";
+import { isoDay, relWhen } from "../domain/format";
 import { geo } from "../domain/geo";
 import { runState, runSummary } from "../domain/runs";
 import { setPrefs, usePrefs } from "../ui/prefs";
@@ -123,16 +123,6 @@ export function DrillChip({
         ×
       </span>
     </Link>
-  );
-}
-
-export function PostingLink({ url, children }: { url: string; children: React.ReactNode }) {
-  const safe = safeUrl(url);
-  if (!safe) return <>{children}</>;
-  return (
-    <a href={safe} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
   );
 }
 

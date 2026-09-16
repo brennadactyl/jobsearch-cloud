@@ -3,7 +3,7 @@
  * to the account. The tab, drill and status filter live in the URL instead, so a
  * filtered view can be linked to.
  */
-import { useCallback, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { OVERVIEW_FOLD_IDS } from "../domain/overview";
 
 export interface Prefs {
@@ -129,12 +129,6 @@ export function usePrefs(): Prefs {
     () => current,
     () => current,
   );
-}
-
-export function usePref<K extends keyof Prefs>(key: K): [Prefs[K], (v: Prefs[K]) => void] {
-  const prefs = usePrefs();
-  const set = useCallback((v: Prefs[K]) => setPrefs({ [key]: v } as Partial<Prefs>), [key]);
-  return [prefs[key], set];
 }
 
 /** Folds or unfolds one Overview section or chart. Reads the store, so clicks landing before a re-render all count. */

@@ -169,12 +169,6 @@ function namedCompanies(text) {
 }
 
 /**
- * The first thing wrong with a set of answers, as `{ error, field }`, or null.
- * `field` names where the page shows the message.
- * @param {unknown} answers
- * @param {import("../r2.js").Docs} docs
- */
-/**
  * The tracks a send creates, one per role block, in the order they were filled
  * in. A key is a slug of the role's name; a name that slugs to nothing, or to
  * one another role already took, falls back to its position, so two roles
@@ -234,6 +228,12 @@ function scopeProblem(answers) {
   };
 }
 
+/**
+ * The first thing wrong with a set of answers, as `{ error, field }`, or null.
+ * `field` names where the page shows the message.
+ * @param {unknown} answers
+ * @param {import("../r2.js").Docs} docs
+ */
 async function answersProblem(answers, docs) {
   const bad = (field, error) => ({ error, field });
   if (!answers || typeof answers !== "object" || Array.isArray(answers)) return bad("answers", "answers must be an object");
@@ -336,8 +336,8 @@ export async function handlePendingIntakes({ env }) {
  * This is the one admin route that yields access to a person's own data: the
  * token reaches everything that account owns, as the nightly search's does. That
  * is what the onboarding run needs to build someone's search, and it is why
- * ADMIN_TOKEN is no longer only a way to create accounts - see server/README.md's
- * security notes.
+ * ADMIN_TOKEN reaches people's data rather than only creating accounts - see
+ * server/README.md's security notes.
  */
 export async function handleMintSearchToken({ request, env }) {
   const body = await readJson(request);
