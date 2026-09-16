@@ -59,6 +59,7 @@ $ErrorActionPreference = "Stop"
 
 # A param default is evaluated before $PSScriptRoot is reliably set, so the
 # script's own folder, which is where demo-user.json sits, is resolved here.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
              elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
              else { "" }

@@ -70,6 +70,7 @@ $ErrorActionPreference = "Stop"
 # script's own folder is resolved here instead. It also names the scheduler this
 # run calls, which becomes a registered task's command line, so an empty path
 # would schedule nothing runnable.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
              elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
              else { "" }

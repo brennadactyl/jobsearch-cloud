@@ -70,6 +70,7 @@ $ErrorActionPreference = "Stop"
 # The same resolution the other scripts use. Here it also names the two scripts
 # registered as scheduled tasks below, and one of them runs as SYSTEM, so an
 # empty path is refused rather than turned into a task that runs nothing.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
              elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
              else { "" }
