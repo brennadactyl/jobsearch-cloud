@@ -284,7 +284,11 @@ function Send-RunLog {
         }
         Log ("run log:          uploaded {0:N0} bytes as {1}" -f $length, $runStarted)
     } catch {
-        Log "WARNING: couldn't upload this run's log ($(Get-HttpStatus $_)): $($_.Exception.Message) - it is still in $logFile"
+        # The tracker's own reason (a 413's size, a 404's track) is in the
+        # response body, which Windows PowerShell keeps in ErrorDetails rather
+        # than in the exception's message.
+        $why = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+        Log "WARNING: couldn't upload this run's log ($(Get-HttpStatus $_)): $why - it is still in $logFile"
     }
 }
 
