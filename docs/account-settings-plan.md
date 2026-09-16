@@ -93,7 +93,10 @@ file, pasted text, or both.
   whatever it is sent. `POST /api/config` stays as it is for the tracker's own
   configuration.
 - **`PUT /api/intake/answers`** (session token) replaces the stored answers
-  after `done`, and sets the intake back to `pending` with a reason of `edit`.
+  after `done` or `failed`, and sets the intake back to `pending` with a reason
+  of `edit`. This is also how a failed setup is recovered: a note that says the
+  resume couldn't be read links to the resume section here, and fixing it there
+  is what gets the search built.
   The setup form itself stays one-shot: `POST /api/intake` still refuses a
   second send, so the panel is the only way to change an answer.
 - **The scope check runs on edit too**, with the same loose rule and the same
