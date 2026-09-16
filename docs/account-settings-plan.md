@@ -47,43 +47,37 @@ the panel promises after each save.
 | Per search: anything that rules a job out | the fit clauses |
 | Per search: lowest acceptable pay | the fit filter |
 | Preferences the search should weigh | the candidate profile |
-| Your resume | the candidate profile and `resume_line` |
 
 Each section says which it is. An answer edit shows "tonight's run applies
 this" until the write-up lands.
 
 ## Your resume
 
-A resume section, alongside the answers, holding what the setup form took: a
-file, pasted text, or both.
+A resume section in the same panel. It works for every account, including ones
+set up by hand before invites existed, because it is built on the search's own
+document list (`tracks.documents`, [schema.md](schema.md)) rather than on setup
+answers - an account set up by the skill has no intake row at all.
 
-- **It lists the files the account already has** under `resumes/`, from
-  `GET /api/documents`, with their dates. Uploading adds one; removing one
-  deletes it.
+- **It lists the files the account has** under `resumes/`, with their dates,
+  from `GET /api/documents`. Uploading adds one; removing one deletes it.
+- **Each resume says which tabs it drives**: the searches whose `documents` list
+  holds its path, plus any tab filled by one of them (`fed_by`). A resume no
+  search lists reads "not used by any search".
+- **Each search gets a picker** of the account's readable resumes. Choosing one
+  writes that search's `documents` entry through `POST /api/settings`, and takes
+  effect on the search's next run, which downloads what the list names. One
+  resume can drive several searches.
+- **The daily prompt reads the resume the list names**, not a file named inside
+  `resume_line`. `resume_line` keeps only how this search frames the resume, so
+  swapping a file never leaves prose pointing at the old one.
 - **The same format rule as the setup form**: `.txt`, `.md` and `.pdf` are
-  readable overnight, anything else needs the text pasted too, and the check is
-  the one constant both screens share. The 8 MB cap and the filename-safety
-  rule are the documents route's, unchanged.
-- **A new file does not orphan the old one.** Uploading under a new name leaves
-  the previous file listed, so a person can see which is which and remove the
-  one they meant to replace. Uploading under the same name replaces it.
-- **Tonight's run picks it up**: it stages whatever the answers point at, rewrites
-  the candidate profile from it, and sets `resume_line` to name the file it
-  read. Until then the search is still running against the old one, and the
-  section says so.
-- **Each resume says which tabs it drives.** A search names the resume it is
-  screened against, so the row for `Alex_Engineering.pdf` reads "Engineering,
-  Platform" - both tabs, where the second is filled by the first's search
-  (`fed_by`). A resume no search names reads "not used by any search", which is
-  how an old one is recognised before it is removed.
-- **Which resume a search uses is a choice, not prose.** Each search gets a
-  picker listing the account's readable resumes, stored in the answers as that
-  role's `resume`. The run does not choose: it writes `resume_line` naming the
-  file the answer names, and `POST /api/writeup` refuses a `resume_line` that
-  names a different file. One resume can drive several searches.
-- **The last readable resume cannot be removed** while no text is pasted: a
-  search with nothing to screen against is the failure this rule exists to
-  prevent, and it is refused with that reason.
+  readable overnight, from the one shared constant; the 8 MB cap and the
+  filename rule are the documents route's.
+- **A search cannot be left without a readable resume.** Removing a file a
+  search lists, or picking an unreadable one, is refused naming the search.
+- **The candidate profile catches up on the next run.** A changed resume marks
+  that search's profile stale, and its next run rewrites the profile section of
+  its doc from the new file before searching, then clears the mark.
 
 ## Server
 
