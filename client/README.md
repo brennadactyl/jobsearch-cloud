@@ -50,9 +50,30 @@ view preferences. It leaves that person's other sessions alone, including the
 one their scheduled searches use. A token revoked anywhere else brings the
 sign-in back on the next request.
 
-Accounts are created by whoever operates the deployment; there's no sign-up
-here. See [`../server/README.md`](../server/README.md#accounts). Each person
-sees only their own tracks, leads, applications, page title and location rules.
+Each person sees only their own tracks, leads, applications, page title and
+location rules.
+
+## Joining from an invite
+
+There is no open sign-up. Whoever operates the deployment sends an invite link,
+`<client URL>/?invite=<code>`, which opens the sign-in card in signup mode:
+a name, a password (12 characters or more) and its confirmation. The code is
+checked first, so a used or expired link falls back to normal sign-in and says
+why. The code leaves the address bar once it has been spent.
+
+A new account has no tracks, so instead of an empty tracker it gets the setup
+form: page title, pronouns, resume, where the person will work, one block per
+kind of role, companies to avoid and preferences. Resume files go to
+`/api/documents/resumes/<name>` first, under a name the documents route
+accepts, then the answers go to `/api/intake`. The preferred locations are
+turned into ranked matching rules on the page (`src/domain/locations.ts`) and
+sent with the answers.
+
+That night the onboarding run builds the search from the answers. Until it has,
+the form stays editable and says where things are: building tonight, not run
+within the account's stale window, or the run's own note when it failed. Once
+the run is done, the tracker replaces the form. See
+[`../docs/onboarding-plan.md`](../docs/onboarding-plan.md).
 
 ## One-time setup
 
@@ -151,6 +172,11 @@ tests cover:
 - **`src/App.test.tsx`** — the gate, shell and routing, queried by role and
   accessible name.
 - **`src/writes.test.tsx`** — the optimistic layer.
+- **`src/domain/locations.test.ts`** — how each preferred location becomes a
+  matching rule, against the ways postings spell places, and what gets flagged.
+- **`src/domain/onboarding.test.ts`** and **`src/onboarding.test.tsx`** — invite
+  signup, the setup form's checks, file naming, the banners and when the tracker
+  takes over.
 - **`src/parity.test.tsx`** and **`src/review.test.tsx`** — detail-pane, grid,
   copy, focus, selection and save-indicator behaviour.
 

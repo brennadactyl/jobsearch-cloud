@@ -538,3 +538,57 @@ a.seglabel:hover{color:var(--accent)}
 tr[data-expand]{cursor:pointer}
 .exp-ind button{appearance:none;border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer}
 .exp-ind button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------------------------------------------------------------------------
+   Invite signup. #gate p sets every paragraph's colour, so the field messages
+   select through #gate to win. */
+#gate .gate-field{display:flex;flex-direction:column;gap:5px}
+#gate .field-err{color:var(--crit);font-size:12.5px;line-height:1.5}
+#gate .field-hint{font-size:12.5px;line-height:1.5}
+.pw-input{position:relative}
+.pw-input input{padding-right:58px}
+.pw-show{position:absolute;right:6px;top:50%;transform:translateY(-50%);appearance:none;border:0;background:none;
+  font:inherit;font-size:12.5px;font-weight:500;color:var(--ink2);padding:3px 5px;border-radius:5px;cursor:pointer}
+.pw-show:hover{color:var(--ink)}
+.pw-show:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[aria-invalid="true"],textarea[aria-invalid="true"]{border-color:var(--crit)}
+
+/* ---------------------------------------------------------------------------
+   Setup: a form filled in once, so a narrow reading column rather than the
+   tracker's workspace width. */
+.setup{min-height:100vh;background:var(--ground)}
+.setup-wrap{max-width:680px;margin:0 auto;padding:26px 20px 72px}
+.setup-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.setup-who{color:var(--ink2);font-size:14px}
+.setup-card{padding:26px 28px 30px}
+.setup-card h1{font-size:23px;margin:0 0 8px}
+.setup-lede{color:var(--ink2);font-size:14px;line-height:1.55;margin:0 0 20px}
+.setup-field{margin-bottom:18px;display:flex;flex-direction:column;gap:6px}
+.setup-label{font-weight:600;font-size:13.5px}
+.setup-optional{font-weight:400;color:var(--ink2);font-size:12.5px}
+.setup-field .field-hint{margin:0;color:var(--ink2);font-size:12.5px;line-height:1.5}
+.setup-field .field-err,.setup-actions .field-err{margin:0;color:var(--crit);font-size:12.5px;line-height:1.5}
+.setup-sec{margin:26px 0 14px;padding-top:20px;border-top:1px solid var(--line)}
+.setup-sec h2{font-size:15px;margin:0 0 4px}
+.setup-sec p{color:var(--ink2);font-size:12.5px;line-height:1.5;margin:0}
+.setup-pronouns{margin-left:0;align-self:flex-start}
+.setup-attach{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.setup-files{display:flex;flex-direction:column;gap:6px}
+.setup-file{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;font-size:13px;color:var(--ink2)}
+.setup-file .field-err{flex-basis:100%;margin:0;color:var(--crit);font-size:12.5px}
+.setup-rm{appearance:none;border:0;background:none;padding:0;font:inherit;color:var(--crit);cursor:pointer}
+.setup-rm:hover{text-decoration:underline}
+.setup-readback{padding:2px 0 0}
+.setup-role{border:1px solid var(--line);border-radius:10px;padding:16px 16px 2px;margin-bottom:14px;background:var(--surface2)}
+.setup-role input[type=text],.setup-role textarea{background:var(--surface)}
+.setup-role-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.setup-role-top strong{font-size:13px;color:var(--ink2)}
+.setup-actions{display:flex;align-items:center;gap:12px;margin-top:24px;flex-wrap:wrap}
+.setup-status{border:1px solid var(--line);border-radius:8px;background:var(--surface2);padding:9px 12px;
+  margin-bottom:20px;font-size:13.5px;line-height:1.55;color:var(--ink2)}
+.setup-status strong{display:block;color:var(--ink);margin-bottom:3px}
+.setup-status.bad{border-color:var(--crit);background:none}
+@media (max-width:700px){
+  .setup-wrap{padding:22px 13px 60px}
+  .setup-card{padding:22px 18px 24px}
+}

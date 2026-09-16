@@ -1,7 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
-import { getData, login, logout, session, UnauthorizedError } from "./api/client";
+import { getData, getIntake, login, logout, session, UnauthorizedError } from "./api/client";
+import InviteGate from "./components/InviteGate";
+import Setup from "./components/Setup";
 import Shell from "./components/Shell";
 import { clearPrefs } from "./ui/prefs";
 import { saved } from "./ui/saved";
@@ -104,7 +106,14 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
     if (error instanceof UnauthorizedError) session.end(error.message);
   }, [error]);
 
-  if (isPending) {
+  // An account with no tracks hasn't had its search built yet. The setup form
+  // says what to search for, or what became of it; once the run is done the
+  // tracker takes over. A failed intake read shows the tracker, which works
+  // empty, rather than a form served on a guess.
+  const needsSetup = !!data && data.tracks.length === 0;
+  const intake = useQuery({ queryKey: ["intake"], queryFn: getIntake, enabled: needsSetup, retry: false });
+
+  if (isPending || (needsSetup && intake.isPending)) {
     return (
       <div className="wrap">
         <p style={{ padding: "40px 0", color: "var(--ink2)" }}>Loading…</p>
@@ -123,14 +132,35 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
     );
   }
 
+  if (needsSetup && !intake.isError && intake.data?.status !== "done") {
+    return <Setup data={data} intake={intake.data ?? null} onSignOut={onSignOut} />;
+  }
+
   return <Shell data={data} isOverview={location.pathname === "/"} onSignOut={onSignOut} />;
 }
 
 function Root() {
   const [signedIn, setSignedIn] = useState(() => !!session.token());
   const [gate, setGate] = useState<GateState>({ notice: "", focusPassword: false });
+  // Read once: the code leaves the address bar as soon as it is spent or turns
+  // out unusable, so a refresh can't re-run a signup that can only fail now.
+  const [invite, setInvite] = useState(() => new URLSearchParams(window.location.search).get("invite") ?? "");
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  const dropInvite = useCallback(() => {
+    setInvite("");
+    navigate({ pathname: "/", search: "" }, { replace: true });
+  }, [navigate]);
+  const inviteUnusable = useCallback(
+    (notice: string) => {
+      dropInvite();
+      // Someone already signed in here has a tracker to go to; everyone else
+      // gets the sign-in card, saying why the link didn't work.
+      if (!session.token()) setGate({ notice, focusPassword: false });
+    },
+    [dropInvite],
+  );
 
   // Every way a session ends arrives here: Log out, and a 401 on any read or
   // write, so a failed write can't leave a page that looks signed in.
@@ -149,6 +179,22 @@ function Root() {
       }),
     [queryClient, navigate],
   );
+
+  // An invite beats a remembered session: opening one is being handed an
+  // account of your own, not signing in as whoever last used this browser.
+  if (invite) {
+    return (
+      <InviteGate
+        code={invite}
+        onUnusable={inviteUnusable}
+        onSignedUp={() => {
+          dropInvite();
+          queryClient.clear();
+          setSignedIn(true);
+        }}
+      />
+    );
+  }
 
   if (!signedIn) {
     return (
