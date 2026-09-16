@@ -154,6 +154,7 @@
  */
 
 import { normalize as normalizeCompany } from "./exclude.js";
+import { searchRootKey } from "./tracks.js";
 import { canonicalUrl } from "./url.js";
 
 // The route modules validate against these same lists, so validation and
@@ -538,13 +539,14 @@ export class Db {
   }
 
   /**
-   * Every lead in a search family - a track and the tabs it fills - with what
-   * choosing tonight's re-checks needs (routes/screened.js). The family is one
-   * set because one run re-checks for all of it.
+   * Every lead in a feed group - a track and the tabs it fills - with what
+   * choosing tonight's re-checks needs (routes/screened.js). The group is one
+   * set because one run re-checks for all of it. The SQL selects the same keys
+   * as feedGroupKeys in ./tracks.js.
    * @param {string} rootKey a track that runs its own search
    * @returns {Promise<Array<{id: number, status: string, verified: string}>>}
    */
-  async getFamilyLeadsForRecheck(rootKey) {
+  async getFeedGroupLeadsForRecheck(rootKey) {
     const rows = await this.d1
       .prepare(
         `SELECT id, status, verified FROM leads
@@ -1243,8 +1245,7 @@ export class Db {
       .prepare("SELECT key, fed_by FROM tracks WHERE user_id = ?")
       .bind(this.userId)
       .all();
-    const rootOf = new Map(tracks.results.map((t) => [t.key, t.fed_by || t.key]));
-    const root = (k) => rootOf.get(k) || k;
+    const root = (k) => searchRootKey(tracks.results, k);
 
     const roots = new Set(asked.map(root));
     const groupKeys = tracks.results.map((t) => t.key).filter((k) => roots.has(root(k)));

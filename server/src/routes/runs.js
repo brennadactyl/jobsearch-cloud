@@ -5,6 +5,7 @@
  */
 
 import { json, readJson } from "../http.js";
+import { feedGroupKeys } from "../tracks.js";
 import { isoDate, unknownTrack } from "../validate.js";
 
 /**
@@ -58,7 +59,7 @@ export async function handleRecordRun({ request, db }) {
   // names it. Read through getTracksAndSettings because handleGetPrompt decides
   // which tabs the prompt covers the same way, so the two can't disagree.
   const config = await db.getTracksAndSettings();
-  const keys = [key, ...config.tracks.filter((t) => t.fed_by === key).map((t) => t.key)];
+  const keys = feedGroupKeys(config.tracks, key);
 
   // Each tab is counted from its own rows, then every record is written in one
   // transaction: a half-written fan-out would leave a searched tab reading as

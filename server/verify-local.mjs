@@ -474,7 +474,7 @@ check("and its own scoped read never carries this account's rows",
   !!aScoped.screened && !aScoped.screened.some((u) => u.startsWith(`https://example.com/scope/${scStamp}/`)));
 
 console.log("\n== tonight's re-checks, chosen by the tracker ==");
-// A search family re-checks an even share of its open leads each night -
+// A feed group re-checks an even share of its open leads each night -
 // min(20, ceil(open / 14)) - longest-unconfirmed first, New and Reviewing only.
 // Its own account and per-run tracks, so nothing earlier in this file counts.
 const rcPw = "recheck-long-password";
@@ -485,7 +485,7 @@ const RC = "RC" + rcStamp, RCF = RC + "F", RCC = RC + "C";
 await req("POST", "/api/config", { token: RC_TOK, body: { tracks: [
   { key: RC, label: "Recheck", full_description: "the feeder", sort_order: 0 },
   { key: RCF, label: "Recheck fed", full_description: "the fed tab", sort_order: 1, fed_by: RC },
-  { key: RCC, label: "Recheck cap", full_description: "a large family", sort_order: 2 } ] } });
+  { key: RCC, label: "Recheck cap", full_description: "a large feed group", sort_order: 2 } ] } });
 const rcUrl = (n) => `https://example.com/recheck/${rcStamp}/${n}`;
 const rcToday = new Date().toISOString().slice(0, 10);
 // Fifteen open leads, so a budget of ceil(15/14) = 2. Three are due; the second
@@ -512,12 +512,12 @@ await rcSetStatus("second", "Reviewing");
 const rcFeed = (await req("GET", `/api/dedup/${RC}?scope=batch`, { token: RC_TOK })).json;
 const rcFed = (await req("GET", `/api/dedup/${RCF}?scope=batch`, { token: RC_TOK })).json;
 const rcFlagged = [...rcFeed.leads, ...rcFed.leads].filter((l) => l.recheck).map((l) => l.url).sort();
-check("the tracker flags the longest-unconfirmed open leads, up to the family's budget",
+check("the tracker flags the longest-unconfirmed open leads, up to the feed group's budget",
   JSON.stringify(rcFlagged) === JSON.stringify([rcUrl("oldest"), rcUrl("second")].sort()), JSON.stringify(rcFlagged));
-check("the budget is an even share of the family's open leads over fourteen nights",
+check("the budget is an even share of the feed group's open leads over fourteen nights",
   !!rcFeed.scope && rcFeed.scope?.recheck?.eligible === 15 && rcFeed.scope?.recheck?.budget === 2 &&
   rcFeed.scope?.recheck?.after_days === 7, JSON.stringify(rcFeed.scope && rcFeed.scope.recheck));
-check("each tab flags its own share of one family-wide choice",
+check("each tab flags its own share of one group-wide choice",
   rcFeed.scope?.recheck?.flagged === 1 && rcFed.scope?.recheck?.flagged === 1 &&
   rcFed.scope?.recheck?.eligible === 15 && rcFed.scope?.recheck?.budget === 2,
   JSON.stringify({ feeder: rcFeed.scope?.recheck, fed: rcFed.scope?.recheck }));
@@ -546,7 +546,7 @@ const rcCap = (await req("GET", `/api/dedup/${RCC}?scope=batch`, { token: RC_TOK
 check("past 280 open leads a run's re-checks stop at twenty",
   !!rcCap.scope && rcCap.scope?.recheck?.eligible === 281 && rcCap.scope?.recheck?.budget === 20 &&
   rcCap.leads.filter((l) => l.recheck).length === 20, JSON.stringify(rcCap.scope && rcCap.scope.recheck));
-check("another account cannot read this family's re-check choice",
+check("another account cannot read this feed group's re-check choice",
   (await req("GET", `/api/dedup/${RC}?scope=batch`, { token: A_TOK })).status === 404);
 
 console.log("\n== runs ==");
