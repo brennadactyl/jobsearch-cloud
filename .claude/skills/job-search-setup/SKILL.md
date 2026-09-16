@@ -103,16 +103,21 @@ A password reset leaves the scheduled-search token working.
 ### 2. Get the resume(s)
 
 Read each resume. Plain text, Markdown and PDF all open with the Read tool, in
-a headless run as well as an interactive one. `.docx`: use the `docx` skill, or
-ask for a plain-text copy. A scan or a photo is pictures of text and gives a run
-nothing. With nothing readable, have the installer paste their experience in
-chat.
+a headless run as well as an interactive one. A Word `.docx` is read through
+its text: uploading it under `resumes/` makes the server extract
+`<same name>.txt` beside it, and the upload's reply says how many words it
+read. An older `.doc` is refused. A scan or a photo is pictures of text and
+gives a run nothing. With nothing readable, have the installer paste their
+experience in chat.
 
 **Upload whatever they gave you**, and point `resume_line` (step 4) at a file a
-run can actually read - the `.pdf` itself is fine. For a `.docx`, `.rtf`,
-`.pages` or a scan, upload a plain-text copy too and name that instead: a run
-pointed at a file it can't read still completes and reports success, having
-screened every posting against an empty profile. Name a text copy
+run can actually read - the `.pdf` itself is fine, and for a `.docx` it is the
+extracted `.txt`, never the `.docx`. The server owns that `.txt`: writing to it
+directly is refused while its `.docx` is stored, so a new Word resume is a new
+upload of the `.docx`. For an `.rtf`, `.pages` or a scan, upload a plain-text
+copy too and name that instead: a run pointed at a file it can't read still
+completes and reports success, having screened every posting against an empty
+profile. Name a text copy
 `<Name>_Resume.txt` and keep that name, so a new resume is a content swap
 rather than a config edit.
 
@@ -241,12 +246,12 @@ finished sentence the search should read:
   (`../add-target-company/SKILL.md`), never on the search.
 - `search_note` - anything qualifying how the step-1c companies are searched
   ("surface any matching role, not only ones in a particular product area").
-- `resume_line` - the whole "read the resume" instruction: the `.txt` to read,
-  that the `.pdf`/`.docx` beside it isn't readable headless, and how this track
-  frames the resume.
+- `resume_line` - the whole "read the resume" instruction: the file to read (the
+  extracted `.txt` for a Word resume), and how this track frames the resume.
 - `documents` - the list of document paths this search reads besides its
   `doc_file`: every file `resume_line` names, and any reference file the track
-  uses, e.g. `["resumes/Jane_Resume.txt", "resumes/Jane_Resume.docx"]`. A
+  uses, e.g. `["resumes/Jane_Resume.txt"]` - for a Word resume that is the
+  extracted `.txt`, since a run cannot read the `.docx`. A
   nightly run downloads its `doc_file` and these and nothing else, and a track
   with an empty list is refused its documents, so it never runs. List only this
   track's files - a person's other searches keep their own.
@@ -408,7 +413,7 @@ from and where the output goes.
 | Step above | In intake mode |
 |---|---|
 | 1, provisioning | Already done. The account, folder, credential and documents exist. |
-| 2, the resume | `resumes\` in the folder holds their resume - text, Markdown or PDF, all of which you can read; a pasted one is already uploaded as `.txt`. Draft the profile paragraph from it as usual. |
+| 2, the resume | `resumes\` in the folder holds their resume - text, Markdown or PDF, all of which you can read. A Word resume is staged as the `.txt` the server extracted from it, and a pasted one is already uploaded as `.txt`. Draft the profile paragraph from it as usual. |
 | 3, asking | `answers.json` is the interview, already answered. Nothing is confirmed with anyone: decide from what they wrote. Where an answer is thin, write the search anyway - a thin search they can see and correct beats no search. |
 | 4, doc and config | Same fields, same template. They go in `out\` as files, not to the API. |
 | 5, confirming | Nobody to confirm with. Prefer the reading that surfaces more jobs: an over-tight fit filter hides work they asked for and nobody is watching. |
