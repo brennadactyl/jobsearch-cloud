@@ -34,6 +34,12 @@ Kept by whoever is holding the product manager role.
   problem on a person's page: it leaves the intake pending and fails loudly in
   the log. Owner: Prompt Bro, as its own change with a stub-CLI test per wording.
 
+- **Refuse a search whose documents are all unreadable.** The prompt route
+  refuses an empty `documents` list, but a list naming only `.docx` passes and
+  the run screens on its profile alone. The same readable-format check belongs
+  there, in the onboarding run's validation, and in the account panel's picker.
+  Owner: Prompt Bro, with Backend Buddy for the route.
+
 ## Worth doing, unscheduled
 
 - **[Split user tokens from machine tokens](token-split-plan.md)** - planned;
