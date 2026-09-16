@@ -7,6 +7,7 @@
 import { z } from "zod";
 import {
   intakeResponseSchema,
+  intakeSentSchema,
   inviteCheckSchema,
   applicationSchema,
   dataSchema,
@@ -211,9 +212,15 @@ export async function getIntake(): Promise<Intake | null> {
   return (await request("/api/intake", intakeResponseSchema)).intake;
 }
 
-/** Sends the setup answers. The resume files they name must already be stored. */
-export async function submitIntake(answers: IntakeAnswers): Promise<Intake | null> {
-  return (await request("/api/intake", intakeResponseSchema, { method: "POST", body: { answers } })).intake;
+/**
+ * Sends the setup answers, which builds the searches. Answers reaching the
+ * server once is the whole rule: a second send is refused, so this is called
+ * once per account and returns the track keys it created.
+ *
+ * The resume files the answers name must already be stored.
+ */
+export async function submitIntake(answers: IntakeAnswers): Promise<string[]> {
+  return (await request("/api/intake", intakeSentSchema, { method: "POST", body: { answers } })).tracks;
 }
 
 const documentWriteSchema = z.object({ path: z.string() });

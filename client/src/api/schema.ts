@@ -213,6 +213,8 @@ export const intakeSchema = z.object({
   updated_at: text,
 });
 export const intakeResponseSchema = z.object({ intake: intakeSchema.nullable() });
+/** A send builds the tracks itself and names them; the tracker data is read back separately. */
+export const intakeSentSchema = z.object({ ok: z.literal(true), tracks: z.array(str) });
 
 export type Lead = z.infer<typeof leadSchema>;
 export type Application = z.infer<typeof applicationSchema>;

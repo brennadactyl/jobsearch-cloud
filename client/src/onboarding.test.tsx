@@ -159,7 +159,7 @@ describe("the setup form", () => {
   it("sends a PDF on its own, since the run reads it", async () => {
     await openSetup();
     vi.spyOn(client, "putDocument").mockImplementation(async (path) => ({ path }));
-    const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(intake());
+    const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
     vi.mocked(client.getIntake).mockResolvedValue(intake());
 
     await fillRequired();
@@ -232,7 +232,9 @@ describe("the setup form", () => {
   it("uploads files under a safe name, then sends the answers with the computed location rules", async () => {
     await openSetup();
     const put = vi.spyOn(client, "putDocument").mockImplementation(async (path) => ({ path }));
-    const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(intake());
+    const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
+    // What the re-read finds once the send has built the tracks.
+    vi.mocked(client.getData).mockResolvedValue(fixture);
     vi.mocked(client.getIntake).mockResolvedValue(intake());
 
     await fillRequired();
@@ -250,13 +252,47 @@ describe("the setup form", () => {
     expect(sent.priority_locations.map((r) => r.label)).toEqual(["Seattle", "Remote US"]);
     expect(sent.roles[0]).toMatchObject({ name: "Engineering", titles: "Staff backend engineer" });
 
-    expect(await screen.findByText("You're all set — it's building tonight")).toBeInTheDocument();
-    // A first run can finish healthily with nothing in it, so the banner says so
-    // rather than leaving an empty tracker to read as a broken one.
-    expect(screen.getByText(/may well open empty.*real result/s)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send changes" })).toBeInTheDocument();
-    expect(screen.getAllByRole("status").some((s) => s.textContent === "Sent")).toBe(true);
-    expect(screen.queryByRole("link", { name: /tracker/i })).toBeNull();
+    // The send built the tracks, so the page re-reads and the tracker takes over.
+    expect(await screen.findByRole("tab", { name: /overview/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Set up your job search" })).toBeNull();
+  });
+
+  it("says on the new tracker that tonight's run fills in the rest", async () => {
+    vi.mocked(client.getData).mockResolvedValue(fixture);
+    vi.spyOn(client, "getIntake").mockResolvedValue(intake());
+    renderAt("/");
+
+    expect(await screen.findByText("Your searches are set up — tonight's run fills in the rest")).toBeInTheDocument();
+    // A first morning can legitimately be empty, so the tracker says so before
+    // an empty one can read as a broken search.
+    expect(screen.getByText(/may well be empty.*real result/s)).toBeInTheDocument();
+  });
+
+  it("puts the scope refusal beside the question it names", async () => {
+    await openSetup();
+    vi.spyOn(client, "submitIntake").mockRejectedValue(
+      refusal(400, "say where you can work - the search needs somewhere to look", { field: "work_scope" }),
+    );
+    await fillRequired();
+    await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+    await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+
+    const message = await screen.findByText("say where you can work - the search needs somewhere to look");
+    expect(message).toHaveClass("field-err");
+  });
+
+  it("says a second send was refused, in the server's words", async () => {
+    await openSetup();
+    vi.spyOn(client, "submitIntake").mockRejectedValue(
+      refusal(409, "your setup has already been sent - change your search from the tracker, or ask whoever invited you"),
+    );
+    await fillRequired();
+    await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+    await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+
+    expect(
+      await screen.findByText("your setup has already been sent - change your search from the tracker, or ask whoever invited you"),
+    ).toBeInTheDocument();
   });
 
   it("puts a server refusal beside the field it names, and says it couldn't send", async () => {
@@ -270,15 +306,23 @@ describe("the setup form", () => {
     expect(screen.getAllByRole("status").some((s) => s.textContent === "Couldn't send — try again")).toBe(true);
   });
 
-  it("says the run's own note when setup couldn't finish", async () => {
-    await openSetup(intake({ status: "failed", status_note: "The run stopped partway through." }));
-    expect(screen.getByText("Setup couldn't finish")).toBeInTheDocument();
+  it("shows the run's own note on the tracker when it couldn't finish, and asks for nothing", async () => {
+    vi.mocked(client.getData).mockResolvedValue(fixture);
+    vi.spyOn(client, "getIntake").mockResolvedValue(
+      intake({ status: "failed", status_note: "The run stopped partway through." }),
+    );
+    renderAt("/");
+
+    expect(await screen.findByText("Tonight's run couldn't finish your setup")).toBeInTheDocument();
     expect(screen.getByText(/The run stopped partway through\./)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /overview/i })).toBeInTheDocument();
+    // Write-once: there is no form to send again, and the run retries by itself.
+    expect(screen.queryByRole("button", { name: /send|start my search/i })).toBeNull();
   });
 
-  it("says it may be waiting on the search machine once the stale window has passed", async () => {
-    await openSetup(intake({ sent_at: new Date(NOW - 40 * 3_600_000).toISOString() }));
-    expect(screen.getByText(/This hasn't run yet/)).toBeInTheDocument();
+  it("keeps the form for an account whose answers never arrived", async () => {
+    await openSetup(null);
+    expect(screen.getByRole("button", { name: "Start my search" })).toBeInTheDocument();
   });
 
   it("gives way to the tracker once the run is done", async () => {

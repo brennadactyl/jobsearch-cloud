@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS } from "../domain/constants";
@@ -21,10 +21,13 @@ function TrackPanel({ data }: { data: TrackerData }) {
 export default function Shell({
   data,
   isOverview,
+  notice,
   onSignOut,
 }: {
   data: TrackerData;
   isOverview: boolean;
+  /** Sits above the tabs on every page: what setup still owes this tracker, or nothing. */
+  notice?: ReactNode;
   onSignOut: () => void;
 }) {
   const { settings } = data;
@@ -108,6 +111,8 @@ export default function Shell({
             ))}
           </nav>
         </div>
+
+        {notice}
 
         <main id="panel">
           <Routes>

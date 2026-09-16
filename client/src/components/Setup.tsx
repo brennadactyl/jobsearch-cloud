@@ -1,19 +1,20 @@
 /**
- * What an account with no tracks sees instead of an empty tracker: the form a
- * new person fills in once, and what became of it until the overnight run has
- * built their search. The answers are stored as given; turning them into config
- * is the run's job (docs/onboarding-plan.md).
+ * The form a new person fills in once, shown until their searches exist.
+ *
+ * Sending builds them, so this is the last thing they see before their own
+ * tracker: the send is write-once and there is no way back here
+ * (docs/instant-setup-plan.md). What the answers can't settle - the prose the
+ * daily prompt reads - the overnight run writes.
  */
 import { useId, useRef, useState, type ReactNode } from "react";
-import { deleteDocument, failureOf, getIntake, putDocument, submitIntake } from "../api/client";
-import { PRONOUNS, type Intake, type IntakeAnswers, type RoleAnswer, type TrackerData } from "../api/schema";
+import { deleteDocument, failureOf, putDocument, submitIntake } from "../api/client";
+import { PRONOUNS, type IntakeAnswers, type RoleAnswer, type TrackerData } from "../api/schema";
 import { locationRules, parseLocations, type LocationEntry } from "../domain/locations";
 import {
   emptyAnswers,
   emptyRole,
   MAX_FILE_BYTES,
   safeDocumentName,
-  setupOverdue,
   setupProblems,
   type SetupProblems,
 } from "../domain/onboarding";
@@ -165,52 +166,21 @@ function RoleBlock({
   );
 }
 
-function Banner({ intake, staleRunHours }: { intake: Intake | null; staleRunHours: number }) {
-  if (!intake || intake.status === "done") return null;
-  if (intake.status === "failed") {
-    return (
-      <div className="setup-status bad" role="status">
-        <strong>Setup couldn't finish</strong>
-        {intake.status_note || "The overnight run stopped before it built your search."} Change whatever's needed below
-        and send it again — it'll be picked up on the next run.
-      </div>
-    );
-  }
-  if (setupOverdue(intake.sent_at, staleRunHours)) {
-    return (
-      <div className="setup-status" role="status">
-        <strong>This hasn't run yet — it may be waiting for the machine that runs searches to be switched on.</strong>
-        Your answers are saved, and you can keep changing them; the last version you send is the one it uses.
-      </div>
-    );
-  }
-  return (
-    <div className="setup-status" role="status">
-      <strong>You're all set — it's building tonight</strong>
-      Your tracker will be ready in the morning, and it may well open empty. An empty day is a real result here — nothing
-      gets padded in — and it fills as the nightly runs find things. You can keep changing anything below until then;
-      the last version you send is the one it uses.
-    </div>
-  );
-}
-
 export default function Setup({
   data,
-  intake: initialIntake,
+  onSent,
   onSignOut,
 }: {
   data: TrackerData;
-  intake: Intake | null;
+  /** The send built the searches; the page reads them back and the tracker takes over. */
+  onSent: () => void;
   onSignOut: () => void;
 }) {
   const save = useSaved();
   const id = useId();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [intake, setIntake] = useState(initialIntake);
-  const [answers, setAnswers] = useState<IntakeAnswers>(() =>
-    initialIntake ? { ...initialIntake.answers, roles: initialIntake.answers.roles.length ? initialIntake.answers.roles : [emptyRole()] } : emptyAnswers(data.user.name),
-  );
-  const [stored, setStored] = useState<string[]>(() => initialIntake?.answers.resume_files ?? []);
+  const [answers, setAnswers] = useState<IntakeAnswers>(() => emptyAnswers(data.user.name));
+  const [stored, setStored] = useState<string[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
   const [picked, setPicked] = useState<File[]>([]);
   const [refused, setRefused] = useState<Refused[]>([]);
@@ -255,13 +225,12 @@ export default function Setup({
       }
       const resumeFiles = [...new Set([...stored, ...uploaded])];
       await submitIntake({ ...answers, resume_files: resumeFiles, priority_locations: locationRules(entries) });
-      const fresh = await getIntake();
-      setIntake(fresh);
       setStored(resumeFiles);
       setPicked([]);
       setRemoved([]);
       setRefused([]);
-      saved.note("Sent");
+      saved.ok();
+      onSent();
     } catch (err) {
       const failure = failureOf(err);
       if (failure?.status === 401) return;
@@ -272,7 +241,9 @@ export default function Setup({
             ? "attach"
             : failure?.field === "priority_locations"
               ? "locations"
-              : "form";
+              : failure?.field === "work_scope"
+                ? "work_scope"
+                : "form";
       setProblems({ [where]: failure?.message ?? (err instanceof Error ? err.message : String(err)) });
       saved.message("Couldn't send — try again");
     } finally {
@@ -308,11 +279,11 @@ export default function Setup({
         >
           <h1>Set up your job search</h1>
           <p className="setup-lede">
-            Tell it what you're looking for and attach your resume. Overnight it reads your resume, works out how to
-            describe the roles you want, and builds your tracker. It'll be here in the morning, and it updates itself
-            every day after that.
+            Tell it what you're looking for and attach your resume. Sending this builds your tracker straight away —
+            you'll land on it. Overnight it reads your resume, works out how to describe the roles you want, and starts
+            filling the tracker in; it updates itself every day after that.
           </p>
-          <Banner intake={intake} staleRunHours={data.settings.stale_run_hours} />
+          <p className="setup-lede">You fill this in once, so take your time with it.</p>
 
           <Field label={<label htmlFor={`${id}-title`}>What should this page be called?</label>}>
             <input id={`${id}-title`} type="text" value={answers.page_title} onChange={(e) => set("page_title", e.target.value)} />
@@ -493,7 +464,7 @@ export default function Setup({
 
           <div className="setup-actions">
             <button className="btn primary" type="submit" disabled={sending}>
-              {intake ? "Send changes" : "Start my search"}
+              Start my search
             </button>
             {problems.form && <p className="field-err">{problems.form}</p>}
           </div>
