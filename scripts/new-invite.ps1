@@ -6,7 +6,7 @@
 .DESCRIPTION
   Adding a person is sending this link. They create their own account on the
   tracker page, describe their search and attach their resume, and the nightly
-  run-onboarding.ps1 builds it (docs/onboarding-plan.md).
+  run-onboarding.ps1 builds it (docs/onboarding.md).
 
   The code is shown once. The server stores only its hash, so a lost code is
   revoked and replaced, never looked up. An invite makes one account, can't
