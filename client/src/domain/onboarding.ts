@@ -62,6 +62,7 @@ export function emptyAnswers(displayName: string): IntakeAnswers {
     pronouns: "",
     resume_text: "",
     resume_files: [],
+    work_scope: "",
     location_limits: "",
     locations_first: "",
     priority_locations: [],
@@ -72,7 +73,7 @@ export function emptyAnswers(displayName: string): IntakeAnswers {
 }
 
 /** Messages keyed by where they sit on the form; empty means it can send. */
-export type SetupProblems = Partial<Record<"attach" | "locations" | `role-${number}`, string>>;
+export type SetupProblems = Partial<Record<"attach" | "work_scope" | "locations" | `role-${number}`, string>>;
 
 /**
  * What stops a send. `files` is every attachment the resume section lists, stored
@@ -83,6 +84,12 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
   if (!answers.resume_text.trim()) {
     if (!files.length) found.attach = "Attach your resume or paste its text.";
     else if (!files.some(isReadableResume)) found.attach = "We can't read Word files overnight. Paste the text too.";
+  }
+  // The run builds the search's scope from this answer alone. Left empty, the
+  // scope would fall back to whatever else mentions a place - an exclusion
+  // among them - and the search would look in the one place ruled out.
+  if (!answers.work_scope.trim()) {
+    found.work_scope = "Say where you can work — it's what the search searches.";
   }
   const entries = parseLocations(answers.locations_first);
   const tooMany = tooManyLocations(entries);
