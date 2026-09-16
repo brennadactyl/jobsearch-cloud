@@ -252,7 +252,7 @@ async function answersProblem(answers, docs) {
     }
   }
   if (answers.pronouns !== undefined && !PRONOUN_ANSWERS.includes(answers.pronouns)) {
-    return bad("answers", "pronouns must be she/her, he/him, they/them or empty");
+    return bad("answers", `pronouns must be ${Object.keys(PRONOUNS).join(", ")} or empty`);
   }
 
   const roles = answers.roles;

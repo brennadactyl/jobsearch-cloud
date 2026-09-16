@@ -21,8 +21,10 @@ const PBKDF2_ITERATIONS = 100000;
 
 // Long rather than complex, and the same floor wherever a password is set,
 // because /api/login has no rate limiting in front of it - see server/README.md.
-// The page checks the same number before sending (MIN_PASSWORD in
-// client/src/domain/onboarding.ts), so a change goes in both.
+// Three other places check the same number before sending and can't import
+// this one, so a change goes in all four: MIN_PASSWORD in
+// client/src/domain/onboarding.ts, scripts/set-password.ps1 and
+// scripts/seed-demo-user.ps1.
 export const PASSWORD_MIN_LENGTH = 12;
 
 /**
@@ -30,10 +32,10 @@ export const PASSWORD_MIN_LENGTH = 12;
  * "sign out other browsers" leaves a machine's search token alone, so every
  * insert and every filter on a label uses these rather than a typed string.
  */
-export const SESSION_LABEL = {
+export const SESSION_LABEL = Object.freeze({
   browser: "browser",
   scheduledSearch: "scheduled-search",
-};
+});
 const DERIVED_BITS = 256;
 const SALT_BYTES = 16;
 const TOKEN_BYTES = 32;

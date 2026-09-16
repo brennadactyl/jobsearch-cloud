@@ -62,8 +62,8 @@ try {
   $p2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto($b2)
 
   if ($p1 -cne $p2) { throw "The two entries did not match. Nothing was changed." }
-  # Matches the server's rule; /api/login has no rate limiting, so length is the
-  # defence.
+  # Matches the server's rule (PASSWORD_MIN_LENGTH in server/src/auth.js, which
+  # lists every copy); /api/login has no rate limiting, so length is the defence.
   if ($p1.Length -lt 12) { throw "Too short: $($p1.Length) characters. The server requires 12+." }
 
   $body = @{ name = $Name; password = $p1 } | ConvertTo-Json -Compress
