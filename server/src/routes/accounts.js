@@ -22,6 +22,8 @@ import {
   deleteSession,
   getUserById,
   getUserByName,
+  PASSWORD_MIN_LENGTH,
+  SESSION_LABEL,
   setUserPassword,
   upsertUser,
   verifyPassword,
@@ -52,7 +54,7 @@ export async function handleLogin({ request, env }) {
     return json({ error: "that name and password don't match" }, 401);
   }
 
-  const token = await createSession(env.DB, user.id, typeof body.label === "string" ? body.label : "browser");
+  const token = await createSession(env.DB, user.id, typeof body.label === "string" ? body.label : SESSION_LABEL.browser);
   return json({ token, user: { id: user.id, name: user.name } });
 }
 
@@ -85,9 +87,9 @@ export async function handleUpsertUser({ request, env }) {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
   if (!name) return json({ error: "name is required" }, 400);
-  // Long rather than complex, and enforced here because /api/login has no rate
-  // limiting in front of it - see server/README.md.
-  if (password.length < 12) return json({ error: "password must be at least 12 characters" }, 400);
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return json({ error: `password must be at least ${PASSWORD_MIN_LENGTH} characters` }, 400);
+  }
 
   // `demo` marks an account whose data is invented, which keeps it off the
   // company list every account shares (demo account, docs/glossary.md#accounts).
@@ -182,11 +184,10 @@ export async function handleChangePassword({ request, env, user, token }) {
   if (!currentPassword || !newPassword) {
     return json({ error: "currentPassword and newPassword are both required" }, 400);
   }
-  // The same minimum as /api/users, for the same reason: /api/login has no
-  // rate limiting, so length is the defence. Checked before the current
-  // password is verified so the two refusals can't be read as one another.
-  if (newPassword.length < 12) {
-    return json({ error: "your new password must be at least 12 characters" }, 400);
+  // Checked before the current password is verified, so the two refusals
+  // can't be read as one another.
+  if (newPassword.length < PASSWORD_MIN_LENGTH) {
+    return json({ error: `your new password must be at least ${PASSWORD_MIN_LENGTH} characters` }, 400);
   }
   if (newPassword === currentPassword) {
     // Almost always a mis-fill rather than an intention. Succeeding silently

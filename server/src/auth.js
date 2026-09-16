@@ -18,6 +18,22 @@
 // `iterations` column is stored per user so this can be raised later without
 // invalidating anyone's password.
 const PBKDF2_ITERATIONS = 100000;
+
+// Long rather than complex, and the same floor wherever a password is set,
+// because /api/login has no rate limiting in front of it - see server/README.md.
+// The page checks the same number before sending (MIN_PASSWORD in
+// client/src/domain/onboarding.ts), so a change goes in both.
+export const PASSWORD_MIN_LENGTH = 12;
+
+/**
+ * Where a session token lives, stored as its label. Revoking by label is how
+ * "sign out other browsers" leaves a machine's search token alone, so every
+ * insert and every filter on a label uses these rather than a typed string.
+ */
+export const SESSION_LABEL = {
+  browser: "browser",
+  scheduledSearch: "scheduled-search",
+};
 const DERIVED_BITS = 256;
 const SALT_BYTES = 16;
 const TOKEN_BYTES = 32;
@@ -170,7 +186,7 @@ export async function getUserByName(d1, name) {
 
 /**
  * Issues a session. `label` is free text describing where the token will live
- * ('browser', 'scheduled-search'), so a credential can later be revoked by
+ * (see SESSION_LABEL), so a credential can later be revoked by
  * what it is rather than by guessing which opaque string is which.
  * @param {D1Database} d1
  * @param {string} userId
@@ -181,7 +197,7 @@ export async function createSession(d1, userId, label) {
   const token = newSessionToken();
   await d1
     .prepare("INSERT INTO sessions (id, user_id, created_at, label) VALUES (?, ?, ?, ?)")
-    .bind(await hashToken(token), userId, new Date().toISOString(), (label || "browser").slice(0, 60))
+    .bind(await hashToken(token), userId, new Date().toISOString(), (label || SESSION_LABEL.browser).slice(0, 60))
     .run();
   // The only time the token itself exists anywhere; the row holds its hash.
   return token;
@@ -344,8 +360,8 @@ export async function setUserPassword(d1, userId, password) {
  */
 export async function deleteOtherBrowserSessions(d1, userId, keepToken) {
   const result = await d1
-    .prepare("DELETE FROM sessions WHERE user_id = ? AND label = 'browser' AND id != ?")
-    .bind(userId, await hashToken(keepToken))
+    .prepare("DELETE FROM sessions WHERE user_id = ? AND label = ? AND id != ?")
+    .bind(userId, SESSION_LABEL.browser, await hashToken(keepToken))
     .run();
   return result.meta.changes || 0;
 }

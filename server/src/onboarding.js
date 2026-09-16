@@ -10,11 +10,11 @@
  * (getIntake, createIntakeWithConfig).
  */
 
-import { getUserById, getUserByName, hashPassword, hashToken, newSessionToken } from "./auth.js";
+import { getUserById, getUserByName, hashPassword, hashToken, newSessionToken, SESSION_LABEL } from "./auth.js";
+import { DAY_MS } from "./validate.js";
 
 export const INVITE_DAYS_DEFAULT = 14;
 export const INVITE_DAYS_MAX = 30;
-const DAY_MS = 86400000;
 // How many nights a failed setup is retried before the run gives up and the
 // note tells the person to ask whoever invited them.
 export const RETRY_NIGHTS = 3;
@@ -214,10 +214,10 @@ export async function mintSearchToken(d1, userId) {
   if (Number(user.demo)) return { demo: true };
   const token = newSessionToken();
   const [removed] = await d1.batch([
-    d1.prepare("DELETE FROM sessions WHERE user_id = ? AND label = 'scheduled-search'").bind(user.id),
+    d1.prepare("DELETE FROM sessions WHERE user_id = ? AND label = ?").bind(user.id, SESSION_LABEL.scheduledSearch),
     d1
-      .prepare("INSERT INTO sessions (id, user_id, created_at, label) VALUES (?, ?, ?, 'scheduled-search')")
-      .bind(await hashToken(token), user.id, new Date().toISOString()),
+      .prepare("INSERT INTO sessions (id, user_id, created_at, label) VALUES (?, ?, ?, ?)")
+      .bind(await hashToken(token), user.id, new Date().toISOString(), SESSION_LABEL.scheduledSearch),
   ]);
   return { token, user: { id: user.id, name: user.name }, replaced: removed.meta.changes || 0 };
 }

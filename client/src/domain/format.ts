@@ -3,6 +3,9 @@
  * should say, not just how to format a number.
  */
 
+export const HOUR_MS = 3_600_000;
+export const DAY_MS = 86_400_000;
+
 /**
  * Whole days since a YYYY-MM-DD or ISO date, or null if there isn't one. Never
  * negative.
@@ -17,7 +20,7 @@ export function daysSince(d: string | null | undefined): number | null {
   if (day) return Math.max(0, daysBetween(day, localToday()));
   const t = Date.parse(d);
   if (Number.isNaN(t)) return null;
-  return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+  return Math.max(0, Math.floor((Date.now() - t) / DAY_MS));
 }
 
 /** Fractional hours since an instant, for staleness maths. */
@@ -25,7 +28,7 @@ export function hoursSince(d: string | null | undefined): number | null {
   if (!d) return null;
   const t = Date.parse(d);
   if (Number.isNaN(t)) return null;
-  return Math.max(0, (Date.now() - t) / 3_600_000);
+  return Math.max(0, (Date.now() - t) / HOUR_MS);
 }
 
 export function today(): string {
@@ -62,7 +65,7 @@ export function localToday(): Date {
  * change two local midnights are 23 or 25 hours apart.
  */
 export function daysBetween(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
+  return Math.round((b.getTime() - a.getTime()) / DAY_MS);
 }
 
 /** The Monday starting the week `d` falls in, as YYYY-MM-DD. */

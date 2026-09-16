@@ -11,8 +11,9 @@
  * Data access is in ../onboarding.js and, for a person's own setup, ../db.js.
  */
 
-import { createSession } from "../auth.js";
+import { createSession, PASSWORD_MIN_LENGTH, SESSION_LABEL } from "../auth.js";
 import { json, readJson } from "../http.js";
+import { PRONOUNS } from "../prompt.js";
 import {
   completeIntake,
   findInvite,
@@ -31,13 +32,11 @@ import { isDocumentPath, priorityLocationsError } from "../validate.js";
 
 const NOTE_MAX = 200;
 const NAME_MAX = 60;
-// The same floor POST /api/users enforces, for the same reason: /api/login has
-// no rate limiting in front of it.
-const PASSWORD_MIN = 12;
 const STATUS_NOTE_MAX = 500;
 const ANSWERS_MAX_BYTES = 256 * 1024;
 const ROLES_MAX = 10;
-const PRONOUNS = ["", "she/her", "he/him", "they/them"];
+// "" is unset; the rest are the pronouns the prompt knows how to write.
+const PRONOUN_ANSWERS = ["", ...Object.keys(PRONOUNS)];
 const ANSWER_STRINGS = ["page_title", "pronouns", "resume_text", "work_scope", "location_limits", "locations_first", "never_work_for", "preferences"];
 // A track key is a slug of the role name, fixed at creation: renaming a role
 // later changes the label only, so no lead is orphaned
@@ -88,8 +87,8 @@ export async function handleSignup({ request, env }) {
   const password = typeof body.password === "string" ? body.password : "";
   if (!name) return json({ error: "name is required", field: "name" }, 400);
   if (name.length > NAME_MAX) return json({ error: `name must be at most ${NAME_MAX} characters`, field: "name" }, 400);
-  if (password.length < PASSWORD_MIN) {
-    return json({ error: `password must be at least ${PASSWORD_MIN} characters`, field: "password" }, 400);
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return json({ error: `password must be at least ${PASSWORD_MIN_LENGTH} characters`, field: "password" }, 400);
   }
 
   const outcome = await signupWithInvite(env.DB, invite, name, password);
@@ -98,7 +97,7 @@ export async function handleSignup({ request, env }) {
   }
   if (outcome.reason) return json({ error: "this invite can't be used", reason: outcome.reason }, 410);
 
-  const token = await createSession(env.DB, outcome.user.id, "browser");
+  const token = await createSession(env.DB, outcome.user.id, SESSION_LABEL.browser);
   return json({ token, user: outcome.user }, 201);
 }
 
@@ -252,7 +251,7 @@ async function answersProblem(answers, docs) {
       return bad(key === "resume_text" ? "resume" : "answers", `${key} must be text`);
     }
   }
-  if (answers.pronouns !== undefined && !PRONOUNS.includes(answers.pronouns)) {
+  if (answers.pronouns !== undefined && !PRONOUN_ANSWERS.includes(answers.pronouns)) {
     return bad("answers", "pronouns must be she/her, he/him, they/them or empty");
   }
 
@@ -352,7 +351,7 @@ export async function handleMintSearchToken({ request, env }) {
   const outcome = await mintSearchToken(env.DB, body.user);
   if (outcome.missing) return json({ error: "no such user" }, 404);
   if (outcome.demo) return json({ error: "a demo account has no scheduled search" }, 403);
-  return json({ token: outcome.token, user: outcome.user, label: "scheduled-search", replaced: outcome.replaced }, 201);
+  return json({ token: outcome.token, user: outcome.user, label: SESSION_LABEL.scheduledSearch, replaced: outcome.replaced }, 201);
 }
 
 /**

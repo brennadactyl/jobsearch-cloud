@@ -7,8 +7,16 @@
 import { json } from "./http.js";
 import { excludedCompanyMatcher } from "./exclude.js";
 
+export const DAY_MS = 86_400_000;
+
+/** Today's UTC date as YYYY-MM-DD. */
 export function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** The UTC date `days` days before now, as YYYY-MM-DD: the cutoff for "within the last N days". */
+export function dateDaysAgo(days) {
+  return new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10);
 }
 
 // A caller-supplied local date, or "" if it isn't one. Strict on purpose - no

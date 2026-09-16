@@ -11,7 +11,7 @@ import { DELISTED_REASON } from "../db.js";
 import { excludedCompanyMatcher, normalize } from "../exclude.js";
 import { json, readJson } from "../http.js";
 import { feedGroupKeys, searchRootKey, searchRootOf } from "../tracks.js";
-import { isoDate, unknownTrack, unknownTrackResponse } from "../validate.js";
+import { dateDaysAgo, isoDate, unknownTrack, unknownTrackResponse } from "../validate.js";
 import { COVERAGE_BATCH, upcomingCompanies } from "./coverage.js";
 
 // How far back a scoped dedup read keeps a screened URL at a company outside the
@@ -50,7 +50,7 @@ const RECHECK_STATUSES = ["New", "Reviewing"];
 function chooseRechecks(groupLeads) {
   const open = groupLeads.filter((l) => RECHECK_STATUSES.includes(l.status));
   const budget = Math.min(RECHECK_MAX_PER_RUN, Math.ceil(open.length / RECHECK_CYCLE_NIGHTS));
-  const dueBy = new Date(Date.now() - RECHECK_AFTER_DAYS * 86400000).toISOString().slice(0, 10);
+  const dueBy = dateDaysAgo(RECHECK_AFTER_DAYS);
   const chosen = open
     .filter((l) => !l.verified || l.verified <= dueBy)
     .sort((a, b) => (a.verified || "").localeCompare(b.verified || "") || a.id - b.id)
@@ -96,7 +96,7 @@ export async function handleGetDedup({ db, params, url }) {
   const rootKey = searchRootOf(track);
   const upcoming = await upcomingCompanies(db, rootKey, 2 * COVERAGE_BATCH);
   const inWindow = new Set(upcoming.companies.map((c) => normalize(c.company)));
-  const since = new Date(Date.now() - DEDUP_RECENT_DAYS * 86400000).toISOString().slice(0, 10);
+  const since = dateDaysAgo(DEDUP_RECENT_DAYS);
   const [{ leads, screened: rows }, groupLeads] = await Promise.all([
     db.getDedupRows(key),
     db.getFeedGroupLeadsForRecheck(rootKey),

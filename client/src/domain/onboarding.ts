@@ -3,9 +3,11 @@
  * unusable invite says, which resumes an overnight run can read, how a file is
  * named for storage, and what stops the form from sending.
  */
-import type { IntakeAnswers, InviteReason, RoleAnswer } from "../api/schema";
+import { DEFAULT_STALE_RUN_HOURS, type IntakeAnswers, type InviteReason, type RoleAnswer } from "../api/schema";
+import { HOUR_MS } from "./format";
 import { parseLocations, tooManyLocations } from "./locations";
 
+/** The server's floor (PASSWORD_MIN_LENGTH in server/src/auth.js), checked here too so a short password answers at once. */
 export const MIN_PASSWORD = 12;
 export const MAX_NAME = 60;
 /** The documents route refuses anything larger. */
@@ -109,7 +111,7 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
  */
 export function setupOverdue(sentAt: string, staleRunHours: number, now = Date.now()): boolean {
   const t = Date.parse(sentAt);
-  return Number.isFinite(t) && now - t > (staleRunHours || 36) * 3_600_000;
+  return Number.isFinite(t) && now - t > (staleRunHours || DEFAULT_STALE_RUN_HOURS) * HOUR_MS;
 }
 
 /**

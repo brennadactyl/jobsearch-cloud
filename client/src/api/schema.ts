@@ -139,12 +139,15 @@ export const priorityLocationSchema = z.object({
  * freshly created database has posted no config and must still render a usable
  * page - the same reason the server defaults them.
  */
+/** The server's default too (DEFAULT_SETTINGS in server/src/db.js); used wherever a stored value is missing or zero. */
+export const DEFAULT_STALE_RUN_HOURS = 36;
+
 export const settingsSchema = z.object({
   display_title: z.string().default("Job Search Tracker"),
   overview_label: z.string().default("Overview"),
   applications_label: z.string().default("Applications"),
   all_leads_label: z.string().default("All leads"),
-  stale_run_hours: z.number().default(36),
+  stale_run_hours: z.number().default(DEFAULT_STALE_RUN_HOURS),
   priority_locations: z.array(priorityLocationSchema).default([]),
   excluded_companies: z.array(z.string()).default([]),
 });
@@ -177,7 +180,7 @@ export const inviteCheckSchema = z.discriminatedUnion("valid", [
   z.object({ valid: z.literal(false), reason: z.enum(INVITE_REASONS) }),
 ]);
 
-/** The three the nightly prompt knows; "" is unset, which it reads as they/them. */
+/** The three the nightly prompt knows (PRONOUNS in server/src/prompt.js); "" is unset, which it reads as they/them. */
 export const PRONOUNS = ["she/her", "he/him", "they/them"] as const;
 
 /**
