@@ -36,6 +36,7 @@ function intake(patch: Partial<Intake> = {}, answers: Partial<IntakeAnswers> = {
     status_note: "",
     sent_at: new Date(NOW - 3_600_000).toISOString(),
     updated_at: new Date(NOW - 3_600_000).toISOString(),
+    retries_end_at: "",
     ...patch,
   };
 }
@@ -344,6 +345,37 @@ describe("the setup form", () => {
     expect(screen.queryByRole("button", { name: /send|start my search/i })).toBeNull();
   });
 
+  describe("a failed setup either side of the server's retry cutoff", () => {
+    const failed = (endsIn: number) =>
+      intake({
+        status: "failed",
+        status_note: "Setup couldn't finish - it'll be tried again tomorrow night.",
+        retries_end_at: new Date(NOW + endsIn).toISOString(),
+      });
+
+    // The clock runs during a render, so these sit a minute either side of the
+    // cutoff; retriesEnded's own test pins the exact millisecond.
+    it("still shows the run's own note a minute before the cutoff", async () => {
+      vi.mocked(client.getData).mockResolvedValue(fixture);
+      vi.spyOn(client, "getIntake").mockResolvedValue(failed(60_000));
+      renderAt("/");
+
+      expect(await screen.findByText("Tonight's run couldn't finish your setup")).toBeInTheDocument();
+      expect(screen.getByText(/tried again tomorrow night/)).toBeInTheDocument();
+    });
+
+    it("says it has stopped trying a minute past the cutoff, without the note's retry promise", async () => {
+      vi.mocked(client.getData).mockResolvedValue(fixture);
+      vi.spyOn(client, "getIntake").mockResolvedValue(failed(-60_000));
+      renderAt("/");
+
+      expect(await screen.findByText("Your setup couldn't be finished")).toBeInTheDocument();
+      expect(screen.getByText(/has stopped trying.*whoever invited you/s)).toBeInTheDocument();
+      // Both promises would be false now: the banner's and the stored note's.
+      expect(screen.queryByText(/tries again tonight/)).toBeNull();
+      expect(screen.queryByText(/tried again tomorrow night/)).toBeNull();
+    });
+  });
   it("adds nothing that contradicts a failure note asking the person to get help", async () => {
     vi.mocked(client.getData).mockResolvedValue(fixture);
     vi.spyOn(client, "getIntake").mockResolvedValue(

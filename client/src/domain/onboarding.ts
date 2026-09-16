@@ -111,3 +111,14 @@ export function setupOverdue(sentAt: string, staleRunHours: number, now = Date.n
   const t = Date.parse(sentAt);
   return Number.isFinite(t) && now - t > (staleRunHours || 36) * 3_600_000;
 }
+
+/**
+ * The run has stopped retrying a failed setup. `retriesEndAt` is the server's
+ * own cutoff, from the rule that decides who gets retried, so the page never
+ * holds a copy of the window. An empty or unreadable one is read as still
+ * retrying, which is what the page said before the server sent one.
+ */
+export function retriesEnded(retriesEndAt: string, now = Date.now()): boolean {
+  const t = Date.parse(retriesEndAt);
+  return Number.isFinite(t) && now >= t;
+}
