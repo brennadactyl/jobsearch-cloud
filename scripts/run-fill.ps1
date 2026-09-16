@@ -118,16 +118,14 @@ if ($offDeployment.Count -gt 0) {
 Log "tracker:          $trackerUrl"
 Log "accounts:         $($accounts.Count) ($(($accounts | ForEach-Object { $_.Id }) -join ', '))"
 
-$claude = Get-Command claude -ErrorAction SilentlyContinue
-if (-not $claude) {
-    $fallback = Join-Path $env:APPDATA "npm\claude.cmd"
-    if (Test-Path $fallback) { $claude = $fallback } else {
-        Log "ERROR: claude CLI not found on PATH or at $fallback"
-        Write-Error "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
-        exit 1
-    }
+. (Join-Path $scriptDir "claude-cli.ps1")
+$claudePath = Find-ClaudeCli
+if (-not $claudePath) {
+    Log "ERROR: the claude CLI is not on PATH or in npm's global folder - nothing was filled in"
+    Exit-RunLock
+    Write-Error "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
+    exit 1
 }
-$claudePath = if ($claude -is [System.Management.Automation.CommandInfo]) { $claude.Source } else { $claude }
 
 # The prompt is the same text for every account, so any account's token can
 # fetch it. A failure here is fatal: running no prompt would look like a night
@@ -232,18 +230,12 @@ Log "----- end output -----"
 # could read, so the task's Last Run Result is the only signal it stopped.
 $exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
 $outputText = if ($output) { ($output | Out-String).Trim() } else { "" }
-if (-not $outputText) {
-    Log "ERROR: the CLI produced no output at all - nothing was filled in"
-    $exitCode = 1
-} elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error") {
-    Log "ERROR: the CLI is not authenticated - nothing was filled in."
-    Log "       Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
-    $exitCode = 1
-} elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
-    # The launcher failed and the CLI never started; the authentication
-    # patterns do not match its message.
-    Log "ERROR: the CLI failed to start - nothing was filled in."
-    Log "       See the output above; a launcher failure is not an empty queue."
+# The fill reports to nobody in particular, so a failure is a log line and the
+# task's exit code - the one place an operator looking at Task Scheduler sees it.
+$failure = Get-CliFailure $outputText $jobState
+if ($failure) {
+    Log "ERROR: $($failure.Message) - nothing was filled in"
+    if ($failure.Hint) { Log "       $($failure.Hint)" }
     $exitCode = 1
 }
 

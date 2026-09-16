@@ -318,16 +318,13 @@ if ($WhatIfOnly) {
 }
 
 # ---- What the model turn needs. --------------------------------------------
-$claude = Get-Command claude -ErrorAction SilentlyContinue
-if (-not $claude) {
-    $fallback = Join-Path $env:APPDATA "npm\claude.cmd"
-    if (Test-Path $fallback) { $claude = $fallback } else {
-        Log "ERROR: the claude CLI is not on PATH or at $fallback - nothing was built"
-        Write-Error "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
-        exit 1
-    }
+. (Join-Path $scriptDir "claude-cli.ps1")
+$claudePath = Find-ClaudeCli
+if (-not $claudePath) {
+    Log "ERROR: the claude CLI is not on PATH or in npm's global folder - nothing was built"
+    Write-Error "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
+    exit 1
 }
-$claudePath = if ($claude -is [System.Management.Automation.CommandInfo]) { $claude.Source } else { $claude }
 
 # Pointed at rather than copied: a second copy of the setup procedure in a
 # here-string would drift from the skill, and the run would build configs in a
@@ -403,6 +400,9 @@ function Test-MentionsAny([string]$haystack, [string[]]$words) {
 # ---- Build each person. ----------------------------------------------------
 $built = @()
 $exitCode = 0
+# Set when a turn fails for a reason that is this machine's, not the person's -
+# see Get-CliFailure. It ends the night's builds.
+$script:machineFailure = $null
 
 foreach ($item in $queue) {
     $id = [string]$item.user.id
@@ -676,16 +676,20 @@ Rules for this run:
         if ($output) { $output | Out-String | Out-File -Append -Encoding utf8 -FilePath $logFile }
         Log "      ----- end output ----- ($([int]((Get-Date) - $turnStart).TotalSeconds)s, job $jobState)"
 
-        # A clean exit is not the same as having done anything: an
-        # unauthenticated CLI prints "Not logged in" and exits 0.
+        # A clean exit is not the same as having done anything (see
+        # claude-cli.ps1).
         $outputText = if ($output) { ($output | Out-String).Trim() } else { "" }
-        if (-not $outputText) {
-            Stop-Person "the CLI produced no output at all - nothing was written" $null
-        } elseif ($outputText -match "Not logged in|Please run /login|Invalid API key|authentication_error|Failed to authenticate|Invalid bearer token") {
-            Log "      ERROR: the CLI is not authenticated. Run ``claude setup-token``, then: setx CLAUDE_CODE_OAUTH_TOKEN ""<token>"""
-            Stop-Person "the CLI is not authenticated - nothing was written" $null
-        } elseif ($outputText -match "failed to run|ApplicationFailedException|NativeCommandFailed|is too long") {
-            Stop-Person "the CLI failed to start - nothing was written" $null
+        $failure = Get-CliFailure $outputText $jobState
+        if ($failure) {
+            if ($failure.Hint) { Log "      $($failure.Hint)" }
+            # A CLI that can't log in or start is this machine's problem, and
+            # the same one for everybody after this person tonight. Marking
+            # their setup failed would put it on their page, where they can do
+            # nothing about it - so it stays pending and is retried tomorrow,
+            # and the tracker's own notice says it's running late if that goes
+            # on past stale_run_hours.
+            if (Test-MachineFailure $failure) { $script:machineFailure = $failure }
+            Stop-Person "$($failure.Message) - nothing was written" $null
         }
 
         # ---- What it wrote, checked before any of it is posted.
@@ -866,6 +870,18 @@ Rules for this run:
     # Left alone, a pending setup keeps promising a tracker in the morning
     # forever. 'failed' both says what happened and keeps them in tomorrow
     # night's queue.
+    if ($script:machineFailure) {
+        # Nobody is told anything: this person's setup and everyone's after
+        # it stay pending, and tomorrow's run tries them again. Every one of
+        # them would hit the same CLI tonight, so the run stops here rather
+        # than minting tokens and staging folders for turns that can't work.
+        $later = @($queue | Select-Object -Skip ([array]::IndexOf($queue, $item) + 1) | ForEach-Object { $_.user.name })
+        Log "      ERROR: $($script:machineFailure.Message) - this machine can't build anyone's search tonight"
+        Log "      left pending: $name$(if ($later.Count) { ", " + ($later -join ', ') })"
+        $exitCode = 1
+        break
+    }
+
     try {
         $fresh = @((Api GET "/api/intake/pending" $AdminToken $null).intakes | Where-Object { $_.user.id -eq $id })
         if ($fresh.Count -gt 0 -and [string]$fresh[0].updated_at -ne [string]$item.updated_at) {
