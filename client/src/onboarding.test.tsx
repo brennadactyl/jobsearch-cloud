@@ -268,6 +268,30 @@ describe("the setup form", () => {
     expect(screen.getByText(/may well be empty.*real result/s)).toBeInTheDocument();
   });
 
+  describe("a pending setup either side of the account's stale window", () => {
+    // The fixture's stale window is 36 hours.
+    const sentHoursAgo = (hours: number) => intake({ sent_at: new Date(NOW - hours * 3_600_000).toISOString() });
+
+    it("still promises tonight a minute inside the window", async () => {
+      vi.mocked(client.getData).mockResolvedValue(fixture);
+      vi.spyOn(client, "getIntake").mockResolvedValue(sentHoursAgo(36 - 1 / 60));
+      renderAt("/");
+
+      expect(await screen.findByText("Your searches are set up — tonight's run fills in the rest")).toBeInTheDocument();
+      expect(screen.queryByText(/taking longer than it should/)).toBeNull();
+    });
+
+    it("stops promising tonight a minute past it, and says the run may not have happened", async () => {
+      vi.mocked(client.getData).mockResolvedValue(fixture);
+      vi.spyOn(client, "getIntake").mockResolvedValue(sentHoursAgo(36 + 1 / 60));
+      renderAt("/");
+
+      expect(await screen.findByText("Finishing your setup is taking longer than it should")).toBeInTheDocument();
+      expect(screen.getByText(/machine that runs it\s+may be switched off/)).toBeInTheDocument();
+      expect(screen.queryByText(/tonight's run fills in the rest/)).toBeNull();
+    });
+  });
+
   it("puts the scope refusal beside the question it names", async () => {
     await openSetup();
     vi.spyOn(client, "submitIntake").mockRejectedValue(

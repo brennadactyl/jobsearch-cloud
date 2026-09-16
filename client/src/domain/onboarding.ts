@@ -102,3 +102,12 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
   }
   return found;
 }
+
+/**
+ * The run hasn't reported within the account's stale window since this attempt
+ * started, so it may be waiting on the machine that runs searches.
+ */
+export function setupOverdue(sentAt: string, staleRunHours: number, now = Date.now()): boolean {
+  const t = Date.parse(sentAt);
+  return Number.isFinite(t) && now - t > (staleRunHours || 36) * 3_600_000;
+}

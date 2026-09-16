@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
 import { getData, getIntake, login, logout, session, UnauthorizedError } from "./api/client";
 import type { Intake } from "./api/schema";
+import { setupOverdue } from "./domain/onboarding";
 import InviteGate from "./components/InviteGate";
 import Setup from "./components/Setup";
 import Shell from "./components/Shell";
@@ -96,7 +97,7 @@ function Gate({ notice, focusPassword, onSignedIn }: GateState & { onSignedIn: (
  * Nothing here needs the person to act - a failed run retries on its own - so
  * it is a note on their own tracker rather than a screen in front of it.
  */
-function SetupNotice({ intake }: { intake: Intake | null }) {
+function SetupNotice({ intake, staleRunHours }: { intake: Intake | null; staleRunHours: number }) {
   if (!intake || intake.status === "done") return null;
   if (intake.status === "failed") {
     return (
@@ -104,6 +105,20 @@ function SetupNotice({ intake }: { intake: Intake | null }) {
         <strong>Tonight's run couldn't finish your setup</strong>
         {intake.status_note || "The run stopped before it finished writing your searches."} It tries again tonight —
         your tracker works in the meantime, and there's nothing you need to do.
+      </div>
+    );
+  }
+  // "Tonight" is only true while a night hasn't come and gone. A pending intake
+  // past the account's stale window means the run that fills it in didn't
+  // happen - the machine was off, or the task didn't fire - and repeating the
+  // promise would renew it every day it stays false.
+  if (setupOverdue(intake.sent_at, staleRunHours)) {
+    return (
+      <div className="setup-status" role="status">
+        <strong>Finishing your setup is taking longer than it should</strong>
+        The overnight run that fills in your searches hasn't run since you sent your answers — the machine that runs it
+        may be switched off. Your tracker works in the meantime; if this stays here another day, let whoever invited
+        you know.
       </div>
     );
   }
@@ -175,7 +190,7 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
     <Shell
       data={data}
       isOverview={location.pathname === "/"}
-      notice={<SetupNotice intake={intake.data ?? null} />}
+      notice={<SetupNotice intake={intake.data ?? null} staleRunHours={data.settings.stale_run_hours} />}
       onSignOut={onSignOut}
     />
   );

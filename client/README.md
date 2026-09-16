@@ -72,8 +72,9 @@ sent with the answers.
 Sending builds the searches, so the tracker exists straight away and the page
 reads it back and hands over: their title, their tabs, their location tiers,
 empty until the night. A notice on the tracker says what that night's run still
-owes them, or carries the run's own note when it couldn't finish — it retries by
-itself, and there is nothing to answer. The send is write-once, so there is no
+owes them, or carries the run's own note when it couldn't finish. Once the
+account's stale window passes with the setup still pending, it stops promising
+tonight and says the run may not have happened. The send is write-once, so there is no
 way back to the form and no second send; the server refuses one. See
 [`../docs/onboarding.md`](../docs/onboarding.md).
 
