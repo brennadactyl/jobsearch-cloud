@@ -100,11 +100,14 @@ function Gate({ notice, focusPassword, onSignedIn }: GateState & { onSignedIn: (
 function SetupNotice({ intake, staleRunHours }: { intake: Intake | null; staleRunHours: number }) {
   if (!intake || intake.status === "done") return null;
   if (intake.status === "failed") {
+    // The run's note says what happens next - whether another night will fix it,
+    // or who to ask when it won't - so nothing is added to it but the one thing
+    // true of every failure. Without a note, the retry is all there is to say.
     return (
       <div className="setup-status bad" role="status">
         <strong>Tonight's run couldn't finish your setup</strong>
-        {intake.status_note || "The run stopped before it finished writing your searches."} It tries again tonight —
-        your tracker works in the meantime, and there's nothing you need to do.
+        {intake.status_note || "The run stopped before it finished writing your searches. It tries again tonight."} Your
+        tracker works in the meantime.
       </div>
     );
   }

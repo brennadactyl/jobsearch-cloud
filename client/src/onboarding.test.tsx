@@ -344,6 +344,22 @@ describe("the setup form", () => {
     expect(screen.queryByRole("button", { name: /send|start my search/i })).toBeNull();
   });
 
+  it("adds nothing that contradicts a failure note asking the person to get help", async () => {
+    vi.mocked(client.getData).mockResolvedValue(fixture);
+    vi.spyOn(client, "getIntake").mockResolvedValue(
+      intake({
+        status: "failed",
+        status_note: "Your resume couldn't be read overnight. Ask whoever invited you to help get a readable copy in.",
+      }),
+    );
+    renderAt("/");
+
+    expect(await screen.findByText(/Ask whoever invited you/)).toBeInTheDocument();
+    expect(screen.getByText(/Your\s+tracker works in the meantime/)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing you need to do/)).toBeNull();
+    expect(screen.queryByText(/tries again tonight/)).toBeNull();
+  });
+
   it("keeps the form for an account whose answers never arrived", async () => {
     await openSetup(null);
     expect(screen.getByRole("button", { name: "Start my search" })).toBeInTheDocument();
