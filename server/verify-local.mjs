@@ -2224,6 +2224,23 @@ check("a failed setup cannot be sent again, and stays in the run's queue for its
 // Only the near side is reachable here - nothing lets a test move `sent_at` -
 // so this checks a fresh failure is still offered, and the rule's other side
 // lives in the query.
+
+// The page stops promising another night at `retries_end_at`, so it has to be
+// the same instant the queue's rule stops offering the setup. The rule is a
+// pure function of `sent_at` and the clock, so both sides of that instant are
+// checked here directly.
+const { retriesEndAt, retryCutoff, RETRY_NIGHTS } = await import("./src/onboarding.js");
+check("the setup says when its retries end: sent_at plus the retry window, exactly",
+  afterFail.retries_end_at === new Date(Date.parse(afterFail.sent_at) + RETRY_NIGHTS * 86400000).toISOString(),
+  JSON.stringify({ sent_at: afterFail.sent_at, retries_end_at: afterFail.retries_end_at }));
+const retryEnd = Date.parse(afterFail.retries_end_at);
+check("the queue still offers the setup one millisecond before retries_end_at",
+  afterFail.sent_at > retryCutoff(retryEnd - 1));
+check("and has stopped offering it at retries_end_at itself",
+  !(afterFail.sent_at > retryCutoff(retryEnd)));
+check("a setup with no sent_at has no retry end",
+  retriesEndAt("") === "" && retriesEndAt(undefined) === "" && retriesEndAt("not a date") === "");
+
 check("marking a setup done closes it",
   (await invAdmin("POST", "/api/intake/complete", { user: N_ID, status: "done" })).status === 200 &&
   (await postIntake(N_TOK, baseAnswers)).status === 409);
