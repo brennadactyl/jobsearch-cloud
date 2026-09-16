@@ -10,7 +10,7 @@
   configured time. Also registers two machine-wide tasks:
     - "JobSearch-Applications" runs run-fill.ps1 for every account.
     - "JobSearch-Onboarding" runs run-onboarding.ps1, which builds the search of
-      anyone who signed up from an invite (docs/onboarding-plan.md). It needs
+      anyone who signed up from an invite (docs/onboarding.md). It needs
       the ADMIN_TOKEN, so it is registered only while <DataDir>\deployment.json
       holds one, even on a machine with nobody set up yet, and removed when it
       doesn't.

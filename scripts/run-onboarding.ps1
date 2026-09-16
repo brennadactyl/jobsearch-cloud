@@ -6,7 +6,7 @@
 .DESCRIPTION
   The last step of self-service onboarding, and the one nobody watches. Someone
   opens an invite link, creates their own account and fills in the setup form
-  (docs/onboarding-plan.md). This turns their answers into a working daily
+  (docs/onboarding.md). This turns their answers into a working daily
   search: their folder, their credential, their config, their track docs and
   their scheduled tasks.
 
@@ -460,7 +460,7 @@ foreach ($item in $queue) {
         #
         # Sending the form built them - their keys, labels and order - and this
         # run writes the prose into them and nothing else
-        # (docs/instant-setup-plan.md). The keys are the account's, never the
+        # (docs/onboarding.md#why-it-is-split-this-way). The keys are the account's, never the
         # model's to invent: a key this run made up would leave the tab the
         # person is looking at empty forever.
         $liveTracks = @((Api GET "/api/config" $personToken $null).tracks |
