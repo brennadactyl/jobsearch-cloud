@@ -47,9 +47,33 @@ the panel promises after each save.
 | Per search: anything that rules a job out | the fit clauses |
 | Per search: lowest acceptable pay | the fit filter |
 | Preferences the search should weigh | the candidate profile |
+| Your resume | the candidate profile and `resume_line` |
 
 Each section says which it is. An answer edit shows "tonight's run applies
 this" until the write-up lands.
+
+## Your resume
+
+A resume section, alongside the answers, holding what the setup form took: a
+file, pasted text, or both.
+
+- **It lists the files the account already has** under `resumes/`, from
+  `GET /api/documents`, with their dates. Uploading adds one; removing one
+  deletes it.
+- **The same format rule as the setup form**: `.txt`, `.md` and `.pdf` are
+  readable overnight, anything else needs the text pasted too, and the check is
+  the one constant both screens share. The 8 MB cap and the filename-safety
+  rule are the documents route's, unchanged.
+- **A new file does not orphan the old one.** Uploading under a new name leaves
+  the previous file listed, so a person can see which is which and remove the
+  one they meant to replace. Uploading under the same name replaces it.
+- **Tonight's run picks it up**: it stages whatever the answers point at, rewrites
+  the candidate profile from it, and sets `resume_line` to name the file it
+  read. Until then the search is still running against the old one, and the
+  section says so.
+- **The last readable resume cannot be removed** while no text is pasted: a
+  search with nothing to screen against is the failure this rule exists to
+  prevent, and it is refused with that reason.
 
 ## Server
 
