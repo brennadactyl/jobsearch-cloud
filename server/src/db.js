@@ -1448,8 +1448,9 @@ export class Db {
    * Same two-layer dedup as addLeads.
    *
    * A URL already tracked as a lead is dropped too, not just one already
-   * screened: the prompt's step 7 sorts each candidate into exactly one of
-   * tracked-or-screened, a finding, or a disqualified new one, so a run
+   * screened: the prompt's step 7 ("Compare candidate URLs") sorts each
+   * candidate into exactly one of tracked-or-screened, a finding, or a
+   * disqualified new one, so a run
    * reporting both is contradicting itself, and the lead is the row to keep.
    *
    * deleteLeadAndScreen doesn't come through here, so a lead being removed

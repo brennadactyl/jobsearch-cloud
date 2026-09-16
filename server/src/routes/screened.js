@@ -16,14 +16,16 @@ import { COVERAGE_BATCH, upcomingCompanies } from "./coverage.js";
 
 // How far back a scoped dedup read keeps a screened URL at a company outside the
 // window. The window covers what the run will be served; this covers what it is
-// likeliest to meet anyway - a candidate its web search or step 3b turned up on
-// one of the last few nights. Short on purpose: most screened rows are recent,
-// so a window of a couple of weeks keeps nearly every list whole and the scope
-// stops trimming anything. A URL this drops is at worst verified again, because
-// POST /api/screened and /api/leads refuse duplicates on the way in.
+// likeliest to meet anyway - a candidate its web search or step 3b ("NOW LOOK
+// OUTSIDE THAT LIST") turned up on one of the last few nights. Short on purpose:
+// most screened rows are recent, so a window of a couple of weeks keeps nearly
+// every list whole and the scope stops trimming anything. A URL this drops is at
+// worst verified again, because POST /api/screened and /api/leads refuse
+// duplicates on the way in.
 export const DEDUP_RECENT_DAYS = 3;
 
-// Which tracked leads a run re-checks tonight (step 8). A feed group re-checks
+// Which tracked leads a run re-checks tonight (the prompt's step 8, "RE-CHECK
+// THE LEADS DUE TONIGHT"). A feed group re-checks
 // an even share of its open leads each night, so every one comes round within
 // RECHECK_CYCLE_NIGHTS. RECHECK_MAX_PER_RUN caps what that costs a run: past it,
 // the cycle stretches instead of the run growing. A lead confirmed live within
@@ -70,13 +72,14 @@ function chooseRechecks(groupLeads) {
  *
  * `?scope=batch` trims `screened` to what the run can meet tonight: URLs at a
  * company in the next 2 x COVERAGE_BATCH companies along the rotation, plus any
- * URL screened in the last DEDUP_RECENT_DAYS. Two batches, because step 9e reads
- * a second slice once 9d has moved the cursor, and a replacement company that
- * arrived with no history would be verified again. A fed tab takes the window
- * from the track whose search fills it, since that is the cursor its run reads;
- * its rows are still its own, because a delisted lead leaves its screened row
- * under the lead's tab. `leads` is never trimmed, since dedup needs every URL a
- * search tracks; a scoped read marks the ones due a re-check tonight with
+ * URL screened in the last DEDUP_RECENT_DAYS. Two batches, because step 9e
+ * ("REPLACE THE COMPANIES YOU COULDN'T READ") reads a second slice once step 9d
+ * ("RECORD WHAT YOU COVERED") has moved the cursor, and a replacement company
+ * that arrived with no history would be verified again. A fed tab takes the
+ * window from the track whose search fills it, since that is the cursor its run
+ * reads; its rows are still its own, because a delisted lead leaves its screened
+ * row under the lead's tab. `leads` is never trimmed, since dedup needs every
+ * URL a search tracks; a scoped read marks the ones due a re-check tonight with
  * `recheck: true`, chosen group-wide by chooseRechecks.
  *
  * The cutoff is the server's date, compared with dates runs stamp in their own
@@ -151,8 +154,8 @@ export async function handleAddScreened({ request, db }) {
   // A screened row belongs to the search that did the screening, not to the
   // tab the posting would have been filed under. For a branched search
   // (`fed_by`, docs/glossary.md#searches-and-tracks) nothing displays screened
-  // rows per tab and step 1b reads them back as one set, so they are filed
-  // under the feeding track below, whatever key the run sent.
+  // rows per tab and step 1b (`./tracker dedup`) reads them back as one set,
+  // so they are filed under the feeding track below, whatever key the run sent.
   const { tracks, settings } = await db.getTracksAndSettings();
 
   // Validated against what the caller sent, before the `fed_by` rewrite far
