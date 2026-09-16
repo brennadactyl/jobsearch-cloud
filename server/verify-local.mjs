@@ -2384,5 +2384,79 @@ check("the invite that made it keeps its ledger row, used, with no account",
   !!delGoneRow && delGoneRow.state === "used" && !!delGoneRow.used_at && delGoneRow.user === null,
   JSON.stringify(delGoneRow));
 
+console.log("\n== each search gets only its own documents ==");
+// A person with two searches: each run should read its own tracking doc and
+// resume, never the other search's (migrations/0017_track_documents.sql).
+const sdRun = Date.now();
+const sdUser = async (tag) => {
+  const name = `Docs ${tag} ${sdRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: `docs-${tag}-long-password` } });
+  const token = (await req("POST", "/api/login", { body: { name, password: `docs-${tag}-long-password` } })).json.token;
+  await req("POST", "/api/config", { token, body: { tracks: [
+    { key: "SWE", label: "SWE", doc_file: "docs/tracked_swe_postings.md" },
+    { key: "swe-ai", label: "AI", fed_by: "SWE" },
+    { key: "CPM", label: "CPM", doc_file: "docs/tracked_cpm_postings.md" },
+  ] } });
+  return token;
+};
+const SD = await sdUser("a"), SD_B = await sdUser("b");
+for (const path of ["docs/tracked_swe_postings.md", "docs/tracked_cpm_postings.md", "resumes/swe.txt", "resumes/cpm.txt", "reference/extra.txt"]) {
+  await req("PUT", `/api/documents/${path}`, { token: SD, raw: `contents of ${path}`, type: "text/plain" });
+}
+const forSearch = (token, key) => req("GET", `/api/documents?search=${encodeURIComponent(key)}`, { token });
+const paths = (res) => (res.json?.documents || []).map((d) => d.path).sort().join();
+
+const unlisted = await forSearch(SD, "SWE");
+check("a search with no documents listed is refused, naming the field",
+  unlisted.status === 409 && unlisted.json?.field === "documents", JSON.stringify(unlisted.json));
+
+const listedViaRun = await req("POST", "/api/writeup", { token: SD, body: {
+  search: "SWE", documents: ["resumes/swe.txt", "resumes/swe.txt"] } });
+check("the overnight run writes a search's documents through the write-up route",
+  listedViaRun.status === 200 && (listedViaRun.json?.written || []).includes("documents"), JSON.stringify(listedViaRun.json));
+const sweDocs = await forSearch(SD, "SWE");
+check("a search is served its own tracking doc and resume, and nothing else of its person's",
+  sweDocs.status === 200 && sweDocs.json?.search === "SWE" &&
+  paths(sweDocs) === "docs/tracked_swe_postings.md,resumes/swe.txt" && sweDocs.json?.missing?.length === 0,
+  JSON.stringify(sweDocs.json));
+check("a tab another search fills is served that search's list",
+  paths(await forSearch(SD, "swe-ai")) === "docs/tracked_swe_postings.md,resumes/swe.txt" &&
+  (await forSearch(SD, "swe-ai")).json?.search === "SWE");
+const configTracks = (await req("GET", "/api/config", { token: SD })).json?.tracks || [];
+check("the config serves the list as a list, stored once however often it was named",
+  JSON.stringify(configTracks.find((t) => t.key === "SWE")?.documents) === JSON.stringify(["resumes/swe.txt"]),
+  JSON.stringify(configTracks.find((t) => t.key === "SWE")?.documents));
+
+// The setup skill writes config through POST /api/config, reading it first; a
+// track posted back as it was read has to be accepted.
+const roundTrip = await req("POST", "/api/config", { token: SD, body: { tracks: configTracks.map((t) =>
+  t.key === "CPM" ? { ...t, documents: ["resumes/cpm.txt", "resumes/not-uploaded.txt"] } : t) } });
+check("config read and posted back is accepted, list included",
+  roundTrip.status === 200, JSON.stringify(roundTrip.json));
+const cpmDocs = await forSearch(SD, "CPM");
+check("a listed document the tracker doesn't have is named in missing, not dropped",
+  paths(cpmDocs) === "docs/tracked_cpm_postings.md,resumes/cpm.txt" &&
+  JSON.stringify(cpmDocs.json?.missing) === JSON.stringify(["resumes/not-uploaded.txt"]), JSON.stringify(cpmDocs.json));
+check("without a search, the listing is still everything - for the backup and the import",
+  (await req("GET", "/api/documents", { token: SD })).json?.documents?.length === 5);
+
+for (const [why, list] of [
+  ["a path outside the document folders", ["../tracker.json"]],
+  ["a string rather than a list", "resumes/swe.txt"],
+  ["more than twenty", Array.from({ length: 21 }, (_, i) => `resumes/r${i}.txt`)],
+]) {
+  check(`a documents list is refused: ${why}`,
+    (await req("POST", "/api/writeup", { token: SD, body: { search: "SWE", documents: list } })).json?.field === "documents" &&
+    (await req("POST", "/api/config", { token: SD, body: { tracks: [{ key: "SWE", label: "SWE", documents: list }] } })).status === 400);
+}
+check("a refused list leaves the stored one as it was",
+  paths(await forSearch(SD, "SWE")) === "docs/tracked_swe_postings.md,resumes/swe.txt");
+
+check("another person's search of the same name is served nothing of this person's",
+  (await forSearch(SD_B, "SWE")).status === 409 &&
+  (await req("GET", "/api/documents", { token: SD_B })).json?.documents?.length === 0);
+check("a search this person doesn't have is a 404",
+  (await forSearch(SD, "NOPE")).status === 404);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

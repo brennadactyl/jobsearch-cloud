@@ -464,5 +464,35 @@ console.log("\n== 0015 and 0016 against an empty database ==");
   db.close();
 }
 
+const STOP17 = MIGRATIONS.find((f) => f.startsWith("0017_"));
+
+console.log("\n== 0017 against a database with configured tracks ==");
+{
+  // Every existing track has to come through with its config whole and an empty
+  // documents list: the list is written for each track after the migration, and
+  // until then GET /api/documents?search= refuses the track rather than guess.
+  const db = migratedThrough(STOP17, `
+INSERT INTO users (id, name) VALUES ('u1', 'One'), ('u2', 'Two');
+INSERT INTO tracks (user_id, key, label, sort_order, role_search_line, resume_line, doc_file, fed_by, sweep_cursor) VALUES
+  ('u1', 'SWE', 'SWE', 0, 'software roles', 'Read resumes/one.txt.', 'docs/tracked_swe_postings.md', '', 12),
+  ('u1', 'swe-ai', 'AI', 1, '', '', '', 'SWE', 0),
+  ('u2', 'product', 'Product', 0, 'product roles', 'Read resumes/two.txt.', 'docs/tracked_product_postings.md', '', 3);
+`);
+  const col = db.prepare("SELECT dflt_value d, [notnull] n FROM pragma_table_info('tracks') WHERE name = 'documents'").get();
+  check("tracks gains documents, not null, defaulting to an empty list",
+    !!col && col.d === "'[]'" && col.n === 1, JSON.stringify(col));
+  const rows = db.prepare("SELECT user_id, key, role_search_line, resume_line, doc_file, fed_by, sweep_cursor, documents FROM tracks ORDER BY user_id, sort_order").all();
+  check("every existing track is kept, with an empty list",
+    rows.length === 3 && rows.every((r) => r.documents === "[]"), JSON.stringify(rows.map((r) => [r.key, r.documents])));
+  check("and its config and rotation are untouched",
+    rows[0].role_search_line === "software roles" && rows[0].resume_line === "Read resumes/one.txt." &&
+    rows[0].doc_file === "docs/tracked_swe_postings.md" && rows[0].sweep_cursor === 12 &&
+    rows[1].fed_by === "SWE" && rows[2].sweep_cursor === 3, JSON.stringify(rows));
+  db.exec("INSERT INTO tracks (user_id, key, label) VALUES ('u2', 'new', 'New')");
+  check("a track created afterwards starts with an empty list too",
+    db.prepare("SELECT documents FROM tracks WHERE key = 'new'").get().documents === "[]");
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
