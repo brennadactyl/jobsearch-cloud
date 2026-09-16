@@ -66,18 +66,13 @@ search is using.
 ## Word files already stored
 
 Extraction runs on upload, so a `.docx` stored before this change has no text
-beside it. Resumes moved into storage by hand carry `.docx` originals, often next
-to a `.txt` someone extracted themselves.
+beside it until it is uploaded again. There is no backfill: the only stored Word
+resumes belong to one account, whose owner re-uploads them once this ships, and
+no hand-made text shares a name with them. After that re-upload, each search's
+`documents` list names the extracted `.txt`.
 
-- **A one-time backfill** runs the same extraction over every stored `.docx`
-  under `resumes/`, across all accounts, once, after the server change deploys.
-- **It never overwrites an existing `.txt` of the same name.** A text file already
-  beside a Word file is taken as the extraction, and the backfill reports it as
-  kept. The pair rule then protects it like any other.
-- It reports each file: extracted with its word count, kept, or refused as
-  under 50 words - so a thin one is visible before a search reads it.
-- Until it has run, a `.docx` with no `.txt` beside it is unreadable, and the
-  overnight run says so rather than building from nothing.
+Until a `.docx` has its `.txt`, it is unreadable, and the overnight run says so
+rather than building from nothing.
 
 ## Importing a folder
 
