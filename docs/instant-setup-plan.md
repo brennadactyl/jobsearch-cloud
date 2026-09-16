@@ -79,6 +79,24 @@ Deterministic refusals, not instructions:
 - **Changing the search afterwards** is what it is today: the tracker's own
   config and the job-search-setup skill, not this form.
 
+## The two write paths
+
+`POST /api/intake` writes the form's half once, in one transaction with the
+intake row, and returns success only; the page then re-reads `/api/data`.
+`POST /api/writeup` takes a track key and only the fields the run owns, and
+refuses any other key by name. Neither path can write the other's fields,
+whatever it is sent.
+
+**The scope check** counts a preferred location as inside the scope when the
+scope text contains its label or one of its terms, and refuses only when none
+of them match. Loose on purpose: this one blocks a person mid-form, so a false
+refusal costs more than a scope the run has to interpret.
+
+**Bounding the retries** without a schema change: `GET /api/intake/pending`
+stops listing a `failed` intake more than three days after `sent_at`. An
+`attempts` column counting nights is the better shape and is a separate change,
+with its own migration.
+
 ## Order of work
 
 1. **Server** (Backend Buddy): POST /api/intake writes the form's half through
