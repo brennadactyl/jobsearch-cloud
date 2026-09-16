@@ -2112,23 +2112,23 @@ const instAnswers = {
 const built = await postIntake(I_TOK, instAnswers);
 check("a sent setup answers with the tracks it built, not the tracker",
   built.status === 200 && built.json.ok === true &&
-  JSON.stringify(built.json.tracks) === JSON.stringify(["engineering", "product-design"]),
+  JSON.stringify(built.json?.tracks) === JSON.stringify(["engineering", "product-design"]),
   JSON.stringify(built.json));
 const builtConfig = (await req("GET", "/api/config", { token: I_TOK })).json;
 check("the tracker exists the moment setup is sent: tabs, in form order, labelled as typed",
-  builtConfig.tracks.length === 2 &&
-  builtConfig.tracks[0].key === "engineering" && builtConfig.tracks[0].label === "Engineering" &&
-  builtConfig.tracks[1].label === "Product & Design" && builtConfig.tracks[1].sort_order === 1,
+  builtConfig.tracks?.length === 2 &&
+  builtConfig.tracks?.[0]?.key === "engineering" && builtConfig.tracks?.[0]?.label === "Engineering" &&
+  builtConfig.tracks?.[1]?.label === "Product & Design" && builtConfig.tracks?.[1]?.sort_order === 1,
   JSON.stringify(builtConfig.tracks.map((t) => ({ key: t.key, label: t.label, sort_order: t.sort_order }))));
 check("and the settings the form owns, with a title defaulted from the name",
-  builtConfig.settings.display_title === `${instName}'s Job Search` &&
-  builtConfig.settings.pronouns === "she/her" &&
-  JSON.stringify(builtConfig.settings.excluded_companies) === JSON.stringify(["Bad Corp", "Worse Inc"]) &&
-  JSON.stringify(builtConfig.settings.priority_locations) === JSON.stringify(baseAnswers.priority_locations),
+  builtConfig.settings?.display_title === `${instName}'s Job Search` &&
+  builtConfig.settings?.pronouns === "she/her" &&
+  JSON.stringify(builtConfig.settings?.excluded_companies) === JSON.stringify(["Bad Corp", "Worse Inc"]) &&
+  JSON.stringify(builtConfig.settings?.priority_locations) === JSON.stringify(baseAnswers.priority_locations),
   JSON.stringify(builtConfig.settings));
 check("nothing the run owns is written on send",
-  builtConfig.tracks.every((t) => t.role_search_line === "" && t.fit_clause === "" && t.schedule_time === "") &&
-  !builtConfig.settings.geo_scope_line, JSON.stringify(builtConfig.tracks[0]));
+  builtConfig.tracks?.every((t) => t.role_search_line === "" && t.fit_clause === "" && t.schedule_time === "") &&
+  !builtConfig.settings?.geo_scope_line, JSON.stringify(builtConfig.tracks[0]));
 check("a second send is refused whatever the state - there is no re-send",
   (await postIntake(I_TOK, instAnswers)).status === 409);
 check("one person's setup is invisible to another",
@@ -2147,19 +2147,19 @@ const formFieldWrite = await req("POST", "/api/writeup", { token: I_TOK, body: {
 check("the write-up route refuses a form-owned field, naming it, rather than dropping it",
   formFieldWrite.status === 400 && formFieldWrite.json.field === "label", JSON.stringify(formFieldWrite.json));
 check("and nothing in that call was written",
-  (await req("GET", "/api/config", { token: I_TOK })).json.tracks[0].role_search_line === "");
+  (await req("GET", "/api/config", { token: I_TOK })).json.tracks?.[0]?.role_search_line === "");
 const writeUp = await req("POST", "/api/writeup", { token: I_TOK, body: {
   search: "engineering", role_search_line: "engineering manager roles", fit_clause: "must be remote",
   schedule_time: "01:00", geo_scope_line: "Search the US." } });
 check("the run writes its own fields, per-track and per-account, in one call",
-  writeUp.status === 200 && writeUp.json.written.includes("role_search_line") &&
-  writeUp.json.written.includes("geo_scope_line"), JSON.stringify(writeUp.json));
+  writeUp.status === 200 && writeUp.json.written?.includes("role_search_line") &&
+  writeUp.json.written?.includes("geo_scope_line"), JSON.stringify(writeUp.json));
 const afterWriteUp = (await req("GET", "/api/config", { token: I_TOK })).json;
 check("and the form's fields come through it untouched",
-  afterWriteUp.tracks[0].label === "Engineering" && afterWriteUp.tracks[0].sort_order === 0 &&
-  afterWriteUp.settings.display_title === `${instName}'s Job Search` &&
-  JSON.stringify(afterWriteUp.settings.priority_locations) === JSON.stringify(baseAnswers.priority_locations),
-  JSON.stringify({ label: afterWriteUp.tracks[0].label, title: afterWriteUp.settings.display_title }));
+  afterWriteUp.tracks?.[0]?.label === "Engineering" && afterWriteUp.tracks?.[0]?.sort_order === 0 &&
+  afterWriteUp.settings?.display_title === `${instName}'s Job Search` &&
+  JSON.stringify(afterWriteUp.settings?.priority_locations) === JSON.stringify(baseAnswers.priority_locations),
+  JSON.stringify({ label: afterWriteUp.tracks?.[0]?.label, title: afterWriteUp.settings?.display_title }));
 check("a written-up track has a prompt again",
   (await req("GET", "/api/prompt/engineering", { token: I_TOK })).status === 200);
 check("writing up a track twice is ordinary, since a retry night works on one that exists",
@@ -2180,7 +2180,7 @@ await req("POST", "/api/config", { token: P_TOK, body: {
 await postIntake(P_TOK, baseAnswers);
 const preAfter = (await req("GET", "/api/config", { token: P_TOK })).json;
 check("a send relabels a track that already exists and leaves its write-up alone",
-  preAfter.tracks[0].label === "Engineering" && preAfter.tracks[0].role_search_line === "roles someone wrote",
+  preAfter.tracks?.[0]?.label === "Engineering" && preAfter.tracks?.[0]?.role_search_line === "roles someone wrote",
   JSON.stringify(preAfter.tracks[0]));
 
 await req("PUT", `/api/documents/resumes/${invRun}.txt`, { token: N_TOK, raw: "Resume as a file.", type: "text/plain" });
