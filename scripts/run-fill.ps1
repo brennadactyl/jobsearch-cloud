@@ -58,6 +58,16 @@ function Log($msg) {
 Log "===== starting applications fill ====="
 Log "data dir:         $DataDir"
 
+# One run at a time on this machine: the fill drives the same CLI the searches
+# do (see run-lock.ps1). It is scheduled after them, but a search that started
+# late or ran long is still going at 06:30 often enough to matter.
+. (Join-Path $PSScriptRoot "run-lock.ps1")
+if (-not (Enter-RunLock)) {
+    Log "ERROR: another run on this machine was still going after $RUN_LOCK_MAX_WAIT_MINUTES minutes - nothing was filled in"
+    Write-Error "The machine was busy with another run for $RUN_LOCK_MAX_WAIT_MINUTES minutes. See $logFile."
+    exit 1
+}
+
 # Same discovery as setup-scheduler.ps1: a person is a folder with a
 # tracker.json in it. A single-user machine (no per-user folders, credentials in
 # the environment) counts as one unnamed account.
@@ -225,7 +235,9 @@ if (-not $outputText) {
 }
 
 $elapsed = [int]((Get-Date) - $start).TotalSeconds
-Log "finished - job state: $jobState, elapsed: ${elapsed}s, exit code: $exitCode"
+Log "finished - job state: $jobState, elapsed: ${elapsed}s, waited for the machine: ${runLockWaitedSeconds}s, exit code: $exitCode"
 Log "===== done ====="
+
+Exit-RunLock
 
 exit $exitCode
