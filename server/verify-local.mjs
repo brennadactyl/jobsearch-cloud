@@ -816,7 +816,13 @@ const c2 = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
 const cycleTotal = (await req("GET", `/api/coverage/${ROT}?all=1`, { token: C_TOK })).json.total;
 const reached = new Set();
 let servedTwiceEarly = 0;
-for (let guard = 0; guard < 200 && reached.size < cycleTotal; guard++) {
+// Enough slices to walk the whole list, plus room for the wrap, rather than a
+// flat count: the list is shared and a local database that has been verified
+// against for a while holds thousands of companies, which a fixed 200 slices
+// cannot reach - and the check would then report a broken rotation when what
+// ran out was the loop.
+const cycleSlices = Math.ceil(cycleTotal / 24) + 5;
+for (let guard = 0; guard < cycleSlices && reached.size < cycleTotal; guard++) {
   const s = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
   for (const c of s.companies) {
     if (reached.size === cycleTotal) break;
@@ -834,7 +840,7 @@ const furthest = whole.reduce((a, c) => (c.position > a.position ? c : a));
 // Only a served company moves the cursor, so read along to the slice holding
 // the end of the log and record it up to that company.
 let endSlice = [];
-for (let guard = 0; guard < 200; guard++) {
+for (let guard = 0; guard < cycleSlices; guard++) {
   endSlice = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json.companies;
   if (endSlice.some((c) => c.company === furthest.company)) break;
   await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
