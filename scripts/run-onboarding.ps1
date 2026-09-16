@@ -366,7 +366,7 @@ $KEY_PATTERN = '^[a-z0-9]+(-[a-z0-9]+)*$'
 # this script owns (schedule_time, target_companies, fed_by), has it dropped
 # rather than posted.
 $MODEL_TRACK_FIELDS = @(
-    "label", "full_description", "role_search_line", "search_note", "resume_line",
+    "full_description", "role_search_line", "search_note", "resume_line",
     "fit_clause", "fit_disqualifier", "fit_filter_step", "intro_note", "doc_summary"
 )
 $MODEL_SETTING_FIELDS = @("geo_scope_line", "scope_clause", "scope_disqualifier")
@@ -412,20 +412,6 @@ foreach ($item in $queue) {
         New-Item -ItemType Directory -Force -Path $userDir | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $userDir "logs") | Out-Null
 
-        # ---- Their slots, before anything with a side effect.
-        #
-        # A refusal here costs nothing, while minting replaces the account's
-        # previous search token - which is worth doing only once there is room
-        # to run a search at all.
-        $slots = @()
-        foreach ($role in $roles) {
-            $slot = Get-NightSlot $taken
-            if ($slot -lt 0) { Stop-Person "no free schedule slot left on this machine" $NOTE_NO_SLOT }
-            $taken += $slot
-            $slots += $slot
-        }
-        Log "      slots: $(($slots | ForEach-Object { ConvertTo-Clock $_ }) -join ', ')"
-
         # ---- Their credential.
         #
         # POST /api/tokens kills the account's previous search token, so
@@ -454,6 +440,33 @@ foreach ($item in $queue) {
             $personToken = [string]$minted.token
             Log "      minted a search token (replaced $($minted.replaced)) and wrote tracker.json"
         }
+
+        # ---- The tracks, which already exist.
+        #
+        # Sending the form built them - their keys, labels and order - and this
+        # run writes the prose into them and nothing else
+        # (docs/instant-setup-plan.md). The keys are the account's, never the
+        # model's to invent: a key this run made up would leave the tab the
+        # person is looking at empty forever.
+        $liveTracks = @((Api GET "/api/config" $personToken $null).tracks |
+            Where-Object { -not $_.fed_by } | Sort-Object sort_order)
+        if ($liveTracks.Count -eq 0) {
+            Stop-Person "their account has no tracks to write up" $null
+        }
+        Log "      tracks to write up: $(($liveTracks | ForEach-Object { $_.key }) -join ', ')"
+
+        # ---- Their slots.
+        #
+        # One per track, and a refusal here costs nothing: the tracker they can
+        # already see keeps working, it just has no run behind it yet.
+        $slots = @()
+        foreach ($track in $liveTracks) {
+            $slot = Get-NightSlot $taken
+            if ($slot -lt 0) { Stop-Person "no free schedule slot left on this machine" $NOTE_NO_SLOT }
+            $taken += $slot
+            $slots += $slot
+        }
+        Log "      slots: $(($slots | ForEach-Object { ConvertTo-Clock $_ }) -join ', ')"
 
         # ---- The staged folder the model turn sees, and nothing else.
         $stage = Join-Path $userDir ".onboarding"
@@ -514,9 +527,13 @@ foreach ($item in $queue) {
         Copy-Item -Path $templateFile -Destination (Join-Path $stage "template.md") -Force
         Copy-Item -Path $skillFile -Destination (Join-Path $stage "setup-skill.md") -Force
 
+        # The tabs as they already exist on their tracker, named by the key
+        # the write-up has to use.
         $roleLines = @()
-        for ($i = 0; $i -lt $roles.Count; $i++) {
-            $roleLines += "  $($i + 1). $($roles[$i].name) - titles: $($roles[$i].titles)"
+        for ($i = 0; $i -lt $liveTracks.Count; $i++) {
+            $role = if ($i -lt $roles.Count) { $roles[$i] } else { $null }
+            $roleLines += "  key " + $liveTracks[$i].key + " - tab " + $liveTracks[$i].label +
+                $(if ($role) { " - they asked for: " + $role.titles } else { "" })
         }
 
         # The turn's whole world is this folder: answers.json, the staged
@@ -551,8 +568,7 @@ out\config.json:
 {
   "tracks": [
     {
-      "key": "<lowercase-hyphenated slug, unique in this file>",
-      "label": "<the tab label - short>",
+      "key": "<one of the keys listed below, exactly>",
       "full_description": "<what belongs in this tab>",
       "role_search_line": "<the titles to search for, as it reads mid-sentence>",
       "search_note": "<optional: how those companies are searched>",
@@ -569,12 +585,13 @@ out\config.json:
     "scope_clause": "<the same scope, short, as it reads mid-sentence>",
     "scope_disqualifier": "<written from location_limits: what puts a posting out, for the disqualified list>"
   },
-  "preferred_inside": ["<each priority_locations label that lies inside work_scope, by its exact label>"],
-  "excluded_companies": ["<one per company they said they'd never work for>"],
   "named_companies": ["<companies they named as ones they want searched>"]
 }
 
-One track per role in answers.json, in the same order:
+Their tracker already exists: sending the form made these tabs, and the
+person can see them now. Write one entry per key below, using that exact
+key - prose filed under a key they don't have leaves the tab they are
+looking at empty while reading as a success:
 $($roleLines -join "`n")
 
 Rules for this run:
@@ -586,17 +603,15 @@ Rules for this run:
   and never let an exclusion narrow the scope to itself - a search scoped to
   the one state they can't work in screens out everything it finds, all night,
   and reports a quiet night.
-- `preferred_inside` lists which of their ranked places actually lie inside
-  work_scope, by the exact label from answers.json. If none of them do, say so
-  with an empty list rather than stretching the scope to fit: the script stops
-  and asks them to fix the two answers.
 - No search keeps a company list. The kinds of employer they like go in the
   track doc's candidate profile, as guidance for discovery; a company they
   named goes in named_companies, which the script puts on the shared list
   every search already reads. Never write companies into the config prose or
   into a doc as a list to sweep.
-- Don't set schedule_time, target_companies, fed_by, doc_file, sort_order,
-  display_title, pronouns or priority_locations. The script owns those.
+- Don't set schedule_time or doc_file - the script writes those - and don't
+  set anything the form owns: the tab label, its order, the page title,
+  pronouns, the ranked locations, or the companies they won't work for. The
+  route this goes through refuses them outright.
 - Their pay floor, if they gave one, screens on a *stated* range only: a range
   topping out below it disqualifies, and no published range does not.
 - Their rule-outs become fit_clause / fit_disqualifier, and only a genuine
@@ -691,24 +706,10 @@ Rules for this run:
                 Stop-Person "the scope clause is built from what they ruled out, not from where they can work" $null
             }
         }
-        # Whether a ranked place lies inside the scope needs geography, so the
-        # model says which ones do and this checks the claim is about their
-        # actual places. None inside means a search that can only screen
-        # everything out: their two answers disagree, and only they can settle it.
-        $labels = @($answers.priority_locations | ForEach-Object { [string]$_.label } | Where-Object { $_ })
-        $inside = @($draft.preferred_inside | ForEach-Object { [string]$_ } | Where-Object { $labels -contains $_ })
-        if ($labels.Count -gt 0 -and $inside.Count -eq 0) {
-            $where = if ($scopeAnswer.Length -gt 90) { $scopeAnswer.Substring(0, 90) + "..." } else { $scopeAnswer }
-            $liked = ($labels -join ", ")
-            if ($liked.Length -gt 90) { $liked = $liked.Substring(0, 90) + "..." }
-            Stop-Person "none of their preferred locations lie inside their work_scope answer" `
-                "The places you put first ($liked) are outside where you said you can work ($where), so a search built from them would rule out everything it found. Check those two answers on the setup form and send it again."
-        }
-        Log "      scope: preferred locations inside it - $(if ($inside.Count) { $inside -join ', ' } else { '(none ranked)' })"
-
         $draftTracks = @($draft.tracks)
-        if ($draftTracks.Count -ne $roles.Count) {
-            Stop-Person "the model turn wrote $($draftTracks.Count) track(s) for $($roles.Count) role(s)" $null
+        $liveKeys = @($liveTracks | ForEach-Object { [string]$_.key })
+        if ($draftTracks.Count -ne $liveKeys.Count) {
+            Stop-Person "the model turn wrote $($draftTracks.Count) track(s) for $($liveKeys.Count) on the account" $null
         }
 
         $tracks = @()
@@ -716,28 +717,25 @@ Rules for this run:
         for ($i = 0; $i -lt $draftTracks.Count; $i++) {
             $d = $draftTracks[$i]
             $key = [string]$d.key
-            if ($key -notmatch $KEY_PATTERN -or $key.Length -gt 40) { Stop-Person "track $($i + 1) has an unusable key: '$key'" $null }
+            # The account's key or nothing: the person is already looking at
+            # these tabs, and prose written under a key they don't have would
+            # leave the tab they can see empty while reading as a success.
+            if ($liveKeys -notcontains $key) { Stop-Person "the model turn wrote a track keyed '$key', which isn't one of theirs ($($liveKeys -join ', '))" $null }
             if ($seen -contains $key) { Stop-Person "two tracks share the key '$key'" $null }
             $seen += $key
-            foreach ($required in @("label", "role_search_line", "resume_line")) {
+            foreach ($required in @("role_search_line", "resume_line")) {
                 if (-not ([string]$d.$required).Trim()) { Stop-Person "track '$key' has no $required" $null }
             }
             if (([string]$d.resume_line) -notlike "*$resumePath*") {
                 Stop-Person "track '$key' has a resume_line that doesn't name $resumePath" $null
             }
 
-            $track = @{
-                key = $key
-                sort_order = $i
+            $writeup = @{
+                search = $key
                 schedule_time = (ConvertTo-Clock $slots[$i])
                 doc_file = "docs/tracked_${key}_postings.md"
-                # Deliberately empty, and not the model's to fill: a list stored
-                # on a track used to be swept every night on top of the run's
-                # own batch of the shared list.
-                target_companies = ""
-                fed_by = ""
             }
-            foreach ($field in $MODEL_TRACK_FIELDS) { $track[$field] = [string]$d.$field }
+            foreach ($field in $MODEL_TRACK_FIELDS) { $writeup[$field] = [string]$d.$field }
 
             $docFile = Join-Path $stage "out\docs\tracked_${key}_postings.md"
             if (-not (Test-Path $docFile)) { Stop-Person "track '$key' has no doc at out\docs\tracked_${key}_postings.md" $null }
@@ -745,7 +743,7 @@ Rules for this run:
             if (-not $docText -or $docText.Length -lt 500) { Stop-Person "track '$key' has a doc too short to be the filled template" $null }
             if ($docText -match '\{\{') { Stop-Person "track '$key' has a doc with an unfilled {{PLACEHOLDER}}" $null }
 
-            $tracks += , @{ Config = $track; DocPath = $track.doc_file; DocText = $docText }
+            $tracks += , @{ Key = $key; Body = $writeup; DocPath = $writeup.doc_file; DocText = $docText; Slot = (ConvertTo-Clock $slots[$i]) }
         }
 
         # ---- Post it, as them.
@@ -760,23 +758,20 @@ Rules for this run:
             Log "      wrote $($t.DocPath) ($($t.DocText.Length) chars)"
         }
 
-        $pageTitle = [string]$answers.page_title
-        if (-not $pageTitle.Trim()) { $pageTitle = "$name's Job Search" }
-        $pronouns = [string]$answers.pronouns
-        if (-not $pronouns.Trim()) { $pronouns = "they/them" }
+        # Their scope wording travels with the first write-up call: it is
+        # per-account rather than per-track, and sending it beside a track's
+        # prose keeps a search from being half described if a later call fails.
+        $scopeBody = @{}
+        foreach ($field in $MODEL_SETTING_FIELDS) { $scopeBody[$field] = [string]$draft.settings.$field }
 
-        $configBody = @{
-            tracks = @($tracks | ForEach-Object { $_.Config })
-            display_title = $pageTitle
-            pronouns = $pronouns
-            # Stored exactly as the page computed them: the rules are ordered,
-            # and the first that matches a posting's location text is its rank.
-            priority_locations = @($answers.priority_locations)
-            excluded_companies = @($draft.excluded_companies | Where-Object { ([string]$_).Trim() })
+        $first = $true
+        foreach ($t in $tracks) {
+            $body = $t.Body.Clone()
+            if ($first) { foreach ($k in $scopeBody.Keys) { $body[$k] = $scopeBody[$k] } }
+            $written = Api POST "/api/writeup" $personToken $body
+            Log "      wrote up $($t.Key) at $($t.Slot): $(($written.written) -join ', ')"
+            $first = $false
         }
-        foreach ($field in $MODEL_SETTING_FIELDS) { $configBody[$field] = [string]$draft.settings.$field }
-        Api POST "/api/config" $personToken $configBody | Out-Null
-        Log "      posted config: $(($seen) -join ', ')"
 
         # The companies they named, onto the one shared list every search reads.
         # Undated, so nothing is marked swept tonight.
@@ -816,10 +811,16 @@ Rules for this run:
         # model reported.
         $after = Api GET "/api/config" $personToken $null
         foreach ($t in $tracks) {
-            $live = @($after.tracks | Where-Object { $_.key -eq $t.Config.key })
-            if ($live.Count -eq 0) { Stop-Person "track '$($t.Config.key)' isn't in the config after posting it" $null }
-            if ([string]$live[0].schedule_time -ne $t.Config.schedule_time) {
-                Stop-Person "track '$($t.Config.key)' came back scheduled at $($live[0].schedule_time), not $($t.Config.schedule_time)" $null
+            $live = @($after.tracks | Where-Object { $_.key -eq $t.Key })
+            if ($live.Count -eq 0) { Stop-Person "track '$($t.Key)' isn't in the config after writing it up" $null }
+            if ([string]$live[0].schedule_time -ne $t.Slot) {
+                Stop-Person "track '$($t.Key)' came back scheduled at $($live[0].schedule_time), not $($t.Slot)" $null
+            }
+            # The tab is only usable once it has a role line: GET /api/prompt
+            # refuses a track without one, so a run that wrote everything else
+            # and skipped this would leave a task that fails every morning.
+            if (-not ([string]$live[0].role_search_line).Trim()) {
+                Stop-Person "track '$($t.Key)' still has no role_search_line after the write-up" $null
             }
         }
         $docPaths = Get-DocumentPaths $personToken
