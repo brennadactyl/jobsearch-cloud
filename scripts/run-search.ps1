@@ -238,8 +238,26 @@ function Add-RunNote($text) {
 function Stop-Run($reason, $userMessage) {
     Log "ERROR: $reason"
     Record-FailedRun $reason
+    # Guarded: the early fatal checks can reach this before the queue below is
+    # even loaded, and a run that never took the lock has nothing to give back.
+    if (Get-Command Exit-RunLock -ErrorAction SilentlyContinue) { Exit-RunLock }
     Write-Error $userMessage
     exit 1
+}
+
+# ---- Wait for the machine. -------------------------------------------------
+#
+# One run at a time: every run on this machine drives the same CLI under one
+# Claude account, and two at once is two runs fighting over it. See run-lock.ps1
+# for why this is a lock rather than more spacing in the schedule.
+#
+# Taken here, before any tracker call, so a run that waits an hour reads its
+# documents and its prompt when it is about to use them rather than an hour
+# stale.
+. (Join-Path $PSScriptRoot "run-lock.ps1")
+if (-not (Enter-RunLock)) {
+    Stop-Run "another run on this machine was still going after $RUN_LOCK_MAX_WAIT_MINUTES minutes - nothing was searched or synced" `
+        "The machine was busy with another run for $RUN_LOCK_MAX_WAIT_MINUTES minutes. See $logFile."
 }
 
 $claude = Get-Command claude -ErrorAction SilentlyContinue
@@ -658,7 +676,9 @@ if ($exitCode -ne 0) {
     Record-FailedRun $failureReason
 }
 
-Log "finished $Task - job state: $jobState, elapsed: ${elapsed}s, exit code: $exitCode"
+Log "finished $Task - job state: $jobState, elapsed: ${elapsed}s, waited for the machine: ${runLockWaitedSeconds}s, exit code: $exitCode"
 Log "===== done ====="
+
+Exit-RunLock
 
 exit $exitCode
