@@ -132,4 +132,28 @@ export class Docs {
     await this.bucket.delete(key);
     return true;
   }
+
+  /**
+   * Remove every document this person has: what deleting their account has to
+   * take with it, since once the account is gone nothing else names these keys.
+   *
+   * Loops rather than deleting one page, because `list` caps at 1000 keys and
+   * the account being deleted is the one that might hold more than a person's
+   * usual fifteen. Each pass lists what is left and deletes that, so a pass
+   * that dies part way leaves the rest for a later call - which is what lets
+   * the delete route be repeated rather than resumed.
+   *
+   * @returns {Promise<number>} how many objects were removed
+   */
+  async deleteAll() {
+    const prefix = `${this.userId}/`;
+    let removed = 0;
+    for (let pass = 0; pass < 20; pass++) {
+      const result = await this.bucket.list({ prefix });
+      if (result.objects.length === 0) break;
+      await this.bucket.delete(result.objects.map((obj) => obj.key));
+      removed += result.objects.length;
+    }
+    return removed;
+  }
 }

@@ -9,8 +9,9 @@
 
 export const CORS_HEADERS = {
   "access-control-allow-origin": "*",
-  // PUT and DELETE for /api/documents, the one resource addressed by its own
-  // URI (./routes/documents.js); a browser preflight refuses unlisted methods.
+  // PUT and DELETE for the resources addressed by their own URI - a document
+  // (./routes/documents.js) and an account (./routes/accounts.js); a browser
+  // preflight refuses unlisted methods.
   "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
   // If-Match rides along with a conditional document write.
   "access-control-allow-headers": "Authorization, Content-Type, If-Match",

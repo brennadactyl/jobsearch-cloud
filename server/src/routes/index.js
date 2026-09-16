@@ -21,6 +21,7 @@
 
 import {
   handleChangePassword,
+  handleDeleteUser,
   handleGetMe,
   handleLogin,
   handleLogout,
@@ -91,8 +92,9 @@ export const PUBLIC_ROUTES = [
  * The routes only the operator's scripts and the onboarding run call. Every one
  * requires ADMIN_TOKEN as the bearer, checked by ../index.js before dispatch, so
  * a handler here cannot forget it and a session token is refused whoever it
- * belongs to. None has a person to scope to: they work across accounts through
- * ../onboarding.js.
+ * belongs to. None is called by the person it concerns: they work across
+ * accounts through ../onboarding.js, or name their subject - deleting an
+ * account names it twice, in the path and the body.
  *
  * @type {Array<[string, string|RegExp, Function]>}
  */
@@ -103,6 +105,10 @@ export const ADMIN_ROUTES = [
   ["GET", "/api/intake/pending", handlePendingIntakes],
   ["POST", "/api/intake/complete", handleCompleteIntake],
   ["POST", "/api/tokens", handleMintSearchToken],
+  // Deleting an account sits here rather than beside POST /api/users, which
+  // predates this list and checks the token inside the handler: a new admin
+  // route belongs where the router does the checking.
+  ["DELETE", /^\/api\/users\/([^/]+)$/, handleDeleteUser],
 ];
 
 /**

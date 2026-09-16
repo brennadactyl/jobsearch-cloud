@@ -230,6 +230,75 @@ export async function upsertUser(d1, name, password, demo) {
 }
 
 /**
+ * What an account owns in D1, table by table. Every table with a `user_id`
+ * appears here, which is what the delete below removes.
+ *
+ * Not `company_fetch`: the company list is shared by every account
+ * (migrations/0011_one_company_list.sql), so what this person's runs learned
+ * about reaching a company stays when they go. Their own record of which
+ * companies they swept, in `company_sweeps`, is theirs and goes.
+ */
+const OWNED_TABLES = [
+  "applications",
+  "company_sweeps",
+  "intake",
+  "leads",
+  "meta",
+  "screened",
+  "search_runs",
+  "sessions",
+  "tracks",
+];
+
+/**
+ * Everything an account holds, counted before it is removed.
+ * @param {D1Database} d1
+ * @param {string} id
+ * @returns {Promise<Record<string, number>>} one count per table in OWNED_TABLES
+ */
+export async function countAccountRows(d1, id) {
+  const rows = await d1.batch(
+    OWNED_TABLES.map((t) => d1.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE user_id = ?`).bind(id))
+  );
+  return Object.fromEntries(OWNED_TABLES.map((t, i) => [t, Number(rows[i].results[0].n) || 0]));
+}
+
+/**
+ * Delete an account and everything in D1 that belongs to it, in one batch,
+ * which D1 runs as one transaction: the account and its rows go together or
+ * not at all, and a caller never meets an account whose rows are half gone.
+ *
+ * Documents live in R2 and cannot join this transaction, so the route deletes
+ * those first and this runs second (routes/accounts.js). That order is
+ * deliberate: a failure between the two leaves an account whose documents are
+ * gone, which deleting again finishes, rather than objects in R2 that nothing
+ * names any more.
+ *
+ * An invite that made this account keeps its ledger row, with `used_by`
+ * cleared. `used_at` set beside an empty `used_by` is unambiguous - an unused
+ * invite has both empty - so the ledger reads "used, and the account it made is
+ * gone". The operator's record of who was invited and when outlives the
+ * account; nothing identifying the person survives in it.
+ *
+ * @param {D1Database} d1
+ * @param {string} id
+ * @returns {Promise<Record<string, number> & {invites: number}>} what was removed
+ */
+export async function deleteAccount(d1, id) {
+  const counts = await countAccountRows(d1, id);
+  const invites = await d1
+    .prepare("SELECT COUNT(*) AS n FROM invites WHERE used_by = ?")
+    .bind(id)
+    .first();
+  await d1.batch([
+    ...OWNED_TABLES.map((t) => d1.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(id)),
+    d1.prepare("UPDATE invites SET used_by = '' WHERE used_by = ?").bind(id),
+    d1.prepare("DELETE FROM users WHERE id = ?").bind(id),
+  ]);
+  return { ...counts, invites: Number(invites && invites.n) || 0 };
+}
+
+/**
  * The full user row, stored credential included, for a caller already known by
  * session.
  * @param {D1Database} d1
