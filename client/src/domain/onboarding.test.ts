@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { emptyAnswers, inviteNotice, isReadableResume, safeDocumentName, setupOverdue, setupProblems } from "./onboarding";
+import {
+  emptyAnswers,
+  inviteNotice,
+  isReadableResume,
+  retriesEnded,
+  safeDocumentName,
+  setupOverdue,
+  setupProblems,
+} from "./onboarding";
 
 /** The documents route's filename rule (server/src/validate.js). */
 const ROUTE_NAME = /^\w(?:[\w .-]*\w)?$/;
@@ -94,5 +102,18 @@ describe("setupOverdue", () => {
     expect(setupOverdue(sent, 36, Date.parse("2026-09-15T20:00:00Z"))).toBe(false);
     expect(setupOverdue(sent, 36, Date.parse("2026-09-15T22:00:00Z"))).toBe(true);
     expect(setupOverdue("", 36, Date.parse("2026-09-15T22:00:00Z"))).toBe(false);
+  });
+});
+
+describe("retriesEnded", () => {
+  const end = "2026-09-19T05:38:24.351Z";
+  it("has ended from the server's cutoff instant on, and not a millisecond before", () => {
+    expect(retriesEnded(end, Date.parse(end) - 1)).toBe(false);
+    expect(retriesEnded(end, Date.parse(end))).toBe(true);
+  });
+
+  it("reads a missing cutoff as still retrying, which is what the page said before there was one", () => {
+    expect(retriesEnded("", Date.parse(end) + 1)).toBe(false);
+    expect(retriesEnded("not a date", Date.parse(end) + 1)).toBe(false);
   });
 });
