@@ -146,14 +146,118 @@ export class Docs {
    * @returns {Promise<number>} how many objects were removed
    */
   async deleteAll() {
-    const prefix = `${this.userId}/`;
-    let removed = 0;
-    for (let pass = 0; pass < 20; pass++) {
-      const result = await this.bucket.list({ prefix });
-      if (result.objects.length === 0) break;
-      await this.bucket.delete(result.objects.map((obj) => obj.key));
-      removed += result.objects.length;
-    }
-    return removed;
+    return deleteUnder(this.bucket, `${this.userId}/`);
+  }
+}
+
+/**
+ * Remove every object under a prefix, a page at a time. `list` caps at 1000
+ * keys, so each pass lists what is left and deletes that; a pass that dies part
+ * way leaves the rest for a later call, which is what lets the account delete
+ * be repeated rather than resumed.
+ * @param {R2Bucket} bucket
+ * @param {string} prefix
+ * @returns {Promise<number>} how many objects were removed
+ */
+async function deleteUnder(bucket, prefix) {
+  let removed = 0;
+  for (let pass = 0; pass < 20; pass++) {
+    const result = await bucket.list({ prefix });
+    if (result.objects.length === 0) break;
+    await bucket.delete(result.objects.map((obj) => obj.key));
+    removed += result.objects.length;
+  }
+  return removed;
+}
+
+/**
+ * @typedef {Object} RunLogEntry
+ * @property {string} started - when the run began, as the run named it: `2026-09-16T08-00-01Z`
+ * @property {number} bytes
+ * @property {string} uploaded - ISO 8601 UTC instant
+ */
+
+/**
+ * One person's nightly run logs: what each search did, kept off the machine
+ * that ran it.
+ *
+ * In the same bucket as documents but outside their prefix, at
+ * `logs/<user-id>/<track>/<started>.log`, for two reasons:
+ * - Every search downloads every document in its account before it starts
+ *   (scripts/run-search.ps1). Logs under `<user-id>/` would join that list, and
+ *   each night would pull down every night before it.
+ * - One bucket rule on the `logs/` prefix expires them for every account after
+ *   30 days, the same window the backups keep (README.md, "Backups"). A rule
+ *   can only match from the start of a key, so logs have to start with `logs/`.
+ *
+ * Bound to one user like Docs, so no method can address another person's log.
+ * The track and the name are checked by the route before they reach a key.
+ */
+export class RunLogs {
+  /**
+   * @param {R2Bucket} bucket the `DOCS` binding
+   * @param {string} userId whose logs this instance can see
+   */
+  constructor(bucket, userId) {
+    this.bucket = bucket;
+    this.userId = userId;
+  }
+
+  /** @param {string} track */
+  #prefix(track) {
+    return `logs/${this.userId}/${track}/`;
+  }
+
+  /**
+   * Write one run's log, replacing any earlier copy under the same name - so a
+   * run that retries its upload leaves one log, not two.
+   * @param {string} track
+   * @param {string} started
+   * @param {ArrayBuffer} body
+   * @returns {Promise<{bytes: number}>}
+   */
+  async put(track, started, body) {
+    const obj = await this.bucket.put(`${this.#prefix(track)}${started}.log`, body, {
+      httpMetadata: { contentType: "text/plain; charset=utf-8" },
+    });
+    return { bytes: obj.size };
+  }
+
+  /**
+   * A track's logs, newest first. No paging: `list` returns up to 1000, and a
+   * nightly search keeps about 30.
+   * @param {string} track
+   * @returns {Promise<RunLogEntry[]>}
+   */
+  async list(track) {
+    const prefix = this.#prefix(track);
+    const result = await this.bucket.list({ prefix });
+    return result.objects
+      .map((obj) => ({
+        started: obj.key.slice(prefix.length).replace(/\.log$/, ""),
+        bytes: obj.size,
+        uploaded: obj.uploaded.toISOString(),
+      }))
+      .sort((a, b) => (a.started < b.started ? 1 : a.started > b.started ? -1 : 0));
+  }
+
+  /**
+   * @param {string} track
+   * @param {string} started
+   * @returns {Promise<R2ObjectBody|null>}
+   */
+  async get(track, started) {
+    return await this.bucket.get(`${this.#prefix(track)}${started}.log`);
+  }
+
+  /** Every log this person has, across tracks: what deleting the account removes. */
+  async deleteAll() {
+    return deleteUnder(this.bucket, `logs/${this.userId}/`);
+  }
+
+  /** @returns {Promise<number>} how many logs this person has, across tracks */
+  async count() {
+    const result = await this.bucket.list({ prefix: `logs/${this.userId}/` });
+    return result.objects.length;
   }
 }
