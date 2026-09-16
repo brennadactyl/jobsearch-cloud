@@ -19,6 +19,7 @@
 
 import { json, CORS_HEADERS } from "../http.js";
 import { parseDocumentList } from "../db.js";
+import { docxText, DocxError, MIN_WORDS } from "../docx.js";
 import { searchRootOf } from "../tracks.js";
 import { badDocumentPath, isDocumentPath, unknownTrack } from "../validate.js";
 
@@ -30,12 +31,17 @@ import { badDocumentPath, isDocumentPath, unknownTrack } from "../validate.js";
  */
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 
-function tooLarge(bytes) {
+// `field: "resume"` marks the refusal of a resume, so the setup form can show it
+// beside the file it is about rather than at the top of the form.
+const RESUME_FIELD = { field: "resume" };
+
+function tooLarge(bytes, path) {
   return json(
     {
       error:
         `document is ${bytes} bytes; the limit is ${MAX_DOCUMENT_BYTES} ` +
         "(8 MB). Documents are re-downloaded by every nightly run and every backup.",
+      ...(path.startsWith("resumes/") ? RESUME_FIELD : {}),
     },
     413
   );
@@ -163,6 +169,19 @@ export async function handleGetDocument({ docs, params }) {
  * `If-Match` -> `{ path, etag, bytes }`; 412 for a stale `If-Match`, 413 over
  * MAX_DOCUMENT_BYTES.
  *
+ * A Word resume (`resumes/<name>.docx`, any case) is read on upload
+ * (docs/word-resumes-plan.md): its text is written beside it as
+ * `resumes/<name>.txt`, which is what a search reads, and the reply adds
+ * `text_path` and `words`. A .docx this can't read, or one with fewer than
+ * MIN_WORDS words (a scanned image, a template), is a 422 naming why - with
+ * `words` when it was read - and nothing is stored. An older Word file
+ * (`resumes/<name>.doc`) is a 415.
+ *
+ * That text belongs to the Word file: a direct PUT to a resume .txt whose .docx
+ * is stored is a 409 with `paired_with`. The pair is matched on the name
+ * ignoring case, since a run downloads onto a Windows disk where `resume.txt`
+ * and `Resume.txt` are one file.
+ *
  * With `If-Match`, a stale etag writes nothing. A nightly run reads the
  * baseline doc at the start of a long turn and writes its edited copy at the
  * end, so an unconditional write would erase anything saved in between;
@@ -184,11 +203,45 @@ export async function handlePutDocument({ request, docs, params }) {
   // buffered length catches a chunked or understated one. Buffering before the
   // put is what keeps an oversized object from ever being written.
   const declared = Number(request.headers.get("content-length") || 0);
-  if (declared > MAX_DOCUMENT_BYTES) return tooLarge(declared);
+  if (declared > MAX_DOCUMENT_BYTES) return tooLarge(declared, path);
 
   const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > MAX_DOCUMENT_BYTES) return tooLarge(bytes.byteLength);
+  if (bytes.byteLength > MAX_DOCUMENT_BYTES) return tooLarge(bytes.byteLength, path);
 
+  const resume = resumeParts(path);
+  if (resume?.ext === "doc") {
+    return json({ error: `${resume.name} is an older Word file - Save it as .docx or PDF and attach that`, ...RESUME_FIELD }, 415);
+  }
+  if (resume?.ext === "txt") {
+    const wordFile = await pairedWordFile(docs, resume);
+    if (wordFile) return textIsServerOwned(wordFile, "replace");
+  }
+
+  // A Word resume is read on the way in, so a file with nothing readable in it
+  // is refused while the person is still there, and nothing is stored.
+  let extracted = null;
+  if (resume?.ext === "docx") {
+    try {
+      extracted = await docxText(bytes);
+    } catch (err) {
+      if (!(err instanceof DocxError)) throw err;
+      return json({ error: `${resume.name} ${err.message}`, ...RESUME_FIELD }, 422);
+    }
+    if (extracted.words < MIN_WORDS) {
+      return json(
+        {
+          error: `${resume.name} has only ${extracted.words} words of text - if it is a scanned image or a template, attach a PDF or paste the text instead`,
+          words: extracted.words,
+          ...RESUME_FIELD,
+        },
+        422
+      );
+    }
+  }
+
+  // The Word file goes first because it is the conditional write: a stale
+  // If-Match writes nothing at all. Its text follows, unconditionally, and
+  // sending the same file again rewrites both if the second write was lost.
   const written = await docs.put(path, bytes, contentType, ifMatch);
   if (!written) {
     return json(
@@ -199,13 +252,84 @@ export async function handlePutDocument({ request, docs, params }) {
       412
     );
   }
+  if (!extracted) return json({ path, etag: written.etag, bytes: written.bytes });
 
-  return json({ path, etag: written.etag, bytes: written.bytes });
+  const textPath = `resumes/${resume.base}.txt`;
+  await docs.put(textPath, new TextEncoder().encode(extracted.text), "text/plain; charset=utf-8");
+  // A text file of the same name in another case would be the same file on the
+  // Windows disk a run downloads to, and whichever arrived second would win.
+  for (const other of await pairedTextFiles(docs, resume)) {
+    if (other !== textPath) await docs.delete(other);
+  }
+  return json({ path, etag: written.etag, bytes: written.bytes, text_path: textPath, words: extracted.words });
+}
+
+/**
+ * A path under resumes/, split into its file name, base name and lowercased
+ * extension; null for anything else. Word pairing lives only under resumes/.
+ * @param {string} path
+ */
+function resumeParts(path) {
+  if (!path.startsWith("resumes/")) return null;
+  const name = path.slice("resumes/".length);
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return { name, base: name, ext: "" };
+  return { name, base: name.slice(0, dot), ext: name.slice(dot + 1).toLowerCase() };
+}
+
+/**
+ * The stored .docx a resume text file is read from, or null. Matched on the
+ * base name ignoring case, for the same reason the text is: runs download onto
+ * a disk where `resume` and `Resume` are one name.
+ * @param {import("../r2.js").Docs} docs
+ * @param {{base: string}} resume
+ * @returns {Promise<string|null>}
+ */
+async function pairedWordFile(docs, resume) {
+  const want = resume.base.toLowerCase();
+  const match = (await docs.list()).find((d) => {
+    const p = resumeParts(d.path);
+    return p?.ext === "docx" && p.base.toLowerCase() === want;
+  });
+  return match ? match.path : null;
+}
+
+/**
+ * Every stored resume .txt paired with a Word file of this base name, ignoring case.
+ * @param {import("../r2.js").Docs} docs
+ * @param {{base: string}} resume
+ * @returns {Promise<string[]>}
+ */
+async function pairedTextFiles(docs, resume) {
+  const want = resume.base.toLowerCase();
+  return (await docs.list())
+    .map((d) => d.path)
+    .filter((p) => {
+      const parts = resumeParts(p);
+      return parts?.ext === "txt" && parts.base.toLowerCase() === want;
+    });
+}
+
+/**
+ * The refusal for writing or removing a resume's text directly. The text is
+ * read from the Word file, so the Word file is the one to change - otherwise a
+ * hand-edited text file would silently stand in for what was read, and nothing
+ * would show which one a search is using.
+ * @param {string} wordFile
+ * @param {"replace"|"remove"} action
+ */
+function textIsServerOwned(wordFile, action) {
+  const name = wordFile.slice("resumes/".length);
+  return json({ error: `This text is read from ${name} - ${action} that file instead.`, paired_with: wordFile, ...RESUME_FIELD }, 409);
 }
 
 /**
  * DELETE /api/documents/<path> - requires a Bearer token -> `{ path, deleted }`,
  * or 404.
+ *
+ * Removing a Word resume also removes the text read from it, listed in
+ * `removed`. Removing that text on its own is a 409 with `paired_with`, as
+ * writing it is.
  *
  * R2 deletes a missing key without complaint; the 404 tells a caller its path
  * was wrong instead of reporting a cleanup that did nothing.
@@ -217,8 +341,24 @@ export async function handleDeleteDocument({ docs, params }) {
   const path = params[0];
   if (!isDocumentPath(path)) return badDocumentPath(path);
 
+  const resume = resumeParts(path);
+  if (resume?.ext === "txt") {
+    const wordFile = await pairedWordFile(docs, resume);
+    if (wordFile) return textIsServerOwned(wordFile, "remove");
+  }
+
   const deleted = await docs.delete(path);
   if (!deleted) return json({ error: `no document at "${path}"` }, 404);
 
+  // Removing a Word resume removes the text read from it: the pair is one
+  // resume. The Word file goes first, so a failure between the two leaves a
+  // text file with nothing claiming it, which can then be removed directly.
+  if (resume?.ext === "docx") {
+    const removed = [];
+    for (const text of await pairedTextFiles(docs, resume)) {
+      if (await docs.delete(text)) removed.push(text);
+    }
+    return json({ path, deleted: true, removed });
+  }
   return json({ path, deleted: true });
 }

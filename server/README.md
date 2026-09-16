@@ -476,6 +476,14 @@ JSON. All four routes answer 503 on a deployment with no `DOCS` bucket.
 - `PUT /api/documents/<path>` - raw body, optional `If-Match` -> `{ path, etag, bytes }`. With `If-Match`, a stale etag is a 412 and nothing is written - send it whenever the write follows an earlier read, so an edit made in between isn't erased. Without it the write is unconditional (the import script and the setup skill). 8 MB maximum; anything larger is a 413.
 - `DELETE /api/documents/<path>` -> `{ path, deleted }`, or 404 for a path this person doesn't have.
 
+**Word resumes.** A `.docx` put under `resumes/` is read on upload (`src/docx.js`, `docs/word-resumes-plan.md`): its text is written beside it as `resumes/<name>.txt`, which is what a search reads, and the PUT reply adds `text_path` and `words` - `{ path, etag, bytes, text_path, words }`. The reading is a fixed procedure with no dependency: the zip's central directory, the Worker's own `DecompressionStream` for the deflated `word/document.xml`, then the text runs in order, a line per paragraph, and a table's cells joined by tabs with a line per row. Only the main document is read, not headers or footers; a paragraph's tab stops are layout, and a text box Word writes twice is read once.
+
+- A `.docx` that can't be read (not really a zip, password-protected, damaged) or that yields fewer than 50 words (a scanned image, a template) is a `422 { error, words?, field: "resume" }` naming why, and nothing is stored - neither file. Every refusal of a file under `resumes/` carries `field: "resume"`, including a `413`, so a form can show it beside the file.
+- An older Word file, `resumes/<name>.doc`, is a `415` asking for `.docx` or PDF.
+- **The text belongs to the Word file.** A PUT or DELETE of a resume `.txt` whose `.docx` is stored is a `409 { error, paired_with }`: "This text is read from Resume.docx - replace that file instead." Replacing the `.docx` rewrites its text; deleting it deletes its text too, listed in the reply's `removed`.
+- The pair is matched on the name **ignoring case**, because a run downloads documents onto a Windows disk where `resume.txt` and `Resume.txt` are one file. Uploading `Resume.docx` when `resume.txt` is stored replaces that file with `Resume.txt`.
+- With `If-Match`, the `.docx` is the conditional write and goes first, so a stale etag writes neither file. The text follows unconditionally; if that second write is lost, sending the same file again rewrites both.
+
 ### Run logs
 
 What each nightly search did, kept with the tracker rather than only on the
