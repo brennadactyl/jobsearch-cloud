@@ -8,6 +8,7 @@ The system as it exists today. When a change makes one of these wrong, it
 updates the doc in the same commit. CI checks `schema.md` against the
 migrations (`server/verify-schema-doc.mjs`).
 
+- [`backlog.md`](backlog.md) — what is worth building next, ranked
 - [`schema.md`](schema.md) — every D1 table, its columns, and how they relate
 - [`architecture.svg`](architecture.svg) and
   [`architecture.html`](architecture.html) — components and data flow (open the
