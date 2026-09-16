@@ -34,7 +34,7 @@
   everything.
 
 .EXAMPLE
-  .\archive-backups.ps1 -SourceDir C:\VibeCoding\private\backups
+  .\archive-backups.ps1 -SourceDir C:\VibeCoding\jobsearch-cloud\private\backups
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -63,11 +63,6 @@ function Log($msg) {
 
 Log "===== archive-backups starting (running as $env:USERNAME) ====="
 
-if (-not (Test-Path $SourceDir)) {
-    Log "ERROR: source folder $SourceDir does not exist."
-    exit 1
-}
-
 # The day an export was taken, from its name (d1-<db>-yyyy-MM-dd-HHmmss.sql), or
 # $null for a name that doesn't carry one - never pruned.
 function Get-ExportDate([string]$Name) {
@@ -77,61 +72,88 @@ function Get-ExportDate([string]$Name) {
 }
 $cutoff = if ($RetentionDays -gt 0) { (Get-Date).Date.AddDays(-$RetentionDays) } else { $null }
 
+# No early exits from here on: every run reaches the staleness check at the
+# bottom, however it went. That check is the only thing that notices exports
+# have stopped reaching the archive, and the usual cause is this run failing - a
+# source folder that moved fails the same way every night, and a check that only
+# ran on a successful night would never see it.
+$exitCode = 0
 $copied = 0
 $failed = 0
-foreach ($f in Get-ChildItem $SourceDir -Filter $Pattern -File | Sort-Object Name) {
-    $dest = Join-Path $ArchiveDir $f.Name
-    if (Test-Path $dest) { continue }
-    # Already past the window: copying it in would only have it pruned below,
-    # and copied in again tomorrow while the source still holds it.
-    $taken = Get-ExportDate $f.Name
-    if ($cutoff -and $taken -and $taken -lt $cutoff) { continue }
-    try {
-        Copy-Item $f.FullName $dest
-        Log ("archived {0} ({1:N0} bytes)" -f $f.Name, $f.Length)
-        $copied++
-    } catch {
-        Log "ERROR: could not archive $($f.Name) - $($_.Exception.Message)"
-        $failed++
-    }
-}
 
-if ($cutoff) {
-    $exports = @(Get-ChildItem $ArchiveDir -Filter $Pattern -File |
-        ForEach-Object { [pscustomobject]@{ File = $_; Taken = (Get-ExportDate $_.Name) } } |
-        Where-Object { $_.Taken })
-    $inWindow = @($exports | Where-Object { $_.Taken -ge $cutoff })
-    if ($inWindow.Count -eq 0) {
-        Log ("retention: skipped - no export from the last {0} days is here, so nothing older is pruned until one arrives." -f $RetentionDays)
-    } else {
-        $pruned = 0
-        foreach ($e in @($exports | Where-Object { $_.Taken -lt $cutoff })) {
-            try {
-                Remove-Item $e.File.FullName -Force -ErrorAction Stop
-                Log ("pruned {0} (taken {1:yyyy-MM-dd}, older than {2} days)" -f $e.File.Name, $e.Taken, $RetentionDays)
-                $pruned++
-            } catch {
-                Log "ERROR: could not prune $($e.File.Name) - $($_.Exception.Message)"
-                $failed++
-            }
+if (-not (Test-Path $SourceDir)) {
+    Log "ERROR: source folder $SourceDir does not exist, so nothing can be archived."
+    Log "       If the repository moved, re-run protect-backups.ps1 elevated from its new location - it re-registers this task with the right folder."
+    $exitCode = 1
+} else {
+    foreach ($f in Get-ChildItem $SourceDir -Filter $Pattern -File | Sort-Object Name) {
+        $dest = Join-Path $ArchiveDir $f.Name
+        if (Test-Path $dest) { continue }
+        # Already past the window: copying it in would only have it pruned below,
+        # and copied in again tomorrow while the source still holds it.
+        $taken = Get-ExportDate $f.Name
+        if ($cutoff -and $taken -and $taken -lt $cutoff) { continue }
+        try {
+            Copy-Item $f.FullName $dest
+            Log ("archived {0} ({1:N0} bytes)" -f $f.Name, $f.Length)
+            $copied++
+        } catch {
+            Log "ERROR: could not archive $($f.Name) - $($_.Exception.Message)"
+            $failed++
         }
-        Log ("retention: kept exports taken on or after {0:yyyy-MM-dd}; pruned {1}" -f $cutoff, $pruned)
     }
+
+    if ($cutoff) {
+        $exports = @(Get-ChildItem $ArchiveDir -Filter $Pattern -File |
+            ForEach-Object { [pscustomobject]@{ File = $_; Taken = (Get-ExportDate $_.Name) } } |
+            Where-Object { $_.Taken })
+        $inWindow = @($exports | Where-Object { $_.Taken -ge $cutoff })
+        if ($inWindow.Count -eq 0) {
+            Log ("retention: skipped - no export from the last {0} days is here, so nothing older is pruned until one arrives." -f $RetentionDays)
+        } else {
+            $pruned = 0
+            foreach ($e in @($exports | Where-Object { $_.Taken -lt $cutoff })) {
+                try {
+                    Remove-Item $e.File.FullName -Force -ErrorAction Stop
+                    Log ("pruned {0} (taken {1:yyyy-MM-dd}, older than {2} days)" -f $e.File.Name, $e.Taken, $RetentionDays)
+                    $pruned++
+                } catch {
+                    Log "ERROR: could not prune $($e.File.Name) - $($_.Exception.Message)"
+                    $failed++
+                }
+            }
+            Log ("retention: kept exports taken on or after {0:yyyy-MM-dd}; pruned {1}" -f $cutoff, $pruned)
+        }
+    }
+
+    if ($failed -gt 0) { $exitCode = 2 }
 }
 
 $total = (Get-ChildItem $ArchiveDir -Filter $Pattern -File).Count
 $bytes = (Get-ChildItem $ArchiveDir -Filter $Pattern -File | Measure-Object -Property Length -Sum).Sum
 Log ("$copied new, $failed failed; archive now holds {0} file(s), {1:N1} MB" -f $total, ($bytes / 1MB))
 
-# Checked even on a clean run: this is the only place that notices the daily
-# export has stopped.
-$newest = Get-ChildItem $ArchiveDir -Filter $Pattern -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if ($newest -and ((Get-Date) - $newest.LastWriteTime).TotalDays -gt 2) {
-    Log ("WARNING: newest archived backup is {0:N1} days old - the daily export may have stopped running." -f ((Get-Date) - $newest.LastWriteTime).TotalDays)
-    Log "===== done, WITH WARNINGS ====="
-    exit 2
+# Whether exports are still arriving, judged by the newest one's name - the day
+# it was taken - rather than when it was copied in, since a late catch-up copy
+# would otherwise make a week-old export look fresh. Two nights missed is a
+# warning; one can be a machine that was off.
+$newest = @(Get-ChildItem $ArchiveDir -Filter $Pattern -File |
+    ForEach-Object { Get-ExportDate $_.Name } | Where-Object { $_ }) |
+    Sort-Object -Descending | Select-Object -First 1
+if (-not $newest) {
+    Log "WARNING: the archive holds no dated export at all."
+    if ($exitCode -eq 0) { $exitCode = 2 }
+} else {
+    $daysOld = ((Get-Date).Date - $newest).Days
+    if ($daysOld -ge 2) {
+        Log ("WARNING: the newest archived backup was taken {0:yyyy-MM-dd}, {1} days ago - backups have stopped reaching the archive." -f $newest, $daysOld)
+        if ($exitCode -eq 0) { $exitCode = 2 }
+    }
 }
 
-Log "===== done ====="
-if ($failed -gt 0) { exit 2 }
-exit 0
+switch ($exitCode) {
+    0 { Log "===== done =====" }
+    1 { Log "===== done, WITH ERRORS =====" }
+    default { Log "===== done, WITH WARNINGS =====" }
+}
+exit $exitCode
