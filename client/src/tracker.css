@@ -477,6 +477,9 @@ a.hseg:hover{outline:1px solid var(--ink3);outline-offset:1px}
 .s-accent-dim{background:color-mix(in srgb,var(--accent) 42%,transparent)}
 .s-soft{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
 .s-line{background:var(--line)}
+/* The quietest filled segment. --line is too close to an empty track
+   (--surface2) to read as filled when it sits beside one. */
+.s-ink3-dim{background:color-mix(in srgb,var(--ink3) 45%,transparent)}
 .s-crit{background:var(--crit)}
 .s-good{background:var(--good)}
 .seglabels{margin-top:6px;gap:4px 14px}

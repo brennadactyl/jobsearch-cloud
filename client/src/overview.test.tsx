@@ -220,8 +220,12 @@ describe("by location", () => {
       const marks = [...r.breakdown!.querySelectorAll(".seglabel")];
       expect(marks.map((m) => Number(m.getAttribute("data-n"))), r.label).toEqual(r.segments);
       for (const m of marks) expect(m.tagName, r.label).toBe("A");
-      // Filled segments only: an outline reads as an empty box.
-      for (const tone of r.tones) expect(tone).not.toMatch(/\bs-soft\b/);
+      // Filled segments only: an outline reads as an empty box. And none in the
+      // --line shade, which is too close to an empty tier's track to read as filled.
+      for (const tone of r.tones) {
+        expect(tone).not.toMatch(/\bs-soft\b/);
+        expect(tone).not.toMatch(/\bs-line\b/);
+      }
     }
   });
 

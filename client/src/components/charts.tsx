@@ -272,7 +272,7 @@ export interface BarSegment {
   n: number;
   target: DrillTarget;
   tip: string;
-  /** A token class: s-accent, s-accent-dim, s-soft, s-line or s-crit. */
+  /** A token class: s-accent, s-accent-dim, s-soft, s-line, s-ink3-dim or s-crit. */
   tone: string;
 }
 
