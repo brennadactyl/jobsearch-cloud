@@ -4,15 +4,15 @@
   own.
 
 .DESCRIPTION
-  Every run on this machine - each person's nightly search, the application
-  fill, the onboarding build - drives the same `claude` CLI under one Claude
-  account. Two at once is two runs fighting over it: they interleave, slow each
-  other down, and the second one's failures read as search failures.
+  Each person's nightly search and the application fill drive the same
+  `claude` CLI under one Claude account; run-search.ps1 and run-fill.ps1
+  dot-source this. Two at once is two runs fighting over it: they interleave,
+  slow each other down, and the second one's failures read as search failures.
 
-  The schedule used to keep them apart by hand, 30 to 45 minutes at a time. That
-  spacing is a guess about how long a run takes, and it stops being true the
-  moment one person's search gets slower or another person joins. So a run now
-  waits for whichever is going, rather than starting on top of it.
+  Spacing the schedule alone can't prevent that: spacing is a guess about how
+  long a run takes, and it stops being true the moment one person's search
+  gets slower or another person joins. So a run waits for whichever is going,
+  rather than starting on top of it.
 
   The lock is a named mutex, which the operating system releases when the
   process holding it exits, however it exits. A run that is killed, crashes or

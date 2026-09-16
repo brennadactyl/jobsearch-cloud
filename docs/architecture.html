@@ -314,6 +314,7 @@
           <tr><th>Task</th><th>Runs</th><th>When</th><th>Does</th></tr>
         </thead>
         <tbody>
+          <tr><td class="mono">JobSearch-Onboarding</td><td class="mono">run-onboarding.ps1</td><td class="mono">00:00</td><td>writes up the searches of everyone who sent the setup form, and schedules them (<a href="onboarding.md">onboarding.md</a>)</td></tr>
           <tr><td class="mono">JobSearch-&lt;user&gt;-&lt;track&gt;</td><td class="mono">run-search.ps1</td><td>the track's <code class="mono">schedule_time</code>, or 30 minutes after the previous track</td><td>one track's search</td></tr>
           <tr><td class="mono">JobSearch-Applications</td><td class="mono">run-fill.ps1</td><td class="mono">06:30</td><td>reads the postings behind URL-only applications, for every account</td></tr>
           <tr><td class="mono">JobSearchTracker-Backup</td><td class="mono">backup-tracker.ps1</td><td><span class="mono">03:15</span>, as you</td><td>exports D1 to a dated <code class="mono">.sql</code> file, downloads every R2 document beside it, and copies both to an off-machine mirror</td></tr>
@@ -321,12 +322,12 @@
         </tbody>
       </table>
     </div>
-    <p class="note">The search and fill tasks are registered by <code class="mono">scripts/setup-scheduler.ps1</code>. The two backup tasks are registered by <code class="mono">scripts/protect-backups.ps1</code>, a one-time elevated setup, which runs a protected copy of <code class="mono">archive-backups.ps1</code> so SYSTEM never executes a script the everyday account can edit.</p>
+    <p class="note">The onboarding, search and fill tasks are registered by <code class="mono">scripts/setup-scheduler.ps1</code>, onboarding only while <code class="mono">deployment.json</code> holds an <code class="mono">admin_token</code>. Searches and the fill take <code class="mono">scripts/run-lock.ps1</code>, so a run that starts while another is going waits for it. The two backup tasks are registered by <code class="mono">scripts/protect-backups.ps1</code>, a one-time elevated setup, which runs a protected copy of <code class="mono">archive-backups.ps1</code> so SYSTEM never executes a script the everyday account can edit.</p>
   </section>
 
   <section>
     <h2>API routes</h2>
-    <p>The route table is <a href="../server/src/routes/index.js" class="mono">server/src/routes/index.js</a>: the three routes that run before anyone is signed in, and every route that needs a session. Each handler's comment gives its request and response, and <a href="../server/README.md" class="mono">server/README.md</a>'s API section has the prose version.</p>
+    <p>The route table is <a href="../server/src/routes/index.js" class="mono">server/src/routes/index.js</a>, in three lists by credential: the routes that run before anyone is signed in, the routes that require <code class="mono">ADMIN_TOKEN</code>, and every route that needs a session. Each handler's comment gives its request and response, and <a href="../server/README.md" class="mono">server/README.md</a>'s API section has the prose version.</p>
   </section>
 
   <footer>

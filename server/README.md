@@ -23,23 +23,40 @@ leads, applications, page titles and location rules.
   the caller's session, building the one `Db` scoped to that person, and
   dispatching to the route table. It knows about no individual endpoint.
 - `src/routes/index.js` - the route table: which method and path map to which
-  handler, in two lists split by whether the caller is known yet. Adding an
-  endpoint is one line here plus one exported function in the module beside
-  it.
+  handler, in three lists by credential. `PUBLIC_ROUTES` need none (or check
+  `ADMIN_TOKEN` inside the handler), `ADMIN_ROUTES` require `ADMIN_TOKEN` and
+  `SESSION_ROUTES` require a session token; `src/index.js` tries them in that
+  order. Adding an endpoint is one line here plus one exported function in the
+  module beside it.
 - `src/routes/*.js` - one module per resource (`leads.js`, `applications.js`,
   `screened.js`, `config.js`, `coverage.js`, `runs.js`, `prompt.js`,
   `data.js`, `documents.js`, `accounts.js`, `admin.js`, `update.js`,
-  `delisting.js`). Each holds its endpoints' parsing, validation and response
-  shaping, with each endpoint's contract documented on its handler. None
-  touches D1 - every one is handed a `Db`.
+  `delisting.js`, `onboarding.js`). Each holds its endpoints' parsing,
+  validation and response shaping, with each endpoint's contract documented on
+  its handler. Session routes are handed a `Db` and never query D1 themselves.
+  The routes that act before there is a session or across accounts -
+  `accounts.js` and `onboarding.js` - pass `env.DB` to `src/auth.js` and
+  `src/onboarding.js`, and `admin.js` builds its own `Db` for the user it
+  names.
 - `src/http.js` - every `Response` this worker builds: `json()`, `text()`, the
   two canned refusals, and `CORS_HEADERS` on all of them. Route modules never
   construct a `Response` themselves, or their error replies lose the CORS
   header.
 - `src/validate.js` - the checks more than one route makes: `isoDate`, the
-  unknown-track refusals, the exclusion matcher, `isDocumentPath`.
+  unknown-track refusals, loading a person's exclusion matcher,
+  `isDocumentPath`.
+- `src/exclude.js` - whether a company is on a person's excluded list, and
+  `normalize`, the company-name key the shared company list and the rotation
+  join on. No D1, so it can be tested offline.
+- `src/url.js` - `canonicalUrl`, which decides when two URLs are the same
+  posting.
 - `src/auth.js` - passwords (PBKDF2 via Web Crypto), session tokens, and
-  looking a bearer token up to a user. The only file that touches either.
+  looking a bearer token up to a user.
+- `src/onboarding.js` - invites, signup and the queue of setups waiting for
+  the onboarding run. It takes the D1 binding rather than a `Db`, because an
+  invite and a waiting setup belong to no single signed-in person. It also
+  mints the `scheduled-search` session a new account's runs use, so it and
+  `src/auth.js` are the two files that write sessions.
 - `src/db.js` - all D1 access for a person's own data. Every instance is
   bound to one user id at construction, so no query can forget to filter.
 - `src/r2.js` - all R2 access for their documents: resumes, and the per-track

@@ -1,6 +1,6 @@
 ---
 name: add-api-route
-description: Add or change an endpoint on this repo's tracker API (server/src/routes/) - which of the two route lists it belongs in, why handlers never build a Response or touch D1 themselves, where the contract gets documented, and the cross-user isolation checks the change owes verify-local.mjs. Use when adding, changing or removing an /api/ endpoint, a handler in server/src/routes/, or a Db method in server/src/db.js.
+description: Add or change an endpoint on this repo's tracker API (server/src/routes/) - which of the three route lists it belongs in, why handlers never build a Response or touch D1 themselves, where the contract gets documented, and the cross-user isolation checks the change owes verify-local.mjs. Use when adding, changing or removing an /api/ endpoint, a handler in server/src/routes/, or a Db method in server/src/db.js.
 ---
 
 # Adding or changing an API route
@@ -14,15 +14,19 @@ Read `server/README.md`'s "Code layout" section and the header comment on
 
 ## 1. Decide which list it goes in
 
-`server/src/routes/index.js` holds two arrays, and the split is the whole
-access-control story:
+`server/src/routes/index.js` holds three arrays, and the split is the whole
+access-control story. `server/src/index.js` matches them in this order:
 
-- `PUBLIC_ROUTES` runs before anyone is known. **Three entries; keep it
-  three** - exchanging a password for a token, provisioning a user with the
-  admin secret, and purging a retired search with the same secret. The last
-  two name their subject in the body rather than being the caller, so a
-  session is the wrong credential for them. A fourth needs its justification
-  in the comment above the array.
+- `PUBLIC_ROUTES` runs before anyone is known. **Keep it short**: each entry
+  is justified in the comment above the array - exchanging a password for a
+  token, checking an invite and signing up with it, and the two older admin
+  routes (provisioning a user, purging a retired search) that check
+  `ADMIN_TOKEN` inside the handler. A new entry needs its own justification
+  there.
+- `ADMIN_ROUTES` requires `ADMIN_TOKEN`, checked once by the router before any
+  of them runs, so a session token is refused whoever it belongs to. A new
+  operator route goes here, not in `PUBLIC_ROUTES`. These get no `ctx.db`:
+  they name their subject in the body or path.
 - `SESSION_ROUTES` is everything else. By the time one of these runs,
   `ctx.user` is the person the bearer token resolved to and `ctx.db` is a `Db`
   that can only see their rows.

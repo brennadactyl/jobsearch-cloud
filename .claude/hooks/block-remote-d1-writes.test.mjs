@@ -2,12 +2,11 @@
 // and asserts allow/deny. Cases live in a file so this script's own command
 // line doesn't contain the trigger strings.
 //
-// The hook is resolved relative to this file, not by absolute path. It used to
-// be hardcoded to C:/VibeCoding/.claude/hooks/, and when the personal repo was
-// moved down a level that path stopped existing - spawnSync then failed with
-// no stdout, `denied` came out false for every case, and the suite printed a
-// clean sheet of "allowed" while testing nothing at all. Hence also the exit
-// code below: a suite that only prints cannot tell you it has stopped working.
+// The hook is resolved relative to this file, so the suite survives the repo
+// moving. A hook that can't be spawned produces no stdout, which reads as
+// "allowed" for every case - a clean sheet that tested nothing. Hence also the
+// exit code below: a suite that only prints cannot tell you it has stopped
+// working.
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 

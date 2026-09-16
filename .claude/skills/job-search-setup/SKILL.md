@@ -394,7 +394,7 @@ Get-ScheduledTask -TaskName "JobSearch-*" | ForEach-Object {
 ### Intake mode: the same setup, unattended
 
 `scripts/run-onboarding.ps1` runs this skill for someone who filled in the
-setup form instead of talking to an installer (`docs/onboarding-plan.md`). The
+setup form instead of talking to an installer (`docs/onboarding.md`). The
 turn is confined to one staged folder and has no tracker access, so the steps
 above still describe *what to write* - the difference is where the answers come
 from and where the output goes.
@@ -413,16 +413,16 @@ The answers map onto the config like this:
 
 | Answer | Becomes |
 |---|---|
-| `page_title`, `pronouns`, `priority_locations` | `display_title`, `settings.pronouns`, `priority_locations` - the script writes these, not you |
+| `page_title`, `pronouns`, `priority_locations` | `display_title`, `settings.pronouns`, `priority_locations` - already written when the form was sent, not by you |
 | `work_scope` ("Where can you work?") | `geo_scope_line` (a paragraph with worked examples) and `scope_clause` - the only answer that sets where a search may look |
 | `location_limits` ("Anywhere you can't take a job?") | `scope_disqualifier` only. An exclusion never becomes the scope: a search scoped to the one place someone ruled out screens out everything it finds and reports a quiet night |
-| the two together | `preferred_inside`: which ranked places lie inside the scope. None means the two answers contradict each other, and the run stops and asks them rather than building a search that can only find nothing |
+| the two together | checked by the script before anything is posted: the scope prose must name a place from `work_scope`, `scope_disqualifier` must name a place from `location_limits`, and `scope_clause` must not name a place that appears only in `location_limits`. Any miss fails the setup. A send whose ranked places all lie outside `work_scope` was already refused by the server |
 | each role's `name` | the track `label`, and a slug `key` |
 | each role's `titles` | `role_search_line` and `full_description` |
 | each role's `company_kinds` | the track doc's candidate profile, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
 | each role's `rule_outs` | `fit_clause` / `fit_disqualifier`, and `fit_filter_step` only for a real pivot |
 | each role's `min_pay` | part of the fit filter: a *stated* range topping out below it disqualifies; no published range does not |
-| `never_work_for` | `excluded_companies` |
+| `never_work_for` | `excluded_companies` - already written when the form was sent, not by you |
 | `preferences` | the track doc's candidate profile, weighed - never turned into a rule-out |
 
 Write `out\config.json` in the shape the run's prompt gives, and one

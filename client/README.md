@@ -75,7 +75,7 @@ empty until the night. A notice on the tracker says what that night's run still
 owes them, or carries the run's own note when it couldn't finish — it retries by
 itself, and there is nothing to answer. The send is write-once, so there is no
 way back to the form and no second send; the server refuses one. See
-[`../docs/instant-setup-plan.md`](../docs/instant-setup-plan.md).
+[`../docs/onboarding.md`](../docs/onboarding.md).
 
 ## One-time setup
 

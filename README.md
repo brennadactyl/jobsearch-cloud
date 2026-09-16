@@ -38,8 +38,19 @@ GitHub shows `.html` files as source).
 ```
 .claude/skills/
   job-search-setup/           AI-assisted onboarding - see Setup below
+  add-target-company/         puts an employer on the shared company list
+  change-search-prompt/       changes what a nightly search does, everywhere it is written
+  edit-tracker-page/          changes the tracker page in client/
+  add-api-route/              adds or changes an API endpoint
+  add-d1-migration/           changes the D1 schema
+  verify-and-deploy/          verifies a change locally and ships it
+.claude/hooks/
+  block-remote-d1-writes.mjs  refuses an agent's command that writes to or deletes the live D1
+  block-remote-d1-writes.test.mjs   its test - see below
 docs/
   README.md                   which docs describe the system today and which are plans
+  glossary.md                 what the codebase's own words mean
+  onboarding.md               from an invite link to a working nightly search
   schema.md                   every D1 table as the migrations leave it
   architecture.svg           the diagram above
   architecture.html           full architecture write-up (open in a browser)
@@ -48,6 +59,8 @@ scripts/
   run-search.ps1              runs one track for one person (fetches its prompt AND documents from the API)
   tracker.ps1                  every API call a run makes, as a command - copied into the run directory
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
+  run-onboarding.ps1           writes up the searches of everyone who sent the setup form - every account, one run
+  run-lock.ps1                 one search or fill at a time on this machine - dot-sourced, not run on its own
   import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
   setup-scheduler.ps1          registers every person's tracks as daily Windows Scheduled Tasks
   new-invite.ps1               makes an invite link to add a person, lists what became of each, or revokes one
@@ -83,6 +96,17 @@ private.example/
 Deploy `server/` and `client/` separately. A change to one needs the other
 redeployed only when it depends on something new - `server/README.md`'s API
 section says what the server supports.
+
+The hook in `.claude/hooks/` is registered in `.claude/settings.json` and runs
+before every shell command an agent issues in this repo. CI doesn't run its
+test, so run it after changing the hook or its cases
+(`block-remote-d1-writes.cases.json`):
+
+```bash
+node .claude/hooks/block-remote-d1-writes.test.mjs
+```
+
+It exits 1 if any case is allowed or refused wrongly.
 
 ## Setup on any machine
 
@@ -182,6 +206,32 @@ cover the CLI path.
 8. **Set up backups** - see [Backups](#backups) below. Nothing above leaves a
    copy of your data anywhere but Cloudflare.
 
+### The nightly schedule
+
+One machine runs everyone's tasks, in this order (local time):
+
+| Time | Task | Script | Registered by |
+|---|---|---|---|
+| 00:00 | `JobSearch-Onboarding` | `run-onboarding.ps1` - writes up new signups' searches | `setup-scheduler.ps1`, only while `deployment.json` holds an `admin_token` |
+| each track's `schedule_time` | `JobSearch-<id8>-<track>` | `run-search.ps1` - one track's search | `setup-scheduler.ps1` |
+| 03:15 | `JobSearchTracker-Backup` | `backup-tracker.ps1` | `protect-backups.ps1` |
+| 03:45 | `JobSearchTracker-ArchiveBackups` | `archive-backups.ps1`, as SYSTEM | `protect-backups.ps1` |
+| 06:30 | `JobSearch-Applications` | `run-fill.ps1` - the application fill, every account | `setup-scheduler.ps1` |
+
+The onboarding run picks a new search's `schedule_time` inside 01:00-05:45, 45
+minutes clear of every other search and of the backup (see
+[docs/onboarding.md](docs/onboarding.md#slots)). A track with no
+`schedule_time` is given one from 08:00, 30 minutes apart, shared across every
+account on the machine. Searches and the fill also take `run-lock.ps1`, so one
+that starts while another is still going waits for it instead of running on
+top of it.
+
+**A task runs the scripts in the checkout that registered it.**
+`setup-scheduler.ps1` registers each task with its own folder's path, and
+`run-search.ps1` copies `tracker.ps1` into the run directory fresh every run.
+So an edit to `scripts\` reaches the nightly runs once it is in that checkout -
+and a worktree that re-registers the tasks points them at the worktree.
+
 Tasks run daily while you're logged in, with no stored Windows password. They
 wake a sleeping machine and catch up a missed slot once it's available, but
 nothing wakes a machine that is shut down or hibernated - the run waits until
@@ -231,8 +281,9 @@ It prints a link that works once, for 14 days. Send it to them. They:
 2. fill in the setup form on the tracker page: the roles they want, where they
    can work, and their resume.
 
-That night the onboarding run creates their folder under `private\<their id>\`,
-posts their search config and track docs, and schedules their searches in a
+Sending the form creates their tracker at once, with a tab per role. That
+night the onboarding run creates their folder under `private\<their id>\`,
+writes up each search and its track doc, and schedules their searches in a
 free slot later the same night. In the morning their tracker has leads. When
 the machine has no free overnight slot left, their setup is marked failed and
 the page tells them why, rather than stacking a search on top of another.

@@ -9,6 +9,8 @@ updates the doc in the same commit. CI checks `schema.md` against the
 migrations (`server/verify-schema-doc.mjs`).
 
 - [`backlog.md`](backlog.md) — what is worth building next, ranked
+- [`glossary.md`](glossary.md) — what the codebase's own words mean: track, feed group, sweep, drill, write-up
+- [`onboarding.md`](onboarding.md) — from an invite link to a working nightly search, and the rules that hold it together
 - [`schema.md`](schema.md) — every D1 table, its columns, and how they relate
 - [`architecture.svg`](architecture.svg) and
   [`architecture.html`](architecture.html) — components and data flow (open the
