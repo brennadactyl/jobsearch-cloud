@@ -31,15 +31,28 @@
   .\import-documents.ps1 -User ab266b6c-00cc-45d1-92ac-cdad412c1558
 #>
 param(
-    [string]$DataDir = $(
-        if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
-        else { Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..")).Path "private" }
-    ),
+    [string]$DataDir,
     [string]$User,
     [switch]$WhatIf
 )
 
 $ErrorActionPreference = "Stop"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder is resolved here instead.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
+# A missing script folder is fine when -DataDir is given, so only a missing data folder is refused.
+if (-not $DataDir) {
+    $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
+               elseif ($scriptDir) { Join-Path $scriptDir "..\private" }
+               else { "" }
+}
+if (-not $DataDir) {
+    throw "No data folder. Pass -DataDir, or set JOB_SEARCH_DATA_DIR. See private.example/README.md."
+}
 $ProgressPreference = "SilentlyContinue"   # PS 5.1 renders a progress bar per request
 
 # Kept in step with server/src/validate.js by hand; a mismatch surfaces as the

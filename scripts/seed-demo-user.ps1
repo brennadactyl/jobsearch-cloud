@@ -50,12 +50,25 @@ param(
 
     [string]$Password,
 
-    [string]$DataFile = (Join-Path $PSScriptRoot "demo-user.json"),
+    [string]$DataFile,
 
     [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder, which is where demo-user.json sits, is resolved here.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
+if (-not $DataFile) {
+    if (-not $scriptDir) {
+        throw "Can't work out where this script lives, so it can't find demo-user.json. Pass -DataFile, or run it by its full path."
+    }
+    $DataFile = Join-Path $scriptDir "demo-user.json"
+}
 
 # --------------------------------------------------------------- preflight --
 

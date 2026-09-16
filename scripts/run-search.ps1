@@ -48,12 +48,26 @@ param(
 
     [string]$User,
 
-    [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
+    [string]$DataDir,
 
     [switch]$UseLocalFiles
 )
 
 $ErrorActionPreference = "Stop"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder is resolved here instead. It also finds run-lock.ps1 and
+# the tracker helper this run copies into its work dir.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
+if (-not $scriptDir) {
+    throw "Can't work out where this script lives, so it can't find run-lock.ps1 or tracker.ps1. Run it by its full path."
+}
+if (-not $DataDir) {
+    $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $scriptDir "..\private" }
+}
 
 if (-not (Test-Path $DataDir)) {
     Write-Error "Data dir not found: $DataDir`nSet -DataDir, or the JOB_SEARCH_DATA_DIR environment variable, to your private job-search data folder."
@@ -254,7 +268,7 @@ function Stop-Run($reason, $userMessage) {
 # Taken here, before any tracker call, so a run that waits an hour reads its
 # documents and its prompt when it is about to use them rather than an hour
 # stale.
-. (Join-Path $PSScriptRoot "run-lock.ps1")
+. (Join-Path $scriptDir "run-lock.ps1")
 if (-not (Enter-RunLock)) {
     Stop-Run "another run on this machine was still going after $RUN_LOCK_MAX_WAIT_MINUTES minutes - nothing was searched or synced" `
         "The machine was busy with another run for $RUN_LOCK_MAX_WAIT_MINUTES minutes. See $logFile."
@@ -410,7 +424,7 @@ $cwd = if ($runDir) { $runDir } else { $workDir }
 # The run's shell is POSIX and cannot execute a .ps1, hence the shim. It is
 # written with LF endings and no BOM: a CR or a BOM ahead of the shebang makes
 # the file unrunnable rather than producing a readable error.
-$helperSrc = Join-Path $PSScriptRoot "tracker.ps1"
+$helperSrc = Join-Path $scriptDir "tracker.ps1"
 if (-not (Test-Path $helperSrc)) {
     Stop-Run "$helperSrc is missing - the run would have no way to sync anything" "scripts\tracker.ps1 not found. The search prompt invokes it for every API call."
 }

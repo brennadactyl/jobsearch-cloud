@@ -48,11 +48,29 @@ param(
     [Parameter(ParameterSetName = "Mint")][ValidateRange(1, 30)][int]$Days = 14,
     [Parameter(ParameterSetName = "List", Mandatory = $true)][switch]$List,
     [Parameter(ParameterSetName = "Revoke", Mandatory = $true)][int]$Revoke,
-    [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
+    [string]$DataDir,
     [string]$DeploymentFile
 )
 
 $ErrorActionPreference = "Stop"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder is resolved here instead. Otherwise running this by path
+# from another directory fails inside Join-Path, naming a line rather than the
+# folder it could not find.
+# The same three lines resolve the script folder in every scripts/*.ps1 that needs it; change them together.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot }
+             elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path }
+             else { "" }
+# A missing script folder is fine when -DataDir is given, so only a missing data folder is refused.
+if (-not $DataDir) {
+    $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
+               elseif ($scriptDir) { Join-Path $scriptDir "..\private" }
+               else { "" }
+}
+if (-not $DataDir) {
+    throw "No data folder to read deployment.json from. Pass -DataDir, or set JOB_SEARCH_DATA_DIR. See private.example/README.md."
+}
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # One file for the URL and the token together, so an operator credential can
