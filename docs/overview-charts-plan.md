@@ -100,6 +100,12 @@ A table with one row per search, plus a row for applications added by hand
   every number column has a fixed width, so the numbers sit together at the
   right rather than spread across gaps, and nothing leaves the card's right side
   empty.
+- **On a phone the table stacks.** Below 640px each search is a block: its name
+  and run stamp, then one wrapping line of its numbers - `17 found · 12 open · 2
+  not a fit · 3 applied 18% · 2 responded 67%` - each count still its own link,
+  each rate muted beside it. Nothing scrolls sideways, and the run stamp stays
+  one sentence rather than breaking on its separators. "Added by hand" and
+  Total stack the same way. The location rows already stack at that width.
 - Rows are sorted by the configured track order, not by any rate, so a row
   stays where you expect it.
 
