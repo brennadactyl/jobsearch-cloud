@@ -224,10 +224,22 @@ export async function submitIntake(answers: IntakeAnswers): Promise<string[]> {
 }
 
 const documentWriteSchema = z.object({ path: z.string() });
+/**
+ * A stored document. A Word resume also answers with the text the server read
+ * from it: where that text is kept, and how many words it holds.
+ */
+const documentPutSchema = documentWriteSchema.extend({
+  text_path: z.string().optional(),
+  words: z.number().optional(),
+});
+export type StoredDocument = z.infer<typeof documentPutSchema>;
 
-/** Stores a file among this person's documents, e.g. `resumes/Sam Resume.pdf`. */
-export function putDocument(path: string, file: Blob): Promise<{ path: string }> {
-  return request(`/api/documents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, documentWriteSchema, {
+/**
+ * Stores a file among this person's documents, e.g. `resumes/Sam Resume.pdf`.
+ * A refusal carries the server's own sentence, starting with the file's name.
+ */
+export function putDocument(path: string, file: Blob): Promise<StoredDocument> {
+  return request(`/api/documents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, documentPutSchema, {
     method: "PUT",
     raw: file,
   });

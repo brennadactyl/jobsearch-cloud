@@ -25,8 +25,17 @@ export function inviteNotice(reason: InviteReason | string): string {
   }
 }
 
-/** A headless run reads text and PDFs; a Word file, RTF or image needs its text pasted too. */
-export const READABLE_RESUME_EXTENSIONS = ["txt", "md", "pdf"] as const;
+/**
+ * What a search can read: text and PDFs as they are, and a Word file through the
+ * text the server extracts from it on upload. An older .doc, RTF or image needs
+ * its text pasted too.
+ */
+export const READABLE_RESUME_EXTENSIONS = ["pdf", "docx", "txt", "md"] as const;
+
+/** The older Word format, refused before upload: nothing reliably reads it. */
+export function isOlderWordFile(filename: string): boolean {
+  return /\.doc$/i.test(filename);
+}
 
 export function isReadableResume(filename: string): boolean {
   const ext = filename.toLowerCase().split(".").pop() ?? "";
@@ -85,7 +94,9 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
   const found: SetupProblems = {};
   if (!answers.resume_text.trim()) {
     if (!files.length) found.attach = "Attach your resume or paste its text.";
-    else if (!files.some(isReadableResume)) found.attach = "We can't read Word files overnight. Paste the text too.";
+    else if (!files.some(isReadableResume)) {
+      found.attach = "We can't read that file overnight. Attach a PDF, Word (.docx), .txt or .md file, or paste the text too.";
+    }
   }
   // The run builds the search's scope from this answer alone. Left empty, the
   // scope would fall back to whatever else mentions a place - an exclusion

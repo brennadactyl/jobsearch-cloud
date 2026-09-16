@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   emptyAnswers,
   inviteNotice,
+  isOlderWordFile,
   isReadableResume,
   retriesEnded,
   safeDocumentName,
@@ -21,12 +22,19 @@ describe("inviteNotice", () => {
 });
 
 describe("isReadableResume", () => {
-  it("reads text and PDFs overnight", () => {
-    expect(["resume.txt", "Resume.MD", "resume.pdf", "Resume.PDF"].every(isReadableResume)).toBe(true);
+  it("reads PDFs, Word files, and text", () => {
+    expect(["resume.pdf", "Resume.PDF", "resume.docx", "Resume.DOCX", "resume.txt", "Resume.MD"].every(isReadableResume)).toBe(true);
   });
 
   it("holds out for pasted text on a format the run can't open", () => {
-    expect(["resume.docx", "resume.doc", "resume.rtf", "resume.pages", "scan.png", "txt"].some(isReadableResume)).toBe(false);
+    expect(["resume.doc", "resume.rtf", "resume.pages", "scan.png", "txt"].some(isReadableResume)).toBe(false);
+  });
+});
+
+describe("isOlderWordFile", () => {
+  it("picks out the older .doc format, not .docx", () => {
+    expect(["resume.doc", "Resume.DOC"].every(isOlderWordFile)).toBe(true);
+    expect(["resume.docx", "resume.doc.pdf", "doc"].some(isOlderWordFile)).toBe(false);
   });
 });
 
@@ -74,11 +82,17 @@ describe("setupProblems", () => {
     expect(setupProblems(noText, ["resume.pdf"]).attach).toBeUndefined();
   });
 
-  it("refuses a Word file alone, and lets it through once text is pasted", () => {
+  it("sends a Word file on its own, since the server reads its text", () => {
+    expect(setupProblems({ ...ready, resume_text: "" }, ["resume.docx"]).attach).toBeUndefined();
+  });
+
+  it("refuses a file nothing can read alone, and lets it through once text is pasted", () => {
     const noText = { ...ready, resume_text: "" };
-    expect(setupProblems(noText, ["resume.docx"]).attach).toBe("We can't read Word files overnight. Paste the text too.");
-    expect(setupProblems(noText, ["resume.docx", "resume.txt"]).attach).toBeUndefined();
-    expect(setupProblems(ready, ["resume.docx"]).attach).toBeUndefined();
+    expect(setupProblems(noText, ["resume.rtf"]).attach).toBe(
+      "We can't read that file overnight. Attach a PDF, Word (.docx), .txt or .md file, or paste the text too.",
+    );
+    expect(setupProblems(noText, ["resume.rtf", "resume.txt"]).attach).toBeUndefined();
+    expect(setupProblems(ready, ["resume.rtf"]).attach).toBeUndefined();
     expect(setupProblems(noText, []).attach).toBe("Attach your resume or paste its text.");
   });
 
