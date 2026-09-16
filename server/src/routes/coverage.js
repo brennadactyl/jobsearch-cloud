@@ -122,11 +122,12 @@ export async function handleGetCoverage({ db, params, url }) {
 
 /**
  * POST /api/coverage - requires a Bearer token. Body
- * `{ search, on?, swept: [{company, board?, endpoint?, url_shape?,
+ * `{ search, on?, start_here?, swept: [{company, board?, endpoint?, url_shape?,
  * dead_signal?, wall?, note?}] }` -> `{ recorded, added, excluded, on, cursor,
  * shared, withheld }`, or `{ recorded: 0, excluded, on }` when every company is
- * excluded; 400 for a missing search, no companies, or a wall sent without a
- * date, 403 for a demo account, 404 for an unknown track.
+ * excluded; 400 for a missing search, no companies, a wall sent without a
+ * date, or `start_here` sent with one, 403 for a demo account, 404 for an
+ * unknown track.
  *
  * Records what a run attempted, not what it found: a company whose board was
  * blocked still gets stamped, or the rotation retries it every run and the rest
@@ -163,6 +164,21 @@ export async function handleRecordSweeps({ request, db, user }) {
   // I haven't swept them" - seeding, which stamps nothing (see
   // db.recordSweeps).
   const on = body.on === "" ? "" : isoDate(body.on) || today();
+
+  // Seeding a new search with the companies its person named, and starting its
+  // rotation there (docs/onboarding-plan.md). Without it a new track's cursor
+  // is 0 and seeded companies are appended past the end of the list, so the
+  // search reaches the names it was given last - a week of nights on a list
+  // this size.
+  //
+  // A seeding flag only. A run reporting a real sweep advances the cursor by
+  // the rule at the bottom of this function, and a second rule moving the same
+  // number from the same call is two answers to one question - so it is refused
+  // rather than ignored, and the caller hears which call it belongs on.
+  const startHere = body.start_here === true;
+  if (startHere && on !== "") {
+    return json({ error: "start_here starts a new search at the companies it is seeded with - send it with `on`: \"\"" }, 400);
+  }
 
   // This route adds any company it's handed to the rotation, so an excluded
   // company reported once would otherwise be served every cycle.
@@ -287,7 +303,9 @@ export async function handleRecordSweeps({ request, db, user }) {
   //
   // Committed only after the sweep is recorded, so a run that dies before
   // reporting leaves the cursor where it was. Seeding (`on: ""`) claims no
-  // coverage, so it doesn't move the cursor.
+  // coverage, so it never advances the cursor; `start_here` is the one thing
+  // that moves it on a seeding call, and it sets it backwards, to the
+  // companies just added.
   //
   // The served slice is rebuilt with sliceAt, as GET built it. Companies outside
   // it are recorded but don't move the cursor: one already on the list can sit
@@ -307,6 +325,26 @@ export async function handleRecordSweeps({ request, db, user }) {
     const served = sliceAt(log.filter((c) => !isExcluded(c.company)), cursor);
     const lastServed = served.findLast((c) => reported.has(normalize(c.company)));
     if (lastServed) cursor = await db.setSweepCursor(key, lastServed.position + 1);
+  } else if (startHere && added) {
+    // The first seeded company in rotation order - the lowest position, since
+    // the batch was shuffled before it was positioned. The rotation wraps, so
+    // starting here skips nothing: the rest of the list follows tonight's
+    // batch and comes round on later nights.
+    //
+    // Read back from the list rather than taken from the positions this call
+    // handed out. addCompanies does nothing on conflict, so a company another
+    // account added in the same moment keeps the position it already had, and
+    // the cursor has to name a position that exists. A cursor past the end of
+    // the list is not an error - sliceAt wraps - but it would quietly start
+    // the search at position 0, which is the behaviour this flag exists to
+    // avoid.
+    //
+    // Only companies this call added count. If every name was already on the
+    // list there is nothing to start at - they sit wherever the list already
+    // put them - so the cursor stays where it is and `added: 0` says why.
+    const listed = await db.getCoverage(key);
+    const seeded = listed.filter((c) => joining.has(normalize(c.company))).map((c) => c.position);
+    if (seeded.length) cursor = await db.setSweepCursor(key, Math.min(...seeded));
   }
 
   return json({ recorded, added, excluded, on, cursor, shared: shared.written, withheld });
