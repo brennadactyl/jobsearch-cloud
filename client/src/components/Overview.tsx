@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 import type { usePinnedLayout } from "../ui/hooks";
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS, LABELS } from "../domain/constants";
-import { drillCount, drillRows, type DrillTarget, type RowSource } from "../domain/drills";
+import { GONE_QUIET_DAYS, drillCount, drillRows, type DrillTarget, type RowSource } from "../domain/drills";
 import { shortDate } from "../domain/format";
 import {
   MIN_FOR_RESPONSE_RATE,
@@ -81,7 +81,7 @@ export default function Overview({
       drill: "applied",
     },
     { k: "In conversation", f: "screen or loop stage", tab: "applications", drill: "in-conversation" },
-    { k: "Gone quiet", f: "applied 14+ days ago", tab: "applications", drill: "gone-quiet" },
+    { k: "Gone quiet", f: `applied ${GONE_QUIET_DAYS}+ days ago`, tab: "applications", drill: "gone-quiet" },
   ];
 
   return (

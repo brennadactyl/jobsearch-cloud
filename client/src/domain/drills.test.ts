@@ -5,8 +5,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
-import { DRILLS, drillCount, drillKeeps, drillLabel, drillRows, leadRows, appRows, type DrillTarget } from "./drills";
-import { NOW, applications, leads, settings, tracks } from "./fixture";
+import { DRILLS, GONE_QUIET_DAYS, drillCount, drillKeeps, drillLabel, drillRows, leadRows, appRows, type DrillTarget } from "./drills";
+import { NOW, applications, daysAgo, leads, settings, tracks } from "./fixture";
 
 const src = { leads, applications, settings, tracks, screened: [] };
 
@@ -112,6 +112,15 @@ describe("individual drills", () => {
     // reached one - which is what the funnel row it opens from counted.
     const rows = drillRows({ tab: "applications", drill: "reached-dateRecruiterScreen" }, src);
     expect(rows.map((r) => r.company)).toContain("Rho");
+  });
+
+  it("gone-quiet includes an application sent exactly the threshold's days ago, as its label's '+' says", () => {
+    const edge = [
+      { ...applications[2], id: 901, company: "OnTheDay", dateApplied: daysAgo(GONE_QUIET_DAYS) },
+      { ...applications[2], id: 902, company: "DayBefore", dateApplied: daysAgo(GONE_QUIET_DAYS - 1) },
+    ];
+    const rows = drillRows({ tab: "applications", drill: "gone-quiet" }, { ...src, applications: edge });
+    expect(rows.map((r) => r.company)).toEqual(["OnTheDay"]);
   });
 
   it("gone-quiet excludes rows that have moved on", () => {
