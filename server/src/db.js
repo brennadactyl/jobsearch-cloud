@@ -487,9 +487,9 @@ export class Db {
    *
    * The UPDATE is built from WRITEUP_FIELDS, not from the caller's keys, so
    * `label`, `sort_order` and the settings the form owns cannot be reached
-   * through this method whatever it is handed. That is the point of it: the
-   * run used to GET the config, edit it and POST the whole thing back, which
-   * re-wrote the form's fields as a side effect every night it ran.
+   * through this method whatever it is handed. That is the point of it: a run
+   * that read the whole config, edited it and posted it back would re-write the
+   * form's fields as a side effect every night it ran.
    *
    * The scope wording is per-account rather than per-track (WRITEUP_SETTINGS),
    * so it travels with the same call and lands in the same batch: a run that
