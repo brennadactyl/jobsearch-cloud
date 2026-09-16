@@ -35,7 +35,7 @@ import {
   handleRequeueAutofill,
   handleSetApplicationStatus,
 } from "./applications.js";
-import { handleGetConfig, handleSetConfig } from "./config.js";
+import { handleGetConfig, handleSetConfig, handleWriteUp } from "./config.js";
 import { handleGetCoverage, handleRecordSweeps } from "./coverage.js";
 import { handleGetData } from "./data.js";
 import {
@@ -139,6 +139,9 @@ export const SESSION_ROUTES = [
   ["GET", "/api/data", handleGetData],
   ["GET", "/api/config", handleGetConfig],
   ["POST", "/api/config", handleSetConfig],
+  // The overnight run's only way into a track's config, and the form's fields
+  // are unreachable through it - see handleWriteUp.
+  ["POST", "/api/writeup", handleWriteUp],
   ["POST", "/api/leads", handleAddLeads],
   ["POST", "/api/runs", handleRecordRun],
   ["POST", "/api/screened", handleAddScreened],

@@ -2057,7 +2057,7 @@ const baseAnswers = {
   page_title: `${newName}'s Job Search`, pronouns: "", resume_text: "Ten years of backend engineering.",
   resume_files: [], location_limits: "", locations_first: "Seattle, Remote",
   priority_locations: [{ label: "Seattle", anyOf: ["seattle"] }, { label: "Remote", anyOf: ["remote"] }],
-  roles: [intakeRole], never_work_for: "", preferences: "",
+  roles: [intakeRole], never_work_for: "", preferences: "", work_scope: "Seattle, or remote in the US",
 };
 const postIntake = (tok, answers) => req("POST", "/api/intake", { token: tok, body: { answers } });
 check("a new account has no setup yet",
@@ -2081,22 +2081,115 @@ for (const [why, rules] of [
 check("a refused setup stores nothing",
   (await req("GET", "/api/intake", { token: N_TOK })).json.intake === null);
 
-const sentIntake = await postIntake(N_TOK, baseAnswers);
-check("a complete setup is stored as pending, with the answers exactly as sent",
-  sentIntake.status === 200 && sentIntake.json.intake.status === "pending" && !!sentIntake.json.intake.sent_at &&
-  JSON.stringify(sentIntake.json.intake.answers) === JSON.stringify(baseAnswers), JSON.stringify(sentIntake.json));
-await new Promise((resolve) => setTimeout(resolve, 15));
-const editedIntake = await postIntake(N_TOK, { ...baseAnswers, preferences: "Small teams" });
-check("editing a waiting setup replaces the answers and keeps when it was first sent",
-  editedIntake.json.intake.answers.preferences === "Small teams" &&
-  editedIntake.json.intake.sent_at === sentIntake.json.intake.sent_at &&
-  editedIntake.json.intake.updated_at > sentIntake.json.intake.updated_at,
-  JSON.stringify({ first: sentIntake.json.intake.sent_at, edited: editedIntake.json.intake }));
+// The scope check runs on the send, while the person is still on the form,
+// rather than overnight (docs/instant-setup-plan.md).
+check("setup needs somewhere the person can work",
+  (await postIntake(N_TOK, { ...baseAnswers, work_scope: "  " })).json.field === "work_scope");
+const outsideScope = await postIntake(N_TOK, { ...baseAnswers, work_scope: "Berlin only" });
+check("and the places ranked first have to be inside it, with both answers named",
+  outsideScope.status === 400 && outsideScope.json.field === "work_scope" &&
+  outsideScope.json.error.includes("Berlin only") && outsideScope.json.error.includes("Seattle"),
+  JSON.stringify(outsideScope.json));
+// Loose on purpose: one ranked place mentioned anywhere in the scope is enough,
+// because this refusal stops someone mid-form.
+check("one match is enough - a scope naming only some of them passes",
+  (await postIntake(N_TOK, { ...baseAnswers, work_scope: "anywhere around seattle" })).status === 200);
+check("a refused setup stores nothing and builds no tracks",
+  (await req("GET", "/api/intake", { token: B_TOK })).json.intake === null &&
+  (await req("GET", "/api/config", { token: B_TOK })).json.tracks.every((t) => t.key !== "engineering"));
+
+// The account above sent successfully, so the rest of the send's effects are
+// checked on a second one - the send is write-once.
+const instInvite = await invAdmin("POST", "/api/invites", { note: `instant ${invRun}` });
+const instName = `Instant ${invRun}`;
+const instSignup = await req("POST", "/api/signup", {
+  body: { code: instInvite.json.code, name: instName, password: "instant-long-password" } });
+const I_TOK = instSignup.json.token, I_ID = instSignup.json.user.id;
+const instAnswers = {
+  ...baseAnswers, page_title: "", pronouns: "she/her", never_work_for: "Bad Corp, Worse Inc",
+  roles: [intakeRole, { ...intakeRole, name: "Product & Design" }],
+};
+const built = await postIntake(I_TOK, instAnswers);
+check("a sent setup answers with the tracks it built, not the tracker",
+  built.status === 200 && built.json.ok === true &&
+  JSON.stringify(built.json?.tracks) === JSON.stringify(["engineering", "product-design"]),
+  JSON.stringify(built.json));
+const builtConfig = (await req("GET", "/api/config", { token: I_TOK })).json;
+check("the tracker exists the moment setup is sent: tabs, in form order, labelled as typed",
+  builtConfig.tracks?.length === 2 &&
+  builtConfig.tracks?.[0]?.key === "engineering" && builtConfig.tracks?.[0]?.label === "Engineering" &&
+  builtConfig.tracks?.[1]?.label === "Product & Design" && builtConfig.tracks?.[1]?.sort_order === 1,
+  JSON.stringify(builtConfig.tracks.map((t) => ({ key: t.key, label: t.label, sort_order: t.sort_order }))));
+check("and the settings the form owns, with a title defaulted from the name",
+  builtConfig.settings?.display_title === `${instName}'s Job Search` &&
+  builtConfig.settings?.pronouns === "she/her" &&
+  JSON.stringify(builtConfig.settings?.excluded_companies) === JSON.stringify(["Bad Corp", "Worse Inc"]) &&
+  JSON.stringify(builtConfig.settings?.priority_locations) === JSON.stringify(baseAnswers.priority_locations),
+  JSON.stringify(builtConfig.settings));
+check("nothing the run owns is written on send",
+  builtConfig.tracks?.every((t) => t.role_search_line === "" && t.fit_clause === "" && t.schedule_time === "") &&
+  !builtConfig.settings?.geo_scope_line, JSON.stringify(builtConfig.tracks[0]));
+check("a second send is refused whatever the state - there is no re-send",
+  (await postIntake(I_TOK, instAnswers)).status === 409);
 check("one person's setup is invisible to another",
   (await req("GET", "/api/intake", { token: B_TOK })).json.intake === null);
+
+// A half-built search must not run: prompt.js would otherwise compose one
+// around its "roles matching the resume" default and a run would carry it out
+// all night and report success.
+const unwritten = await req("GET", "/api/prompt/engineering", { token: I_TOK });
+check("a track with no role_search_line has no prompt, and the refusal names the field",
+  unwritten.status === 409 && unwritten.json.field === "role_search_line", JSON.stringify(unwritten.json));
+
+// The ownership split, in the direction the run could break it.
+const formFieldWrite = await req("POST", "/api/writeup", { token: I_TOK, body: {
+  search: "engineering", label: "Renamed", role_search_line: "engineering manager roles" } });
+check("the write-up route refuses a form-owned field, naming it, rather than dropping it",
+  formFieldWrite.status === 400 && formFieldWrite.json.field === "label", JSON.stringify(formFieldWrite.json));
+check("and nothing in that call was written",
+  (await req("GET", "/api/config", { token: I_TOK })).json.tracks?.[0]?.role_search_line === "");
+const writeUp = await req("POST", "/api/writeup", { token: I_TOK, body: {
+  search: "engineering", role_search_line: "engineering manager roles", fit_clause: "must be remote",
+  schedule_time: "01:00", geo_scope_line: "Search the US." } });
+check("the run writes its own fields, per-track and per-account, in one call",
+  writeUp.status === 200 && writeUp.json.written?.includes("role_search_line") &&
+  writeUp.json.written?.includes("geo_scope_line"), JSON.stringify(writeUp.json));
+const afterWriteUp = (await req("GET", "/api/config", { token: I_TOK })).json;
+check("and the form's fields come through it untouched",
+  afterWriteUp.tracks?.[0]?.label === "Engineering" && afterWriteUp.tracks?.[0]?.sort_order === 0 &&
+  afterWriteUp.settings?.display_title === `${instName}'s Job Search` &&
+  JSON.stringify(afterWriteUp.settings?.priority_locations) === JSON.stringify(baseAnswers.priority_locations),
+  JSON.stringify({ label: afterWriteUp.tracks?.[0]?.label, title: afterWriteUp.settings?.display_title }));
+check("a written-up track has a prompt again",
+  (await req("GET", "/api/prompt/engineering", { token: I_TOK })).status === 200);
+check("writing up a track twice is ordinary, since a retry night works on one that exists",
+  (await req("POST", "/api/writeup", { token: I_TOK, body: {
+    search: "engineering", role_search_line: "engineering roles, second pass" } })).status === 200);
+check("the write-up route 404s an unknown track, and 400s a missing one",
+  (await req("POST", "/api/writeup", { token: I_TOK, body: { search: "nope", fit_clause: "x" } })).status === 404 &&
+  (await req("POST", "/api/writeup", { token: I_TOK, body: { fit_clause: "x" } })).status === 400);
+
+// The other direction: an account whose tracks were built by the setup skill
+// before it ever saw the form. Its send must not blank the config it has.
+const preInvite = await invAdmin("POST", "/api/invites", { note: `preconfigured ${invRun}` });
+const preName = `Preconfigured ${invRun}`;
+const P_TOK = (await req("POST", "/api/signup", {
+  body: { code: preInvite.json.code, name: preName, password: "preconfigured-password" } })).json.token;
+await req("POST", "/api/config", { token: P_TOK, body: {
+  tracks: [{ key: "engineering", label: "Set up by hand", role_search_line: "roles someone wrote", sort_order: 0 }] } });
+await postIntake(P_TOK, baseAnswers);
+const preAfter = (await req("GET", "/api/config", { token: P_TOK })).json;
+check("a send relabels a track that already exists and leaves its write-up alone",
+  preAfter.tracks?.[0]?.label === "Engineering" && preAfter.tracks?.[0]?.role_search_line === "roles someone wrote",
+  JSON.stringify(preAfter.tracks[0]));
+
 await req("PUT", `/api/documents/resumes/${invRun}.txt`, { token: N_TOK, raw: "Resume as a file.", type: "text/plain" });
+const resumeFileInvite = await invAdmin("POST", "/api/invites", { note: `resume file ${invRun}` });
+const RF_TOK = (await req("POST", "/api/signup", {
+  body: { code: resumeFileInvite.json.code, name: `Resume file ${invRun}`, password: "resume-file-password" } })).json.token;
+await req("PUT", `/api/documents/resumes/${invRun}.txt`, { token: RF_TOK, raw: "Resume as a file.", type: "text/plain" });
 check("a resume file counts once it exists under resumes/",
-  (await postIntake(N_TOK, { ...baseAnswers, resume_text: "", resume_files: [`resumes/${invRun}.txt`] })).status === 200);
+  (await postIntake(RF_TOK, { ...baseAnswers, resume_text: "", resume_files: [`resumes/${invRun}.txt`] })).status === 200);
 
 const demoIntake = await req("POST", "/api/users", { admin: true, body: { name: `Demo intake ${invRun}`, password: "demo-intake-password", demo: true } });
 const DI_TOK = (await req("POST", "/api/login", { body: { name: `Demo intake ${invRun}`, password: "demo-intake-password" } })).json.token;
@@ -2112,14 +2205,18 @@ const failedRun = await invAdmin("POST", "/api/intake/complete", { user: N_ID, s
 const afterFail = (await req("GET", "/api/intake", { token: N_TOK })).json.intake;
 check("a failed run's note reaches the person as written",
   failedRun.status === 200 && afterFail.status === "failed" && afterFail.status_note === "We couldn't read your resume.");
-await new Promise((resolve) => setTimeout(resolve, 15));
-const resentIntake = await postIntake(N_TOK, baseAnswers);
-check("sending again after a failure starts a new attempt: pending, note cleared, sent_at moved",
-  resentIntake.json.intake.status === "pending" && resentIntake.json.intake.status_note === "" &&
-  resentIntake.json.intake.sent_at > afterFail.sent_at, JSON.stringify(resentIntake.json.intake));
+// A failure is retried by the run with the same answers, not fixed by the
+// person: nothing they could retype reaches the search.
+check("a failed setup cannot be sent again, and stays in the run's queue for its retry",
+  (await postIntake(N_TOK, baseAnswers)).status === 409 &&
+  (await invAdmin("GET", "/api/intake/pending")).json.intakes.some((i) => i.user.id === N_ID));
+// The give-up rule drops a failed setup three days after its attempt began.
+// Only the near side is reachable here - nothing lets a test move `sent_at` -
+// so this checks a fresh failure is still offered, and the rule's other side
+// lives in the query.
 check("marking a setup done closes it",
   (await invAdmin("POST", "/api/intake/complete", { user: N_ID, status: "done" })).status === 200 &&
-  (await postIntake(N_TOK, baseAnswers)).json.error === "setup is already done");
+  (await postIntake(N_TOK, baseAnswers)).status === 409);
 check("done is final: completing it again is refused",
   (await invAdmin("POST", "/api/intake/complete", { user: N_ID, status: "failed", note: "late" })).status === 409);
 check("completing an account that never sent a setup 404s",
@@ -2179,6 +2276,8 @@ const delSeedAccount = async (token, tag) => {
     { search: key, company: "Delete Co", title: "Engineer", url: `https://del.example.com/${tag}/${delRun}` }] } });
   const lead = (await req("GET", "/api/data", { token })).json.leads[0];
   await req("POST", `/api/leads/${lead.id}/status`, { token, body: { status: "Applied" } });
+  // The seed sends the setup form too, so the account has two tracks: the one
+  // posted here and the one that send built.
   // A different id, not just a different path: canonicalUrl keys on the ids in
   // a url, so a screened row sharing the lead's id reads as the same posting.
   await req("POST", "/api/screened", { token, body: { screened: [{ search: key,
@@ -2187,7 +2286,7 @@ const delSeedAccount = async (token, tag) => {
   await req("POST", "/api/coverage", { token, body: { search: key, on: "",
     swept: [{ company: `Del Sweep ${delRun}` }] } });
   await req("POST", "/api/intake", { token, body: { answers: {
-    resume_text: "a resume", roles: [{ name: "Eng", titles: "Engineer" }] } } });
+    resume_text: "a resume", work_scope: "Remote US", roles: [{ name: "Eng", titles: "Engineer" }] } } });
   await req("PUT", `/api/documents/resumes/${tag}_${delRun}.txt`, {
     token, raw: "resume text", type: "text/plain" });
   return key;
@@ -2214,7 +2313,7 @@ check("the right id with another account's name is refused, and removes nothing"
 
 const dryDel = await delAdmin("DELETE", `/api/users/${GONE_ID}`, { name: goneName, dryRun: true });
 check("a dry run counts what would go, and goes through with nothing",
-  dryDel.json.dryRun === true && dryDel.json.wouldDelete?.tracks === 1 && dryDel.json.wouldDelete?.leads === 1 &&
+  dryDel.json.dryRun === true && dryDel.json.wouldDelete?.tracks === 2 && dryDel.json.wouldDelete?.leads === 1 &&
   dryDel.json.wouldDelete?.documents === 1 &&
   (await req("GET", "/api/me", { token: GONE_TOK })).status === 200,
   JSON.stringify(dryDel.json));
@@ -2224,11 +2323,11 @@ check("a dry run counts what would go, and goes through with nothing",
 await req("DELETE", `/api/documents/resumes/gone_${delRun}.txt`, { token: GONE_TOK });
 const delResult = await delAdmin("DELETE", `/api/users/${GONE_ID}`, { name: goneName });
 check("a delete that follows a half-finished one completes it",
-  delResult.status === 200 && delResult.json.deleted?.documents === 0 && delResult.json.deleted?.tracks === 1,
+  delResult.status === 200 && delResult.json.deleted?.documents === 0 && delResult.json.deleted?.tracks === 2,
   JSON.stringify(delResult.json));
 check("it reports what it removed, per table, the way /api/purge does",
   delResult.json.deleted?.leads === 1 && delResult.json.deleted?.applications === 1 &&
-  delResult.json.deleted?.screened === 1 && delResult.json.deleted?.search_runs === 1 &&
+  delResult.json.deleted?.screened === 1 && delResult.json.deleted?.search_runs === 2 &&
   delResult.json.deleted?.company_sweeps === 1 && delResult.json.deleted?.intake === 1 &&
   delResult.json.deleted?.meta >= 1 && delResult.json.deleted?.sessions === 1,
   JSON.stringify(delResult.json.deleted));

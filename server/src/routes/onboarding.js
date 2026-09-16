@@ -37,7 +37,16 @@ const STATUS_NOTE_MAX = 500;
 const ANSWERS_MAX_BYTES = 256 * 1024;
 const ROLES_MAX = 10;
 const PRONOUNS = ["", "she/her", "he/him", "they/them"];
-const ANSWER_STRINGS = ["page_title", "pronouns", "resume_text", "location_limits", "locations_first", "never_work_for", "preferences"];
+const ANSWER_STRINGS = ["page_title", "pronouns", "resume_text", "work_scope", "location_limits", "locations_first", "never_work_for", "preferences"];
+// A track key is a slug of the role name, fixed at creation: renaming a role
+// later changes the label only, so no lead is orphaned
+// (docs/instant-setup-plan.md).
+const KEY_MAX = 40;
+// One send per account, so the refusal is the same whatever state the setup is
+// in - and it says what to do instead, since there is no re-send.
+const ALREADY_SENT = {
+  error: "your setup has already been sent - change your search from the tracker, or ask whoever invited you",
+};
 const ROLE_STRINGS = ["name", "titles", "company_kinds", "rule_outs", "min_pay"];
 
 /**
@@ -117,15 +126,46 @@ export async function handlePostIntake({ request, db, docs, user }) {
   const body = await readJson(request);
   if (body instanceof Response) return body;
 
-  const current = await db.getIntake();
-  if (current && current.status === "done") return json({ error: "setup is already done" }, 409);
+  // Write-once, whatever state the setup is in (docs/instant-setup-plan.md).
+  // There is no re-send: the tracker's own config is how a search changes after
+  // this, so nothing a person does can put an account back to `pending`.
+  if (await db.getIntake()) return json(ALREADY_SENT, 409);
 
-  const problem = await answersProblem(body.answers, docs);
+  const problem = (await answersProblem(body.answers, docs)) || scopeProblem(body.answers);
   if (problem) return json(problem, 400);
 
-  // saveIntake refuses a done setup too, for a run that finished between the read above and this write.
-  if (!(await db.saveIntake(JSON.stringify(body.answers)))) return json({ error: "setup is already done" }, 409);
-  return json({ intake: await db.getIntake() });
+  const answers = body.answers;
+  const tracks = tracksFromRoles(answers.roles);
+  // The form's half of the config, written now rather than overnight: these are
+  // values, and a value needs no judgement. The run's half - the prose
+  // prompt.js reads - is written later through POST /api/writeup.
+  const settings = {
+    display_title: (answers.page_title || "").trim() || `${user.name}'s Job Search`,
+    pronouns: answers.pronouns || "",
+    priority_locations: JSON.stringify(
+      Array.isArray(answers.priority_locations) ? answers.priority_locations : []
+    ),
+    excluded_companies: JSON.stringify(namedCompanies(answers.never_work_for)),
+  };
+
+  // The answers and the config land together or not at all: the page decides
+  // between the form and the tracker by whether the intake exists, and must
+  // never meet an account that is half built.
+  if (!(await db.createIntakeWithConfig(JSON.stringify(answers), settings, tracks))) {
+    return json(ALREADY_SENT, 409);
+  }
+  return json({ ok: true, tracks: tracks.map((t) => t.key) });
+}
+
+/**
+ * The companies someone said they would never work for, as the list
+ * `excluded_companies` holds. One per line or comma-separated, since the form
+ * asks for prose and people write both.
+ * @param {unknown} text
+ */
+function namedCompanies(text) {
+  if (typeof text !== "string") return [];
+  return [...new Set(text.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean))];
 }
 
 /**
@@ -134,6 +174,66 @@ export async function handlePostIntake({ request, db, docs, user }) {
  * @param {unknown} answers
  * @param {import("../r2.js").Docs} docs
  */
+/**
+ * The tracks a send creates, one per role block, in the order they were filled
+ * in. A key is a slug of the role's name; a name that slugs to nothing, or to
+ * one another role already took, falls back to its position, so two roles
+ * called "Eng" and "eng!" are never one track.
+ * @param {Array<{name: string}>} roles
+ */
+function tracksFromRoles(roles) {
+  const taken = new Set();
+  return roles.map((role, i) => {
+    let key = String(role.name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, KEY_MAX);
+    if (!key || taken.has(key)) key = `${key || "role"}-${i + 1}`.slice(0, KEY_MAX);
+    taken.add(key);
+    return { key, label: role.name.trim(), sort_order: i };
+  });
+}
+
+/**
+ * Whether the places someone ranked first are anywhere they said they can work.
+ *
+ * Checked here rather than left to the overnight run, because the person is
+ * still on the form and can fix it (docs/instant-setup-plan.md). Both answers
+ * are free text against computed rules, so the test is deliberately loose: a
+ * location counts as inside the scope when the scope mentions its label or one
+ * of the terms the page derived from it, and the refusal only fires when not
+ * one of them is mentioned. A scope the run has to interpret costs far less
+ * than a refusal that stops someone who answered sensibly.
+ *
+ * @param {Record<string, unknown>} answers
+ * @returns {{error: string, field: string}|null}
+ */
+function scopeProblem(answers) {
+  const scope = typeof answers.work_scope === "string" ? answers.work_scope.trim() : "";
+  if (!scope) {
+    return { error: "say where you can work - the search needs somewhere to look", field: "work_scope" };
+  }
+  const rules = Array.isArray(answers.priority_locations) ? answers.priority_locations : [];
+  if (rules.length === 0) return null;
+
+  const haystack = scope.toLowerCase();
+  const terms = (rule) => [rule.label, ...(rule.allOf || []), ...(rule.anyOf || [])];
+  const inside = rules.filter((rule) =>
+    terms(rule).some((t) => typeof t === "string" && t.trim() && haystack.includes(t.trim().toLowerCase()))
+  );
+  if (inside.length > 0) return null;
+
+  const named = rules.map((r) => r.label).filter(Boolean).join(", ");
+  return {
+    error:
+      `you can work in "${scope}", but the places you'd like first are ${named} - ` +
+      "none of them is somewhere you said you can work, so nothing would be searched first. " +
+      "Widen where you can work, or rank places inside it",
+    field: "work_scope",
+  };
+}
+
 async function answersProblem(answers, docs) {
   const bad = (field, error) => ({ error, field });
   if (!answers || typeof answers !== "object" || Array.isArray(answers)) return bad("answers", "answers must be an object");

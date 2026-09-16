@@ -186,6 +186,31 @@ export const TRACK_CONFIG_FIELDS = [
   "screened_examples", "schedule_time", "fed_by",
 ];
 
+/**
+ * The track fields the overnight run owns, and the only ones POST /api/writeup
+ * can write (docs/instant-setup-plan.md).
+ *
+ * The complement is what the setup form owns - `label`, `sort_order` and the
+ * settings - and nothing is in both lists. `fed_by` is in neither: pairing tabs
+ * is the tracker's own configuration, through POST /api/config.
+ */
+export const WRITEUP_FIELDS = [
+  "role_search_line", "full_description", "resume_line", "search_note",
+  "fit_clause", "fit_disqualifier", "fit_filter_step", "leads_note",
+  "doc_file", "doc_summary", "doc_update_line", "intro_note", "report_line",
+  "screened_examples", "schedule_time",
+];
+
+/**
+ * The run's half of the per-account settings, written by the same route: where
+ * the search may look, in the prose prompt.js reads verbatim. They are settings
+ * rather than track fields because one person's searches share a scope.
+ *
+ * `priority_locations`, `display_title`, `pronouns` and `excluded_companies`
+ * are the form's, and are not here.
+ */
+export const WRITEUP_SETTINGS = ["geo_scope_line", "scope_clause", "scope_disqualifier"];
+
 // Settings the client renders from...
 export const SETTING_KEYS = [
   "display_title", "overview_label", "applications_label", "all_leads_label",
@@ -390,6 +415,122 @@ export class Db {
    * @param {string} answersJson
    * @returns {Promise<boolean>} false when the setup is already done
    */
+  /**
+   * The setup form's whole effect, in one batch, which D1 runs as one
+   * transaction: the answers, the settings the form owns, and one track per
+   * role block (docs/instant-setup-plan.md).
+   *
+   * One transaction because the page decides between the form and the tracker
+   * by whether an intake exists. A state where the answers are stored and the
+   * tracks are not would show someone an empty tracker with no way back to the
+   * form, and the reverse would show the form to someone whose tracks already
+   * exist.
+   *
+   * Write-once. The intake insert does nothing if a row is already there, and
+   * every other statement is conditional on this call being the one that wrote
+   * it - `sent_at` is the instant this call generated - so a second send
+   * changes nothing at all rather than half of it.
+   *
+   * Only the form's fields are written. A track that somehow already exists
+   * has its `label` and `sort_order` set and nothing else, so the run's
+   * write-up survives a send, and the fields prompt.js reads are never touched
+   * from here (the other half of the split is writeUpTrack).
+   *
+   * @param {string} answersJson the answers as the form sent them
+   * @param {Record<string, string>} settings form-owned settings, already validated
+   * @param {Array<{key: string, label: string, sort_order: number}>} tracks one per role
+   * @returns {Promise<boolean>} false when a setup had already been sent
+   */
+  async createIntakeWithConfig(answersJson, settings, tracks) {
+    const now = new Date().toISOString();
+    // Every statement after the first asks "did this call create that row?".
+    const mine = "EXISTS (SELECT 1 FROM intake WHERE user_id = ? AND sent_at = ?)";
+    const results = await this.d1.batch([
+      this.d1
+        .prepare(
+          `INSERT INTO intake (user_id, answers, status, status_note, sent_at, updated_at)
+           VALUES (?, ?, 'pending', '', ?, ?)
+           ON CONFLICT(user_id) DO NOTHING`
+        )
+        .bind(this.userId, answersJson, now, now),
+      ...Object.entries(settings).map(([key, value]) =>
+        this.d1
+          .prepare(
+            `INSERT INTO meta (user_id, key, value) SELECT ?, ?, ? WHERE ${mine}
+             ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value`
+          )
+          .bind(this.userId, key, value, this.userId, now)
+      ),
+      ...tracks.map((t) =>
+        this.d1
+          .prepare(
+            `INSERT INTO tracks (user_id, key, label, sort_order)
+             SELECT ?, ?, ?, ? WHERE ${mine}
+             ON CONFLICT(user_id, key) DO UPDATE SET
+               label = excluded.label, sort_order = excluded.sort_order`
+          )
+          .bind(this.userId, t.key, t.label, t.sort_order, this.userId, now)
+      ),
+      // The "never ran" row each track needs, as replaceTracks makes one.
+      ...tracks.map((t) =>
+        this.d1
+          .prepare(`INSERT OR IGNORE INTO search_runs (user_id, track_key) SELECT ?, ? WHERE ${mine}`)
+          .bind(this.userId, t.key, this.userId, now)
+      ),
+    ]);
+    return (results[0].meta.changes || 0) > 0;
+  }
+
+  /**
+   * Write the overnight run's half of one track: the prose and the schedule,
+   * never the form's fields (docs/instant-setup-plan.md).
+   *
+   * The UPDATE is built from WRITEUP_FIELDS, not from the caller's keys, so
+   * `label`, `sort_order` and the settings the form owns cannot be reached
+   * through this method whatever it is handed. That is the point of it: the
+   * run used to GET the config, edit it and POST the whole thing back, which
+   * re-wrote the form's fields as a side effect every night it ran.
+   *
+   * The scope wording is per-account rather than per-track (WRITEUP_SETTINGS),
+   * so it travels with the same call and lands in the same batch: a run that
+   * wrote the track's prose and then failed to write the scope would leave a
+   * search half described.
+   *
+   * @param {string} key the track
+   * @param {Record<string, string>} body whatever the run sent
+   * @returns {Promise<string[]|null>} the fields written, or null for an unknown track
+   */
+  async writeUpTrack(key, body) {
+    if (!(await this.trackExists(key))) return null;
+    const fields = WRITEUP_FIELDS.filter((f) => typeof body[f] === "string");
+    const settings = WRITEUP_SETTINGS.filter((f) => typeof body[f] === "string");
+    if (fields.length === 0 && settings.length === 0) return [];
+
+    const statements = [];
+    if (fields.length) {
+      statements.push(
+        this.d1
+          .prepare(
+            `UPDATE tracks SET ${fields.map((f) => `${f} = ?`).join(", ")}
+              WHERE user_id = ? AND key = ?`
+          )
+          .bind(...fields.map((f) => body[f]), this.userId, key)
+      );
+    }
+    for (const key2 of settings) {
+      statements.push(
+        this.d1
+          .prepare(
+            `INSERT INTO meta (user_id, key, value) VALUES (?, ?, ?)
+             ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value`
+          )
+          .bind(this.userId, key2, body[key2])
+      );
+    }
+    await this.d1.batch(statements);
+    return [...fields, ...settings];
+  }
+
   async saveIntake(answersJson) {
     const now = new Date().toISOString();
     const result = await this.d1

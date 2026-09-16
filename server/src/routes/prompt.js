@@ -34,13 +34,17 @@ export async function handleGetPrompt({ db, user, params }) {
   }
 
   // A track with no search config would still compose a well-formed prompt
-  // from the generic fallbacks, and a run would carry out that hollow search
-  // and report success. A track is in this state until its config is posted,
-  // so refuse and let the run fail visibly.
-  if (!track.role_search_line && !track.resume_line) {
+  // from the generic fallbacks - prompt.js falls back to "roles matching the
+  // resume" - and a run would carry out that hollow search all night and report
+  // success. `role_search_line` is what says which roles to look for, so a
+  // track without it is not written up, whatever else has been filled in
+  // (docs/instant-setup-plan.md). Every track starts in this state now: the
+  // setup form creates it, and the overnight run writes it up.
+  if (!track.role_search_line) {
     return json(
       {
-        error: `track "${key}" has no search config yet - post it to /api/config before running this search`,
+        error: `track "${key}" has no role_search_line yet, so there is nothing to search for - the overnight run writes it up`,
+        field: "role_search_line",
       },
       409
     );

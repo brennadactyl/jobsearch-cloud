@@ -5,7 +5,9 @@
  * object, which is what lets one deployment hold several people's searches.
  */
 
+import { WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
 import { json, readJson } from "../http.js";
+import { unknownTrack } from "../validate.js";
 
 /**
  * GET /api/config - requires a Bearer token -> `{ tracks[], settings }`.
@@ -31,6 +33,56 @@ export async function handleGetConfig({ db }) {
  * and only lose their tab. search_runs stays 1:1 with the list: new tracks gain
  * a "never ran" row, removed tracks lose theirs.
  */
+/**
+ * POST /api/writeup - requires a Bearer token. Body `{ search, <write-up
+ * fields> }` -> `{ written: [field, ...] }`; 400 for a missing search or a key
+ * this route does not accept, 404 for an unknown track.
+ *
+ * The overnight run's only way into a track's config. It exists because the run
+ * used to GET the whole config, edit it and POST it back, which re-wrote the
+ * setup form's fields - `label`, `sort_order`, the title, the location rules -
+ * as a side effect of every night it ran. "The run leaves those alone" was a
+ * promise; this is a guarantee: db.writeUpTrack builds its UPDATE from
+ * WRITEUP_FIELDS and WRITEUP_SETTINGS, so a form-owned field is unreachable
+ * here whatever the body says (docs/instant-setup-plan.md).
+ *
+ * An unaccepted key is refused rather than dropped, naming the key: a run that
+ * tries to rename a tab should hear that it can't, not wonder later why the
+ * rename didn't take.
+ *
+ * Writing a track that is already written up is ordinary - a retry night works
+ * on a track that exists - so there is no conflict to report.
+ *
+ * POST /api/config stays as it is, for the tracker's own settings.
+ */
+export async function handleWriteUp({ request, db }) {
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+
+  const key = typeof body.search === "string" ? body.search.trim() : "";
+  if (!key) return json({ error: "missing search (track key)" }, 400);
+
+  const accepted = new Set([...WRITEUP_FIELDS, ...WRITEUP_SETTINGS, "search"]);
+  for (const sent of Object.keys(body)) {
+    if (!accepted.has(sent)) {
+      return json(
+        {
+          error: `"${sent}" is not a field the overnight run writes - the setup form owns it, and it can only be changed from the tracker`,
+          field: sent,
+        },
+        400
+      );
+    }
+    if (sent !== "search" && typeof body[sent] !== "string") {
+      return json({ error: `${sent} must be text`, field: sent }, 400);
+    }
+  }
+
+  const written = await db.writeUpTrack(key, body);
+  if (written === null) return unknownTrack(key);
+  return json({ written });
+}
+
 export async function handleSetConfig({ request, db }) {
   const body = await readJson(request);
   if (body instanceof Response) return body;

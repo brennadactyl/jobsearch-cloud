@@ -252,6 +252,14 @@ resume, baseline docs and anything else under their prefix in R2 go too, and
 they are gone before the rows are, so a call that dies half way is finished by
 making it again.
 
+**A backup is the only way back, and it may not hold their documents.**
+`backup-tracker.ps1` fetches each account's documents with that account's own
+`tracker.json`, so it can only back up documents for accounts whose folder is on
+the machine taking the backup - its log says how many of how many it managed.
+Deleting an account whose folder lives on another machine can destroy the only
+copy of its resumes. The `dryRun` counts that account's documents; if it is not
+zero, take the backup where that account's folder is.
+
 **Sign in** - the webpage does this for them. Do it by hand once per machine
 that runs their searches, to mint the long-lived token for the scheduled
 runs:
@@ -356,7 +364,8 @@ application id or track key doesn't resolve, and comes back as a 404.
 A person's own setup, with their session:
 
 - `GET /api/intake` -> `{ intake: null }` or `{ intake: { answers, status, status_note, sent_at, updated_at } }`.
-- `POST /api/intake` - body `{ answers }` -> `{ intake }`, stored as `pending`. The answers are kept whole, as sent. Only what the onboarding run cannot work without is checked: 1-10 `roles`, each with a `name` and `titles`; a resume, as non-empty `resume_text` or a `resume_files` path under `resumes/` that exists; and `priority_locations` rules shaped `[{label, allOf?, anyOf?}]`, at most 20, labels 1-60 characters, at most 20 terms of 1-80 characters each. `400 { error, field }` otherwise, `409` once setup is done, `403` for a demo account. Editing a pending setup keeps `sent_at`; sending again after a failure starts a new attempt and resets it.
+- `POST /api/intake` - body `{ answers }` -> `{ ok: true, tracks: [key, ...] }`. **Sending the form builds the tracker**: in the same D1 batch as the answers it writes the settings the form owns (`display_title`, `pronouns`, `priority_locations`, `excluded_companies`) and one track per role block, keyed by a slug of the role's name and labelled as typed. The account has tabs and a title before the overnight run touches it, and the run then writes the prose through `POST /api/writeup`. Nothing the run owns is written here, and one batch means the page never meets an account whose answers exist but whose tracks don't. **Write-once**: a second send is `409` whatever the status, since there is no re-send - a search changes from the tracker afterwards. The answers are kept whole, as sent. Checked: 1-10 `roles`, each with a `name` and `titles`; a resume, as non-empty `resume_text` or a `resume_files` path under `resumes/` that exists; `priority_locations` rules shaped `[{label, allOf?, anyOf?}]`, at most 20, labels 1-60 characters, at most 20 terms of 1-80 characters each; and `work_scope`, which must name somewhere and must mention at least one of the places ranked first - otherwise `400 { error, field: "work_scope" }` while the person is still on the form. `400 { error, field }` for the rest, `403` for a demo account.
+- `POST /api/writeup` - body `{ search, ... }` -> `{ written: [field, ...] }`. The overnight run's only way into a track's config. Accepts `role_search_line`, `full_description`, `resume_line`, `search_note`, `fit_clause`, `fit_disqualifier`, `fit_filter_step`, `leads_note`, `doc_file`, `doc_summary`, `doc_update_line`, `intro_note`, `report_line`, `screened_examples`, `schedule_time`, and the per-account scope wording `geo_scope_line`, `scope_clause`, `scope_disqualifier`. Any other key is `400 { error, field }` naming it, rather than being dropped: a run that tries to rename a tab should hear that it can't. The UPDATE is built from that fixed list, so a field the setup form owns - `label`, `sort_order`, the title, the location rules - cannot be written through this route whatever the body says. Writing a track that is already written up is ordinary, since a retry night works on one that exists. `404` for an unknown track.
 
 The operator's scripts and the onboarding run, each with **`ADMIN_TOKEN` as the Bearer**. The router checks it once for the whole list, so a session token is refused whoever holds it:
 
