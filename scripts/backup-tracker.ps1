@@ -61,12 +61,9 @@
   .\backup-tracker.ps1 -NoMirror -BackupDir D:\Backups
 #>
 param(
-    [string]$RepoDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+    [string]$RepoDir,
     [string]$BackupDir,
-    [string]$DataDir = $(
-        if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
-        else { Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..")).Path "private" }
-    ),
+    [string]$DataDir,
     [string]$MirrorDir = $(
         if ($env:JOB_SEARCH_BACKUP_MIRROR) { $env:JOB_SEARCH_BACKUP_MIRROR }
         elseif ($env:OneDrive) { Join-Path $env:OneDrive "JobSearchTracker\backups" }
@@ -79,6 +76,20 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder is resolved here instead. Everything below hangs off the
+# repo root, so an empty one would write a backup somewhere nobody looks.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $RepoDir) {
+    if (-not $scriptDir) {
+        throw "Can't work out where this script lives, so it can't find the repo. Pass -RepoDir, or run it by its full path."
+    }
+    $RepoDir = (Resolve-Path (Join-Path $scriptDir "..")).Path
+}
+if (-not $DataDir) {
+    $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $RepoDir "private" }
+}
 
 if (-not $BackupDir) { $BackupDir = Join-Path $RepoDir "private\backups" }
 $logDir = Join-Path $RepoDir "private\logs"

@@ -57,7 +57,7 @@
   .\run-onboarding.ps1 -User f6d1e62d-e325-4c52-908a-91bb5850c776
 #>
 param(
-    [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
+    [string]$DataDir,
 
     [string]$User,
 
@@ -65,6 +65,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder is resolved here instead. It also names the scheduler this
+# run calls, which becomes a registered task's command line, so an empty path
+# would schedule nothing runnable.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $scriptDir) {
+    throw "Can't work out where this script lives, so it can't find setup-scheduler.ps1. Run it by its full path."
+}
+if (-not $DataDir) {
+    $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $scriptDir "..\private" }
+}
 
 if (-not (Test-Path $DataDir)) {
     Write-Error "Data dir not found: $DataDir`nSet -DataDir, or the JOB_SEARCH_DATA_DIR environment variable, to your private job-search data folder."
@@ -320,7 +332,7 @@ $claudePath = if ($claude -is [System.Management.Automation.CommandInfo]) { $cla
 $skillDir = if ($env:CLAUDE_PLUGIN_ROOT) {
     Join-Path $env:CLAUDE_PLUGIN_ROOT ".claude\skills\job-search-setup"
 } else {
-    Join-Path (Split-Path -Parent $PSScriptRoot) ".claude\skills\job-search-setup"
+    Join-Path (Split-Path -Parent $scriptDir) ".claude\skills\job-search-setup"
 }
 $skillFile = Join-Path $skillDir "SKILL.md"
 $templateFile = Join-Path $skillDir "templates\tracked-postings.template.md"
@@ -802,7 +814,7 @@ Rules for this run:
         #
         # A separate process: setup-scheduler.ps1 ends with `exit`, which would
         # end this run too if it were dot-sourced or called in-process.
-        $scheduler = Join-Path $PSScriptRoot "setup-scheduler.ps1"
+        $scheduler = Join-Path $scriptDir "setup-scheduler.ps1"
         & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scheduler `
             -DataDir $DataDir -User $id *>&1 | Out-File -Append -Encoding utf8 -FilePath $logFile
         if ($LASTEXITCODE -ne 0) { Stop-Person "setup-scheduler.ps1 exited $LASTEXITCODE" $null }

@@ -33,12 +33,22 @@
   .\run-fill.ps1 -User ab266b6c-00cc-45d1-92ac-cdad412c1558
 #>
 param(
-    [string]$DataDir = $(if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $PSScriptRoot "..\private" }),
+    [string]$DataDir,
 
     [string]$User
 )
 
 $ErrorActionPreference = "Stop"
+
+# A param default is evaluated before $PSScriptRoot is reliably set, so the
+# script's own folder is resolved here instead. It also finds run-lock.ps1.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $scriptDir) {
+    throw "Can't work out where this script lives, so it can't find run-lock.ps1. Run it by its full path."
+}
+if (-not $DataDir) {
+    $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR } else { Join-Path $scriptDir "..\private" }
+}
 
 if (-not (Test-Path $DataDir)) {
     Write-Error "Data dir not found: $DataDir`nSet -DataDir, or the JOB_SEARCH_DATA_DIR environment variable, to your private job-search data folder."
@@ -61,7 +71,7 @@ Log "data dir:         $DataDir"
 # One run at a time on this machine: the fill drives the same CLI the searches
 # do (see run-lock.ps1). It is scheduled after them, but a search that started
 # late or ran long is still going at 06:30 often enough to matter.
-. (Join-Path $PSScriptRoot "run-lock.ps1")
+. (Join-Path $scriptDir "run-lock.ps1")
 if (-not (Enter-RunLock)) {
     Log "ERROR: another run on this machine was still going after $RUN_LOCK_MAX_WAIT_MINUTES minutes - nothing was filled in"
     Write-Error "The machine was busy with another run for $RUN_LOCK_MAX_WAIT_MINUTES minutes. See $logFile."
