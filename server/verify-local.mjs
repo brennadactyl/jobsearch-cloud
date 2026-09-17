@@ -2680,5 +2680,160 @@ check("deleting the account takes every Word file and its text with it",
   wordGone.status === 200 && wordGone.json?.deleted?.documents === beforeDelete && beforeDelete >= 5,
   JSON.stringify({ before: beforeDelete, deleted: wordGone.json?.deleted?.documents }));
 
+
+console.log("\n== choosing a search's resume ==");
+// The account panel's resume section (docs/account-settings-plan.md#your-resume):
+// which searches read which file, pointing a search at another one, and the
+// profile mark its next run clears (migrations/0018_profile_stale.sql).
+const rsUser = async (tag) => {
+  const name = `Resumes ${tag} ${Date.now()}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: `resumes-${tag}-long-password` } });
+  const token = (await req("POST", "/api/login", { body: { name, password: `resumes-${tag}-long-password` } })).json.token;
+  await req("POST", "/api/config", { token, body: { tracks: [
+    { key: "SWE", label: "Eng - Gaming", doc_file: "docs/tracked_swe_postings.md" },
+    { key: "swe-ai", label: "Eng - AI", fed_by: "SWE" },
+    { key: "CPM", label: "Program", doc_file: "docs/tracked_cpm_postings.md" },
+  ] } });
+  return { name, token };
+};
+const R = await rsUser("a"), RB = await rsUser("b");
+const sixtyWords = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
+for (const [path, raw, type] of [
+  ["docs/tracked_swe_postings.md", "# SWE\n## Candidate Profile\nold", "text/markdown"],
+  ["docs/tracked_cpm_postings.md", "# CPM", "text/markdown"],
+  ["resumes/Engineering.pdf", "%PDF-1.4 not really", "application/pdf"],
+  ["resumes/Pasted.txt", sixtyWords, "text/plain"],
+  ["resumes/Headshot.png", "not an image", "image/png"],
+  ["reference/notes.txt", "reference notes", "text/plain"],
+]) await putDoc(R, path, raw, type);
+await putDoc(R, "resumes/AI_Roles.docx", plainDocx(), DOCX_TYPE);
+await req("POST", "/api/writeup", { token: R.token, body: { search: "SWE", documents: ["resumes/Engineering.pdf", "reference/notes.txt"] } });
+await req("POST", "/api/writeup", { token: R.token, body: { search: "CPM", documents: ["resumes/Engineering.pdf"] } });
+
+const listing = async (who) => (await req("GET", "/api/documents", { token: who.token })).json?.documents || [];
+const entry = async (who, path) => (await listing(who)).find((d) => d.path === path);
+const usage = (d) => JSON.stringify((d?.used_by || []).map((u) => [u.search, u.tabs.join("+"), u.state]));
+const settings = (who, body) => req("POST", "/api/settings", { token: who.token, body });
+const searchDocs = async (who, key) => (await req("GET", `/api/documents?search=${key}`, { token: who.token })).json;
+
+for (const [why, list, pattern] of [
+  ["an empty list", [], /at least one document/],
+  ["a Word file, which a run can't read", ["resumes/AI_Roles.docx"], /list the \.txt read from it/],
+  ["a list with nothing a run can read", ["resumes/Headshot.png"], /none of these documents can be read/],
+]) {
+  const viaRun = await req("POST", "/api/writeup", { token: R.token, body: { search: "SWE", documents: list } });
+  const viaConfig = await req("POST", "/api/config", { token: R.token, body: { tracks: [
+    { key: "SWE", label: "Eng - Gaming", documents: list }, { key: "swe-ai", label: "Eng - AI", fed_by: "SWE" }, { key: "CPM", label: "Program" }] } });
+  check(`a search left without a readable resume is refused on both write paths: ${why}`,
+    viaRun.status === 400 && viaRun.json?.field === "documents" && pattern.test(viaRun.json?.error || "") &&
+    viaConfig.status === 400 && pattern.test(viaConfig.json?.error || ""), JSON.stringify([viaRun.json, viaConfig.json]));
+}
+const readBack = (await req("GET", "/api/config", { token: R.token })).json?.tracks || [];
+check("config read and posted back is accepted, a fed tab's empty list included",
+  (await req("POST", "/api/config", { token: R.token, body: { tracks: readBack } })).status === 200);
+
+const pdf = await entry(R, "resumes/Engineering.pdf");
+check("the listing says which searches read a resume, with the tabs each fills",
+  usage(pdf) === JSON.stringify([["SWE", "SWE+swe-ai", "reads"], ["CPM", "CPM", "reads"]]) && pdf?.readable === true && pdf?.words === null,
+  JSON.stringify(pdf));
+const pasted = await entry(R, "resumes/Pasted.txt");
+check("a text resume carries its word count, and one no search lists is used by none",
+  pasted?.words === 60 && pasted?.readable === true && usage(pasted) === "[]", JSON.stringify(pasted));
+const word = await entry(R, "resumes/AI_Roles.docx"), wordText = await entry(R, "resumes/AI_Roles.txt");
+check("a Word resume names its text and word count, and its text names the Word file",
+  word?.text_path === "resumes/AI_Roles.txt" && word?.readable === true && word?.words === plain.json?.words &&
+  wordText?.paired_with === "resumes/AI_Roles.docx" && wordText?.readable === false, JSON.stringify([word, wordText]));
+check("a file no search can read is not offered",
+  (await entry(R, "resumes/Headshot.png"))?.readable === false);
+check("documents outside resumes/ carry no resume fields",
+  (await entry(R, "reference/notes.txt"))?.used_by === undefined);
+
+for (const [why, body, status, pattern] of [
+  ["a key the panel doesn't own", { role_search_line: "anything" }, 400, /not a setting this page can change/],
+  ["a search this person doesn't have", { resumes: { NOPE: "resumes/Pasted.txt" } }, 404, /unknown search/],
+  ["a tab another search fills", { resumes: { "swe-ai": "resumes/Pasted.txt" } }, 400, /Eng - AI is filled by the Eng - Gaming search/],
+  ["a file outside resumes/", { resumes: { SWE: "reference/notes.txt" } }, 400, /under resumes\//],
+  ["a file that isn't stored", { resumes: { SWE: "resumes/Nothing.pdf" } }, 404, /no resume named Nothing\.pdf/],
+  ["a file a search can't read", { resumes: { SWE: "resumes/Headshot.png" } }, 422, /can't read Headshot\.png/],
+]) {
+  const res = await settings(R, body);
+  check(`choosing a resume is refused: ${why}`,
+    res.status === status && pattern.test(res.json?.error || ""), JSON.stringify(res.json));
+}
+const halfBad = await settings(R, { resumes: { SWE: "resumes/AI_Roles.docx", CPM: "resumes/Nothing.pdf" } });
+check("one refused search refuses the whole save, naming it, and changes nothing",
+  halfBad.status === 404 && halfBad.json?.search === "CPM" && halfBad.json?.field === "resume" &&
+  JSON.stringify((await searchDocs(R, "SWE"))?.documents?.map((d) => d.path)) ===
+    JSON.stringify(["docs/tracked_swe_postings.md", "resumes/Engineering.pdf", "reference/notes.txt"]) &&
+  (await searchDocs(R, "SWE"))?.profile_stale === null, JSON.stringify(halfBad.json));
+
+const chose = await settings(R, { resumes: { SWE: "resumes/AI_Roles.docx", CPM: "resumes/AI_Roles.txt" } });
+check("a save points each search at its resume - a Word file through its text - keeping other documents",
+  chose.status === 200 &&
+  JSON.stringify(chose.json?.resumes?.SWE) === JSON.stringify({ documents: ["resumes/AI_Roles.txt", "reference/notes.txt"], profile_pending: true }) &&
+  JSON.stringify(chose.json?.resumes?.CPM) === JSON.stringify({ documents: ["resumes/AI_Roles.txt"], profile_pending: true }),
+  JSON.stringify(chose.json));
+const staleSwe = await searchDocs(R, "SWE");
+check("the change marks the search's profile stale, with the file it was written from",
+  !!staleSwe?.profile_stale?.since && staleSwe?.profile_stale?.was === "resumes/Engineering.pdf", JSON.stringify(staleSwe));
+check("a tab the search fills reports the search's mark",
+  JSON.stringify((await searchDocs(R, "swe-ai"))?.profile_stale) === JSON.stringify(staleSwe?.profile_stale));
+check("the listing shows the new resume from the next run, and the old one until then",
+  usage(await entry(R, "resumes/AI_Roles.docx")) === JSON.stringify([["SWE", "SWE+swe-ai", "from_next_run"], ["CPM", "CPM", "from_next_run"]]) &&
+  usage(await entry(R, "resumes/Engineering.pdf")) === JSON.stringify([["SWE", "SWE+swe-ai", "until_next_run"], ["CPM", "CPM", "until_next_run"]]),
+  usage(await entry(R, "resumes/AI_Roles.docx")) + usage(await entry(R, "resumes/Engineering.pdf")));
+
+const secondChoice = await settings(R, { resumes: { SWE: "resumes/Pasted.txt" } });
+const staleAgain = await searchDocs(R, "SWE");
+check("a second change before a run keeps the file the profile was written from, and moves the mark",
+  secondChoice.status === 200 && staleAgain?.profile_stale?.was === "resumes/Engineering.pdf" &&
+  staleAgain?.profile_stale?.since !== staleSwe?.profile_stale?.since, JSON.stringify(staleAgain?.profile_stale));
+
+const refusedRemove = await req("DELETE", "/api/documents/resumes/AI_Roles.docx", { token: R.token });
+check("removing a resume a search reads is refused, naming the search the way the page says it",
+  refusedRemove.status === 409 && JSON.stringify(refusedRemove.json?.searches) === JSON.stringify(["CPM"]) &&
+  refusedRemove.json?.error === "Program reads this resume, so it can't be removed. Choose another resume for that search below first." &&
+  (await entry(R, "resumes/AI_Roles.docx")) !== undefined, JSON.stringify(refusedRemove.json));
+await settings(R, { resumes: { CPM: "resumes/Pasted.txt" } });
+const twoReaders = await req("DELETE", "/api/documents/resumes/Pasted.txt", { token: R.token });
+check("with two searches reading it, the refusal names both",
+  twoReaders.status === 409 &&
+  twoReaders.json?.error === "Eng - Gaming and Program read this resume, so it can't be removed. Choose another resume for them below first.",
+  JSON.stringify(twoReaders.json));
+check("removing a search's tracking doc is refused too",
+  (await req("DELETE", "/api/documents/docs/tracked_swe_postings.md", { token: R.token })).status === 409);
+check("a file the searches were switched away from can be removed before their next run",
+  (await req("DELETE", "/api/documents/resumes/Engineering.pdf", { token: R.token })).status === 200 &&
+  (await req("DELETE", "/api/documents/resumes/AI_Roles.docx", { token: R.token })).status === 200);
+
+const markNow = (await searchDocs(R, "SWE"))?.profile_stale?.since;
+const lateClear = await req("POST", "/api/writeup", { token: R.token, body: { search: "SWE", profile_refreshed: staleSwe?.profile_stale?.since } });
+check("a run that read an older mark doesn't clear a newer change",
+  lateClear.status === 200 && !(lateClear.json?.written || []).includes("profile_refreshed") &&
+  (await searchDocs(R, "SWE"))?.profile_stale?.since === markNow, JSON.stringify(lateClear.json));
+const cleared = await req("POST", "/api/writeup", { token: R.token, body: { search: "SWE", profile_refreshed: markNow } });
+check("the run clears the mark it read, and says so",
+  JSON.stringify(cleared.json?.written) === JSON.stringify(["profile_refreshed"]) && (await searchDocs(R, "SWE"))?.profile_stale === null &&
+  usage(await entry(R, "resumes/Pasted.txt")).includes('["SWE","SWE+swe-ai","reads"]'), JSON.stringify(cleared.json));
+check("the tab's own list is untouched, since only the search's is read",
+  JSON.stringify((await req("GET", "/api/config", { token: R.token })).json?.tracks?.find((t) => t.key === "swe-ai")?.documents) === "[]");
+
+const same = await settings(R, { resumes: { SWE: "resumes/Pasted.txt" } });
+check("choosing the resume a search already reads changes nothing",
+  same.json?.resumes?.SWE?.profile_pending === false && (await searchDocs(R, "SWE"))?.profile_stale === null, JSON.stringify(same.json));
+await putDoc(R, "resumes/Pasted.txt", sixtyWords, "text/plain");
+check("the same file sent secondChoice leaves the profile alone",
+  (await searchDocs(R, "SWE"))?.profile_stale === null);
+await putDoc(R, "resumes/Pasted.txt", `${sixtyWords} and more`, "text/plain");
+const inPlace = await searchDocs(R, "SWE");
+check("replacing a resume's contents under the same name marks the searches reading it",
+  inPlace?.profile_stale?.was === "resumes/Pasted.txt" && (await entry(R, "resumes/Pasted.txt"))?.words === 62, JSON.stringify(inPlace?.profile_stale));
+
+check("another person can't choose this person's resume for their own search of the same name",
+  (await settings(RB, { resumes: { SWE: "resumes/Pasted.txt" } })).status === 404 &&
+  (await searchDocs(RB, "SWE"))?.profile_stale === undefined);
+check("and this person's searches are unchanged by it",
+  JSON.stringify((await searchDocs(R, "SWE"))?.documents?.map((d) => d.path)) ===
+  JSON.stringify(["docs/tracked_swe_postings.md", "resumes/Pasted.txt", "reference/notes.txt"]));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

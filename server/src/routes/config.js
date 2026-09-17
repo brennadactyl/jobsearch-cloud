@@ -5,9 +5,26 @@
  * object, which is what lets one deployment hold several people's searches.
  */
 
-import { WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
+import { parseDocumentList, WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
 import { json, readJson } from "../http.js";
-import { trackDocumentsError, unknownTrack } from "../validate.js";
+import { trackDocumentsError, unknownTrack, unreadableDocumentsError } from "../validate.js";
+
+/**
+ * The refusal for a `documents` list a search couldn't read its resume from,
+ * or null. A list identical to the stored one passes, so config read and
+ * posted back is accepted for a search set up before this rule. So does a tab
+ * another search fills, whose own list no run reads.
+ * @param {string[]} list already passed trackDocumentsError
+ * @param {string[]|null} storedList the list as stored, null for a new track
+ * @param {string} fedBy the track's `fed_by` once this write lands
+ * @returns {string|null}
+ */
+function documentsChoiceError(list, storedList, fedBy) {
+  if (fedBy) return null;
+  const deduped = [...new Set(list)];
+  if (storedList && JSON.stringify(deduped) === JSON.stringify(storedList)) return null;
+  return unreadableDocumentsError(deduped);
+}
 
 /**
  * GET /api/config - requires a Bearer token -> `{ tracks[], settings }`.
@@ -40,6 +57,12 @@ export async function handleGetConfig({ db }) {
  * Writing a track that is already written up is ordinary - a retry night works
  * on a track that exists - so there is no conflict to report.
  *
+ * `profile_refreshed` is the runner's, and not a field: it echoes the
+ * `profile_stale.since` it read from GET /api/documents?search= once it has
+ * accepted the rewritten profile, and clears the mark only if no resume change
+ * has landed since (migrations/0018_profile_stale.sql). `written` names it only
+ * when the mark was cleared.
+ *
  * POST /api/config stays as it is, for the tracker's own settings.
  */
 export async function handleWriteUp({ request, db }) {
@@ -49,7 +72,7 @@ export async function handleWriteUp({ request, db }) {
   const key = typeof body.search === "string" ? body.search.trim() : "";
   if (!key) return json({ error: "missing search (track key)" }, 400);
 
-  const accepted = new Set([...WRITEUP_FIELDS, ...WRITEUP_SETTINGS, "search"]);
+  const accepted = new Set([...WRITEUP_FIELDS, ...WRITEUP_SETTINGS, "search", "profile_refreshed"]);
   for (const sent of Object.keys(body)) {
     if (!accepted.has(sent)) {
       return json(
@@ -68,6 +91,13 @@ export async function handleWriteUp({ request, db }) {
     } else if (sent !== "search" && typeof body[sent] !== "string") {
       return json({ error: `${sent} must be text`, field: sent }, 400);
     }
+  }
+
+  const stored = await db.getTrack(key);
+  if (!stored) return unknownTrack(key);
+  if ("documents" in body) {
+    const problem = documentsChoiceError(body.documents, parseDocumentList(stored.documents), stored.fed_by);
+    if (problem) return json({ error: problem, field: "documents" }, 400);
   }
 
   const fields = "documents" in body ? { ...body, documents: JSON.stringify([...new Set(body.documents)]) } : body;
@@ -94,6 +124,7 @@ export async function handleSetConfig({ request, db }) {
   if (body instanceof Response) return body;
 
   if (Array.isArray(body.tracks)) {
+    const stored = new Map((await db.getTracksAndSettings()).tracks.map((t) => [t.key, t]));
     const valid = body.tracks.filter((t) => t && typeof t.key === "string" && t.key);
     if (valid.length === 0) return json({ error: "tracks must be a non-empty array of {key, ...}" }, 400);
     // A `fed_by` pointing anywhere but at another track in this same list is a
@@ -108,6 +139,11 @@ export async function handleSetConfig({ request, db }) {
       if (t.documents !== undefined) {
         const problem = trackDocumentsError(t.documents);
         if (problem) return json({ error: `track "${t.key}": ${problem}`, field: "documents" }, 400);
+        // replaceTracks keeps a stored fed_by that the post leaves out.
+        const was = stored.get(t.key);
+        const fedBy = typeof t.fed_by === "string" ? t.fed_by : was?.fed_by || "";
+        const unreadable = documentsChoiceError(t.documents, was ? was.documents : null, fedBy);
+        if (unreadable) return json({ error: `track "${t.key}": ${unreadable}`, field: "documents" }, 400);
       }
     }
     // Each track carries its display fields and, optionally, its search

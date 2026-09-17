@@ -511,9 +511,21 @@ export class Db {
     if (!(await this.trackExists(key))) return null;
     const fields = WRITEUP_FIELDS.filter((f) => typeof body[f] === "string");
     const settings = WRITEUP_SETTINGS.filter((f) => typeof body[f] === "string");
-    if (fields.length === 0 && settings.length === 0) return [];
+    const refreshed = typeof body.profile_refreshed === "string" && body.profile_refreshed ? body.profile_refreshed : "";
+    if (fields.length === 0 && settings.length === 0 && !refreshed) return [];
 
     const statements = [];
+    // Last in the batch, so its result is the last one. It matches on the mark
+    // the run read: a resume chosen while the run worked moved the mark, and
+    // the next night refreshes again.
+    const clearMark = refreshed
+      ? this.d1
+          .prepare(
+            `UPDATE tracks SET profile_stale_since = '', resume_was = ''
+              WHERE user_id = ? AND key = ? AND profile_stale_since = ?`
+          )
+          .bind(this.userId, key, refreshed)
+      : null;
     if (fields.length) {
       statements.push(
         this.d1
@@ -534,8 +546,80 @@ export class Db {
           .bind(this.userId, key2, body[key2])
       );
     }
-    await this.d1.batch(statements);
-    return [...fields, ...settings];
+    if (clearMark) statements.push(clearMark);
+    const results = await this.d1.batch(statements);
+    const cleared = clearMark && (results[results.length - 1].meta.changes || 0) > 0;
+    return [...fields, ...settings, ...(cleared ? ["profile_refreshed"] : [])];
+  }
+
+  /**
+   * What ../resumes.js needs to say which searches read which file: every
+   * track's list, tracking doc, feed and profile mark, in tab order.
+   * @returns {Promise<import("./resumes.js").SearchRow[]>}
+   */
+  async getResumeState() {
+    const rows = await this.d1
+      .prepare(
+        `SELECT key, label, fed_by, doc_file, documents, profile_stale_since, resume_was
+           FROM tracks WHERE user_id = ? ORDER BY sort_order, key`
+      )
+      .bind(this.userId)
+      .all();
+    return rows.results;
+  }
+
+  /**
+   * Mark these searches' profiles stale because the resume they read was
+   * replaced in place: the list still names the same file, and its contents
+   * changed underneath the profile. `resume_was` is that same path, since the
+   * old contents have no path of their own.
+   * @param {string[]} keys searches that run
+   * @param {string} path the replaced resume, as their lists name it
+   * @param {string} now ISO 8601 instant
+   */
+  async markProfilesStale(keys, path, now) {
+    if (keys.length === 0) return;
+    await this.d1.batch(
+      keys.map((key) =>
+        this.d1
+          .prepare(
+            `UPDATE tracks SET profile_stale_since = ?,
+                    resume_was = CASE WHEN profile_stale_since = '' THEN ? ELSE resume_was END
+              WHERE user_id = ? AND key = ?`
+          )
+          .bind(now, path, this.userId, key)
+      )
+    );
+  }
+
+  /**
+   * Point each search at the resume chosen for it, and mark its profile stale
+   * (migrations/0018_profile_stale.sql). One batch, so a save that names several
+   * searches changes all of them or none.
+   *
+   * The route has already checked each key is a search this person runs and
+   * each path a stored, readable resume, and computed each new list.
+   *
+   * A search already marked keeps `resume_was`: that is still the file its
+   * profile was written from. The mark's time moves on every change, which is
+   * what stops a run that started before this change from clearing it.
+   *
+   * @param {Array<{key: string, documents: string[], was: string}>} changes
+   * @param {string} now ISO 8601 instant
+   */
+  async setSearchResumes(changes, now) {
+    if (changes.length === 0) return;
+    await this.d1.batch(
+      changes.map((c) =>
+        this.d1
+          .prepare(
+            `UPDATE tracks SET documents = ?, profile_stale_since = ?,
+                    resume_was = CASE WHEN profile_stale_since = '' THEN ? ELSE resume_was END
+              WHERE user_id = ? AND key = ?`
+          )
+          .bind(JSON.stringify(c.documents), now, c.was, this.userId, c.key)
+      )
+    );
   }
 
   /**

@@ -62,6 +62,7 @@ import {
 import { handleGetAutofillPrompt, handleGetPrompt } from "./prompt.js";
 import { handleRecordRun } from "./runs.js";
 import { handleAddScreened, handleGetDedup, handleUnscreen } from "./screened.js";
+import { handlePostSettings } from "./settings.js";
 import { handleUpdate } from "./update.js";
 
 /**
@@ -140,6 +141,8 @@ export const SESSION_ROUTES = [
   // The overnight run's only way into a track's config, and the form's fields
   // are unreachable through it - see handleWriteUp.
   ["POST", "/api/writeup", handleWriteUp],
+  // Its mirror: the account panel's fields, and nothing the run writes.
+  ["POST", "/api/settings", handlePostSettings],
   ["POST", "/api/leads", handleAddLeads],
   ["POST", "/api/runs", handleRecordRun],
   ["POST", "/api/screened", handleAddScreened],
