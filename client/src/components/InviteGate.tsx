@@ -5,7 +5,8 @@
  */
 import { useEffect, useState, type FormEvent } from "react";
 import { checkInvite, failureOf, signup } from "../api/client";
-import { inviteNotice, MAX_NAME, MIN_PASSWORD } from "../domain/onboarding";
+import { MIN_PASSWORD } from "../domain/account";
+import { inviteNotice, MAX_NAME } from "../domain/onboarding";
 
 type Problems = { name?: string; password?: string; confirm?: string; form?: string };
 

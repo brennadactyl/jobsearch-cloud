@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { changePassword, UnauthorizedError } from "../api/client";
 import type { Track } from "../api/schema";
-import { MIN_PASSWORD } from "../domain/onboarding";
+import { MIN_PASSWORD } from "../domain/account";
 import ResumeSection, { type Unsaved } from "./ResumeSection";
 
 type Props = { open: boolean; name: string; tracks: readonly Track[]; onClose: () => void };
