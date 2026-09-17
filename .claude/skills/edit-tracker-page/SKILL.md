@@ -25,7 +25,7 @@ TanStack Query plus `useState`, or SSR.
   than typing it into a component.
 - **`src/components/`** — the UI. `Shell.tsx` is the header, tab bar and
   routes; one component per tab; `writes.tsx` holds the editable controls;
-  `facts.tsx` the detail cards.
+  `detailFields.tsx` the blocks a row's detail shows.
 - **`src/ui/`** — per-browser state: `prefs.ts` (view, sort, selection, folded
   groups, in `localStorage`), `saved.ts` (the write indicator), `hooks.ts`
   (theme, the Overview's scroll region).
