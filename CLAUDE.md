@@ -59,6 +59,13 @@ role.
   `scripts/` from the checkout that registered them, so a script change is live
   once that checkout is pulled; a deploy doesn't ship it. Deploy `server/` and
   `client/` only from the main checkout.
+- **Edit repo files with the Edit and Write tools,** not shell heredocs or
+  `node -e` patches, which mangle quoting and escapes. Write a throwaway script
+  with Write too, and normalise CRLF before a scripted text replace: the working
+  copy has CRLF line endings.
+- **Don't tell a teammate something is verified until it has actually run.**
+- **Run `git push` on its own,** not chained with other commands; the
+  permission check refuses a chained push.
 - **The in-app browser pane reads the page as hidden.** TanStack Query pauses
   retries and `requestAnimationFrame` never fires there, so a live check can
   hang; `role-client-comrade` has the workarounds.

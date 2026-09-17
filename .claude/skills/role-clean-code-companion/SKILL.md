@@ -68,23 +68,32 @@ by pulling main there.
    queued feature) and wait until it is clear. A handoff gives the files, the
    change, why, the owner's proof standard, and any other session about to touch
    the same files.
-4. **Prove it's behaviour-preserving,** by area:
-   - Comments only: parse before and after with esbuild and compare; for
-     PowerShell, compare the non-comment tokens.
+4. **Prove it's behaviour-preserving,** by area - `prove-a-change` has the
+   tools and every owner's standard:
+   - Comments only: `tools/proof/check-comment-only.mjs`, or
+     `tools/proof/check-ps1-tokens.ps1` for a `.ps1`.
    - Server: `server/verify-local.mjs` against `wrangler dev --local` and
      `server/verify-schema-doc.mjs` pass, plus Backend Buddy's line-by-line
      read.
    - `prompt.js`: composed prompts byte-identical across synthetic track shapes
      (every optional field on and off, single tab and fed tabs, exclusions,
      stale profile, document variants), plus Prompt Bro's check against live
-     configs. The harness imports `buildSearchPrompt` and writes one file per
-     shape; diff the folders before and after.
+     configs: `tools/proof/prompt-snapshot.mjs`, run from main and from the
+     branch, then diff the folders.
+   - `tracker.ps1`: `tools/tracker-rig/run.sh` against main and the branch.
    - `tracker.ps1`: Prompt Bro's stub-API rig - every command's output, exit
      code and requests match.
    - Client: Client Comrade's checks - typecheck, test and lint pass with tests
      unedited.
 
 **Editing habits:**
+
+- **One rule, one home.** When a rule or constant appears in more than one
+  place, grep for every copy (its value, its name, and the prose describing it)
+  before changing any. Define it once and import it. Where two builds can't
+  share code (server and client, a script and the server), name each copy the
+  same and have each comment name the others' paths, so a change goes in all of
+  them.
 
 - Make mechanical, multi-site edits with a small script that fails loudly when
   an expected marker is missing, so it never half-applies.

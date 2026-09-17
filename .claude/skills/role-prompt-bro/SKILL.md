@@ -83,6 +83,16 @@ first.
   worktree for any test worker, so a branch switch can't change code under it.
 - After a `setup-scheduler.ps1` test, list the scheduled tasks and remove any
   whose data dir isn't the real `private\`.
+- Before a runner or `tracker.ps1` PR merges, run `tools/tracker-rig/run.sh`
+  (`tracker.ps1`) or `tools/proof/prompt-snapshot.mjs` (`prompt.js`) against
+  main and the branch, and put the result in the PR. `prove-a-change` has the
+  standard in full.
+- A scratchpad path plus a staged file can pass Windows' 260-character limit
+  and silently hide the file; run end-to-end tests from short folders.
+- Never delete or write under the main checkout's `private\` or its tracked
+  files from a session - the hook blocks it; drafts go in the scratchpad.
+- A doc-growth cap is a budget the runner passes to the prompt
+  (`?doc_budget`); change the number in `run-search.ps1` only.
 - Wait for every CI check before merging.
 - Before renumbering prompt steps, grep for citations of the step numbers.
 
@@ -102,6 +112,8 @@ first.
 
 Live data changes and deploys land outside the nightly window (00:00 to 03:15
 PT).
+
+A drifted doc or config is rebuilt with `rebuild-track-doc`.
 
 ## Starting fresh
 

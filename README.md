@@ -447,6 +447,12 @@ often than daily). **A red dot means the last run reported an error.** Either
 way, check the scheduled task and `private\<user-id>\logs\<track>.log` - a
 search that stopped running looks like one that found nothing.
 
+**Reading a run's log:** every warning and error carries a tag in brackets
+(`WARNING [run-note-failed]`), so `grep -E "ERROR|WARNING"` gives the night in
+a few lines, and searching the tag finds the code that wrote it. The last
+`run record:` line says whether the run reported itself to the tracker at all,
+which is the difference between a quiet night and a broken one.
+
 **Logging an application takes a URL.** Paste it on the Applications tab. One
 nightly task per machine (`JobSearch-Applications`, 06:30) reads each posting
 once and fills in company, role, location, work setup and posted comp - only

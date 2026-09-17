@@ -38,9 +38,10 @@ comes *down* off the live site.
    status` (from `server/`). If it's newer than you expect, find out what
    shipped and probe the live site for it first.
 
-If the session is in a worktree, the deploy is not yours to run: verify here,
-get the change merged to main, and tell the person the exact command to run
-from the main checkout.
+If the session is in a worktree, verify there and get the change merged to
+main. The session that owns the half then deploys it from the main checkout
+itself - running the commands in that directory, not in the worktree - once the
+checks below have passed there and the user has said go in that session.
 
 **If the main checkout has diverged** - another session commits there too, and
 it may be ahead with unpushed work, behind, or both - do not pull or merge it
@@ -49,11 +50,13 @@ than "the checkout is clean": *the half you are deploying* must equal the tree
 you verified. Check that directly and deploy on the answer:
 
 ```bash
-git -C <main checkout> diff --stat HEAD origin/main -- server/   # empty = same
+git -C <main checkout> diff --stat HEAD <the branch or commit you verified> -- server/   # empty = same
 ```
 
 Empty means a `server/` deploy from there ships exactly what you tested, and
-their in-flight `client/` work is irrelevant to it. Non-empty means stop.
+their in-flight work elsewhere is irrelevant to it. Non-empty means stop.
+Compare against what you verified, not `origin/main`: main can move between
+your checks and your deploy.
 
 ## Verifying a `server/` change
 
@@ -73,6 +76,9 @@ confirm nothing holds it:
 ```bash
 netstat -ano | grep -E ":(8788)\s" ; echo "exit $? (1 = free)"
 ```
+
+8788 in the commands below is an example. Use a port you have just confirmed
+free, and the same one in every command that follows.
 
 ### 2. Start the worker and prove it is yours
 
@@ -130,6 +136,17 @@ against the same local database is fine - it resets its own fixtures.
 **Read the failures, do not just count them.** A run where everything fails at
 once means the port is wrong, not the change.
 
+### Prove the checks can fail
+
+A clean first run is also what a check that tests nothing looks like. For each
+rule the change adds, commit, then break it on purpose - skip the refusal, swap
+the comparison - and rerun: the new checks must FAIL. Restore with
+`git checkout -- src` and rerun clean. Commit before breaking anything, or the
+restore takes your uncommitted work with it.
+
+A change that should alter no behaviour at all - a refactor, a comment edit - is
+proved another way: see the `prove-a-change` skill.
+
 ### 4. If you touched `migrations/`
 
 `verify-local.mjs` only sees a database the migrations built from empty. A
@@ -160,8 +177,17 @@ migration runs first, and a failed migration stops the deploy. The
 `block-remote-d1-writes` hook permits `migrations apply` and refuses data
 writes.
 
-**If this deploy carries a migration, take a backup first** -
-`scripts/backup-tracker.ps1`.
+**Take a backup first** - `scripts/backup-tracker.ps1` - always when the deploy
+carries a migration, and before any write to production data through an admin
+route. Deploy outside the nightly window (00:00 to about 03:15 PT), with no
+`JobSearch-*` scheduled task running.
+
+**Then prove the change is live.** An unauthenticated request returning 401
+only shows a worker answering. Also call the thing you changed and check for the
+answer only the new code gives: through the demo account for a session route
+(log that session out afterwards), or through `dryRun` for an admin route. Note
+the version ID `npm run deploy` prints, and tell whoever consumes the change
+that it is live, with the time in PT.
 
 **The target account must have R2 enabled** (`wrangler.toml` binds a `DOCS`
 bucket); otherwise `wrangler deploy` refuses with
@@ -182,7 +208,9 @@ cd client && npm run typecheck && npm test && npm run lint
 ```
 
 Then look at it: `npm run dev` against the live API, both themes and a narrow
-viewport - see the `edit-tracker-page` skill.
+viewport - see the `edit-tracker-page` skill. A change that depends on server
+routes not yet live is checked against the server branch locally instead - see
+the `verify-client-against-local-server` skill.
 
 Deploy through the npm script, never a bare `wrangler deploy`:
 
@@ -194,7 +222,14 @@ That builds and then deploys `dist/`. A bare `wrangler deploy` publishes whateve
 `dist/` last held, which may not be the tree you verified.
 
 Check what is live first, as for the server: `npx wrangler deployments status`
-from `client/`.
+from `client/`. The client ships only after any server change it depends on is
+live.
+
+Then confirm the live page serves the new build. Deploy output alone doesn't
+prove it: fetch the page with a cache-busting query, take the `assets/index-*.js`
+name from it, fetch that bundle, and search it for a string only this change
+added, such as a new label or class name. If the old bundle name comes back,
+fetch again with a new query before concluding anything.
 
 ## What a deploy does not cover
 

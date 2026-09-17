@@ -47,13 +47,13 @@ session is not approval.
    defining code and cite it; a survey across many files can go to a subagent,
    then spot-check its claims before writing.
 2. **Write to the house style:** why, not what; present tense; no history.
-3. **Prove it by script, not by eye:**
+3. **Prove it by script, not by eye** (`prove-a-change` has the whole set):
+   - `node tools/docs/check-links.mjs` - every relative link's file exists and
+     every `#anchor` matches a heading slug.
    - `node server/verify-schema-doc.mjs` for `schema.md` (CI runs it too).
-   - A link check: every relative link's file exists and every `#anchor`
-     matches a heading slug.
    - A history scan for "used to", "no longer", "previously" and the like.
-   - When touching code comments, prove the change is comments-only: parse
-     before and after with esbuild; for PowerShell, compare non-comment tokens.
+   - `node tools/proof/check-comment-only.mjs`, or
+     `tools/proof/check-ps1-tokens.ps1`, when the change touches code comments.
    - When a doc describes a procedure, run it where it is safe to (a local
      worker, `-WhatIf`, a stub CLI).
 4. **Commit, fetch, rebase onto `origin/main`,** rerun the checks if anything
@@ -61,8 +61,9 @@ session is not approval.
 5. **Review peers' doc edits** against their branch: check each claim in the
    code and reply with exact wording for anything to change.
 
-`architecture.svg` is derived from the diagram in `architecture.html`; change
-the HTML and regenerate the SVG, never edit the SVG alone.
+`architecture.svg` is derived from the diagram in `architecture.html`: change
+the HTML, then regenerate it with
+`node tools/docs/build-architecture-svg.mjs`. Never edit the SVG alone.
 
 ## Starting fresh
 
