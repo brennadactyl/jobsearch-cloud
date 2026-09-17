@@ -4,7 +4,7 @@
  */
 
 import { json, text } from "../http.js";
-import { buildAutofillPrompt, buildSearchPrompt } from "../prompt.js";
+import { buildAutofillPrompt, buildSearchPrompt, DEFAULT_DOC_BUDGET_BYTES } from "../prompt.js";
 import { tracksFedBy } from "../tracks.js";
 import { unknownTrack } from "../validate.js";
 
@@ -13,9 +13,14 @@ import { unknownTrack } from "../validate.js";
  * unknown track, 409 for a track with `fed_by` set (the error names the one to
  * run) or with no search config.
  *
+ * `?doc_budget=<bytes>` sets how much step 8b tells the run it may add to its
+ * doc. scripts/run-search.ps1 passes the budget it enforces, so the number lives
+ * in one place. A value that isn't a whole number from 100 to 20000 is ignored
+ * rather than refused: a bad parameter must not cost a night's run.
+ *
  * text/plain because its consumer pipes it straight into the CLI.
  */
-export async function handleGetPrompt({ db, user, params }) {
+export async function handleGetPrompt({ db, user, params, url }) {
   const key = params[0];
   const [track, config] = await Promise.all([db.getTrack(key), db.getTracksAndSettings()]);
   if (!track) return unknownTrack(key);
@@ -55,7 +60,13 @@ export async function handleGetPrompt({ db, user, params }) {
   // multi-tab: dedup for every key, a filing step, and a run record each.
   const feeds = tracksFedBy(config.tracks, key);
 
-  return text(buildSearchPrompt({ user, track, settings: config.settings, feeds }));
+  return text(buildSearchPrompt({ user, track, settings: config.settings, feeds, docBudget: docBudgetFrom(url) }));
+}
+
+function docBudgetFrom(url) {
+  const raw = url ? url.searchParams.get("doc_budget") : null;
+  const n = raw !== null && /^\d+$/.test(raw) ? Number(raw) : NaN;
+  return n >= 100 && n <= 20000 ? n : DEFAULT_DOC_BUDGET_BYTES;
 }
 
 /**

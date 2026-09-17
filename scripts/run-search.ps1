@@ -218,9 +218,13 @@ function Record-FailedRun($reason) {
 # night, and it only grows. What runs append is mostly per-company fetch notes,
 # which belong on the shared company list through the prompt's step 9d ("RECORD
 # WHAT YOU COVERED"); a sentence in the prompt saying so doesn't stop it, so the
-# limit lives here. 1.5 KB fits a fit refinement or a promoted company; a batch
-# of fetch notes doesn't. A doc may always shrink.
-$DocGrowthLimitBytes = 1500
+# limit lives here. The budget is what the prompt tells the run it may add: it
+# is passed to GET /api/prompt as ?doc_budget, so the number the run is told and
+# the one it is held to can't disagree. The refusal is set well above it, so a
+# run that aims for the budget and overshoots a little still saves its notes;
+# a batch of fetch notes doesn't. A doc may always shrink.
+$DocBudgetBytes = 1000
+$DocGrowthLimitBytes = [int]($DocBudgetBytes * 2.5)
 
 # ---- The one section a profile refresh may rewrite. ------------------------
 #
@@ -361,7 +365,7 @@ Log "credentials from: $(if (Test-Path $trackerFile) { $trackerFile } else { 'en
 
 try {
     $promptBody = Invoke-WithRetry "GET /api/prompt/$Task" {
-        Invoke-RestMethod -Uri "$trackerUrl/api/prompt/$Task" -Headers @{ Authorization = "Bearer $trackerToken" } -ErrorAction Stop
+        Invoke-RestMethod -Uri "$trackerUrl/api/prompt/${Task}?doc_budget=$DocBudgetBytes" -Headers @{ Authorization = "Bearer $trackerToken" } -ErrorAction Stop
     }
 } catch {
     $status = Get-HttpStatus $_

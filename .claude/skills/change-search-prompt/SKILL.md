@@ -12,7 +12,7 @@ its siblings.
 | Surface | Holds | Reaches |
 |---|---|---|
 | `scripts/tracker.ps1` | the mechanics of every API call a run makes - the route, the body, the track key, the date, what a bad row does | every track, every person, on the next run; nothing to deploy |
-| `server/src/prompt.js` | which command each numbered step invokes and what only the run can decide - what counts as verified, what to report | every track, every person, on the next server deploy |
+| `server/src/prompt.js` | which command each numbered step invokes and what only the run can decide - what counts as verified, what to report. The doc budget step 8b states is passed in by `run-search.ps1` (`?doc_budget`), which enforces it: change the number there, not here | every track, every person, on the next server deploy |
 | D1 track config (`/api/config`) | one track's stored prose - role line, how the resume is framed, every rule that screens a posting out (scope, fit clause, fit step) | that one track, immediately, no deploy |
 | `docs/tracked_<key>_postings.md` in the tracker (`/api/documents`) | what has no other home - the profile the resume gives, what the person is looking for, how to weigh fit, why companies were tried. Never a screening rule, never a fetch fact | that one track, immediately, everywhere - a run fetches it fresh |
 
