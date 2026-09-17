@@ -1028,10 +1028,8 @@ export class Db {
    * record's numbers come from here, not from the caller (see routes/runs.js's
    * handleRecordRun).
    *
-   *   - `leadsAdded`: leads under this key whose `found` is this date.
-   *   - `delisted`: screened rows carrying DELISTED_REASON (see above).
-   *   - `screenedAdded`: every other screened row that day, so a delisting
-   *     isn't counted in both columns.
+   * A delisting leaves a screened row too, so screened rows are split by
+   * DELISTED_REASON: each is counted as a delisting or as a screening, never both.
    *
    * Only `added_by = 'run'` screened rows count, so a person clearing postings
    * off their board isn't reported as the search's work
@@ -1046,14 +1044,14 @@ export class Db {
   async countRunActivity(key, on) {
     const [leads, screened] = await Promise.all([
       this.d1
-        .prepare("SELECT COUNT(*) AS n FROM leads WHERE user_id = ? AND search = ? AND found = ?")
+        .prepare("SELECT COUNT(*) AS leadsAdded FROM leads WHERE user_id = ? AND search = ? AND found = ?")
         .bind(this.userId, key, on)
         .first(),
       // One query, so both sums agree on what "not delisted" means.
       this.d1
         .prepare(
           `SELECT SUM(CASE WHEN reason = ? THEN 1 ELSE 0 END) AS delisted,
-                  SUM(CASE WHEN reason <> ? THEN 1 ELSE 0 END) AS screened
+                  SUM(CASE WHEN reason <> ? THEN 1 ELSE 0 END) AS screenedAdded
              FROM screened
             WHERE user_id = ? AND search = ? AND date = ? AND added_by = 'run'`
         )
@@ -1062,9 +1060,9 @@ export class Db {
     ]);
     // SUM over zero rows is NULL in SQLite, and a quiet day is normal.
     return {
-      leadsAdded: (leads && leads.n) || 0,
-      screenedAdded: (screened && screened.screened) || 0,
-      delisted: (screened && screened.delisted) || 0,
+      leadsAdded: leads?.leadsAdded || 0,
+      screenedAdded: screened?.screenedAdded || 0,
+      delisted: screened?.delisted || 0,
     };
   }
 
