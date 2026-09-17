@@ -30,7 +30,7 @@ import { runState } from "../domain/runs";
 import { FORWARD_STAGES } from "../domain/stages";
 import { buildTracks, pathForTab, pathForTarget } from "../domain/tabs";
 import { selectRow } from "../ui/prefs";
-import { RunStamp } from "./bits";
+import { RunStamp } from "./RunStamp";
 import {
   ChartTable,
   ColumnChart,
