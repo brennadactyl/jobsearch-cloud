@@ -88,8 +88,8 @@ export const APP_ROLE_FIELDS: readonly (readonly [field: string, label: string])
 ];
 
 export const LEAD_SORTS: readonly (readonly [key: string, label: string])[] = [
-  ["priority", "Priority"],
   ["found-desc", "Newest found"],
+  ["priority", "Priority"],
   ["found-asc", "Oldest found"],
   ["location-asc", "Location A-Z"],
   ["company-asc", "Company A-Z"],

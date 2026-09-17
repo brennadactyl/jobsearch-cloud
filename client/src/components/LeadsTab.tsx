@@ -119,8 +119,8 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
       <div className="key">
         <SortSelect kind="leads" id="leadSort" />
         <GeoKey settings={settings} />
-        {/* Only true under the default sort - a flat sort means proximity no
-            longer decides the order, so the legend shouldn't claim it does. */}
+        {/* Only true under Priority - any other sort means proximity no longer
+            decides the order, so the legend shouldn't claim it does. */}
         {prefs.leadSort === "priority" && <span>Closest roles sorted first</span>}
         <span className="key-run">
           {isAll ? trackCountLine(tracks) : <RunStamp track={track} settings={settings} />}
