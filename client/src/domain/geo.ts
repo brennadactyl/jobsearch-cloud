@@ -25,7 +25,7 @@ export function tierCssClass(rank: number): string {
 
 export function matchLocationTier(
   location: string | null | undefined,
-  rules: readonly PriorityLocation[]
+  rules: readonly PriorityLocation[],
 ): LocationTier | null {
   const loc = String(location ?? "").toLowerCase();
   for (let i = 0; i < rules.length; i++) {

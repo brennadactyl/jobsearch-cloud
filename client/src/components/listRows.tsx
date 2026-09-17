@@ -18,7 +18,7 @@ export function SelectableRow({
   children,
 }: {
   selected: boolean;
-  /** The location tier's stripe class (`matchLocationTier().cssClass`), or "" for none. */
+  /** The tier stripe class from `matchLocationTier()`, or "" for none. */
   tierClass: string;
   onSelect: () => void;
   children: ReactNode;
