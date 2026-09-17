@@ -107,11 +107,13 @@ export const DOCUMENT_FOLDERS = ["docs", "resumes", "reference"];
 // more than word characters, spaces, dots and hyphens is likelier a mistake or
 // an attack than a document.
 //
-// The first and last characters must be word characters because Windows
-// silently strips a trailing space or dot when it creates a file: `x.md `
-// would materialize as `x.md`, and the hash-compared write-back would PUT to
-// `x.md`, orphaning the original and editing a second copy.
-const DOCUMENT_PATH = new RegExp(`^(${DOCUMENT_FOLDERS.join("|")})/\\w(?:[\\w .-]*\\w)?$`);
+// A filename of word characters, spaces, dots and hyphens that starts and ends
+// with a word character. The ends matter because Windows silently strips a
+// trailing space or dot when it creates a file: `x.md ` would materialize as
+// `x.md`, and the hash-compared write-back would PUT to `x.md`, orphaning the
+// original and editing a second copy.
+const PLAIN_FILENAME = String.raw`\w(?:[\w .-]*\w)?`;
+const DOCUMENT_PATH = new RegExp(`^(${DOCUMENT_FOLDERS.join("|")})/${PLAIN_FILENAME}$`);
 
 // DOS device names are not filenames on Windows whatever extension follows:
 // `CON`, `PRN.md` and `aux.txt` all resolve to a device, so the runner's write
