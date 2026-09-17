@@ -7,8 +7,6 @@ import { DEFAULT_STALE_RUN_HOURS, type IntakeAnswers, type InviteReason, type Ro
 import { HOUR_MS } from "./format";
 import { parseLocations, tooManyLocations } from "./locations";
 
-/** The server's floor (PASSWORD_MIN_LENGTH in server/src/auth.js), checked here too so a short password answers at once. */
-export const MIN_PASSWORD = 12;
 export const MAX_NAME = 60;
 /** The documents route refuses anything larger. */
 export const MAX_FILE_BYTES = 8 * 1024 * 1024;

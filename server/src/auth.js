@@ -23,7 +23,7 @@ const PBKDF2_ITERATIONS = 100000;
 // because /api/login has no rate limiting in front of it - see server/README.md.
 // Three other places check the same number before sending and can't import
 // this one, so a change goes in all four: MIN_PASSWORD in
-// client/src/domain/onboarding.ts, scripts/set-password.ps1 and
+// client/src/domain/account.ts, scripts/set-password.ps1 and
 // scripts/seed-demo-user.ps1.
 export const PASSWORD_MIN_LENGTH = 12;
 
