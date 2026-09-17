@@ -7,7 +7,7 @@
  */
 import type { Application, Lead, Settings, Track } from "../api/schema";
 import { APP_ROLE_FIELDS, LABELS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "./constants";
-import { geo } from "./geo";
+import { matchLocationTier } from "./geo";
 
 export interface Column<T> {
   header: string;
@@ -19,7 +19,7 @@ function field<T>(name: string, header: string): Column<T> {
 }
 
 function tier(location: string, settings: Settings): string {
-  return geo(location, settings.priority_locations)?.label ?? "";
+  return matchLocationTier(location, settings.priority_locations)?.label ?? "";
 }
 
 /**

@@ -6,7 +6,7 @@ import { LABELS } from "../domain/constants";
 import { appRows, drillKeeps } from "../domain/drills";
 import { applicationColumns } from "../domain/export";
 import { daysSince, hostOf, safeUrl } from "../domain/format";
-import { geo } from "../domain/geo";
+import { matchLocationTier } from "../domain/geo";
 import { appComparator, fillState, type FillState } from "../domain/rows";
 import { buildTracks, pathWithoutDrill } from "../domain/tabs";
 import { revealSelectedRow } from "../ui/hooks";
@@ -161,14 +161,14 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
       <div className="md">
         <div className="md-list" ref={revealSelectedRow} data-wheel-target>
           {rows.map((a) => {
-            const g = geo(a.location, settings.priority_locations);
+            const g = matchLocationTier(a.location, settings.priority_locations);
             const d = daysSince(a.dateApplied);
             const label = a.company || hostOf(a.link) || "Untitled";
             return (
               <SelectableRow
                 key={a.id}
                 selected={a.id === sel.id}
-                tierClass={g ? g.p : ""}
+                tierClass={g ? g.cssClass : ""}
                 onSelect={() => selectRow("applications", String(a.id))}
               >
                 <div className="md-row-top">
@@ -315,14 +315,14 @@ function AppsGrid({
                 )}
                 {!shut &&
                   grp.rows.map((a) => {
-                    const g = geo(a.location, settings.priority_locations);
+                    const g = matchLocationTier(a.location, settings.priority_locations);
                     const open = !!prefs.expanded[a.id];
                     const d = daysSince(a.dateApplied);
                     const link = safeUrl(a.link);
                     // A stuck row's edge says stuck rather than how close the
                     // job is: it has no location yet to be close to.
                     const cls = [
-                      g && grp.key !== "stuck" ? g.p : "",
+                      g && grp.key !== "stuck" ? g.cssClass : "",
                       grp.key === "stuck" ? "stuck" : "",
                       a.id === shownId ? "gr-sel" : "",
                     ]
@@ -436,7 +436,7 @@ function AppDetail({
 }) {
   const { settings } = data;
   const d = daysSince(app.dateApplied);
-  const g = geo(app.location, settings.priority_locations);
+  const g = matchLocationTier(app.location, settings.priority_locations);
   const track = appTrackLabel(app, data);
   const safe = safeUrl(app.link);
 
@@ -473,7 +473,7 @@ function AppDetail({
               placeholder={LABELS.location}
               ariaLabel={LABELS.location}
             />
-            {g && <span className={`geo ${g.p}`}>{g.label}</span>}
+            {g && <span className={`geo ${g.cssClass}`}>{g.label}</span>}
             {safe && (
               <>
                 <span className="dh-sep">·</span>

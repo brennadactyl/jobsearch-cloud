@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { geo } from "./geo";
+import { matchLocationTier } from "./geo";
 import { locationRules, parseLocation, parseLocations, tooManyLocations } from "./locations";
 
 /** Location strings in the shapes postings write them. A rule is right when it ranks these. */
@@ -9,7 +9,7 @@ const REMOTE_US = [
 ];
 const MULTI_CITY = "Seattle, WA / Denver, CO / Austin, TX";
 
-const rank = (answer: string, location: string) => geo(location, locationRules(parseLocations(answer)))?.label ?? null;
+const rank = (answer: string, location: string) => matchLocationTier(location, locationRules(parseLocations(answer)))?.label ?? null;
 
 describe("parseLocations", () => {
   it("keeps the order typed, and drops empty entries", () => {

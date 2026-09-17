@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_LEADS } from "./constants";
 import { NOW, applications, leads, settings, tracks as trackList } from "./fixture";
 import { daysSince, hostOf, relWhen, safeUrl } from "./format";
-import { geo, priClass, rank } from "./geo";
+import { matchLocationTier, tierCssClass, tierRank } from "./geo";
 import { appComparator, fillState, leadComparator } from "./rows";
 import { runState, runSummary, trackWarn } from "./runs";
 import { buildTabs, buildTracks, pathForTab } from "./tabs";
@@ -52,31 +52,31 @@ describe("hostOf", () => {
   });
 });
 
-describe("geo", () => {
+describe("matchLocationTier", () => {
   it("ranks by position in the list, so index is the tier", () => {
-    expect(geo("Springfield, IL", settings.priority_locations)?.i).toBe(0);
-    expect(geo("Shelbyville", settings.priority_locations)?.i).toBe(1);
-    expect(geo("Ogdenville", settings.priority_locations)).toBeNull();
+    expect(matchLocationTier("Springfield, IL", settings.priority_locations)?.rank).toBe(0);
+    expect(matchLocationTier("Shelbyville", settings.priority_locations)?.rank).toBe(1);
+    expect(matchLocationTier("Ogdenville", settings.priority_locations)).toBeNull();
   });
 
   it("matches case-insensitively on a substring", () => {
-    expect(geo("REMOTE (US)", settings.priority_locations)?.label).toBe("Metro core");
+    expect(matchLocationTier("REMOTE (US)", settings.priority_locations)?.label).toBe("Metro core");
   });
 
   it("requires every term of allOf and any term of anyOf", () => {
     const rules = [{ label: "Both", allOf: ["remote", "us"] }];
-    expect(geo("Remote - US", rules)?.label).toBe("Both");
-    expect(geo("Remote - EU", rules)).toBeNull();
+    expect(matchLocationTier("Remote - US", rules)?.label).toBe("Both");
+    expect(matchLocationTier("Remote - EU", rules)).toBeNull();
   });
 
   it("caps the colour class at the five the stylesheet defines", () => {
-    expect(priClass(0)).toBe("pri0");
-    expect(priClass(4)).toBe("pri4");
-    expect(priClass(5)).toBe("");
+    expect(tierCssClass(0)).toBe("pri0");
+    expect(tierCssClass(4)).toBe("pri4");
+    expect(tierCssClass(5)).toBe("");
   });
 
   it("sorts unmatched locations last rather than first", () => {
-    expect(rank({ location: "Ogdenville" }, settings.priority_locations)).toBe(999);
+    expect(tierRank({ location: "Ogdenville" }, settings.priority_locations)).toBe(999);
   });
 });
 
@@ -84,7 +84,7 @@ describe("leadComparator", () => {
   it("sinks Not a fit, then orders by tier, then newest found", () => {
     const sorted = [...leads].sort(leadComparator("priority", settings.priority_locations));
     expect(sorted[sorted.length - 1].status).toBe("Not a fit");
-    const ranks = sorted.filter((l) => l.status !== "Not a fit").map((l) => rank(l, settings.priority_locations));
+    const ranks = sorted.filter((l) => l.status !== "Not a fit").map((l) => tierRank(l, settings.priority_locations));
     expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
   });
 

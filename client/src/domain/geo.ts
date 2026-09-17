@@ -7,31 +7,38 @@
  */
 import type { Lead, PriorityLocation } from "../api/schema";
 
-export interface GeoMatch {
-  /** CSS class for the tier stripe: pri0..pri4. */
-  p: string;
+/** How many tiers the stylesheet colours: `.pri0` to `.pri4` in tracker.css. */
+export const TIER_CLASS_COUNT = 5;
+
+/** Where a posting's location falls in the configured tiers. */
+export interface LocationTier {
+  /** CSS class for the tier stripe: pri0..pri4, or "" past the coloured tiers. */
+  cssClass: string;
   label: string;
-  /** Rank. 0 is the top tier. */
-  i: number;
+  /** 0 is the top tier. */
+  rank: number;
 }
 
-export function priClass(i: number): string {
-  return i < 5 ? `pri${i}` : "";
+export function tierCssClass(rank: number): string {
+  return rank < TIER_CLASS_COUNT ? `pri${rank}` : "";
 }
 
-export function geo(location: string | null | undefined, rules: readonly PriorityLocation[]): GeoMatch | null {
+export function matchLocationTier(
+  location: string | null | undefined,
+  rules: readonly PriorityLocation[]
+): LocationTier | null {
   const loc = String(location ?? "").toLowerCase();
   for (let i = 0; i < rules.length; i++) {
     const r = rules[i];
     if (r.allOf && !r.allOf.every((s) => loc.includes(s))) continue;
     if (r.anyOf && !r.anyOf.some((s) => loc.includes(s))) continue;
-    return { p: priClass(i), label: r.label, i };
+    return { cssClass: tierCssClass(i), label: r.label, rank: i };
   }
   return null;
 }
 
 /** Rank for sorting. Unmatched locations sort last, not first. */
-export function rank(l: Pick<Lead, "location">, rules: readonly PriorityLocation[]): number {
-  const g = geo(l.location, rules);
-  return g ? g.i : 999;
+export function tierRank(l: Pick<Lead, "location">, rules: readonly PriorityLocation[]): number {
+  const tier = matchLocationTier(l.location, rules);
+  return tier ? tier.rank : 999;
 }
