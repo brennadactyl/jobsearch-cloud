@@ -208,7 +208,7 @@ function Record-FailedRun($reason) {
         }
         Log "recorded a failed run against $Task - the page will show it as an error rather than a stale stamp"
     } catch {
-        Log "WARNING: could not record the failed run ($($_.Exception.Message)). The failure above still stands; only the tracker's copy of it is missing."
+        Log "WARNING [failed-run-unrecorded]: could not record the failed run ($($_.Exception.Message)). The failure above still stands; only the tracker's copy of it is missing."
     }
 }
 
@@ -277,7 +277,7 @@ function Add-RunNote($text) {
                 -ContentType "application/json" -Body ($body | ConvertTo-Json -Compress)
         }
     } catch {
-        Log "WARNING: couldn't add to the run record ($($_.Exception.Message)): $text"
+        Log "WARNING [run-note-failed]: couldn't add to the run record ($($_.Exception.Message)): $text"
     }
 }
 
@@ -318,12 +318,14 @@ function Send-RunLog {
         # response body, which Windows PowerShell keeps in ErrorDetails rather
         # than in the exception's message.
         $why = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
-        Log "WARNING: couldn't upload this run's log ($(Get-HttpStatus $_)): $why - it is still in $logFile"
+        Log "WARNING [log-upload-failed]: couldn't upload this run's log ($(Get-HttpStatus $_)): $why - it is still in $logFile"
     }
 }
 
-function Stop-Run($reason, $userMessage) {
-    Log "ERROR: $reason"
+function Stop-Run($tag, $reason, $userMessage) {
+    # The tag names the shape of the failure rather than its wording, so
+    # scripts/run-report.ps1 keeps counting it after the sentence is reworded.
+    Log "ERROR [$tag]: $reason"
     Record-FailedRun $reason
     # Guarded: the early fatal checks can reach this before the queue below is
     # even loaded, and a run that never took the lock has nothing to give back.
@@ -344,14 +346,14 @@ function Stop-Run($reason, $userMessage) {
 # stale.
 . (Join-Path $scriptDir "run-lock.ps1")
 if (-not (Enter-RunLock)) {
-    Stop-Run "another run on this machine was still going after $RUN_LOCK_MAX_WAIT_MINUTES minutes - nothing was searched or synced" `
+    Stop-Run "queue-timeout" "another run on this machine was still going after $RUN_LOCK_MAX_WAIT_MINUTES minutes - nothing was searched or synced" `
         "The machine was busy with another run for $RUN_LOCK_MAX_WAIT_MINUTES minutes. See $logFile."
 }
 
 . (Join-Path $scriptDir "claude-cli.ps1")
 $claudePath = Find-ClaudeCli
 if (-not $claudePath) {
-    Stop-Run "the claude CLI is not on PATH or in npm's global folder - nothing was searched or synced" "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
+    Stop-Run "cli-missing" "the claude CLI is not on PATH or in npm's global folder - nothing was searched or synced" "claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"
 }
 
 # A prompt fetch failure is fatal: a stale or empty prompt would look like a
@@ -376,10 +378,10 @@ try {
     }
     # After a 401 or 404 the failure record is refused too; recording is
     # best-effort, so the run still exits on the error that explains it.
-    Stop-Run "couldn't fetch the prompt ($status): $hint" "Couldn't fetch the prompt for '$Task' ($status): $hint"
+    Stop-Run "prompt-fetch-failed" "couldn't fetch the prompt ($status): $hint" "Couldn't fetch the prompt for '$Task' ($status): $hint"
 }
 if (-not $promptBody) {
-    Stop-Run "the tracker returned an empty prompt for $Task" "The tracker returned an empty prompt for '$Task'."
+    Stop-Run "prompt-empty" "the tracker returned an empty prompt for $Task" "The tracker returned an empty prompt for '$Task'."
 }
 
 # ---- Materialize this search's documents into a throwaway directory. -------
@@ -425,7 +427,7 @@ if ($UseLocalFiles) {
             # that says so - is in the response body, which Windows PowerShell
             # keeps in ErrorDetails.
             $why = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
-            Stop-Run "couldn't list this search's documents ($status): $why" "Couldn't list documents for '$Task' ($status): $why"
+            Stop-Run "documents-list-failed" "couldn't list this search's documents ($status): $why" "Couldn't list documents for '$Task' ($status): $why"
         }
     }
 
@@ -434,13 +436,13 @@ if ($UseLocalFiles) {
         # failed download: the search would run without a file it was set up to
         # read, most likely its resume.
         if ($index.missing -and $index.missing.Count -gt 0) {
-            Stop-Run "this search lists documents the tracker doesn't have: $($index.missing -join ', ')" "Search '$Task' lists documents that aren't in the tracker: $($index.missing -join ', '). Upload them, or correct the track's documents list. Refusing to search against a partial profile."
+            Stop-Run "documents-missing" "this search lists documents the tracker doesn't have: $($index.missing -join ', ')" "Search '$Task' lists documents that aren't in the tracker: $($index.missing -join ', '). Upload them, or correct the track's documents list. Refusing to search against a partial profile."
         }
         # Zero documents is refused: with no baseline doc and no resume the
         # search screens every posting against nothing and reports success,
         # which looks like a quiet night. Usually the import has not been run.
         if (-not $index.documents -or $index.documents.Count -eq 0) {
-            Stop-Run "the tracker holds no documents for this account" "No documents for this account - run scripts\import-documents.ps1 first. Refusing to search against an empty profile."
+            Stop-Run "no-documents" "the tracker holds no documents for this account" "No documents for this account - run scripts\import-documents.ps1 first. Refusing to search against an empty profile."
         }
 
         # Set when a resume was chosen since this search's profile was written.
@@ -471,7 +473,7 @@ if ($UseLocalFiles) {
             }
         }
         if ($longest) {
-            Stop-Run "run directory path too long: $longest is $($longest.Length) characters, over the Windows limit of $longestLimit" ("The run would write '{0}', which is {1} characters - Windows PowerShell cannot write paths longer than {2}. Use a data dir at least {3} characters shorter: set JOB_SEARCH_DATA_DIR or pass -DataDir." -f $longest, $longest.Length, $longestLimit, $over)
+            Stop-Run "path-too-long" "run directory path too long: $longest is $($longest.Length) characters, over the Windows limit of $longestLimit" ("The run would write '{0}', which is {1} characters - Windows PowerShell cannot write paths longer than {2}. Use a data dir at least {3} characters shorter: set JOB_SEARCH_DATA_DIR or pass -DataDir." -f $longest, $longest.Length, $longestLimit, $over)
         }
 
         if (Test-Path $runDir) { Remove-Item -Recurse -Force $runDir }
@@ -492,11 +494,11 @@ if ($UseLocalFiles) {
                         -Headers $headers -OutFile $dest -UseBasicParsing -ErrorAction Stop
                 }
             } catch {
-                Stop-Run "couldn't fetch $($doc.path) ($(Get-HttpStatus $_)): $($_.Exception.Message)" "Couldn't fetch document '$($doc.path)'. Refusing to search against a partial profile."
+                Stop-Run "document-fetch-failed" "couldn't fetch $($doc.path) ($(Get-HttpStatus $_)): $($_.Exception.Message)" "Couldn't fetch document '$($doc.path)'. Refusing to search against a partial profile."
             }
             $got = (Get-Item $dest).Length
             if ($doc.bytes -and $got -ne $doc.bytes) {
-                Stop-Run "$($doc.path) came back $got bytes, expected $($doc.bytes)" "Document '$($doc.path)' downloaded short. Refusing to search against a truncated profile."
+                Stop-Run "document-short" "$($doc.path) came back $got bytes, expected $($doc.bytes)" "Document '$($doc.path)' downloaded short. Refusing to search against a truncated profile."
             }
             $manifest[$doc.path] = @{
                 etag  = $doc.etag
@@ -527,7 +529,7 @@ $cwd = if ($runDir) { $runDir } else { $workDir }
 # the file unrunnable rather than producing a readable error.
 $helperSrc = Join-Path $scriptDir "tracker.ps1"
 if (-not (Test-Path $helperSrc)) {
-    Stop-Run "$helperSrc is missing - the run would have no way to sync anything" "scripts\tracker.ps1 not found. The search prompt invokes it for every API call."
+    Stop-Run "helper-missing" "$helperSrc is missing - the run would have no way to sync anything" "scripts\tracker.ps1 not found. The search prompt invokes it for every API call."
 }
 Copy-Item -Path $helperSrc -Destination (Join-Path $cwd "tracker.ps1") -Force
 $shim = "#!/bin/sh`n" +
@@ -583,7 +585,7 @@ try {
     $recordBefore = if ($trackBefore -and $trackBefore.last_run) { [string]$trackBefore.last_run.at } else { "" }
     Log "run record before: $(if ($recordBefore) { $recordBefore } else { '(never recorded)' })"
 } catch {
-    Log "WARNING: couldn't read this track's run record before starting ($($_.Exception.Message)) - the post-run check will have nothing to compare against."
+    Log "WARNING [record-baseline-unread]: couldn't read this track's run record before starting ($($_.Exception.Message)) - the post-run check will have nothing to compare against."
 }
 
 $job = Start-Job -ScriptBlock {
@@ -641,7 +643,9 @@ $failureReason = ""
 $failure = Get-CliFailure $outputText $jobState
 if ($failure) {
     $failureReason = "$($failure.Message) - nothing was searched or synced"
-    Log "ERROR: $failureReason"
+    # The kind is the tag: which of the CLI's failures this was is exactly what
+    # a report of many nights wants to count.
+    Log "ERROR [cli-$($failure.Kind)]: $failureReason"
     if ($failure.Hint) { Log "       $($failure.Hint)" }
     $exitCode = 1
 }
@@ -657,9 +661,17 @@ if ($failure) {
 # reached, it says so and leaves $exitCode alone. Only the run record is
 # asserted, never leads or screened rows - a quiet night adds none, and the
 # record is the one thing every run writes.
+#
+# The check ends in one fixed line, whatever it found: what a run did is
+# otherwise only in the model's prose, which scripts/run-report.ps1 won't parse.
+# The counts are the record's own, which the tracker derives from the rows that
+# landed. `swept` is this search's own number - a tab another search fills reads
+# 0 - and is left off entirely by a deployment that doesn't keep one, so a
+# report shows "no count" rather than a false zero.
+$recordSummary = "status=unchecked"
 if ($exitCode -eq 0) {
     if ($null -eq $recordBefore) {
-        Log "WARNING: no baseline was read before the run - skipping the check that it wrote a record."
+        Log "WARNING [record-check-skipped]: no baseline was read before the run - skipping the check that it wrote a record."
     } else {
         try {
             $cfg = Invoke-WithRetry "GET /api/config" {
@@ -669,23 +681,32 @@ if ($exitCode -eq 0) {
             $track = $cfg.tracks | Where-Object { $_.key -eq $Task } | Select-Object -First 1
             $recordedAt = if ($track -and $track.last_run) { [string]$track.last_run.at } else { "" }
             if (-not $recordedAt -or $recordedAt -eq $recordBefore) {
-                Log "ERROR: the run wrote no run record - it did not finish, whatever the output says."
+                $recordSummary = "status=none"
+                Log "ERROR [no-run-record]: the run wrote no run record - it did not finish, whatever the output says."
                 Log "       Run record for $Task is unchanged since this run started$(if ($recordBefore) { " ($recordBefore)" } else { ' (there has never been one)' })."
                 $failureReason = "the run wrote no run record - it did not finish its own bookkeeping"
                 $exitCode = 1
-            } elseif ($track.last_run.status -eq "error") {
+            } else {
+                $r = $track.last_run
+                $recordSummary = "status=$([string]$r.status) leads_added=$([int]$r.leads_added) screened_added=$([int]$r.screened_added) delisted=$([int]$r.delisted)"
+                if ($null -ne $r.PSObject.Properties["swept"] -and $null -ne $r.swept) {
+                    $recordSummary += " swept=$([int]$r.swept)"
+                }
+            }
+            if ($recordedAt -and $recordedAt -ne $recordBefore -and $track.last_run.status -eq "error") {
                 # The run recorded its own failure. That record stands, so none
                 # is added - but the task must not report exit 0 over it.
                 $script:runRecorded = $true
-                Log "ERROR: the run recorded itself as an error: $($track.last_run.note)"
+                Log "ERROR [run-recorded-error]: the run recorded itself as an error: $($track.last_run.note)"
                 $failureReason = "the run recorded itself as an error: $($track.last_run.note)"
                 $exitCode = 1
             }
         } catch {
-            Log "WARNING: couldn't check whether a run record was written ($($_.Exception.Message)) - leaving the run's own result alone."
+            Log "WARNING [record-check-failed]: couldn't check whether a run record was written ($($_.Exception.Message)) - leaving the run's own result alone."
         }
     }
 }
+Log "run record:       $recordSummary"
 
 # ---- Write back what the run edited. --------------------------------------
 #
@@ -705,7 +726,7 @@ if ($runDir -and $manifest.Count -gt 0) {
         if (-not (Test-Path $local)) {
             # Never mirrored as a delete: removing someone's baseline doc
             # because a run deleted its local copy is not this script's call.
-            Log "WARNING: $rel is gone from the run directory - left untouched in the tracker."
+            Log "WARNING [doc-missing]: $rel is gone from the run directory - left untouched in the tracker."
             continue
         }
 
@@ -713,7 +734,7 @@ if ($runDir -and $manifest.Count -gt 0) {
         if ($now -eq $manifest[$rel].sha) { continue }
 
         if ($folder -ne "docs") {
-            Log "WARNING: $rel changed during the run and was discarded - only docs/ is written back."
+            Log "WARNING [non-doc-changed]: $rel changed during the run and was discarded - only docs/ is written back."
             continue
         }
 
@@ -731,7 +752,7 @@ if ($runDir -and $manifest.Count -gt 0) {
                 # marked out of date, so the next run tries the rewrite again.
                 $kept = Join-Path $logDir "$Task-doc-refused-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
                 Copy-Item $local $kept -Force
-                Log "WARNING: $rel $refusal during a profile refresh - not written back, and the profile stays marked out of date. This run's version: $kept"
+                Log "WARNING [refresh-refused]: $rel $refusal during a profile refresh - not written back, and the profile stays marked out of date. This run's version: $kept"
                 Add-RunNote "the profile refresh $refusal, so it wasn't saved and runs again next time - this run's version is in logs\$(Split-Path $kept -Leaf)"
                 continue
             }
@@ -743,7 +764,7 @@ if ($runDir -and $manifest.Count -gt 0) {
                 # person to look at rather than sent, and the run record says where.
                 $kept = Join-Path $logDir "$Task-doc-refused-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
                 Copy-Item $local $kept -Force
-                Log "WARNING: $rel grew $grew bytes in this run, over the $DocGrowthLimitBytes-byte limit - not written back. This run's version: $kept"
+                Log "WARNING [doc-over-limit]: $rel grew $grew bytes in this run, over the $DocGrowthLimitBytes-byte limit - not written back. This run's version: $kept"
                 Add-RunNote "$rel grew $grew bytes, over the $DocGrowthLimitBytes-byte limit, so this run's doc edit wasn't saved - it is in logs\$(Split-Path $kept -Leaf)"
                 continue
             }
@@ -771,10 +792,10 @@ if ($runDir -and $manifest.Count -gt 0) {
                 # copy would erase it. Keep the copy for a person to merge.
                 $rescue = Join-Path $logDir "$Task-doc-conflict-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
                 Copy-Item $local $rescue -Force
-                Log "ERROR: $rel changed underneath this run (412). This run's version: $rescue"
+                Log "ERROR [doc-changed-underneath]: $rel changed underneath this run (412). This run's version: $rescue"
                 $failureReason = "$rel changed underneath this run (412) - this run's version is at $rescue"
             } else {
-                Log "ERROR: couldn't write back $rel ($status): $($_.Exception.Message)"
+                Log "ERROR [write-back-failed]: couldn't write back $rel ($status): $($_.Exception.Message)"
                 $failureReason = "couldn't write back $rel ($status) - the run's edits are in $local"
             }
             $exitCode = 1
@@ -813,10 +834,10 @@ if ($runDir -and $manifest.Count -gt 0) {
                     Log "profile:          rewritten, but the resume changed again during this run - it stays marked, and the next run rewrites it from the newer one"
                 }
             } catch {
-                Log "WARNING: the profile was rewritten but couldn't be marked current ($(Get-HttpStatus $_)) - the next run rewrites it again"
+                Log "WARNING [profile-mark-failed]: the profile was rewritten but couldn't be marked current ($(Get-HttpStatus $_)) - the next run rewrites it again"
             }
         } else {
-            Log "WARNING: this run was asked to rewrite the profile from the new resume and didn't - it stays marked for the next run"
+            Log "WARNING [profile-not-refreshed]: this run was asked to rewrite the profile from the new resume and didn't - it stays marked for the next run"
             Add-RunNote "the resume changed, but this run's profile rewrite wasn't saved - the next run tries again"
         }
     }
