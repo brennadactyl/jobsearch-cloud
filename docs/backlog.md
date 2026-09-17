@@ -7,11 +7,10 @@ Kept by whoever is holding the product manager role.
 
 ## Next
 
-- **[Word resumes](word-resumes-plan.md)** - in progress: server extraction,
-  setup form, overnight run and folder import, then an end-to-end test.
-- **[Account settings](account-settings-plan.md)** - planned, and the resume
-  screens are approved (mockup version 7). Starts once Word resumes ship, resume
-  section first.
+- **[Account settings](account-settings-plan.md), the rest** - the resume section
+  and "My account" are live. Still to build: editing the page title, pronouns,
+  ranked locations, excluded companies and search names, and the setup answers
+  the night turns into prose. Needs its own mockup pass first.
 - **An `attempts` column on `intake`** - the retry bound is a three-day rule on
   `sent_at` today, which is the right stop in the wrong unit. Counting nights is
   one column and one increment, and needs its own migration.
