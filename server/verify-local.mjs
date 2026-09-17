@@ -667,6 +667,42 @@ const listed = buildSearchPrompt({
   settings: {},
   feeds: [],
 });
+{
+  const promptFor = (track) =>
+    buildSearchPrompt({
+      user: { id: "u", name: "Nobody" },
+      track: { key: "T", label: "T", full_description: "t", role_search_line: "r", ...track },
+      settings: {},
+      feeds: [],
+    });
+  const stepOf = (text, n) => text.split("\n").find((l) => l.startsWith(`${n}. `)) || "";
+
+  const chosen = promptFor({ documents: JSON.stringify(["resumes/Chosen_Resume.txt"]), resume_line: "Frame it as an IC engineer." });
+  check("the prompt reads the resume its documents list names, with resume_line as framing only",
+    stepOf(chosen, "2").includes("`resumes/Chosen_Resume.txt`") && stepOf(chosen, "2").includes("Frame it as an IC engineer."));
+  check("a search whose profile is current is not asked to rewrite it", !stepOf(chosen, "2b"));
+
+  const stale = promptFor({
+    documents: JSON.stringify(["resumes/New_Resume.txt"]),
+    profile_stale_since: "2026-09-16T20:00:00Z",
+    resume_was: "resumes/Old_Resume.pdf",
+    doc_file: "docs/tracked_T_postings.md",
+  });
+  const refresh = stepOf(stale, "2b");
+  check("a search with a stale profile rewrites it before searching, naming the resume it was written from",
+    refresh.includes("`resumes/Old_Resume.pdf`") && refresh.includes("## Candidate Profile") && refresh.includes("docs/tracked_T_postings.md"));
+  check("and is told no other doc edit survives that night",
+    refresh.includes("Change nothing else in the doc tonight") && stale.indexOf("2b. ") < stale.indexOf("\n3. "));
+
+  const fromReference = promptFor({ documents: JSON.stringify(["resumes/Word_Resume.docx", "reference/Text_Copy.txt"]) });
+  check("a list with no readable resume under resumes/ still names the readable copy it has",
+    stepOf(fromReference, "2").includes("`reference/Text_Copy.txt`") && !stepOf(fromReference, "2").includes(".docx"));
+
+  const legacy = promptFor({ documents: JSON.stringify(["resumes/Only.docx"]), resume_line: "Read the resume: `resumes/Only.docx`." });
+  check("a list with nothing readable leaves resume_line as it was, rather than naming nothing",
+    stepOf(legacy, "2") === "2. Read the resume: `resumes/Only.docx`.");
+}
+
 check("a company list stored on a track never reaches the prompt",
   !listed.includes("Zyqfold Robotics") && !listed.includes("Quennet Labs") && !listed.includes("drawn from"));
 check("the default doc-update step never asks a run to keep company groups",
