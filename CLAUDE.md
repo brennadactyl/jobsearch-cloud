@@ -10,13 +10,17 @@ role.
 
 - **Code over prompts.** Never leave to a model what a comparison, a lookup
   table or a check can decide. A nightly run nobody watches re-makes a judgement
-  differently every night and still exits 0.
+  differently every night and still exits 0. A model decides content - the
+  prose it writes - and nothing about storage, transport or control flow.
 - **Comments and docs give the why; the code shows the what.** No history
   anywhere: nothing about how it used to be, dated incidents, PR numbers. State
   the rule and its reason in the present tense. Applied migrations and
   `docs/*-plan.md` are the exceptions and are never rewritten.
 - **Plans state the design.** Give each section a line or two of context, name
-  the files and constraints, and stop. Don't argue choices or narrate drafts.
+  the files and constraints, and stop. Don't argue choices or narrate drafts;
+  keep an explanation only where it prevents a wrong build, as a one-line
+  directive. What isn't being done gets a few lines at the end at most. Write
+  things readably: a route as `/api/documents/<path>`, not its regex.
 - **Reference docs describe today.** A change that makes one wrong updates it in
   the same commit. A plan is never read as the current state.
 - **A push, merge, deploy or live write needs the user's go typed in the session
@@ -24,28 +28,40 @@ role.
   which session to say go in. The product session's plans and backlog edits
   that the user has asked for are the exception: they go straight to main.
 - **Merge PRs with `gh pr merge <n> --squash`** and a hand-written title and
-  body. Docs and small changes can go straight to main: rebase onto
+  body, never GitHub's default list of commits. The repo allows only squash
+  merges and deletes a branch once merged. Docs and small changes can go straight to main: rebase onto
   `origin/main` first, so no merge commits land there.
 - **Other sessions push to main all the time.** Fetch before building on main,
   and coordinate before editing a file another session owns or is changing.
 - **Production data is written only through the API.** Never write production
   D1 by hand; the `block-remote-d1-writes` hook enforces it. Read it through the
-  API, or load the newest local backup into `node:sqlite`. If no route does what
-  is needed, build one.
+  API, or load the newest local backup into `node:sqlite`; note the backup's
+  time, since anything written after it is missing, and take a fresh backup when
+  the answer must be current. If no route does what is needed, build one.
 - **The repo is public.** No account ids, tokens, passwords, resumes or anyone's
   search details in code, tests, docs or commit messages.
-- **Times are US Pacific,** labelled PT. Date-only fields (`found`, `verified`,
-  `last_swept`) are printed as they arrive, never parsed into a zone.
+- **Times are US Pacific,** labelled PT, and the system stays on Pacific: runs
+  stamp their local date. Don't propose a switch to server-side UTC without a
+  new reason. Date-only fields (`found`, `verified`, `last_swept`,
+  `last_run.on`) are printed as they arrive: a bare date has no instant, and
+  converting it shifts it a day back west of UTC. `last_run.at` is the one
+  instant; show it relative or with `toLocaleString()`.
 - **An unused function may be a feature dropped by accident.** Ask Product
   Partner before deleting one that looks like part of a user-facing rule.
 - **A fixed mapping only governs new setups.** Configs already built keep the
   old prose: ask who is living with it and offer the rewrite as its own change.
 - **A field a run reports crosses three layers** - the migration and route,
-  `scripts/tracker.ps1`'s forwarding, and the prompt step - in one change.
+  `scripts/tracker.ps1`'s forwarding, and the prompt step - in one change. Miss
+  one and nothing errors; the value just never arrives. The layers are Backend
+  Buddy's and Prompt Bro's, so hand off explicitly, and check a real run's value
+  lands in the row.
 - **Scripts ship through the main checkout.** The scheduled tasks run
   `scripts/` from the checkout that registered them, so a script change is live
   once that checkout is pulled; a deploy doesn't ship it. Deploy `server/` and
   `client/` only from the main checkout.
+- **The in-app browser pane reads the page as hidden.** TanStack Query pauses
+  retries and `requestAnimationFrame` never fires there, so a live check can
+  hang; `role-client-comrade` has the workarounds.
 - **In PowerShell use `npm.cmd` and `npx.cmd`.** Execution policy can block the
   `.ps1` shims for the user even when they work in an agent's shell.
 

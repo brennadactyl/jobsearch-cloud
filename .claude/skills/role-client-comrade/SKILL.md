@@ -64,8 +64,13 @@ depends on is live.
 - Check live changes on the demo account, never a real person's.
 - The in-app browser pane reads the page as hidden: TanStack Query pauses
   retries and `requestAnimationFrame` never fires. Override
-  `document.visibilityState` to see an error state, poll with `setTimeout`, and
-  use headless Edge over CDP for screenshots.
+  `document.visibilityState` to `visible` to see an error state, and poll with
+  `setTimeout`. Screenshots there can time out or come back blank, so take them
+  with headless Edge (`--headless=new --remote-debugging-port`) over CDP using
+  Node's built-in WebSocket: set `tracker_token` in localStorage and reload,
+  `Emulation.setDeviceMetricsOverride` for the width and a tall height (the
+  Overview scrolls inside its own panel), `Emulation.setEmulatedMedia` for
+  `prefers-color-scheme`, then `Page.captureScreenshot`.
 
 **Before calling it done:** `tsc -b --noEmit`, `vitest run` (and again with
 `TZ=UTC` for date code), and `oxlint src` in `client/`, then CI green.

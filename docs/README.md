@@ -44,3 +44,9 @@ Name a plan `<topic>-plan.md`. Anything else in this folder is reference.
 
 A plan that touches something a reference doc covers links to it and describes
 only what it changes — it does not copy the current state in.
+
+A plan states the design and stops. Each section opens with a line or two on
+what it is for; it names the files and constraints; it keeps an explanation
+only where one prevents a wrong build, as a one-line directive. It doesn't
+argue its choices, record drafts or reversed decisions, or list at length what
+it isn't doing.
