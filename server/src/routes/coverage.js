@@ -122,6 +122,11 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
 }
 
 /**
+ * @typedef {{company: string, board?: string, endpoint?: string, url_shape?: string,
+ *   dead_signal?: string, wall?: string, note?: string}} SweepRow one entry of `swept`
+ */
+
+/**
  * POST /api/coverage - requires a Bearer token. Body
  * `{ search, on?, start_here?, swept: [{company, board?, endpoint?, url_shape?,
  * dead_signal?, wall?, note?}] }` -> `{ recorded, added, excluded, on, cursor,
@@ -244,6 +249,8 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   const withheld = allowed.filter(contradictsItself).length;
   const shared = await companyList.upsertCompanyFetch(allowed.filter((i) => !contradictsItself(i)).map(sharedFacts), on);
 
+  // Only a dated report claims coverage, so only it advances the cursor; a
+  // seeding call moves it only for start_here.
   let cursor = await db.getSweepCursor(key);
   if (on !== "") {
     cursor = await advanceCursorPastReported(db, key, cursor, allowed, log, isExcluded);
@@ -254,7 +261,11 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   return json({ recorded, added, excluded, on, cursor, shared: shared.written, withheld });
 }
 
-/** The reported companies with a usable name, trimmed; anything else is dropped. */
+/**
+ * The reported companies with a usable name, trimmed; anything else is dropped.
+ * @param {unknown} swept the request body's `swept`
+ * @returns {SweepRow[]}
+ */
 function sweptCompanies(swept) {
   const incoming = Array.isArray(swept) ? swept : [];
   return incoming
@@ -276,7 +287,10 @@ function sweptCompanies(swept) {
  * alphabetical or grouped by theme, and arrival order would carry that bias
  * into the rotation. A batch naming one company in two spellings adds it
  * once, under the first.
- * @returns {Map<string, {company: string, position: number}>}
+ * @param {SweepRow[]} allowed the reported companies, exclusions already removed
+ * @param {Array<{company: string, position: number}>} log the list as db.getCoverage returns it
+ * @param {Map<string, {company: string, position: number}>} onList `log` keyed by normalize()
+ * @returns {Map<string, {company: string, position: number}>} keyed by normalize()
  */
 function positionNewCompanies(allowed, log, onList) {
   let nextPos = log.length ? Math.max(...log.map((c) => c.position)) + 1 : 0;
@@ -309,6 +323,8 @@ function positionNewCompanies(allowed, log, onList) {
  * load while its listing is walled, so that row shares as normal.
  *
  * Enforced here, not only in scripts/tracker.ps1, so every caller meets it.
+ * @param {SweepRow} i
+ * @returns {boolean}
  */
 function contradictsItself(i) {
   return (
@@ -317,7 +333,10 @@ function contradictsItself(i) {
   );
 }
 
-/** The fields of a report that describe a company's website, for the shared list. */
+/**
+ * The fields of a report that describe a company's website, for the shared list.
+ * @param {SweepRow} i
+ */
 function sharedFacts(i) {
   return {
     company: i.company,
@@ -352,6 +371,13 @@ function sharedFacts(i) {
  * served. If the list changes between read and report, the worst case is the
  * cursor stopping short and a company being served twice; the cursor only
  * passes companies this report named.
+ * @param {import("../db.js").Db} db
+ * @param {string} key the track that ran
+ * @param {number} cursor this search's cursor before the report
+ * @param {SweepRow[]} allowed the reported companies, exclusions already removed
+ * @param {Array<{company: string, position: number}>} log the list as it was before this report added to it
+ * @param {(company: string) => boolean} isExcluded this person's exclusion matcher
+ * @returns {Promise<number>}
  */
 async function advanceCursorPastReported(db, key, cursor, allowed, log, isExcluded) {
   const reported = new Set(allowed.map((i) => normalize(i.company)));
@@ -380,6 +406,11 @@ async function advanceCursorPastReported(db, key, cursor, allowed, log, isExclud
  * Only companies this call added count. If every name was already on the
  * list there is nothing to start at - they sit wherever the list already
  * put them - so the cursor stays where it is and `added: 0` says why.
+ * @param {import("../db.js").Db} db
+ * @param {string} key the track being seeded
+ * @param {number} cursor this search's cursor before the call
+ * @param {Map<string, {company: string, position: number}>} joining what positionNewCompanies added
+ * @returns {Promise<number>}
  */
 async function startCursorAtSeeded(db, key, cursor, joining) {
   const listed = await db.getCoverage(key);
