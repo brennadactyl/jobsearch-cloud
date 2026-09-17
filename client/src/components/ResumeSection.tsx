@@ -24,6 +24,7 @@ import {
   currentResume,
   fileNameOf,
   joinNames,
+  removeRefusal,
   resumeDetail,
   resumeRows,
   rootSearches,
@@ -150,13 +151,7 @@ export default function ResumeSection({
 
   function askToRemove(row: StoredResume) {
     setAttachMsg(null);
-    const readers = [...new Set(row.used_by.map((u) => u.search))].map(labelOf);
-    setRemoving({
-      path: row.path,
-      refusal: readers.length
-        ? `${joinNames(readers)} ${readers.length === 1 ? "reads" : "read"} this resume, so it can't be removed. Choose another resume for ${readers.length === 1 ? "it" : "them"} below first.`
-        : "",
-    });
+    setRemoving({ path: row.path, refusal: removeRefusal(row, labelOf) });
   }
 
   async function remove(path: string) {

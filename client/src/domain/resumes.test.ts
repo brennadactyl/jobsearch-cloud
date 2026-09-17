@@ -4,6 +4,7 @@ import {
   attachRefusal,
   currentResume,
   joinNames,
+  removeRefusal,
   resumeDetail,
   resumeRows,
   rootSearches,
@@ -104,5 +105,26 @@ describe("attachRefusal", () => {
 
   it("lets a same-name file replace one no search reads, since nothing changes for any search", () => {
     expect(attachRefusal("Spare.pdf", 100, "resumes/Spare.pdf", stored, labelOf)).toBeNull();
+  });
+});
+
+describe("removeRefusal", () => {
+  const labelOf = (key: string) => ({ ai: "Eng - AI", gaming: "Eng - Gaming" })[key] ?? key;
+
+  it("names the searches that go on reading a resume", () => {
+    const both = resume("resumes/Eng.pdf", { used_by: [{ search: "gaming", tabs: ["gaming"], state: "reads" }, { search: "ai", tabs: ["ai"], state: "reads" }] });
+    expect(removeRefusal(both, labelOf)).toBe(
+      "Eng - Gaming and Eng - AI read this resume, so it can't be removed. Choose another resume for them below first.",
+    );
+    const next = resume("resumes/AI.docx", { used_by: [{ search: "ai", tabs: ["ai"], state: "from_next_run" }] });
+    expect(removeRefusal(next, labelOf)).toBe(
+      "Eng - AI reads this resume, so it can't be removed. Choose another resume for that search below first.",
+    );
+  });
+
+  it("lets a resume go once its search only holds it until tonight, since the next run reads the new one", () => {
+    const old = resume("resumes/Eng.pdf", { used_by: [{ search: "ai", tabs: ["ai"], state: "until_next_run" }] });
+    expect(removeRefusal(old, labelOf)).toBe("");
+    expect(removeRefusal(resume("resumes/Spare.pdf"), labelOf)).toBe("");
   });
 });

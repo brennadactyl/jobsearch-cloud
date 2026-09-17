@@ -30,6 +30,23 @@ export function rootSearches(tracks: readonly Track[]): Track[] {
   return tracks.filter((t) => !t.fed_by).sort((a, b) => a.sort_order - b.sort_order);
 }
 
+/**
+ * The searches that go on reading a resume from their next run. A search only
+ * holding it until tonight isn't one: its next run reads the new file, so the
+ * old one can be removed or replaced, as the server allows.
+ */
+export function keptBy(row: StoredResume): string[] {
+  return [...new Set(row.used_by.filter((u) => u.state !== "until_next_run").map((u) => u.search))];
+}
+
+/** Why a resume can't be removed, naming the searches that still read it, or "" when it can. */
+export function removeRefusal(row: StoredResume, labelOf: (search: string) => string): string {
+  const searches = keptBy(row).map(labelOf);
+  if (!searches.length) return "";
+  const one = searches.length === 1;
+  return `${joinNames(searches)} ${one ? "reads" : "read"} this resume, so it can't be removed. Choose another resume for ${one ? "that search" : "them"} below first.`;
+}
+
 /** The resume a search reads now, or from its next run once a saved change is waiting. */
 export function currentResume(rows: readonly StoredResume[], search: string): string {
   const row = rows.find((r) => r.used_by.some((u) => u.search === search && u.state !== "until_next_run"));
@@ -94,9 +111,7 @@ export function attachRefusal(
   }
   const same = (path: string | undefined) => path?.toLowerCase() === storedPath.toLowerCase();
   // A Word file and the text read from it are one resume, so either name counts.
-  const readers = stored
-    .filter((d) => same(d.path) || same(d.text_path) || same(d.paired_with))
-    .flatMap((d) => d.used_by.map((u) => u.search));
+  const readers = stored.filter((d) => same(d.path) || same(d.text_path) || same(d.paired_with)).flatMap(keptBy);
   const searches = [...new Set(readers)].map(labelOf);
   if (searches.length) {
     return `${joinNames(searches)} ${searches.length === 1 ? "reads" : "read"} a resume called ${fileNameOf(storedPath)}. Attach this one under a new name, then choose it and save.`;
