@@ -128,7 +128,7 @@ foreach ($log in $logs) {
                 [pscustomobject]@{
                     Account = $account.Substring(0, [Math]::Min(8, $account.Length))
                     Search = $Matches[1]; Start = $at; Minutes = $null; Waited = $queueWait
-                    Exit = $null; Status = "-"; Leads = "-"; Screened = "-"; Delisted = "-"
+                    Exit = $null; Status = "-"; Leads = "-"; Screened = "-"; Delisted = "-"; Swept = "-"
                     DocUpdated = $null; DocRefused = $null; Profile = "none"
                     Problems = New-Object System.Collections.Generic.List[string]
                 }
@@ -147,7 +147,7 @@ foreach ($log in $logs) {
         elseif ($text -match '^run record:\s+(.*)$') {
             foreach ($pair in ($Matches[1] -split '\s+')) {
                 $k, $v = $pair -split '=', 2
-                switch ($k) { "status" { $run.Status = $v } "leads_added" { $run.Leads = $v } "screened_added" { $run.Screened = $v } "delisted" { $run.Delisted = $v } }
+                switch ($k) { "status" { $run.Status = $v } "leads_added" { $run.Leads = $v } "screened_added" { $run.Screened = $v } "delisted" { $run.Delisted = $v } "swept" { $run.Swept = $v } }
             }
         }
         elseif ($text -match '^write-back:\s+(\d+) document') { $run.DocUpdated = [int]$Matches[1] }
@@ -186,6 +186,7 @@ $rows | Sort-Object Start | ForEach-Object {
         Leads    = $_.Leads
         Screened = $_.Screened
         Delisted = $_.Delisted
+        Swept    = $_.Swept
         Doc      = if ($_.DocRefused -gt 0) { "refused, +$($_.DocRefused) over" }
                    elseif ($null -ne $_.DocRefused) { "refused" }
                    elseif ($_.DocUpdated -gt 0) { "updated" }
