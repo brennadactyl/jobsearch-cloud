@@ -60,7 +60,7 @@ export function EditableField({
   /** Width in characters - the application header's location input sizes itself to its value. */
   size?: number;
 }) {
-  const draft = useDraftUntilSaved(kind, row.id, field, (row as unknown as Record<string, string>)[field] ?? "");
+  const fieldProps = useDraftUntilSaved(kind, row.id, field, (row as unknown as Record<string, string>)[field] ?? "");
 
   return (
     <input
@@ -69,7 +69,7 @@ export function EditableField({
       size={size}
       placeholder={placeholder}
       aria-label={ariaLabel ?? field}
-      {...draft}
+      {...fieldProps}
     />
   );
 }
@@ -84,9 +84,9 @@ export function EditableNotes({
   kind: "lead" | "application";
   placeholder?: string;
 }) {
-  const draft = useDraftUntilSaved(kind, row.id, "notes", row.notes ?? "");
+  const fieldProps = useDraftUntilSaved(kind, row.id, "notes", row.notes ?? "");
 
-  return <textarea rows={3} placeholder={placeholder} aria-label="Notes" {...draft} />;
+  return <textarea rows={3} placeholder={placeholder} aria-label="Notes" {...fieldProps} />;
 }
 
 export function LeadStatusSelect({
