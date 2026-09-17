@@ -1037,6 +1037,12 @@ export class Db {
    *
    * Each key counts only its own rows; a multi-tab run calls this once per tab.
    *
+   * The counts match dates exactly, so `on` has to be the same kind of date the
+   * rows carry: the run's local date, which it sends both here and on each lead
+   * and screened row. Where a caller leaves a date out, the server falls back to
+   * the UTC date, and after 17:00 PT that is the next day - rows stamped one way
+   * and a record asked for the other count zero.
+   *
    * @param {string} key - track key
    * @param {string} on - YYYY-MM-DD, the run's own local date
    * @returns {Promise<{leadsAdded: number, screenedAdded: number, delisted: number}>}
