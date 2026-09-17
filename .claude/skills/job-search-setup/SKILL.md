@@ -1,6 +1,6 @@
 ---
 name: job-search-setup
-description: Onboards a person into this job-search tracker (or adds a track to an existing one) - provisions their account, reads their resume(s), asks about desired role tracks and locations, uploads their resume and per-track baseline doc, posts their search config and page config to /api/config, and registers their scheduled tasks. Use when someone wants to set up this repo for themselves, add a second person to an existing deployment, or add/change a tracked search.
+description: Onboards a person into this job-search tracker (or adds a track to an existing one) - provisions their account, reads their resume(s), asks about desired role tracks and locations, uploads their resume and per-track baseline doc, posts their search config and page config to /api/config (an unattended intake instead writes each search up through /api/writeup), and registers their scheduled tasks. Use when someone wants to set up this repo for themselves, add a second person to an existing deployment, or add/change a tracked search.
 ---
 
 # Job search setup
@@ -43,6 +43,14 @@ tracker and another for its files; don't copy that split.
 ## Steps
 
 ### 1. Establish who this is, and what already exists
+
+**Most people arrive through an invite, not through you.**
+`../../../scripts/new-invite.ps1` makes the link, they fill in the setup
+form, and `../../../scripts/run-onboarding.ps1` runs this skill unattended
+that night - see "Intake mode" below and `../../../docs/onboarding.md`. Work
+through the steps by hand when there is no deployment yet, when someone is
+adding or changing a track on an account that already exists, or when a
+person asks for it.
 
 **The data dir** is `$JOB_SEARCH_DATA_DIR` if set, else `private\` at the repo
 root (gitignored). Each person has a folder named by their user id holding
@@ -435,7 +443,7 @@ from and where the output goes.
 | 3, asking | `answers.json` is the interview, already answered. Nothing is confirmed with anyone: decide from what they wrote. Where an answer is thin, write the search anyway - a thin search they can see and correct beats no search. |
 | 4, doc and config | Same fields, same template. They go in `out\` as files, not to the API. |
 | 5, confirming | Nobody to confirm with. Prefer the reading that surfaces more jobs: an over-tight fit filter hides work they asked for and nobody is watching. |
-| 6, posting | The script posts it, with their token, after checking it. |
+| 6, posting | The script uploads the docs and writes each search up through `POST /api/writeup`, with their token, after checking it. The form already wrote the tracks and page settings. |
 | 7, scheduling | The script does it. |
 
 The answers map onto the config like this:

@@ -26,7 +26,7 @@ Each run should:
 
 Don't re-spend a full verification attempt rediscovering a **domain-wide fetch block** that's already confirmed - that's different from a specific posting closing, which is real signal and always worth checking. The distinction: if *every* URL tried at a domain fails the *same way* regardless of which posting (robots.txt block, blanket 403/429, a JS-rendered shell with no static content ever, metadata-only, or systematic truncation), that's a tooling wall, not news. If specific postings turn out closed/404 while others at the same domain verify fine, that's normal churn - keep checking those in full.
 
-Walls are recorded in the tracker, not here. When no route to a company's listings works - including the fallbacks, a different subdomain or an ATS mirror - record a `wall` for it in step 9d. Once the same wall has been recorded on two separate dates, `./tracker companies` serves it, and a served wall means skip that company's listing for the run; the tracker stops serving it after seven days, and that is the re-test. A served wall never stops a specific posting URL - a concrete new lead there still earns its verification attempt. If any route works, report it as `board` or `endpoint` instead of a wall. A company note below that calls a domain blocked or skippable on cadence records what a past run found; it does not decide whether to skip.
+Walls are recorded in the tracker, not here. When no route to a company's listings works - including the fallbacks, a different subdomain or an ATS mirror - record a `wall` for it in step 9d. Once the same wall has been recorded on two separate dates, `./tracker companies` serves it, and a served wall means skip that company's listing for the run; the tracker stops serving it after seven days, and that is the re-test. A served wall never stops a specific posting URL - a concrete new lead there still earns its verification attempt. If any route works, report it as `board` or `endpoint` instead of a wall.
 
 ## Company coverage (apply on every run)
 
@@ -52,8 +52,7 @@ attempted and advances the cursor. Don't keep a parallel
 table here: what belongs in this doc is *why* a company is worth searching
 (Company notes below). How to reach a company is not a doc edit - a
 board, an endpoint, a URL shape that works, and a wall when nothing does all go
-in step 9d, where every search reads them. The per-company fetch notes in this
-doc stay as reference.
+in step 9d, where every search reads them.
 
 ## Scope rules (apply on every run)
 
