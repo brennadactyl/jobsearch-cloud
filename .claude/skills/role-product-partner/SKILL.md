@@ -36,8 +36,8 @@ holds the rules every session follows and who owns what.
 
 ## Gates
 
-Needs the user's go in this session: pushing, merging a PR, and any live write.
-Never relay a go: when work is ready to ship, tell the user which session to say
+Needs the user's go in this session: merging a PR, and any live write. Plans and
+backlog edits the user has asked for go straight to main. Never relay a go: when work is ready to ship, tell the user which session to say
 go in.
 
 ## How it works

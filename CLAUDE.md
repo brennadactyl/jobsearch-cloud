@@ -21,7 +21,8 @@ role.
   the same commit. A plan is never read as the current state.
 - **A push, merge, deploy or live write needs the user's go typed in the session
   doing it.** A go passed along by another session doesn't count; tell the user
-  which session to say go in.
+  which session to say go in. The product session's plans and backlog edits
+  that the user has asked for are the exception: they go straight to main.
 - **Merge PRs with `gh pr merge <n> --squash`** and a hand-written title and
   body. Docs and small changes can go straight to main: rebase onto
   `origin/main` first, so no merge commits land there.
