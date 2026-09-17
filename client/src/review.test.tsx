@@ -232,6 +232,19 @@ describe("adding from a link that fails to save", () => {
   });
 });
 
+describe("the default sort", () => {
+  it("lists leads newest found first until a person picks another sort", async () => {
+    await renderAt("/all-leads");
+    expect(screen.getByRole("combobox", { name: "Sort" })).toHaveDisplayValue("Newest found");
+    expect(screen.queryByText("Closest roles sorted first")).toBeNull();
+  });
+
+  it("lists applications newest applied first", async () => {
+    await renderAt("/applications");
+    expect(screen.getByRole("combobox", { name: "Sort" })).toHaveDisplayValue("Newest applied");
+  });
+});
+
 describe("the account panel", () => {
   it("opens from My account and names who is signed in", async () => {
     await renderAt("/");

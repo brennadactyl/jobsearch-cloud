@@ -4,8 +4,8 @@ import { rank } from "./geo";
 import { isWaiting, lastMoved } from "./stages";
 
 /**
- * Default ("priority") sinks "Not a fit" to the bottom, then orders by location
- * rank, then newest-found. The explicit sorts are exactly what they say.
+ * "priority" sinks "Not a fit" to the bottom, then orders by location rank, then
+ * newest-found. The other sorts are exactly what they say.
  */
 export function leadComparator(
   sortKey: string,

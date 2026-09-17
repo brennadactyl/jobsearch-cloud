@@ -22,7 +22,7 @@ export interface Prefs {
 
 const DEFAULTS: Prefs = {
   view: "detail",
-  leadSort: "priority",
+  leadSort: "found-desc",
   appSort: "applied-desc",
   collapsed: {},
   selected: {},
