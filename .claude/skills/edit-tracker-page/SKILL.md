@@ -23,7 +23,8 @@ TanStack Query plus `useState`, or SSR.
   `constants.ts` holds the labels the page shows (`LABELS`, the field lists);
   the CSV headers are the same constants, so read a label from there rather
   than typing it into a component.
-- **`src/components/`** — the UI. `Shell.tsx` is the header, tab bar and
+- **`src/components/`** — the UI, with files named by the rule in
+  `client/README.md` ("Working on it"). `Shell.tsx` is the header, tab bar and
   routes; one component per tab; `writes.tsx` holds the editable controls;
   `detailFields.tsx` the blocks a row's detail shows.
 - **`src/ui/`** — per-browser state: `prefs.ts` (view, sort, selection, folded
@@ -69,6 +70,19 @@ otherwise fail anywhere.
 - **Fonts requested.** A font family the stylesheet names must be in
   `index.html`'s Google Fonts link. (`fonts.test.ts`)
 
+## Reading a response
+
+Every response goes through a schema in `schema.ts`, and a field that fails it
+fails the whole response: one odd row blanks the list it's in.
+
+- **Find out what the server sends before writing a schema.** Read the route,
+  or call it, and note which fields it omits and which it sends as `null`. A
+  local run against fresh data won't show a `null` that older stored rows carry.
+- **A field the server can send as `null` is `.nullish()`, never
+  `.optional()`.** `.optional()` accepts only a missing key, so one `null`
+  rejects the response. Where the page wants a default, turn it into one:
+  `.nullish().transform((v) => v ?? [])`.
+
 ## Writes
 
 - **Every write is a hook in `api/mutations.ts`** built on `useWrite`: it sets
@@ -97,6 +111,11 @@ the live API.
 
 Check both themes and a narrow viewport before calling it done, and check the
 browser console.
+
+To check a change against a server branch that isn't deployed, or to drive a
+flow and take screenshots in a real browser, follow
+`verify-client-against-local-server`. Its browser driver is
+`tools/client/edge-driver.mjs`.
 
 To exercise states that are awkward to reach on a real account, sign in to the
 demo account (`scripts/seed-demo-user.ps1`): leads across every status and
