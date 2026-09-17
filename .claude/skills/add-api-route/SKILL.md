@@ -130,6 +130,19 @@ Write them in the existing voice: `check("B cannot fill A's row", ...)`.
 Follow the file's fixtures - users Ada and Bo, `example.com` URLs, tolerating a
 re-run against the same local database.
 
+**Wrap a new section in its own `{ ... }` block.** The file is one module with
+every section at the top level, so a `const` named like one in an earlier
+section - `dated`, `paths`, `again` - is a SyntaxError that stops the whole
+file. Inside a block the names are the section's own. Put the section's
+`console.log("\n== ... ==")` heading as the block's first line.
+
+Then check it parses before starting a worker, since a SyntaxError otherwise
+surfaces only after the worker is up:
+
+```bash
+cd server && node --check verify-local.mjs
+```
+
 Then run it, per the `verify-and-deploy` skill.
 
 ## 6. Update the docs that describe the API
