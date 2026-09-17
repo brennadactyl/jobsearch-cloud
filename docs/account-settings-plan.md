@@ -70,6 +70,12 @@ answers - an account set up by the skill has no intake row at all.
 - **Uploading and choosing are two steps.** A file uploads the moment it is
   selected, so its word count or refusal shows straight away, and it joins the
   list as "not used by any search". Nothing a search reads changes yet.
+- **A name a search reads can't be uploaded over.** Attaching or pasting under
+  the name of a file some search lists is refused - "Eng - AI reads a resume
+  called X. Attach this one under a new name, then choose it and save." -
+  because storing over it would change what that search reads without a Save.
+  A same-name file no search lists is replaced. The server still accepts an
+  overwrite, so an operator's folder import can restore a backup.
 - **Pasted text is a resume too.** A paste box beside Attach takes the text and
   a name, and stores it as `resumes/<name>.txt` the moment it is added - the
   same step as an upload, with the same word count. It then joins the list and
