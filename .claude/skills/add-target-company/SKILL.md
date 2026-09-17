@@ -67,6 +67,16 @@ for (const c of l.companies) {
 It matches on substrings, so it over-reports - `nfl` also turns up `Confluent`.
 Read the names; don't count the lines.
 
+`./tracker known` (and the server) match the *exact* normalised name, so a row
+under another spelling - `SSI` beside `Safe Superintelligence`, `Amazon/AWS`
+beside `Amazon` - is a second company to every search, swept twice and holding
+its own facts. Check the parent, the brand and the abbreviation before writing.
+Merging two rows, or renaming one, is not something a write can do: it is
+`POST /api/companies/cleanup` with an admin token (`{merges, renames, dryRun}`,
+see `../../../server/README.md`), which keeps the kept row's facts, moves each
+search's sweep record across and leaves positions alone. Run it with `dryRun`
+first.
+
 `?all=1` returns the same list for every key. Pass every name the company goes
 by. The server matches through `normalize()` (lowercase, punctuation collapsed),
 so `Cursor Anysphere` and `Cursor (Anysphere)` are one company - but a parent
@@ -128,6 +138,11 @@ shared, not even for the other rows in the same call. Sent with a date beside a
 `board` or `endpoint` it contradicts itself and shares nothing (`withheld: 1`).
 If no route works for you, add the company with no facts (step 3) and let the
 runs establish it.
+
+**A route that works isn't reason enough.** Every search on the deployment
+sweeps every company on the list, so a company where no search has matching
+roles costs each of them a fetch a cycle and returns nothing. Add it when a
+search would want the roles it posts; a working board alone is not that.
 
 ## 3. Write it
 

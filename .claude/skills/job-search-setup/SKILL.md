@@ -44,6 +44,14 @@ tracker and another for its files; don't copy that split.
 
 ### 1. Establish who this is, and what already exists
 
+**Most people arrive through an invite, not through you.**
+`../../../scripts/new-invite.ps1` makes the link, they fill in the setup
+form, and `../../../scripts/run-onboarding.ps1` runs this skill unattended
+that night - see "Intake mode" below and `../../../docs/onboarding.md`. Work
+through the steps by hand when there is no deployment yet, when someone is
+adding or changing a track on an account that already exists, or when a
+person asks for it.
+
 **The data dir** is `$JOB_SEARCH_DATA_DIR` if set, else `private\` at the repo
 root (gitignored). Each person has a folder named by their user id holding
 `tracker.json` and `logs\`. Their documents live in the tracker and are fetched
