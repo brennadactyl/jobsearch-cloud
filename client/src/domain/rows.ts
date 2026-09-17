@@ -16,13 +16,13 @@ function byNumber<T>(of: (row: T) => number): Compare<T> {
 }
 
 /** The rows this matches go first, whatever the comparators after it say. */
-function first<T>(matches: (row: T) => boolean): Compare<T> {
+function firstIf<T>(matches: (row: T) => boolean): Compare<T> {
   return (a, b) => (matches(a) ? 0 : 1) - (matches(b) ? 0 : 1);
 }
 
 /** The rows this matches go last, the same way. */
-function last<T>(matches: (row: T) => boolean): Compare<T> {
-  return first((row: T) => !matches(row));
+function lastIf<T>(matches: (row: T) => boolean): Compare<T> {
+  return firstIf((row: T) => !matches(row));
 }
 
 /** The first comparator that doesn't tie decides. */
@@ -53,7 +53,7 @@ export function leadComparator(sortKey: string, rules: readonly PriorityLocation
   return (
     LEAD_SORTS.get(sortKey) ??
     inOrder<Lead>(
-      last((l) => l.status === "Not a fit"),
+      lastIf((l) => l.status === "Not a fit"),
       byNumber((l) => tierRank(l, rules)),
       byText((l) => l.found, true),
     )
@@ -63,6 +63,9 @@ export function leadComparator(sortKey: string, rules: readonly PriorityLocation
 /**
  * Applications have no location or "found" date to sort by - just when you
  * applied and who to.
+ *
+ * Branches rather than a lookup like the lead sorts: each of these is a
+ * sequence of steps, not one comparator.
  */
 export function appComparator(sortKey: string): Compare<Application> {
   if (sortKey === "company-asc") return byText((a) => a.company);
@@ -70,7 +73,7 @@ export function appComparator(sortKey: string): Compare<Application> {
     return inOrder<Application>(
       // A hand-added application can have no location, and "" would sort first
       // in the sort that asks about location, so blanks sink.
-      last((a) => !a.location),
+      lastIf((a) => !a.location),
       byText((a) => a.location),
     );
   }
@@ -87,7 +90,7 @@ export function appComparator(sortKey: string): Compare<Application> {
   // application, so both date sorts float them rather than clump them on "".
   // Company A-Z stays exactly alphabetical.
   return inOrder<Application>(
-    first((a) => a.status === "To Apply"),
+    firstIf((a) => a.status === "To Apply"),
     byText((a) => a.dateApplied, sortKey !== "applied-asc"),
   );
 }
