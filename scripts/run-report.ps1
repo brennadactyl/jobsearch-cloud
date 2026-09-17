@@ -74,7 +74,7 @@ $UNTAGGED = @(
     @{ Tag = "write-back-failed";      Pattern = "couldn't write back" }
     @{ Tag = "no-run-record";          Pattern = "wrote no run record" }
     @{ Tag = "run-recorded-error";     Pattern = "recorded itself as an error" }
-    @{ Tag = "run-failed";             Pattern = "not authenticated|not logged in" }
+    @{ Tag = "cli-not-authenticated";  Pattern = "not authenticated|not logged in" }
     @{ Tag = "profile-mark-failed";    Pattern = "couldn't be marked current" }
     @{ Tag = "profile-not-refreshed";  Pattern = "rewrite the profile" }
     @{ Tag = "log-upload-failed";      Pattern = "upload this run's log" }
