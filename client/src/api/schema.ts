@@ -249,10 +249,11 @@ export const storedResumeSchema = z.object({
   path: str,
   bytes: z.number().default(0),
   uploaded: text,
-  readable: z.boolean().default(false),
+  readable: z.boolean().nullish().transform((v) => v ?? false),
   words: z.number().nullish(),
-  text_path: z.string().optional(),
-  paired_with: z.string().optional(),
+  /** null on a Word file whose text was never read, e.g. one stored before Word files were read on upload. */
+  text_path: z.string().nullish(),
+  paired_with: z.string().nullish(),
   used_by: z
     .array(
       z.object({
@@ -264,6 +265,7 @@ export const storedResumeSchema = z.object({
         state: z.enum(["reads", "from_next_run", "until_next_run"]),
       }),
     )
-    .default([]),
+    .nullish()
+    .transform((v) => v ?? []),
 });
 export type StoredResume = z.infer<typeof storedResumeSchema>;

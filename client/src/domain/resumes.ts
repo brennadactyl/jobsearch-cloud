@@ -109,7 +109,7 @@ export function attachRefusal(
   if (!isReadableResume(name)) {
     return `${name} wasn't attached: a search can read PDF, Word (.docx), .txt or .md files.`;
   }
-  const same = (path: string | undefined) => path?.toLowerCase() === storedPath.toLowerCase();
+  const same = (path: string | null | undefined) => path?.toLowerCase() === storedPath.toLowerCase();
   // A Word file and the text read from it are one resume, so either name counts.
   const readers = stored.filter((d) => same(d.path) || same(d.text_path) || same(d.paired_with)).flatMap(keptBy);
   const searches = [...new Set(readers)].map(labelOf);

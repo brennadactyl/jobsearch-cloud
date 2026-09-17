@@ -77,6 +77,17 @@ afterEach(() => {
 });
 
 describe("the resume list", () => {
+  it("still lists everything when a Word file stored before Word support has no text, and offers it to no search", async () => {
+    // As GET /api/documents sends it: text_path is null, not missing.
+    const unread = client.storedResumeListSchema.parse({
+      documents: [{ path: "resumes/Old_Word.docx", kind: "resumes", bytes: 900, uploaded: "2026-07-01T17:00:00.000Z", words: null, text_path: null, readable: false, used_by: [] }],
+    }).documents;
+    documents = [...documents, ...unread];
+    await openResumes();
+    expect(rowOf("Old_Word.docx")).toHaveTextContent("No text could be read from it");
+    expect(within(picker("Eng - AI")).queryByText("Old_Word.docx")).toBeNull();
+  });
+
   it("lists each resume once, with its date, words read and the tabs it drives", async () => {
     await openResumes();
     expect(screen.queryByText("Brenna_AI_Roles.txt", NAME)).toBeNull();
