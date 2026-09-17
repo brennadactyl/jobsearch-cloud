@@ -225,7 +225,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
     <>
       {toolbar}
       <div className="md">
-        <div className="md-list" ref={revealSelectedRow}>
+        <div className="md-list" ref={revealSelectedRow} data-wheel-target>
           {rows.map((l) => {
             const g = geo(l.location, settings.priority_locations);
             return (

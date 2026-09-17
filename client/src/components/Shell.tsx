@@ -5,6 +5,7 @@ import { ALL_LEADS } from "../domain/constants";
 import { buildTabs, buildTracks, pathForTab } from "../domain/tabs";
 import { usePinnedLayout, useTheme } from "../ui/hooks";
 import { useSaved } from "../ui/saved";
+import { useWheelAnywhere } from "../ui/wheel";
 import ApplicationsTab from "./ApplicationsTab";
 import AccountPanel from "./AccountPanel";
 import LeadsTab from "./LeadsTab";
@@ -38,6 +39,7 @@ export default function Shell({
   const [accountOpen, setAccountOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const pinned = usePinnedLayout(isOverview);
+  useWheelAnywhere();
 
   // Given back on sign-out, so the next person on a shared browser doesn't
   // inherit the account's title.
