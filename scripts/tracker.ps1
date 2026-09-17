@@ -260,268 +260,273 @@ function Get-OutputPath($fallback) {
 
 # ---------------------------------------------------------------- commands --
 
+# Each command is one function, named for what it runs, and the switch below
+# only dispatches. Kept in this file because run-search.ps1 copies it alone
+# into the run directory.
+
+# The tabs this run fills, read from the config rather than named in an
+# argument. A branched search fills its own tab plus every track whose
+# `fed_by` points at it; asking the server which those are keeps the prompt
+# from listing them and keeps the list from going stale.
+function Invoke-DedupCommand {
+    $keys = @($Search)
+    $config = Invoke-Tracker "GET" "/api/config" $null
+    # `| Where-Object { $_ }` throughout, because @($null) in PowerShell is a
+    # one-element array holding $null - a foreach over an absent property
+    # runs once on nothing rather than not at all.
+    foreach ($track in @($config.tracks | Where-Object { $_ })) {
+        if ($track.fed_by -eq $Search -and $track.key -ne $Search) { $keys += $track.key }
+    }
+
+    $leads = @()
+    $screened = @()
+    $seen = @{}
+    # Screened history scoped to what this run can reach: the companies around its
+    # cursor, plus anything rejected in the last few days wherever it was. A run
+    # only meets the rest by chance, and reporting one again costs a check, not a
+    # row - the tracker refuses the duplicate. Leads always come back whole.
+    $scopedTabs = 0
+    $flagged = 0
+    $recheckBudget = $null
+    $recheckOpen = $null
+    $keptScreened = 0
+    $totalScreened = 0
+    $companies = $null
+    $since = $null
+    foreach ($tabKey in $keys) {
+        $dedupResponse = Invoke-Tracker "GET" "/api/dedup/${tabKey}?scope=batch" $null
+        if ($dedupResponse.scope) {
+            $scopedTabs++
+            $keptScreened += [int]$dedupResponse.scope.kept
+            $totalScreened += [int]$dedupResponse.scope.of
+            $companies = $dedupResponse.scope.companies
+            $since = $dedupResponse.scope.since
+            if ($dedupResponse.scope.recheck) {
+                $recheckBudget = $dedupResponse.scope.recheck.budget
+                $recheckOpen = $dedupResponse.scope.recheck.eligible
+            }
+        }
+        foreach ($lead in @($dedupResponse.leads | Where-Object { $_ })) {
+            # No `id`. Nothing a run posts back is keyed by one, and a lead id
+            # in front of a model is an invitation to report by it.
+            $row = [ordered]@{ url = $lead.url; status = $lead.status; search = $tabKey }
+            # The tracker picks tonight's re-checks across the whole search, longest-
+            # unconfirmed first, so the flag is carried through as it came.
+            if ($lead.recheck -eq $true) { $row["recheck"] = $true; $flagged++ }
+            $leads += [pscustomobject]$row
+        }
+        foreach ($screenedUrl in @($dedupResponse.screened | Where-Object { $_ })) {
+            if (-not $seen.ContainsKey($screenedUrl)) { $seen[$screenedUrl] = $true; $screened += $screenedUrl }
+        }
+    }
+
+    $out = Get-OutputPath "dedup.json"
+    Write-Json $out ([pscustomobject]@{ leads = @($leads); screened = @($screened) })
+    # A server that doesn't know `scope` sends every row and no `scope` key.
+    if ($scopedTabs -eq $keys.Count) {
+        $scopeNote = "screened scoped to $companies companies from the cursor plus since $since ($keptScreened of $totalScreened kept)"
+    } elseif ($scopedTabs -eq 0) {
+        $scopeNote = "unscoped - the tracker sent full history"
+    } else {
+        $scopeNote = "scoped on $scopedTabs of $($keys.Count) tab(s)"
+    }
+    if ($null -ne $recheckBudget) {
+        $recheckNote = "$flagged to re-check tonight (budget $recheckBudget of $recheckOpen open)"
+    } else {
+        $recheckNote = "no re-check selection from the tracker"
+    }
+    Write-TrackerLine "dedup: $($leads.Count) tracked lead(s), $($screened.Count) screened url(s) across $($keys.Count) tab(s), $scopeNote, $recheckNote -> $out"
+}
+
+function Invoke-CompaniesCommand {
+    if (Test-Path $KnownCache) { Remove-Item $KnownCache -Force }
+    $coverage = Invoke-Tracker "GET" "/api/coverage/$Search" $null
+    $out = Get-OutputPath "companies.json"
+    Write-Json $out $coverage
+    Write-TrackerLine "companies: $($coverage.batch) to cover tonight, $($coverage.cursor) of $($coverage.total) through the rotation -> $out"
+    foreach ($listed in @($coverage.companies | Where-Object { $_ })) {
+        $line = "  $($listed.company)"
+        $board = Get-TrimmedField $listed "board"
+        if ($board) { $line += " [$board]" }
+        $note = Get-TrimmedField $listed "note"
+        if ($note) { $line += " - $note" }
+        Write-TrackerLine $line
+    }
+}
+
+function Invoke-KnownCommand {
+    # Whether a company is already on the shared list, decided here rather than
+    # by the run reading names. A run only sees tonight's slice, so on its own it
+    # cannot tell that another search added a company earlier the same night.
+    # The match is normalize() in server/src/exclude.js - lowercase, every run of
+    # characters outside a-z and 0-9 collapsed to one space, trimmed - so it
+    # agrees with how the list itself tells two names apart. Change both together.
+    if (-not $PositionalArg) { Fail "known needs a company name - usage: tracker known ""<company>""" }
+    $norm = { param($companyName) (([string]$companyName).ToLowerInvariant() -creplace "[^a-z0-9]+", " ").Trim() }
+    $want = & $norm $PositionalArg
+    if (-not $want) { Fail "'$PositionalArg' has no letters or digits to match on" }
+    if (Test-Path $KnownCache) {
+        $names = @((Get-Content -Raw -Encoding UTF8 $KnownCache | ConvertFrom-Json).companies)
+    } else {
+        $fullList = Invoke-Tracker "GET" "/api/coverage/${Search}?all=1" $null
+        $names = @($fullList.companies | Where-Object { $_ } | ForEach-Object { [string]$_.company })
+        # Under a property, not as a bare array: piped through ConvertTo-Json, a
+        # one-name list is written as a string and an empty one as nothing.
+        Write-Json "known-list.json" @{ companies = $names }
+    }
+    $hit = @($names | Where-Object { $_ -and ((& $norm $_) -eq $want) }) | Select-Object -First 1
+    if ($hit) {
+        Write-TrackerLine "known: $PositionalArg is on the list as '$hit' - skip it, its turn comes in the rotation"
+    } else {
+        # The list hides this account's excluded companies, so absence is one of
+        # two things, and the run has to hear both.
+        Write-TrackerLine "known: $PositionalArg is not on the list, or is excluded for this account"
+    }
+}
+
+function Invoke-LeadsCommand {
+    $rows = Read-Rows $PositionalArg "leads"
+    $send = @()
+    foreach ($inputRow in $rows) {
+        $url = Get-TrimmedField $inputRow "url"
+        $company = Get-TrimmedField $inputRow "company"
+        $title = Get-TrimmedField $inputRow "title"
+        if (-not $url) { Refuse "a lead with no url" "there is nothing to track or dedup on"; continue }
+        if (-not $company -or -not $title) { Refuse "$url" "a lead needs both a company and a title"; continue }
+        $row = @{ search = $Search; company = $company; title = $title; url = $url }
+        $rowSearch = Get-TrimmedField $inputRow "search"
+        if ($rowSearch) { $row["search"] = $rowSearch }
+        foreach ($fieldName in @("location", "fit", "team", "setup", "comp")) {
+            $fieldValue = Get-TrimmedField $inputRow $fieldName
+            if ($fieldValue) { $row[$fieldName] = $fieldValue }
+        }
+        $send += $row
+    }
+    if ($send.Count -eq 0) { Write-TrackerLine "leads: nothing to send (refused=$($script:Refused))"; exit 0 }
+    $res = Invoke-Tracker "POST" "/api/leads" @{ on = $Today; leads = @($send) }
+    Write-TrackerLine "leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) on=$Today"
+}
+
+function Invoke-ScreenedCommand {
+    $rows = Read-Rows $PositionalArg "screened"
+    $send = @()
+    foreach ($inputRow in $rows) {
+        $url = Get-TrimmedField $inputRow "url"
+        $reason = Get-TrimmedField $inputRow "reason"
+        if (-not $url) { Refuse "a screened row with no url" "the url is what stops tomorrow re-verifying it"; continue }
+        if (-not $reason) { Refuse "$url" "a screened row needs a reason - it is the whole value of the entry"; continue }
+        $row = @{ search = $Search; url = $url; reason = $reason }
+        foreach ($fieldName in @("company", "title", "location")) {
+            $fieldValue = Get-TrimmedField $inputRow $fieldName
+            if ($fieldValue) { $row[$fieldName] = $fieldValue }
+        }
+        $send += $row
+    }
+    if ($send.Count -eq 0) { Write-TrackerLine "screened: nothing to send (refused=$($script:Refused))"; exit 0 }
+    $res = Invoke-Tracker "POST" "/api/screened" @{ search = $Search; on = $Today; screened = @($send) }
+    Write-TrackerLine "screened: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) on=$Today"
+}
+
+function Invoke-UrlReportCommand {
+    $rows = Read-Rows $PositionalArg "urls"
+    $urls = @()
+    $seen = @{}
+    foreach ($inputRow in $rows) {
+        $url = ""
+        if ($inputRow -is [string]) { $url = ([string]$inputRow).Trim() } else { $url = Get-TrimmedField $inputRow "url" }
+        if (-not $url) { Refuse "an entry with no url" "both reports are by url - there are no ids here"; continue }
+        if ($seen.ContainsKey($url)) { continue }
+        $seen[$url] = $true
+        $urls += $url
+    }
+    if ($urls.Count -eq 0) { Write-TrackerLine "${Command}: nothing to report (refused=$($script:Refused))"; exit 0 }
+    # `search` is this run's own key in both calls, including for a posting
+    # tracked in another tab this run fills: the tracker matches a url against
+    # every lead this person has, whatever tab holds it.
+    $path = "/api/verified"
+    if ($Command -eq "delist") { $path = "/api/delist" }
+    $res = Invoke-Tracker "POST" $path @{ search = $Search; on = $Today; urls = @($urls) }
+    if ($Command -eq "delist") {
+        Write-TrackerLine "delist: removed=$($res.removed) kept=$($res.kept) unmatched=$($res.unmatched) on=$Today"
+    } else {
+        Write-TrackerLine "verified: stamped=$($res.stamped) unmatched=$($res.unmatched) on=$Today"
+    }
+    foreach ($unmatchedUrl in @($res.unmatchedUrls | Where-Object { $_ })) { Write-TrackerLine "  no lead matches $unmatchedUrl" }
+}
+
+function Invoke-SweptCommand {
+    $rows = Read-Rows $PositionalArg "swept"
+    $send = @()
+    foreach ($inputRow in $rows) {
+        $company = ""
+        if ($inputRow -is [string]) { $company = ([string]$inputRow).Trim() } else { $company = Get-TrimmedField $inputRow "company" }
+        if (-not $company) { Refuse "a sweep with no company" "there is nothing to stamp"; continue }
+        $row = @{ company = $company }
+        # `board`, `endpoint`, `url_shape` and `wall` go to the shared
+        # company_fetch table used by every search on the deployment; `note`
+        # stays in this search's own row (see routes/coverage.js). The server
+        # reads fields by name and drops the rest, so a new field is added
+        # here in the same change as its server column. `dead_signal` is
+        # deliberately not sent - see prompt.js's step 9d, "RECORD WHAT YOU
+        # COVERED".
+        foreach ($fieldName in @("board", "endpoint", "url_shape", "wall", "note")) {
+            $fieldValue = Get-TrimmedField $inputRow $fieldName
+            if ($fieldValue) { $row[$fieldName] = $fieldValue }
+        }
+        # A `wall` plus a `board` or `endpoint` contradicts itself: the wall
+        # says no route to the listings worked, the board or endpoint says one
+        # did. The row is sent exactly as written and the server, which
+        # applies this rule for every caller, shares nothing from it; this
+        # only warns. `url_shape` is not part of the contradiction - it
+        # describes a posting page, not a route to the listings.
+        if ($row.ContainsKey("wall") -and ($row.ContainsKey("board") -or $row.ContainsKey("endpoint"))) {
+            Write-TrackerLine "WARNING: $company reports a wall and a working board/endpoint in one row, which contradicts itself. If any route to its listings worked, re-send it without the wall; if none did, re-send it without the board/endpoint."
+        }
+        $send += $row
+    }
+    if ($send.Count -eq 0) { Write-TrackerLine "swept: nothing to record (refused=$($script:Refused))"; exit 0 }
+    $res = Invoke-Tracker "POST" "/api/coverage" @{ search = $Search; on = $Today; swept = @($send) }
+    if (Test-Path $KnownCache) { Remove-Item $KnownCache -Force }
+    # `added`: companies this call put on the shared list, which every search
+    # sweeps. `withheld`: rows the server shared nothing from because of the
+    # wall contradiction. It should equal the WARNING count above - both apply
+    # the same test, and a field is only in a row when non-empty - so a
+    # mismatch means the rule has drifted between here and handleRecordSweeps.
+    Write-TrackerLine "swept: recorded=$($res.recorded) added=$($res.added) withheld=$($res.withheld) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
+}
+
+function Invoke-RunCommand {
+    # Status is taken from --status or a positional argument, so the one call
+    # that must never be skipped cannot fail on how it is spelled.
+    $status = "ok"
+    if ($Opts.ContainsKey("status") -and $Opts["status"]) { $status = $Opts["status"].ToLowerInvariant() }
+    elseif ($PositionalArg) { $status = $PositionalArg.ToLowerInvariant() }
+    if ($status -ne "ok" -and $status -ne "error") {
+        Fail "--status must be 'ok' or 'error', not '$status'"
+    }
+    $note = ""
+    if ($Opts.ContainsKey("note")) { $note = $Opts["note"] }
+    # No counts. The server derives leadsAdded/screenedAdded/delisted from the
+    # rows that actually landed, per tab, so there is nothing here to add up
+    # and nothing that can be added up wrong.
+    $res = Invoke-Tracker "POST" "/api/runs" @{ search = $Search; status = $status; on = $Today; note = $note }
+    $also = @($res.also | Where-Object { $_ }).Count
+    $fanout = ""
+    if ($also -gt 0) { $fanout = " (+$also fed tab(s) recorded)" }
+    Write-TrackerLine "run: recorded $Search as '$status' for $Today$fanout"
+}
+
+# ---------------------------------------------------------------- dispatch --
+
 switch ($Command) {
-
-  # The tabs this run fills, read from the config rather than named in an
-  # argument. A branched search fills its own tab plus every track whose
-  # `fed_by` points at it; asking the server which those are keeps the prompt
-  # from listing them and keeps the list from going stale.
-  "dedup" {
-      $keys = @($Search)
-      $config = Invoke-Tracker "GET" "/api/config" $null
-      # `| Where-Object { $_ }` throughout, because @($null) in PowerShell is a
-      # one-element array holding $null - a foreach over an absent property
-      # runs once on nothing rather than not at all.
-      foreach ($track in @($config.tracks | Where-Object { $_ })) {
-          if ($track.fed_by -eq $Search -and $track.key -ne $Search) { $keys += $track.key }
-      }
-
-      $leads = @()
-      $screened = @()
-      $seen = @{}
-      # Screened history scoped to what this run can reach: the companies around its
-      # cursor, plus anything rejected in the last few days wherever it was. A run
-      # only meets the rest by chance, and reporting one again costs a check, not a
-      # row - the tracker refuses the duplicate. Leads always come back whole.
-      $scopedTabs = 0
-      $flagged = 0
-      $recheckBudget = $null
-      $recheckOpen = $null
-      $keptScreened = 0
-      $totalScreened = 0
-      $companies = $null
-      $since = $null
-      foreach ($tabKey in $keys) {
-          $dedupResponse = Invoke-Tracker "GET" "/api/dedup/${tabKey}?scope=batch" $null
-          if ($dedupResponse.scope) {
-              $scopedTabs++
-              $keptScreened += [int]$dedupResponse.scope.kept
-              $totalScreened += [int]$dedupResponse.scope.of
-              $companies = $dedupResponse.scope.companies
-              $since = $dedupResponse.scope.since
-              if ($dedupResponse.scope.recheck) {
-                  $recheckBudget = $dedupResponse.scope.recheck.budget
-                  $recheckOpen = $dedupResponse.scope.recheck.eligible
-              }
-          }
-          foreach ($lead in @($dedupResponse.leads | Where-Object { $_ })) {
-              # No `id`. Nothing a run posts back is keyed by one, and a lead id
-              # in front of a model is an invitation to report by it.
-              $row = [ordered]@{ url = $lead.url; status = $lead.status; search = $tabKey }
-              # The tracker picks tonight's re-checks across the whole search, longest-
-              # unconfirmed first, so the flag is carried through as it came.
-              if ($lead.recheck -eq $true) { $row["recheck"] = $true; $flagged++ }
-              $leads += [pscustomobject]$row
-          }
-          foreach ($screenedUrl in @($dedupResponse.screened | Where-Object { $_ })) {
-              if (-not $seen.ContainsKey($screenedUrl)) { $seen[$screenedUrl] = $true; $screened += $screenedUrl }
-          }
-      }
-
-      $out = Get-OutputPath "dedup.json"
-      Write-Json $out ([pscustomobject]@{ leads = @($leads); screened = @($screened) })
-      # A server that doesn't know `scope` sends every row and no `scope` key.
-      if ($scopedTabs -eq $keys.Count) {
-          $scopeNote = "screened scoped to $companies companies from the cursor plus since $since ($keptScreened of $totalScreened kept)"
-      } elseif ($scopedTabs -eq 0) {
-          $scopeNote = "unscoped - the tracker sent full history"
-      } else {
-          $scopeNote = "scoped on $scopedTabs of $($keys.Count) tab(s)"
-      }
-      if ($null -ne $recheckBudget) {
-          $recheckNote = "$flagged to re-check tonight (budget $recheckBudget of $recheckOpen open)"
-      } else {
-          $recheckNote = "no re-check selection from the tracker"
-      }
-      Write-TrackerLine "dedup: $($leads.Count) tracked lead(s), $($screened.Count) screened url(s) across $($keys.Count) tab(s), $scopeNote, $recheckNote -> $out"
-      break
-  }
-
-  "companies" {
-      if (Test-Path $KnownCache) { Remove-Item $KnownCache -Force }
-      $coverage = Invoke-Tracker "GET" "/api/coverage/$Search" $null
-      $out = Get-OutputPath "companies.json"
-      Write-Json $out $coverage
-      Write-TrackerLine "companies: $($coverage.batch) to cover tonight, $($coverage.cursor) of $($coverage.total) through the rotation -> $out"
-      foreach ($listed in @($coverage.companies | Where-Object { $_ })) {
-          $line = "  $($listed.company)"
-          $board = Get-TrimmedField $listed "board"
-          if ($board) { $line += " [$board]" }
-          $note = Get-TrimmedField $listed "note"
-          if ($note) { $line += " - $note" }
-          Write-TrackerLine $line
-      }
-      break
-  }
-
-  "known" {
-      # Whether a company is already on the shared list, decided here rather than
-      # by the run reading names. A run only sees tonight's slice, so on its own it
-      # cannot tell that another search added a company earlier the same night.
-      # The match is normalize() in server/src/exclude.js - lowercase, every run of
-      # characters outside a-z and 0-9 collapsed to one space, trimmed - so it
-      # agrees with how the list itself tells two names apart. Change both together.
-      if (-not $PositionalArg) { Fail "known needs a company name - usage: tracker known ""<company>""" }
-      $norm = { param($companyName) (([string]$companyName).ToLowerInvariant() -creplace "[^a-z0-9]+", " ").Trim() }
-      $want = & $norm $PositionalArg
-      if (-not $want) { Fail "'$PositionalArg' has no letters or digits to match on" }
-      if (Test-Path $KnownCache) {
-          $names = @((Get-Content -Raw -Encoding UTF8 $KnownCache | ConvertFrom-Json).companies)
-      } else {
-          $fullList = Invoke-Tracker "GET" "/api/coverage/${Search}?all=1" $null
-          $names = @($fullList.companies | Where-Object { $_ } | ForEach-Object { [string]$_.company })
-          # Under a property, not as a bare array: piped through ConvertTo-Json, a
-          # one-name list is written as a string and an empty one as nothing.
-          Write-Json "known-list.json" @{ companies = $names }
-      }
-      $hit = @($names | Where-Object { $_ -and ((& $norm $_) -eq $want) }) | Select-Object -First 1
-      if ($hit) {
-          Write-TrackerLine "known: $PositionalArg is on the list as '$hit' - skip it, its turn comes in the rotation"
-      } else {
-          # The list hides this account's excluded companies, so absence is one of
-          # two things, and the run has to hear both.
-          Write-TrackerLine "known: $PositionalArg is not on the list, or is excluded for this account"
-      }
-      break
-  }
-
-  "leads" {
-      $rows = Read-Rows $PositionalArg "leads"
-      $send = @()
-      foreach ($inputRow in $rows) {
-          $url = Get-TrimmedField $inputRow "url"
-          $company = Get-TrimmedField $inputRow "company"
-          $title = Get-TrimmedField $inputRow "title"
-          if (-not $url) { Refuse "a lead with no url" "there is nothing to track or dedup on"; continue }
-          if (-not $company -or -not $title) { Refuse "$url" "a lead needs both a company and a title"; continue }
-          $row = @{ search = $Search; company = $company; title = $title; url = $url }
-          $rowSearch = Get-TrimmedField $inputRow "search"
-          if ($rowSearch) { $row["search"] = $rowSearch }
-          foreach ($fieldName in @("location", "fit", "team", "setup", "comp")) {
-              $fieldValue = Get-TrimmedField $inputRow $fieldName
-              if ($fieldValue) { $row[$fieldName] = $fieldValue }
-          }
-          $send += $row
-      }
-      if ($send.Count -eq 0) { Write-TrackerLine "leads: nothing to send (refused=$($script:Refused))"; exit 0 }
-      $res = Invoke-Tracker "POST" "/api/leads" @{ on = $Today; leads = @($send) }
-      Write-TrackerLine "leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) on=$Today"
-      break
-  }
-
-  "screened" {
-      $rows = Read-Rows $PositionalArg "screened"
-      $send = @()
-      foreach ($inputRow in $rows) {
-          $url = Get-TrimmedField $inputRow "url"
-          $reason = Get-TrimmedField $inputRow "reason"
-          if (-not $url) { Refuse "a screened row with no url" "the url is what stops tomorrow re-verifying it"; continue }
-          if (-not $reason) { Refuse "$url" "a screened row needs a reason - it is the whole value of the entry"; continue }
-          $row = @{ search = $Search; url = $url; reason = $reason }
-          foreach ($fieldName in @("company", "title", "location")) {
-              $fieldValue = Get-TrimmedField $inputRow $fieldName
-              if ($fieldValue) { $row[$fieldName] = $fieldValue }
-          }
-          $send += $row
-      }
-      if ($send.Count -eq 0) { Write-TrackerLine "screened: nothing to send (refused=$($script:Refused))"; exit 0 }
-      $res = Invoke-Tracker "POST" "/api/screened" @{ search = $Search; on = $Today; screened = @($send) }
-      Write-TrackerLine "screened: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) on=$Today"
-      break
-  }
-
-  { $_ -eq "verified" -or $_ -eq "delist" } {
-      $rows = Read-Rows $PositionalArg "urls"
-      $urls = @()
-      $seen = @{}
-      foreach ($inputRow in $rows) {
-          $url = ""
-          if ($inputRow -is [string]) { $url = ([string]$inputRow).Trim() } else { $url = Get-TrimmedField $inputRow "url" }
-          if (-not $url) { Refuse "an entry with no url" "both reports are by url - there are no ids here"; continue }
-          if ($seen.ContainsKey($url)) { continue }
-          $seen[$url] = $true
-          $urls += $url
-      }
-      if ($urls.Count -eq 0) { Write-TrackerLine "${Command}: nothing to report (refused=$($script:Refused))"; exit 0 }
-      # `search` is this run's own key in both calls, including for a posting
-      # tracked in another tab this run fills: the tracker matches a url against
-      # every lead this person has, whatever tab holds it.
-      $path = "/api/verified"
-      if ($Command -eq "delist") { $path = "/api/delist" }
-      $res = Invoke-Tracker "POST" $path @{ search = $Search; on = $Today; urls = @($urls) }
-      if ($Command -eq "delist") {
-          Write-TrackerLine "delist: removed=$($res.removed) kept=$($res.kept) unmatched=$($res.unmatched) on=$Today"
-      } else {
-          Write-TrackerLine "verified: stamped=$($res.stamped) unmatched=$($res.unmatched) on=$Today"
-      }
-      foreach ($unmatchedUrl in @($res.unmatchedUrls | Where-Object { $_ })) { Write-TrackerLine "  no lead matches $unmatchedUrl" }
-      break
-  }
-
-  "swept" {
-      $rows = Read-Rows $PositionalArg "swept"
-      $send = @()
-      foreach ($inputRow in $rows) {
-          $company = ""
-          if ($inputRow -is [string]) { $company = ([string]$inputRow).Trim() } else { $company = Get-TrimmedField $inputRow "company" }
-          if (-not $company) { Refuse "a sweep with no company" "there is nothing to stamp"; continue }
-          $row = @{ company = $company }
-          # `board`, `endpoint`, `url_shape` and `wall` go to the shared
-          # company_fetch table used by every search on the deployment; `note`
-          # stays in this search's own row (see routes/coverage.js). The server
-          # reads fields by name and drops the rest, so a new field is added
-          # here in the same change as its server column. `dead_signal` is
-          # deliberately not sent - see prompt.js's step 9d, "RECORD WHAT YOU
-          # COVERED".
-          foreach ($fieldName in @("board", "endpoint", "url_shape", "wall", "note")) {
-              $fieldValue = Get-TrimmedField $inputRow $fieldName
-              if ($fieldValue) { $row[$fieldName] = $fieldValue }
-          }
-          # A `wall` plus a `board` or `endpoint` contradicts itself: the wall
-          # says no route to the listings worked, the board or endpoint says one
-          # did. The row is sent exactly as written and the server, which
-          # applies this rule for every caller, shares nothing from it; this
-          # only warns. `url_shape` is not part of the contradiction - it
-          # describes a posting page, not a route to the listings.
-          if ($row.ContainsKey("wall") -and ($row.ContainsKey("board") -or $row.ContainsKey("endpoint"))) {
-              Write-TrackerLine "WARNING: $company reports a wall and a working board/endpoint in one row, which contradicts itself. If any route to its listings worked, re-send it without the wall; if none did, re-send it without the board/endpoint."
-          }
-          $send += $row
-      }
-      if ($send.Count -eq 0) { Write-TrackerLine "swept: nothing to record (refused=$($script:Refused))"; exit 0 }
-      $res = Invoke-Tracker "POST" "/api/coverage" @{ search = $Search; on = $Today; swept = @($send) }
-      if (Test-Path $KnownCache) { Remove-Item $KnownCache -Force }
-      # `added`: companies this call put on the shared list, which every search
-      # sweeps. `withheld`: rows the server shared nothing from because of the
-      # wall contradiction. It should equal the WARNING count above - both apply
-      # the same test, and a field is only in a row when non-empty - so a
-      # mismatch means the rule has drifted between here and handleRecordSweeps.
-      Write-TrackerLine "swept: recorded=$($res.recorded) added=$($res.added) withheld=$($res.withheld) excluded=$($res.excluded) refused=$($script:Refused) cursor=$($res.cursor) on=$Today"
-      break
-  }
-
-  "run" {
-      # Status is taken from --status or a positional argument, so the one call
-      # that must never be skipped cannot fail on how it is spelled.
-      $status = "ok"
-      if ($Opts.ContainsKey("status") -and $Opts["status"]) { $status = $Opts["status"].ToLowerInvariant() }
-      elseif ($PositionalArg) { $status = $PositionalArg.ToLowerInvariant() }
-      if ($status -ne "ok" -and $status -ne "error") {
-          Fail "--status must be 'ok' or 'error', not '$status'"
-      }
-      $note = ""
-      if ($Opts.ContainsKey("note")) { $note = $Opts["note"] }
-      # No counts. The server derives leadsAdded/screenedAdded/delisted from the
-      # rows that actually landed, per tab, so there is nothing here to add up
-      # and nothing that can be added up wrong.
-      $res = Invoke-Tracker "POST" "/api/runs" @{ search = $Search; status = $status; on = $Today; note = $note }
-      $also = @($res.also | Where-Object { $_ }).Count
-      $fanout = ""
-      if ($also -gt 0) { $fanout = " (+$also fed tab(s) recorded)" }
-      Write-TrackerLine "run: recorded $Search as '$status' for $Today$fanout"
-      break
-  }
-
+  "dedup" { Invoke-DedupCommand; break }
+  "companies" { Invoke-CompaniesCommand; break }
+  "known" { Invoke-KnownCommand; break }
+  "leads" { Invoke-LeadsCommand; break }
+  "screened" { Invoke-ScreenedCommand; break }
+  { $_ -eq "verified" -or $_ -eq "delist" } { Invoke-UrlReportCommand; break }
+  "swept" { Invoke-SweptCommand; break }
+  "run" { Invoke-RunCommand; break }
   default {
       Fail "unknown command '$Command' - one of: dedup, companies, known, leads, screened, verified, delist, swept, run"
   }
