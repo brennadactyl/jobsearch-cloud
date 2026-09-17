@@ -248,8 +248,10 @@ export function putDocument(path: string, file: Blob): Promise<StoredDocument> {
 }
 
 /** Every stored document, with what the server read of each resume and which searches read it. */
+export const storedResumeListSchema = z.object({ documents: z.array(storedResumeSchema) });
+
 export async function listDocuments(): Promise<StoredResume[]> {
-  return (await request("/api/documents", z.object({ documents: z.array(storedResumeSchema) }))).documents;
+  return (await request("/api/documents", storedResumeListSchema)).documents;
 }
 
 /**
