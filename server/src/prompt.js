@@ -51,181 +51,20 @@ const DEFAULT_REPORT_LINE =
   "step-9c run record was accepted. If nothing new either way, say so plainly - " +
   "don't pad.";
 
-/**
- * @param {{user: {id: string, name: string}, track: import("./db.js").Track, settings: import("./db.js").Settings, feeds?: import("./db.js").Track[]}} args
- * @param {import("./db.js").Track[]} [args.feeds] tracks whose `fed_by` names
- *   this one - tabs this run also fills. See docs/glossary.md#searches-and-tracks.
- * @returns {string} the full prompt text
- */
-export function buildSearchPrompt({ user, track, settings, feeds }) {
-  const name = user.name;
-  const pn = PRONOUNS[settings.pronouns] || PRONOUNS["they/them"];
-  const key = track.key;
-
-  // A branched search splits one set of companies across several tabs, so one
-  // run fills them all rather than each re-fetching the same boards.
-  const fed = (Array.isArray(feeds) ? feeds : []).filter((t) => t && t.key && t.key !== key);
-  const multi = fed.length > 0;
-  const allKeys = [key, ...fed.map((t) => t.key)];
-  // Step 7b describes each tab with its page subtitle, so the two can't drift.
-  const branchOf = (t) => t.full_description || t.label;
-
-  const doc = track.doc_file || `docs/tracked_${key}_postings.md`;
-  const docSummary =
-    track.doc_summary ||
-    "candidate profile, what this search is looking for, how to weigh fit, and notes on companies tried";
-  // Runs into "Do the following:" as one paragraph: a track's note reads as
-  // preamble, not as a heading.
-  const intro = track.intro_note ? `${track.intro_note} ` : "";
-  // Extends step 9's `"search"` sentence for a track where an optional lead
-  // field is required (e.g. `fit` on a career-pivot search).
-  const leadsNote = track.leads_note ? `, and ${track.leads_note}` : "";
-
-  // A track's own screening step pushes the capture step from 6b to 6c. The
-  // number is computed because step 9 refers back to it ("the step-6b fields").
-  const fitFilterStep = track.fit_filter_step ? `6b. ${track.fit_filter_step}\n` : "";
-  const captureNum = track.fit_filter_step ? "6c" : "6b";
-
-  // What a run may add to its doc is what has no other home. A rule that
-  // screens postings belongs in the config, where the prompt reads it: written
-  // into the doc as well, the two copies drift and nothing says which a run
-  // follows. A dated note costs every later run a read, and outlives the
-  // thing it described.
-  const docUpdateLine =
-    track.doc_update_line ||
-    'If this run learned something worth keeping that has nowhere else to go - ' +
-      'why a company outside the shared list was tried, and what came of it - add ' +
-      `it to \`${doc}\`'s Company notes, as things stand now: correct a line in place ` +
-      'rather than adding a dated note or a correction beneath it. A refinement to ' +
-      "what fits or to the scope is not a doc edit: the rules that screen a posting " +
-      "live in this search's config, so say it in your step-10 report for a person " +
-      'to change there. A blocked domain or a working URL format is not a doc edit ' +
-      'either: it is a `wall`, `endpoint` or `url_shape` in step 9d, where every ' +
-      'search reads it. Do not add a found-postings table or a screened/dead-link ' +
-      'list to the doc; those live in the tracker only.';
-
-  // A search has no company list of its own. It covers the step-1c slice of the
-  // one shared list and finds new employers in step 3b; a list kept per search
-  // becomes a fixed set swept every night on top of the slice, which is what
-  // makes a run long. target_companies may still hold one in D1; it is not read.
-  const searchNote = track.search_note ? ` ${track.search_note}` : "";
-
-  // A settings list rather than track prose, so "is this company excluded?" is
-  // one lookup. Entries may be a name or a catch-all phrase ("any other company
-  // X owns"), so the sentence reads either way. The tracker also drops them on
-  // the way in (exclude.js); this clause only saves the fetch.
-  const excluded = Array.isArray(settings.excluded_companies)
-    ? settings.excluded_companies.filter((c) => typeof c === "string" && c.trim())
-    : [];
-  const exclusionNote = excluded.length
-    ? ` Don't spend the run's time on ${joinAnd(excluded)} - permanently excluded, including via broader discovery. Skip a hit there rather than verifying it, and don't screen it either: an exclusion isn't a candidate that was considered and ruled out, so it earns no row.`
-    : "";
-
-  // The resume is whatever this search's documents list names - the one place a
-  // resume is chosen - so choosing a new one can't leave prose pointing at the
-  // old file. resume_line carries only how this search frames the resume. Files
-  // under resumes/ are the resume; a list with none there (a text copy kept
-  // under reference/) still names what the run can read.
-  const readableDocuments = parseDocumentList(track.documents).filter((p) =>
-    READABLE_DOCUMENT_EXTENSIONS.includes(documentExtension(p))
-  );
-  const resumeFiles = readableDocuments.filter((p) => p.startsWith("resumes/"));
-  const resumeRead = resumeFiles.length ? resumeFiles : readableDocuments;
-  const resumeLine = resumeRead.length
-    ? `Read the resume: ${joinAnd(resumeRead.map((p) => `\`${p}\``))}.${track.resume_line ? ` ${track.resume_line}` : ""}`
-    : track.resume_line || "Read the resume.";
-
-  // A resume chosen since this search's profile was written. The profile in the
-  // doc was drawn from the old one, so a run that searched first would screen
-  // tonight's postings against a person who no longer exists. The rewrite is
-  // confined to one section, and scripts/run-search.ps1 refuses a doc changed
-  // anywhere else - so no other doc edit is asked for on the same night.
-  const profileRefreshStep = track.profile_stale_since
-    ? `2b. THE RESUME HAS CHANGED - REWRITE THE PROFILE BEFORE YOU SEARCH. ` +
-      `This search's profile in \`${doc}\` was written from ` +
-      `${track.resume_was ? `\`${track.resume_was}\`` : "an earlier resume"}, and step 2's resume replaces it. ` +
-      `Rewrite the section of \`${doc}\` that starts at the heading beginning \`## Candidate Profile\` and runs to the next \`## \` heading: ` +
-      `the candidate profile, the best-fit roles, and anything else there drawn from the resume, from the new one. ` +
-      `Keep the heading beginning \`## Candidate Profile\`, and don't name a resume file in it. ` +
-      `Change nothing else in the doc tonight - every other section must come back exactly as it was, ` +
-      `or the whole doc is refused and the profile stays out of date. ` +
-      `So skip step 8b's other doc edits tonight and put what you would have written in your step-10 report. ` +
-      `Then search against the profile you just wrote.\n`
-    : "";
-  const roleLine = track.role_search_line || "roles matching the resume";
-
-  // Built from optional parts so a track with no fit filter or geographic scope
-  // leaves no empty clauses.
-  const findingIs = joinAnd([
-    "genuinely new",
-    "verified live",
-    settings.scope_clause,
-    track.fit_clause,
-  ]);
-  const disqualified = [
-    "dead-on-arrival",
-    settings.scope_disqualifier,
-    track.fit_disqualifier,
-    "wrong level",
-    "duplicate of an existing lead",
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  const geoStep = settings.geo_scope_line
-    ? settings.geo_scope_line
-    : "No geographic restriction is configured for this search - don't exclude a posting on location alone.";
-  // Never empty: it is a numbered step, and the tracker derives priority from
-  // location text whether or not priority locations are set.
-  const locationGuidance = settings.location_guidance || DEFAULT_LOCATION_GUIDANCE;
-  const screenedExamples = track.screened_examples || DEFAULT_SCREENED_EXAMPLES;
-  const report = track.report_line || DEFAULT_REPORT_LINE;
-  const footer = settings.footer_note ? ` ${settings.footer_note}` : "";
-
-  // ---- Multi-tab pieces: empty for a single-tab run unless noted.
-  const alsoFills = multi
-    ? `\n# Also fills: ${fed.map((t) => `${t.key} (${t.label})`).join(", ")} - one search, ${allKeys.length} tabs`
-    : "";
-  // `./tracker dedup` fetches and merges every fed tab itself; the run only
-  // needs telling how to read the merged result.
-  const dedupNote = multi
-    ? ` It covers all ${allKeys.length} tabs this run fills (${allKeys.join(", ")}) and merges them: a posting already tracked under any of them is not new, whichever tab tonight's run would file it under.`
-    : "";
-  // After step 7, because only findings need a tab. A tie goes to the first
-  // listed tab among those the posting reads as, never to `key` by default:
-  // `key` is just the tab that owns the scheduled search, which may be the
-  // narrowest one.
-  const filingStep = multi
-    ? `7b. FILE EACH FINDING UNDER THE RIGHT TAB. This one search fills ${allKeys.length} tabs, and every finding from step 7 belongs to exactly one of them:\n${[track, ...fed]
-        .map((t) => `   - \`${t.key}\` (${t.label}): ${branchOf(t)}`)
-        .join("\n")}\n   Decide from what the posting and the company actually are, reading the tab descriptions above as written - not from a job title alone, which means different things at different companies. \`${doc}\` is where any finer rule for this split lives; follow it. If a posting genuinely reads more than one way after checking, file it under whichever of *those* tabs comes first in the list above, and name those ones in your report. The tie is only ever between the tabs it actually reads as: a tab you have already ruled out is never the answer, and that includes \`${key}\` - the tab that happens to own this search, which is not a reason for a posting to show up in it. Don't spend a second verification pass on the question: the posting is already verified, this only decides which tab shows it. The answer is the \`"search"\` value in step 9.\n`
-    : "";
-  // Not empty for a single tab: tracker.ps1 stamps `search` from TRACKER_SEARCH,
-  // so there is no key to choose.
-  const searchValueRule = multi
-    ? `is the key step 7b filed that posting under - ${allKeys
-        .map((k) => `\`"${k}"\``)
-        .join(" or ")}; one file can carry rows for several tabs`
-    : `is stamped by the helper`;
-  // The tracker matches a url against every lead the person has, whatever tab
-  // holds it (db.getLeadsForUrlMatch). Unsaid, a multi-tab run invents one
-  // call per tab.
-  const delistTabNote = multi
-    ? ` One file each covers all ${allKeys.length} tabs: the tracker matches a url against every lead ${name} has, whatever tab holds it.`
-    : "";
-  // Steps 1c, 9d and 9e go to every search, even with an empty company list:
-  // 9d is the only step that adds a company. Cursor mechanics live in
-  // routes/coverage.js; 9e states only their consequence.
-  const coverageStep = `1c. Get this run's companies: \`./tracker companies\`. It writes \`companies.json\` - \`{companies: [{company, last_swept, board, note}], total, batch, cursor}\` - and lists them. The server picks them, capped at what one run can actually verify. **Cover exactly these, all of them**, and don't reach past them into the rest of the list in step 3: that list is longer than one run can do properly, and the failure mode isn't a company going uncovered for a day, it's every company being skimmed. They come back round - everything is reached once per cycle before anything is reached twice. \`board\` is a JSON endpoint already confirmed for that company (\`greenhouse\`, \`ashby\`, \`workday cxs\`, ...); it makes a company cheap to cover, not privileged - use it where it's there. The cap is about *this* list: "don't reach past them" means don't help yourself to the rest of the rotation early, and step 3b sends you outside it on purpose.
+// Steps 1c, 9d and 9e go to every search, even with an empty company list:
+// 9d is the only step that adds a company. Cursor mechanics live in
+// routes/coverage.js; 9e states only their consequence.
+const COVERAGE_STEP = `1c. Get this run's companies: \`./tracker companies\`. It writes \`companies.json\` - \`{companies: [{company, last_swept, board, note}], total, batch, cursor}\` - and lists them. The server picks them, capped at what one run can actually verify. **Cover exactly these, all of them**, and don't reach past them into the rest of the list in step 3: that list is longer than one run can do properly, and the failure mode isn't a company going uncovered for a day, it's every company being skimmed. They come back round - everything is reached once per cycle before anything is reached twice. \`board\` is a JSON endpoint already confirmed for that company (\`greenhouse\`, \`ashby\`, \`workday cxs\`, ...); it makes a company cheap to cover, not privileged - use it where it's there. The cap is about *this* list: "don't reach past them" means don't help yourself to the rest of the rotation early, and step 3b sends you outside it on purpose.
 `;
-  // 9d omits dead_signal until the warning migrations/0010 asks writers to read
-  // exists: the field turns one run's pattern-match into a delisting rule every
-  // search trusts.
-  //
-  // 9e re-fetches with a separate call after 9d, because only a recorded sweep
-  // moves the cursor. Reading is safe to repeat and recording marks work done,
-  // so a run that dies mid-way has recorded what it did or nothing.
-  const sweepStep = `9d. RECORD WHAT YOU COVERED. Write every company this run actually
+
+// 9d omits dead_signal until the warning migrations/0010 asks writers to read
+// exists: the field turns one run's pattern-match into a delisting rule every
+// search trusts.
+//
+// 9e re-fetches with a separate call after 9d, because only a recorded sweep
+// moves the cursor. Reading is safe to repeat and recording marks work done,
+// so a run that dies mid-way has recorded what it did or nothing.
+const SWEEP_STEP = `9d. RECORD WHAT YOU COVERED. Write every company this run actually
    attempted to \`swept.json\` - a JSON array of
    \`{company, board, endpoint, url_shape, wall, note}\` - and run
    \`./tracker swept swept.json\`.
@@ -297,13 +136,239 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
    it leaves the wall standing.
 `;
 
-  // 9c sends no counts: POST /api/runs derives them from the rows that landed
-  // and writes each fed tab's record too (routes/runs.js).
-  const runFanoutNote = multi
+
+/**
+ * The tabs this run fills: its own, and every track whose `fed_by` names it.
+ * A branched search splits one set of companies across several tabs, so one
+ * run fills them all rather than each re-fetching the same boards.
+ */
+function tabsThisRunFills(track, feeds) {
+  const fed = (Array.isArray(feeds) ? feeds : []).filter((t) => t && t.key && t.key !== track.key);
+  return { fed, multi: fed.length > 0, allKeys: [track.key, ...fed.map((t) => t.key)] };
+}
+
+/**
+ * What a run may add to its doc is what has no other home. A rule that
+ * screens postings belongs in the config, where the prompt reads it: written
+ * into the doc as well, the two copies drift and nothing says which a run
+ * follows. A dated note costs every later run a read, and outlives the
+ * thing it described.
+ */
+function docUpdateLine(track, doc) {
+  return (
+    track.doc_update_line ||
+    'If this run learned something worth keeping that has nowhere else to go - ' +
+      'why a company outside the shared list was tried, and what came of it - add ' +
+      `it to \`${doc}\`'s Company notes, as things stand now: correct a line in place ` +
+      'rather than adding a dated note or a correction beneath it. A refinement to ' +
+      "what fits or to the scope is not a doc edit: the rules that screen a posting " +
+      "live in this search's config, so say it in your step-10 report for a person " +
+      'to change there. A blocked domain or a working URL format is not a doc edit ' +
+      'either: it is a `wall`, `endpoint` or `url_shape` in step 9d, where every ' +
+      'search reads it. Do not add a found-postings table or a screened/dead-link ' +
+      'list to the doc; those live in the tracker only.'
+  );
+}
+
+/**
+ * A settings list rather than track prose, so "is this company excluded?" is
+ * one lookup. Entries may be a name or a catch-all phrase ("any other company
+ * X owns"), so the sentence reads either way. The tracker also drops them on
+ * the way in (exclude.js); this clause only saves the fetch.
+ */
+function exclusionNote(settings) {
+  const excluded = Array.isArray(settings.excluded_companies)
+    ? settings.excluded_companies.filter((c) => typeof c === "string" && c.trim())
+    : [];
+  return excluded.length
+    ? ` Don't spend the run's time on ${joinAnd(excluded)} - permanently excluded, including via broader discovery. Skip a hit there rather than verifying it, and don't screen it either: an exclusion isn't a candidate that was considered and ruled out, so it earns no row.`
+    : "";
+}
+
+/**
+ * The resume is whatever this search's documents list names - the one place a
+ * resume is chosen - so choosing a new one can't leave prose pointing at the
+ * old file. resume_line carries only how this search frames the resume. Files
+ * under resumes/ are the resume; a list with none there (a text copy kept
+ * under reference/) still names what the run can read.
+ */
+function resumeLine(track) {
+  const readableDocuments = parseDocumentList(track.documents).filter((p) =>
+    READABLE_DOCUMENT_EXTENSIONS.includes(documentExtension(p))
+  );
+  const resumeFiles = readableDocuments.filter((p) => p.startsWith("resumes/"));
+  const resumeRead = resumeFiles.length ? resumeFiles : readableDocuments;
+  return resumeRead.length
+    ? `Read the resume: ${joinAnd(resumeRead.map((p) => `\`${p}\``))}.${track.resume_line ? ` ${track.resume_line}` : ""}`
+    : track.resume_line || "Read the resume.";
+}
+
+/**
+ * Step 2b, only when a resume was chosen since this search's profile was
+ * written. The profile in the doc was drawn from the old one, so a run that
+ * searched first would screen tonight's postings against a person who no
+ * longer exists. The rewrite is confined to one section, and
+ * scripts/run-search.ps1 refuses a doc changed anywhere else - so no other doc
+ * edit is asked for on the same night.
+ */
+function profileRefreshStep(track, doc) {
+  return track.profile_stale_since
+    ? `2b. THE RESUME HAS CHANGED - REWRITE THE PROFILE BEFORE YOU SEARCH. ` +
+      `This search's profile in \`${doc}\` was written from ` +
+      `${track.resume_was ? `\`${track.resume_was}\`` : "an earlier resume"}, and step 2's resume replaces it. ` +
+      `Rewrite the section of \`${doc}\` that starts at the heading beginning \`## Candidate Profile\` and runs to the next \`## \` heading: ` +
+      `the candidate profile, the best-fit roles, and anything else there drawn from the resume, from the new one. ` +
+      `Keep the heading beginning \`## Candidate Profile\`, and don't name a resume file in it. ` +
+      `Change nothing else in the doc tonight - every other section must come back exactly as it was, ` +
+      `or the whole doc is refused and the profile stays out of date. ` +
+      `So skip step 8b's other doc edits tonight and put what you would have written in your step-10 report. ` +
+      `Then search against the profile you just wrote.\n`
+    : "";
+}
+
+// Step 7's two categories, built from optional parts so a track with no fit
+// filter or geographic scope leaves no empty clauses.
+function findingIs(track, settings) {
+  return joinAnd(["genuinely new", "verified live", settings.scope_clause, track.fit_clause]);
+}
+function disqualifiedReasons(track, settings) {
+  return [
+    "dead-on-arrival",
+    settings.scope_disqualifier,
+    track.fit_disqualifier,
+    "wrong level",
+    "duplicate of an existing lead",
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function geoStep(settings) {
+  return settings.geo_scope_line
+    ? settings.geo_scope_line
+    : "No geographic restriction is configured for this search - don't exclude a posting on location alone.";
+}
+
+// ---- Multi-tab fragments: empty for a single-tab run unless noted.
+
+function alsoFillsHeader({ fed, multi, allKeys }) {
+  return multi
+    ? `\n# Also fills: ${fed.map((t) => `${t.key} (${t.label})`).join(", ")} - one search, ${allKeys.length} tabs`
+    : "";
+}
+
+// `./tracker dedup` fetches and merges every fed tab itself; the run only
+// needs telling how to read the merged result.
+function dedupNote({ multi, allKeys }) {
+  return multi
+    ? ` It covers all ${allKeys.length} tabs this run fills (${allKeys.join(", ")}) and merges them: a posting already tracked under any of them is not new, whichever tab tonight's run would file it under.`
+    : "";
+}
+
+/**
+ * Step 7b. After step 7, because only findings need a tab. A tie goes to the
+ * first listed tab among those the posting reads as, never to the track's own
+ * key by default: that is just the tab that owns the scheduled search, which
+ * may be the narrowest one. Each tab is described with its page subtitle, so
+ * the two can't drift.
+ */
+function filingStep(track, { fed, multi, allKeys }, doc) {
+  const key = track.key;
+  const branchOf = (t) => t.full_description || t.label;
+  return multi
+    ? `7b. FILE EACH FINDING UNDER THE RIGHT TAB. This one search fills ${allKeys.length} tabs, and every finding from step 7 belongs to exactly one of them:\n${[track, ...fed]
+        .map((t) => `   - \`${t.key}\` (${t.label}): ${branchOf(t)}`)
+        .join("\n")}\n   Decide from what the posting and the company actually are, reading the tab descriptions above as written - not from a job title alone, which means different things at different companies. \`${doc}\` is where any finer rule for this split lives; follow it. If a posting genuinely reads more than one way after checking, file it under whichever of *those* tabs comes first in the list above, and name those ones in your report. The tie is only ever between the tabs it actually reads as: a tab you have already ruled out is never the answer, and that includes \`${key}\` - the tab that happens to own this search, which is not a reason for a posting to show up in it. Don't spend a second verification pass on the question: the posting is already verified, this only decides which tab shows it. The answer is the \`"search"\` value in step 9.\n`
+    : "";
+}
+
+// Not empty for a single tab: tracker.ps1 stamps `search` from TRACKER_SEARCH,
+// so there is no key to choose.
+function searchValueRule({ multi, allKeys }) {
+  return multi
+    ? `is the key step 7b filed that posting under - ${allKeys
+        .map((k) => `\`"${k}"\``)
+        .join(" or ")}; one file can carry rows for several tabs`
+    : `is stamped by the helper`;
+}
+
+// The tracker matches a url against every lead the person has, whatever tab
+// holds it (db.getLeadsForUrlMatch). Unsaid, a multi-tab run invents one
+// call per tab.
+function delistTabNote({ multi, allKeys }, name) {
+  return multi
+    ? ` One file each covers all ${allKeys.length} tabs: the tracker matches a url against every lead ${name} has, whatever tab holds it.`
+    : "";
+}
+
+// 9c sends no counts: POST /api/runs derives them from the rows that landed
+// and writes each fed tab's record too (routes/runs.js).
+function runFanoutNote({ fed, multi }) {
+  return multi
     ? ` One call covers every tab this run fills: the tracker writes a record for ${fed
         .map((t) => `\`${t.key}\``)
         .join(", ")} too, counted from the rows that landed in each. Don't run it once per tab.`
     : "";
+}
+
+/**
+ * @param {{user: {id: string, name: string}, track: import("./db.js").Track, settings: import("./db.js").Settings, feeds?: import("./db.js").Track[]}} args
+ * @param {import("./db.js").Track[]} [args.feeds] tracks whose `fed_by` names
+ *   this one - tabs this run also fills. See docs/glossary.md#searches-and-tracks.
+ * @returns {string} the full prompt text
+ */
+export function buildSearchPrompt({ user, track, settings, feeds }) {
+  const name = user.name;
+  const pn = PRONOUNS[settings.pronouns] || PRONOUNS["they/them"];
+  const key = track.key;
+  const tabs = tabsThisRunFills(track, feeds);
+  const { multi } = tabs;
+
+  const doc = track.doc_file || `docs/tracked_${key}_postings.md`;
+  const docSummary =
+    track.doc_summary ||
+    "candidate profile, what this search is looking for, how to weigh fit, and notes on companies tried";
+  // Runs into "Do the following:" as one paragraph: a track's note reads as
+  // preamble, not as a heading.
+  const intro = track.intro_note ? `${track.intro_note} ` : "";
+  // Extends step 9's `"search"` sentence for a track where an optional lead
+  // field is required (e.g. `fit` on a career-pivot search).
+  const leadsNote = track.leads_note ? `, and ${track.leads_note}` : "";
+
+  // A track's own screening step pushes the capture step from 6b to 6c. The
+  // number is computed because step 9 refers back to it ("the step-6b fields").
+  const fitFilterStep = track.fit_filter_step ? `6b. ${track.fit_filter_step}\n` : "";
+  const captureNum = track.fit_filter_step ? "6c" : "6b";
+
+  // A search has no company list of its own. It covers the step-1c slice of the
+  // one shared list and finds new employers in step 3b; a list kept per search
+  // becomes a fixed set swept every night on top of the slice, which is what
+  // makes a run long. target_companies may still hold one in D1; it is not read.
+  const searchNote = track.search_note ? ` ${track.search_note}` : "";
+  const roleLine = track.role_search_line || "roles matching the resume";
+
+  // Never empty: it is a numbered step, and the tracker derives priority from
+  // location text whether or not priority locations are set.
+  const locationGuidance = settings.location_guidance || DEFAULT_LOCATION_GUIDANCE;
+  const screenedExamples = track.screened_examples || DEFAULT_SCREENED_EXAMPLES;
+  const report = track.report_line || DEFAULT_REPORT_LINE;
+  const footer = settings.footer_note ? ` ${settings.footer_note}` : "";
+
+  // The fragments that depend on this track, settings or tabs, each built by a
+  // function above.
+  const alsoFills = alsoFillsHeader(tabs);
+  const docUpdate = docUpdateLine(track, doc);
+  const exclusion = exclusionNote(settings);
+  const resume = resumeLine(track);
+  const profileRefresh = profileRefreshStep(track, doc);
+  const finding = findingIs(track, settings);
+  const disqualified = disqualifiedReasons(track, settings);
+  const geo = geoStep(settings);
+  const dedup = dedupNote(tabs);
+  const filing = filingStep(track, tabs, doc);
+  const searchValue = searchValueRule(tabs);
+  const delistTab = delistTabNote(tabs, name);
+  const runFanout = runFanoutNote(tabs);
 
   // Step 3b sends discoveries to 9d because a company written into the doc
   // never reaches the rotation, and a search left with only its original
@@ -326,9 +391,9 @@ same arguments.)
 ${intro}Do the following:
 
 1. Read \`${doc}\` - ${docSummary}. Follow its numbered process. The doc doesn't keep a found-postings table or a screened/dead-link list - dedup data comes from step 1b instead.
-1b. Fetch what this track has already seen: \`./tracker dedup\`. It writes \`dedup.json\`: \`leads[]\` as \`{url, status}\`, with \`recheck: true\` on the ones due a re-check tonight - postings already tracked, where \`url\` is what step 8 reports back and \`status\` is context for your report (that's how you tell a stale lead nobody's touched from one ${name} has already applied to) - and \`screened[]\`, urls already looked at and rejected at tonight's companies or in the last few days, which is what stops you re-verifying the same dead or out-of-scope candidate. Older rejections at other companies aren't in it; if you verify one of those and report it, the tracker recognises it, so it costs a check and never a duplicate.${dedupNote}
-${coverageStep}2. ${resumeLine}
-${profileRefreshStep}3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}.${searchNote}${exclusionNote}
+1b. Fetch what this track has already seen: \`./tracker dedup\`. It writes \`dedup.json\`: \`leads[]\` as \`{url, status}\`, with \`recheck: true\` on the ones due a re-check tonight - postings already tracked, where \`url\` is what step 8 reports back and \`status\` is context for your report (that's how you tell a stale lead nobody's touched from one ${name} has already applied to) - and \`screened[]\`, urls already looked at and rejected at tonight's companies or in the last few days, which is what stops you re-verifying the same dead or out-of-scope candidate. Older rejections at other companies aren't in it; if you verify one of those and report it, the tracker recognises it, so it costs a check and never a duplicate.${dedup}
+${COVERAGE_STEP}2. ${resume}
+${profileRefresh}3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}.${searchNote}${exclusion}
 3b. NOW LOOK OUTSIDE THAT LIST. Step 3 is the companies already known to be worth checking; this step is how that list ever grows, and it is not optional. Search for ${roleLine} at companies **not already on the shared list** - including outside tech entirely: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities, manufacturing, and sports (leagues and the larger franchises, plus the data, streaming and betting companies built around them). All of them run real engineering orgs and all of them are easy to miss when the named list reads as big tech. Rotate through a couple of verticals per run rather than attempting all of them.
 
    **Check each company before you spend anything on it: \`./tracker known "<company>"\`.** Tonight's slice is a small part of the list, and another search may have added a company earlier tonight. If it says the company is on the list, skip it - its turn comes in the rotation.
@@ -343,11 +408,11 @@ ${profileRefreshStep}3. Search the step-1c companies' careers sites (web search 
    **Before you write a domain off as a wall, check what the HTML actually carried.** Three things survive on a page whose body renders client-side, and each is the page stating something rather than you inferring it: a \`JobPosting\` block in \`<script type="application/ld+json">\` (Ashby, Greenhouse, Lever, Workday and iCIMS all emit one - \`title\`, \`hiringOrganization\`, \`jobLocation\`, \`employmentType\`, \`baseSalary\`, usually the whole description); \`og:title\` / \`og:description\` meta tags; and the \`<title>\` tag. A JSON-LD \`JobPosting\` carrying a real description **is** the job description rendering - the same document in machine-readable form - so verify from it rather than calling the posting unconfirmable. A \`<title>\` naming no role ("Careers", "Job Board") states nothing, and an \`ItemList\` is a listing page, not a posting.
 
    **And tell a truncated page apart from an empty one.** A fetch that returned a megabyte of navigation and got cut off before the description is a size problem, not a block - the content is there, and the workaround for that domain (a reader-proxy, an ATS JSON endpoint, a different URL format) goes in step 9d as an \`endpoint\` or \`url_shape\`. Recording "truncated" as "blocked" is how a company that is perfectly readable ends up skipped for weeks.
-5. ${geoStep}
+5. ${geo}
 6. ${locationGuidance}
 ${fitFilterStep}${captureNum}. While the posting is open, also capture - only when it's stated plainly, never inferred or guessed - the team/org named for the role (\`team\`), the stated work arrangement (\`setup\`, e.g. "Remote", "Hybrid - 3 days/week onsite", "Onsite"), and any posted compensation range (\`comp\`, e.g. "$180,000-$230,000/yr"; many US states disclose this by law). Leave any of these as an empty string when the posting doesn't say. These land in the tracker's per-lead "Details" panel alongside referral/resume/next-action fields that are ${name}'s alone to fill in by hand - this search never touches those.
-7. Compare candidate URLs against \`leads[]\` and \`screened[]\` from step 1b (not a doc table). Sort each candidate into: (a) already tracked or already screened - skip it; (b) ${findingIs} - a finding, goes to step 9; (c) genuinely new but disqualified (${disqualified}) - goes to step 9b instead of being dropped silently.
-${filingStep}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open every lead step 1b marked \`recheck: true\`, and only those: the tracker picks them, longest-unconfirmed first, so every lead gets its turn without any run re-checking the whole list. If none are marked, there is nothing to re-check tonight. A tracked posting you happen to open for another reason can be reported too. For the postings you re-checked, **never delete or move anything yourself** - report what you saw and let the tracker decide what to do with it. Both reports are a JSON array of the urls you actually opened; send the URL you opened rather than matching it against step 1b's spelling first, because the tracker matches on posting identity, so a \`?gh_jid=\` suffix, a tracking param or a missing slug still finds the right lead.${delistTabNote}
+7. Compare candidate URLs against \`leads[]\` and \`screened[]\` from step 1b (not a doc table). Sort each candidate into: (a) already tracked or already screened - skip it; (b) ${finding} - a finding, goes to step 9; (c) genuinely new but disqualified (${disqualified}) - goes to step 9b instead of being dropped silently.
+${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open every lead step 1b marked \`recheck: true\`, and only those: the tracker picks them, longest-unconfirmed first, so every lead gets its turn without any run re-checking the whole list. If none are marked, there is nothing to re-check tonight. A tracked posting you happen to open for another reason can be reported too. For the postings you re-checked, **never delete or move anything yourself** - report what you saw and let the tracker decide what to do with it. Both reports are a JSON array of the urls you actually opened; send the URL you opened rather than matching it against step 1b's spelling first, because the tracker matches on posting identity, so a \`?gh_jid=\` suffix, a tracking param or a missing slug still finds the right lead.${delistTab}
 
    - **Still live**: write them to \`live.json\`, then \`./tracker verified live.json\`. This is the only thing in the whole system that writes a lead's "Confirmed live" date, and that date is the only measure of how long a lead still sitting in a tab has been presumed live. It changes nothing else, so being honest about which ones you actually opened is the whole of it.
    - **Confirmed dead**: write them to \`dead.json\`, then \`./tracker delist dead.json\`. Don't also screen these - this one report is the whole of it. List a dead posting whatever \`status\` its lead is in; the tracker keeps ${name}'s applied-to leads and reports them back as \`kept\`.
@@ -357,13 +422,13 @@ ${filingStep}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open 
    **So only list a posting you have actually confirmed dead** - a page that loads and says the role is closed or filled, or a genuine 404. Not being able to check is not the same as dead: a fetch timeout, a blocked domain, a 403/429, truncated content, or a JS shell that renders nothing all mean *unknown*, and an unknown belongs in **neither** file - it leaves the lead exactly as it is while you note the tooling problem in your report. Reporting a live posting as dead takes a real opening off ${pn.poss} board. When in doubt, leave it out of both and say so.
 
    A url reported back as unmatched means you believe you're tracking something the tracker has no lead for - report that plainly rather than retrying it.
-8b. ${docUpdateLine}
+8b. ${docUpdate}
 9. SYNC NEW POSTINGS TO THE LIVE TRACKER WEBPAGE. Write today's new verified
    postings to \`leads.json\` - a JSON array of
    \`{company, title, location, url, fit, team, setup, comp}\` - then run
    \`./tracker leads leads.json\`. \`team\`, \`setup\` and \`comp\` are the
    step-${captureNum} fields; leave a key out entirely for anything the posting
-   didn't state. Every row's \`"search"\` ${searchValueRule}${leadsNote}.
+   didn't state. Every row's \`"search"\` ${searchValue}${leadsNote}.
 9b. RECORD SCREENED-OUT CANDIDATES so tomorrow's run doesn't re-verify them.
    Write the disqualified-but-new candidates from step 7 to \`screened.json\` -
    \`{url, company, title, location, reason}\` - then run
@@ -379,7 +444,7 @@ ${filingStep}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open 
    because a run that finds nothing writes nothing anywhere else. Without it a
    search that has quietly stopped (expired token, disabled scheduled task,
    machine asleep) looks exactly like a quiet night on the webpage, and can go
-   unnoticed for weeks.${runFanoutNote}
+   unnoticed for weeks.${runFanout}
 
    Send \`--status error\` instead if the run couldn't do its job properly - the
    tracker unreachable, search or fetch tooling failing broadly enough that the
@@ -389,7 +454,7 @@ ${filingStep}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open 
 
    Send no counts: the tracker derives them from what steps 8, 9
    and 9b wrote${multi ? ", per tab and from that tab's own rows" : ""}.
-${sweepStep}10. ${report}
+${SWEEP_STEP}10. ${report}
 
 Never add an unverified link to any output.${footer}
 `;
