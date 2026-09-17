@@ -7,6 +7,14 @@ Kept by whoever is holding the product manager role.
 
 ## Next
 
+- **Team skills and tools** - approved from every role's workflow review. In
+  order: commit the proof tools under `tools/` (comment-only checks, one prompt
+  snapshot, the tracker helper rig, the doc link checker and diagram generator)
+  with a `prove-a-change` skill; fix `verify-and-deploy`; three CLAUDE.md lines;
+  then skills for testing the page against a local server, live end-to-end
+  tests, rebuilding a search's doc and PowerShell script conventions; fixes to
+  `edit-tracker-page`, `job-search-setup`, `add-target-company` and
+  `change-search-prompt`; a nightly run report and a backup query script.
 - **[Account settings](account-settings-plan.md), the rest** - the resume section
   and "My account" are live. Still to build: editing the page title, pronouns,
   ranked locations, excluded companies and search names, and the setup answers
