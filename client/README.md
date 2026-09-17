@@ -137,6 +137,10 @@ npm test
 npm run lint
 ```
 
+In `src/components/`, a file holding one component is named for it
+(PascalCase: `AccountPanel.tsx`); a file grouping several is camelCase and named
+for what the group is (`listControls.tsx`).
+
 Typecheck, tests and a build run in CI on pushes to `main` and on pull requests
 ([`../.github/workflows/checks.yml`](../.github/workflows/checks.yml)). What the
 tests cover:
