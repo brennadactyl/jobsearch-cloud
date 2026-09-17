@@ -20,10 +20,25 @@
   good ones before it. The age is read from the date in each file's name, not
   from the file's timestamps, which a copy can change.
 
+  The export runs up to three times, 30 seconds and then two minutes apart,
+  when Cloudflare's management API refuses it the way it does now and then - an
+  account, authorization, rate-limit or 5xx error that clears by itself. Any
+  other failure, such as a wrong database name or a login that has expired,
+  stops on the attempt that found it: retrying it only delays the news. Each
+  document call gets one second attempt on the same reasoning.
+
   Exit codes: 0 wrote and validated; 1 the export failed, nothing written; 2
   wrote the file but a check failed - read the log. Task Scheduler shows the
   code as "Last Run Result". A document problem is always 2, because the .sql
   has already landed by then.
+
+  The same outcome is written to <BackupDir>\last-backup-status.json and logged
+  as a RESULT line, so a night that failed can be seen without reading the log
+  or the scheduler: `{status, tags, reason, finishedAt, exitCode}` plus what
+  landed. `tags` is a fixed vocabulary safe to print anywhere; `reason` says the
+  same thing in words and can carry a path.
+  It is rewritten on every run, so a stale finishedAt means the job itself
+  stopped running. scripts/run-report.ps1 reads it.
 
 .PARAMETER RepoDir
   The repository root - used to find server\wrangler.toml (for the database
@@ -108,6 +123,47 @@ function Log($msg) {
     Add-Content -Path $logFile -Value $line -Encoding utf8
 }
 
+# The night's outcome in one place a reader can find without the log: the
+# scheduled task shows only an exit code, and a backup that stopped running is
+# discovered when someone needs it unless something says so. scripts/run-report.ps1
+# reads this file, and the RESULT line is the same thing in the log.
+#
+# Written on every exit, including a failure, so a stale file always means the
+# backup didn't run at all.
+$statusFile = Join-Path $BackupDir "last-backup-status.json"
+$script:statusFacts = [ordered]@{}
+
+function Complete-Backup([string]$Status, [string]$Tag, [string]$Reason) {
+    $exitCode = 0
+    if ($Status -eq "failed") { $exitCode = 1 }
+    elseif ($Status -eq "warnings") { $exitCode = 2 }
+    $record = [ordered]@{
+        status     = $Status
+        # `tags` is the fixed vocabulary a report can print anywhere: the words
+        # beside each problem below, and `export-failed` or `config` for the two
+        # ways a run stops early. `reason` is the readable version of the same
+        # thing and can carry a path or an API message, so it belongs in a log
+        # rather than in something pasted around.
+        tags       = @($Tag -split "," | Where-Object { $_ })
+        reason     = $Reason
+        finishedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        exitCode   = $exitCode
+    }
+    foreach ($k in $script:statusFacts.Keys) { $record[$k] = $script:statusFacts[$k] }
+    try {
+        # WriteAllText rather than Set-Content: PowerShell 5.1 writes a BOM,
+        # which a reader that isn't PowerShell trips over.
+        [System.IO.File]::WriteAllText($statusFile, ($record | ConvertTo-Json -Depth 4))
+    } catch {
+        Log "WARNING: could not write $statusFile - $($_.Exception.Message)"
+    }
+    Log ("RESULT status={0} exit={1} tags={2} reason={3}" -f $Status, $exitCode, $(if ($Tag) { $Tag } else { "-" }), $(if ($Reason) { $Reason } else { "-" }))
+    if ($Status -eq "ok") { Log "===== done =====" }
+    elseif ($Status -eq "warnings") { Log "===== done, WITH WARNINGS =====" }
+    else { Log "===== FAILED =====" }
+    exit $exitCode
+}
+
 Log "===== backup-tracker starting ====="
 
 # Read from wrangler.toml so a renamed database can't leave this exporting the
@@ -115,12 +171,12 @@ Log "===== backup-tracker starting ====="
 $wranglerToml = Join-Path $RepoDir "server\wrangler.toml"
 if (-not (Test-Path $wranglerToml)) {
     Log "ERROR: no server\wrangler.toml under $RepoDir - can't tell which database to export."
-    exit 1
+    Complete-Backup "failed" "config" "no server\wrangler.toml under $RepoDir"
 }
 $dbName = ([regex]::Match((Get-Content $wranglerToml -Raw), 'database_name\s*=\s*"([^"]+)"')).Groups[1].Value
 if (-not $dbName) {
     Log "ERROR: server\wrangler.toml has no database_name."
-    exit 1
+    Complete-Backup "failed" "config" "server\wrangler.toml has no database_name"
 }
 Log "database: $dbName"
 
@@ -148,22 +204,60 @@ function Invoke-Export {
     return $p.ExitCode
 }
 
-# One retry: the export endpoint fails transiently ("A request to the Cloudflare
-# API failed"), and an unattended job that gives up leaves no backup.
+# Whether a failed wrangler call is worth trying again: the Cloudflare
+# management API this export goes through refuses requests now and then, for a
+# few minutes, with an account or authorization error that means nothing about
+# the account (7403, 10000), a rate limit, or a 5xx. Every failure seen on this
+# machine has been one of those, and a retry has always cleared it.
+#
+# Matched on what wrangler printed, and deliberately narrow. A wrong database
+# name, a missing login or an expired token is settled on the first attempt:
+# retrying those three times only delays the report of a backup that was never
+# going to run.
+function Test-TransientFailure([string]$Output) {
+    if (-not $Output) { return $false }
+    $transient = @(
+        'A request to the Cloudflare API failed',
+        'code:\s*(7403|10000|10001)\b',
+        '\b(429|500|502|503|504)\b',
+        'rate limit',
+        'Internal error',
+        'temporarily unavailable',
+        'fetch failed',
+        'ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|socket hang up'
+    )
+    foreach ($pattern in $transient) {
+        if ($Output -match $pattern) { return $true }
+    }
+    return $false
+}
+
+# Three attempts, 30 seconds then two minutes apart: cheap for a job that runs
+# unattended at 03:15, and long enough to ride out the wobbles seen so far. The
+# export is the only copy of this data outside Cloudflare, so giving up early
+# costs a night.
+$exportWaits = @(30, 120)
 Log "exporting to staging: $staging"
 $code = Invoke-Export $staging
-if ($code -ne 0 -or -not (Test-Path $staging)) {
-    Log "export attempt 1 failed (exit $code) - retrying in 30s"
+for ($attempt = 1; $attempt -le $exportWaits.Count; $attempt++) {
+    if ($code -eq 0 -and (Test-Path $staging)) { break }
+    $errText = (Get-Content $errFile -Raw -ErrorAction SilentlyContinue), (Get-Content $outFile -Raw -ErrorAction SilentlyContinue) -join "`n"
     Get-Content $errFile -ErrorAction SilentlyContinue | ForEach-Object { Log "  wrangler: $_" }
-    Start-Sleep -Seconds 30
+    if (-not (Test-TransientFailure $errText)) {
+        Log "export attempt $attempt failed (exit $code) and the error isn't a transient Cloudflare one - not retrying."
+        break
+    }
+    $wait = $exportWaits[$attempt - 1]
+    Log "export attempt $attempt failed (exit $code) on a transient Cloudflare error - retrying in ${wait}s"
+    Start-Sleep -Seconds $wait
     $code = Invoke-Export $staging
 }
 
 if ($code -ne 0 -or -not (Test-Path $staging)) {
-    Log "ERROR: wrangler d1 export failed (exit $code) on both attempts. Nothing was written."
+    Log "ERROR: wrangler d1 export failed (exit $code). Nothing was written."
     Get-Content $outFile -ErrorAction SilentlyContinue | ForEach-Object { Log "  wrangler: $_" }
     Get-Content $errFile -ErrorAction SilentlyContinue | ForEach-Object { Log "  wrangler: $_" }
-    exit 1
+    Complete-Backup "failed" "export-failed" "wrangler d1 export failed (exit $code)"
 }
 
 # ---- Validate the staged file before it becomes a backup. ------------------
@@ -204,14 +298,18 @@ foreach ($m in [regex]::Matches($text, '(?im)^\s*INSERT INTO\s+"?users"?\s[^\r\n
 $expectedAccounts = $userCount - $demoIds.Count
 
 $problems = @()
-if ($size -lt $MinBytes) { $problems += "only $size bytes (under the $MinBytes floor)" }
-if ($tables -lt 1)       { $problems += "no CREATE TABLE statements" }
-if ($inserts -lt 1)      { $problems += "no INSERT statements - the schema came back but no data" }
+# A short fixed word per problem, for a report that has to be safe to paste:
+# the matching $problems text can carry a path or an API message.
+$problemTags = @()
+if ($size -lt $MinBytes) { $problemTags += "export-small"; $problems += "only $size bytes (under the $MinBytes floor)" }
+if ($tables -lt 1)       { $problemTags += "export-no-tables"; $problems += "no CREATE TABLE statements" }
+if ($inserts -lt 1)      { $problemTags += "export-no-rows"; $problems += "no INSERT statements - the schema came back but no data" }
 
 # A partial dump still reads as a valid file, so compare with the last backup.
 $previous = Get-ChildItem $BackupDir -Filter "*.sql" -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($previous -and $size -lt ($previous.Length * 0.5)) {
+    $problemTags += "export-shrank"
     $problems += ("less than half the size of the previous backup ({0:N0} vs {1:N0} bytes)" -f $size, $previous.Length)
 }
 
@@ -221,6 +319,9 @@ foreach ($p in $problems) { Log "WARNING: $p" }
 $final = Join-Path $BackupDir $name
 Copy-Item $staging $final -Force
 Log ("wrote {0} ({1:N0} bytes)" -f $final, (Get-Item $final).Length)
+$script:statusFacts["backup"] = $name
+$script:statusFacts["bytes"] = $size
+$script:statusFacts["accounts"] = $userCount
 
 if (-not $NoMirror -and $MirrorDir) {
     try {
@@ -254,6 +355,7 @@ if (-not $NoDocuments) {
     if ($accounts.Count -eq 0) {
         Log "WARNING: no <user-id>\tracker.json under $DataDir - no document backup taken."
         Log "         Set -DataDir or JOB_SEARCH_DATA_DIR. See private.example/README.md."
+        $problemTags += "no-account-folders"
         $problems += "no accounts found for the document backup"
     } else {
         # PS 5.1 draws a progress bar per web request, slow enough to dominate
@@ -262,11 +364,29 @@ if (-not $NoDocuments) {
         $ProgressPreference = "SilentlyContinue"
         $docTotal = 0; $docBytes = 0; $covered = 0
 
+        # These calls go to the tracker's own API rather than Cloudflare's
+        # management API, which has been the steady half - but a rate limit, a
+        # 5xx or a dropped connection would still cost a document, so each gets
+        # one quick second go. A refusal that means something - 401, 404, the
+        # 503 that says documents are switched off - is returned at once.
+        function Invoke-DocumentCall([scriptblock]$Call) {
+            try {
+                return & $Call
+            } catch {
+                $status = $null
+                if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+                $retryable = (-not $status) -or $status -eq 429 -or $status -ge 500
+                if (-not $retryable) { throw }
+                Start-Sleep -Seconds 5
+                return & $Call
+            }
+        }
+
         foreach ($acct in $accounts) {
             $cfg = Get-Content (Join-Path $acct.FullName "tracker.json") -Raw | ConvertFrom-Json
             $headers = @{ Authorization = "Bearer $($cfg.token)" }
             try {
-                $index = Invoke-RestMethod -Uri "$($cfg.url)/api/documents" -Headers $headers -ErrorAction Stop
+                $index = Invoke-DocumentCall { Invoke-RestMethod -Uri "$($cfg.url)/api/documents" -Headers $headers -ErrorAction Stop }
             } catch {
                 # 503 means no DOCS binding: documents are switched off, which
                 # is supported and not a backup failure.
@@ -277,6 +397,7 @@ if (-not $NoDocuments) {
                     break
                 }
                 Log "WARNING: could not list documents for $($acct.Name) (HTTP $status) - $($_.Exception.Message)"
+                $problemTags += "documents-list-failed"
                 $problems += "document listing failed for $($acct.Name)"
                 continue
             }
@@ -287,6 +408,7 @@ if (-not $NoDocuments) {
                 # because the path is joined onto a local directory and written.
                 if ($doc.path -notmatch '^(docs|resumes|reference)/[\w][\w .-]*$') {
                     Log "WARNING: skipping unexpected document path for $($acct.Name): $($doc.path)"
+                    $problemTags += "documents-bad-path"
                     $problems += "unexpected document path from the API"
                     continue
                 }
@@ -297,6 +419,7 @@ if (-not $NoDocuments) {
                 if ($dest.Length -ge 260) {
                     Log ("WARNING: path too long for Windows ({0} chars, limit 260): {1}" -f $dest.Length, $dest)
                     Log "         Use a shorter -BackupDir, or enable long paths (LongPathsEnabled)."
+                    $problemTags += "documents-path-too-long"
                     $problems += "path over MAX_PATH: $($acct.Name)\$($doc.path)"
                     continue
                 }
@@ -305,18 +428,22 @@ if (-not $NoDocuments) {
                 if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
                 try {
                     # -UseBasicParsing: PS 5.1 otherwise parses with the IE engine, which prompts and throws under -NonInteractive.
-                    Invoke-WebRequest -Uri "$($cfg.url)/api/documents/$($doc.path)" `
-                        -Headers $headers -OutFile $dest -UseBasicParsing -ErrorAction Stop
+                    Invoke-DocumentCall {
+                        Invoke-WebRequest -Uri "$($cfg.url)/api/documents/$($doc.path)" `
+                            -Headers $headers -OutFile $dest -UseBasicParsing -ErrorAction Stop
+                    }
                     $got = (Get-Item $dest).Length
                     # A truncated download looks like a real backup on disk, so
                     # compare with the size R2 reports.
                     if ($doc.bytes -and $got -ne $doc.bytes) {
                         Log ("WARNING: {0}\{1} came back {2:N0} bytes, expected {3:N0}" -f $acct.Name, $doc.path, $got, $doc.bytes)
+                        $problemTags += "documents-short"
                         $problems += "short download: $($acct.Name)\$($doc.path)"
                     }
                     $docTotal++; $docBytes += $got
                 } catch {
                     Log "WARNING: failed to download $($acct.Name)\$($doc.path) - $($_.Exception.Message)"
+                    $problemTags += "documents-download-failed"
                     $problems += "document download failed: $($acct.Name)\$($doc.path)"
                 }
             }
@@ -325,6 +452,8 @@ if (-not $NoDocuments) {
 
         # Logged even at zero, so an empty bucket can't be mistaken for a pass
         # that never ran.
+        $script:statusFacts["documents"] = $docTotal
+        $script:statusFacts["accountsWithDocuments"] = $covered
         if ($docTotal -gt 0) {
             Log ("documents: {0} file(s), {1:N0} bytes, from {2} account(s) -> {3}" -f $docTotal, $docBytes, $covered, $docRoot)
         } else {
@@ -396,10 +525,9 @@ if ($RetentionDays -gt 0 -and $problems.Count -eq 0) {
 
 $kept = (Get-ChildItem $BackupDir -Filter "*.sql" -ErrorAction SilentlyContinue).Count
 Log "$kept backup file(s) now in $BackupDir"
+$script:statusFacts["kept"] = $kept
 
 if ($problems.Count -gt 0) {
-    Log "===== done, WITH WARNINGS ====="
-    exit 2
+    Complete-Backup "warnings" (($problemTags | Select-Object -Unique) -join ",") ($problems -join "; ")
 }
-Log "===== done ====="
-exit 0
+Complete-Backup "ok" "" ""

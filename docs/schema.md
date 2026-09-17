@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0018_profile_stale.sql` applied in order. This is the
+`0001_schema.sql` through `0019_run_swept.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -121,6 +121,7 @@ erDiagram
         INTEGER screened_added
         INTEGER delisted
         TEXT note
+        INTEGER swept
     }
     leads {
         INTEGER id PK
@@ -317,6 +318,9 @@ run only, not a history. Written by `POST /api/runs`.
   local `YYYY-MM-DD`.
 - `status` is `ok` or `error`, and `''` before any run.
 - `leads_added`, `screened_added` and `delisted` count that run's work.
+- `swept` is how many companies the search covered that date, counted from its
+  `company_sweeps` rows. A tab another search fills records none of its own, so
+  it reads 0 and the search that ran carries the number.
 
 ### leads
 
