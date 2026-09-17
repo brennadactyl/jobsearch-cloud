@@ -663,7 +663,7 @@ Rules for this run:
   the one state they can't work in screens out everything it finds, all night,
   and reports a quiet night.
 - No search keeps a company list. The kinds of employer they like go in the
-  track doc's candidate profile, as guidance for discovery; a company they
+  track doc's `## What this search is looking for`, as guidance for discovery; a company they
   named goes in named_companies, which the script puts on the shared list
   every search already reads. Never write companies into the config prose or
   into a doc as a list to sweep.
@@ -672,7 +672,12 @@ Rules for this run:
   pronouns, the ranked locations, or the companies they won't work for. The
   route this goes through refuses them outright.
 - Their pay floor, if they gave one, screens on a *stated* range only: a range
-  topping out below it disqualifies, and no published range does not.
+  topping out below it disqualifies, and no published range does not. It goes
+  in fit_clause and fit_disqualifier, never in the doc: a screening rule has
+  one home.
+- The doc's `## Candidate Profile` holds only what the resume says. A resume
+  change rewrites that section, so their preferences go under `## What this
+  search is looking for` instead, where they survive it.
 - Their rule-outs become fit_clause / fit_disqualifier, and only a genuine
   pivot needs fit_filter_step. Keep a caveat at the level of the gap they
   described: an over-literal one silently hides work they asked for, and

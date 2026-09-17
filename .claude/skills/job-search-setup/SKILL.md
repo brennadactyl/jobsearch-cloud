@@ -156,7 +156,7 @@ For each track, draft from the resume where you can, then confirm:
   `../add-target-company/SKILL.md`. A company they never want to see:
   `excluded_companies` (step 6).
 - **A fit caveat**, optional, and only for a verifiable mismatch - a skill,
-  language, location or level they don't have. The template's "Fit philosophy"
+  language, location or level they don't have. The template's "How to weigh fit"
   already weighs a stated requirement against the profile instead of screening
   on it. Keep the caveat at the level of the gap: "no documented
   experimentation ownership" is not "exclude experimentation roles". An
@@ -189,7 +189,7 @@ Once per person:
   below $X" disqualifies, "no published range" does not. Most postings outside
   pay-transparency states publish none, so a literal floor quietly discards
   them. Say the floor, and that an unstated range isn't a reason to screen, in
-  the doc's Candidate Profile.
+  `fit_clause` and `fit_disqualifier` themselves - not in the doc.
 
 ### 4. Write the per-track doc, and draft the track's config
 
@@ -209,6 +209,21 @@ Check `GET /api/documents` first and ask before overwriting an existing doc. It
 holds what runs have learned, and an unconditional `PUT` replaces it without
 error.
 
+**What goes where.** A doc and a config that both state a rule will one day
+disagree, and nothing says which one a run follows. So each thing has one home:
+
+| What | Where |
+|---|---|
+| What screens a posting out - scope, fit caveats, a pay floor, a pivot's screening step | the config only: `geo_scope_line`, `scope_clause`, `scope_disqualifier`, `fit_clause`, `fit_disqualifier`, `fit_filter_step` |
+| What the resume says - level, roles, skills, the case for a stretch, the gaps | the doc's `## Candidate Profile`, and nothing else there. A resume change rewrites this whole section, so anything else in it is lost |
+| What the person wants - kinds of employer, preferences, why a role appeals | the doc's `## What this search is looking for`. A resume change leaves it alone |
+| How to reach a company - a board, an endpoint, a wall | the shared company list, never the doc (`../add-target-company/SKILL.md`) |
+| Why a company was tried, and what came of it | the doc's `## Company notes` |
+
+A doc states how things stand: correct a line in place, and never add a dated
+note or a correction beneath the thing it corrects. Every run reads the whole
+doc every night, and history is paid for each time.
+
 Every placeholder (the template has no comments, because anything left in it
 reaches the live doc):
 
@@ -219,11 +234,10 @@ reaches the live doc):
 | `{{SIBLING_DOCS_NOTE}}` | A sentence pointing at this person's other track docs and saying not to merge them, or empty for their first track. A `fed_by` tab has no doc of its own. |
 | `{{TRACK_KEY}}` | The track key. It appears in the API paths the doc quotes. |
 | `{{ROLE_SEARCH_LINE}}` | The same text as the track's `role_search_line`. |
-| `{{GEO_SCOPE_PARAGRAPH}}` | The same text as `geo_scope_line`. |
 | `{{SCOPE_ADJECTIVE}}` | Fills "any other{{SCOPE_ADJECTIVE}} location" - `" US"` for a US-only search (note the leading space), empty with no scope. |
 | `{{CANDIDATE_PROFILE_PARAGRAPH}}` | The profile paragraph from step 2, as agreed. |
 | `{{BEST_FIT_SENTENCE}}` | The best-fit sentence from step 2. |
-| `{{RESUME_FILENAME}}` | The resume the profile came from. |
+| `{{LOOKING_FOR_PARAGRAPH}}` | What they want from this search that isn't on the resume: the kinds of employer they favour (guidance for discovery, never a list to sweep) and any preference to weigh. Empty-handed, write that they named none. |
 | `{{LOCATION_TIER_ROWS}}` | One table row per priority tier, in the same order as `priority_locations`: `\| Top \| Seattle, Bellevue - or remote in scope \| "Seattle area" tag, sorted first \|`. |
 
 **If this search also fills a `fed_by` tab**, the fed tab shares this doc. Add
@@ -241,8 +255,8 @@ finished sentence the search should read:
 - `target_companies` - leave it empty. No search keeps a company list: each
   covers its batch of the shared list (step 1c) and finds new employers in
   step 3b, and the prompt doesn't read this field. The kinds of employer
-  someone favours go in the track doc's candidate profile, as guidance for
-  discovery. A company they name goes on the shared list
+  someone favours go in the track doc's `## What this search is looking for`,
+  as guidance for discovery. A company they name goes on the shared list
   (`../add-target-company/SKILL.md`), never on the search.
 - `search_note` - anything qualifying how the step-1c companies are searched
   ("surface any matching role, not only ones in a particular product area").
@@ -434,11 +448,11 @@ The answers map onto the config like this:
 | the two together | checked by the script before anything is posted: the scope prose must name a place from `work_scope`, `scope_disqualifier` must name a place from `location_limits`, and `scope_clause` must not name a place that appears only in `location_limits`. Any miss fails the setup. A send whose ranked places all lie outside `work_scope` was already refused by the server |
 | each role's `name` | the track `label`, and a slug `key` |
 | each role's `titles` | `role_search_line` and `full_description` |
-| each role's `company_kinds` | the track doc's candidate profile, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
+| each role's `company_kinds` | the track doc's `## What this search is looking for`, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
 | each role's `rule_outs` | `fit_clause` / `fit_disqualifier`, and `fit_filter_step` only for a real pivot |
 | each role's `min_pay` | part of the fit filter: a *stated* range topping out below it disqualifies; no published range does not |
 | `never_work_for` | `excluded_companies` - already written when the form was sent, not by you |
-| `preferences` | the track doc's candidate profile, weighed - never turned into a rule-out |
+| `preferences` | the track doc's `## What this search is looking for`, weighed - never turned into a rule-out |
 
 Write `out\config.json` in the shape the run's prompt gives, and one
 `out\docs\tracked_<key>_postings.md` per role. Leave `schedule_time`,
