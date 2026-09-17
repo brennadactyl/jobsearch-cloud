@@ -36,7 +36,10 @@ GitHub shows `.html` files as source).
 ## Contents
 
 ```
+CLAUDE.md                     the rules every Claude session here follows, and who owns what
 .claude/skills/
+  team-setup/                 starts one Claude session per role - "set up the team"
+  role-*/                     one skill per teammate role, loaded by "you are <role name>"
   job-search-setup/           AI-assisted onboarding - see Setup below
   add-target-company/         puts an employer on the shared company list
   change-search-prompt/       changes what a nightly search does, everywhere it is written
@@ -61,6 +64,8 @@ scripts/
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
   run-onboarding.ps1           writes up the searches of everyone who sent the setup form - every account, one run
   run-lock.ps1                 one search or fill at a time on this machine - dot-sourced, not run on its own
+  claude-cli.ps1               finds the claude CLI and classifies its failures - dot-sourced by the runners
+  verify-claude-cli.ps1        checks claude-cli.ps1's failure classification
   import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
   setup-scheduler.ps1          registers every person's tracks as daily Windows Scheduled Tasks
   new-invite.ps1               makes an invite link to add a person, lists what became of each, or revokes one
