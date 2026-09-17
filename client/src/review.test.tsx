@@ -232,17 +232,33 @@ describe("adding from a link that fails to save", () => {
   });
 });
 
-describe("the password dialog", () => {
-  it("puts focus in Current password when it opens", async () => {
+describe("the account panel", () => {
+  it("opens from My account and names who is signed in", async () => {
     await renderAt("/");
-    await userEvent.click(screen.getByRole("button", { name: /Signed in as/ }));
+    await userEvent.click(screen.getByRole("button", { name: "My account" }));
+    const panel = screen.getByRole("dialog", { name: "My account" });
+    expect(panel).toHaveTextContent("Signed in as Fixture");
+  });
+
+  it("puts focus in Current password when a password change starts", async () => {
+    await renderAt("/");
+    await userEvent.click(screen.getByRole("button", { name: "My account" }));
+    await userEvent.click(screen.getByRole("button", { name: "Change password" }));
     expect(screen.getByLabelText("Current password")).toHaveFocus();
   });
 
   it("holds its message line before there is a message, so the buttons don't jump when one arrives", async () => {
     await renderAt("/");
-    await userEvent.click(screen.getByRole("button", { name: /Signed in as/ }));
+    await userEvent.click(screen.getByRole("button", { name: "My account" }));
+    await userEvent.click(screen.getByRole("button", { name: "Change password" }));
     expect(document.querySelector(".pw-msg")).toBeEmptyDOMElement();
+  });
+
+  it("closes with Escape", async () => {
+    await renderAt("/");
+    await userEvent.click(screen.getByRole("button", { name: "My account" }));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 

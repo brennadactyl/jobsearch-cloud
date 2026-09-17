@@ -315,6 +315,8 @@ describe("every input is reachable by the stylesheet", () => {
       expect(type, `an input rendered with no type attribute: #${el.id || el.getAttribute("aria-label")}`).not.toBeNull();
       // Checkboxes and radios are styled separately and deliberately.
       if (["checkbox", "radio"].includes(type!)) continue;
+      // A hidden file input is opened by its button and never drawn.
+      if (type === "file" && el.hidden) continue;
       expect(STYLED, `type="${type}" is not one the stylesheet targets`).toContain(type);
     }
   }
@@ -344,12 +346,12 @@ describe("every input is reachable by the stylesheet", () => {
     assertAllTyped();
   });
 
-  it("in the password dialog", async () => {
+  it("in the account panel's password form", async () => {
     signedIn();
     renderApp();
     await screen.findByRole("heading", { name: "Fixture Search" });
-    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
-    await screen.findByRole("dialog");
+    await userEvent.click(screen.getByRole("button", { name: "My account" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Change password" }));
     assertAllTyped();
   });
 });

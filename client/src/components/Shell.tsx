@@ -2,11 +2,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS } from "../domain/constants";
-import { buildTabs, buildTracks } from "../domain/tabs";
+import { buildTabs, buildTracks, pathForTab } from "../domain/tabs";
 import { usePinnedLayout, useTheme } from "../ui/hooks";
 import { useSaved } from "../ui/saved";
 import ApplicationsTab from "./ApplicationsTab";
-import PasswordModal from "./PasswordModal";
+import AccountPanel from "./AccountPanel";
 import LeadsTab from "./LeadsTab";
 import Overview from "./Overview";
 
@@ -35,7 +35,7 @@ export default function Shell({
   const tabs = buildTabs(data.leads, data.applications, tracks, settings);
   const location = useLocation();
   const save = useSaved();
-  const [pwOpen, setPwOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [theme, toggleTheme] = useTheme();
   const pinned = usePinnedLayout(isOverview);
 
@@ -71,8 +71,8 @@ export default function Shell({
                   {save.text}
                 </span>
               </div>
-              <button className="who" type="button" title="Account details" onClick={() => setPwOpen(true)}>
-                Signed in as {data.user.name}
+              <button className="who" type="button" title="Your password and resumes" onClick={() => setAccountOpen(true)}>
+                My account
               </button>
               <button className="btn ghost" type="button" onClick={onSignOut} title="Sign out of this browser">
                 Log out
@@ -119,15 +119,17 @@ export default function Shell({
           <Routes>
             {/* Overview owns its scroll region: the tiles are pinned outside
                 it, so the wrapper can't live out here. */}
-            <Route path="/" element={<Overview data={data} {...pinned} />} />
-            <Route path="/applications" element={<ApplicationsTab data={data} />} />
-            <Route path="/all-leads" element={<LeadsTab data={data} trackKey={ALL_LEADS} />} />
+            {/* Built from pathForTab, which the tabs link to, so the two can't drift. */}
+            <Route path={pathForTab("dashboard")} element={<Overview data={data} {...pinned} />} />
+            <Route path={pathForTab("applications")} element={<ApplicationsTab data={data} />} />
+            <Route path={pathForTab(ALL_LEADS)} element={<LeadsTab data={data} trackKey={ALL_LEADS} />} />
+            {/* pathForTab's /t/<key>, for every track. */}
             <Route path="/t/:trackKey" element={<TrackPanel data={data} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>
-      <PasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
+      <AccountPanel open={accountOpen} name={data.user.name} tracks={data.tracks} onClose={() => setAccountOpen(false)} />
     </div>
   );
 }

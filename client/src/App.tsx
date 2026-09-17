@@ -200,6 +200,7 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
     );
   }
 
+  // The tab pages and their URLs are Shell's <Routes> (components/Shell.tsx).
   return (
     <Shell
       data={data}

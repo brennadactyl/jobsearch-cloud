@@ -61,8 +61,8 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 #themeToggle{font-size:15px;line-height:1;padding:6px 9px}
 .stamp{font-size:12px;color:var(--ink3);display:flex;align-items:center;gap:9px}
 .who{appearance:none;border:0;background:none;padding:0;font:inherit;
-  font-size:12px;color:var(--ink3);cursor:pointer;border-radius:4px}
-.who:hover{color:var(--ink2);text-decoration:underline}
+  font-size:12px;color:var(--ink2);cursor:pointer;border-radius:4px}
+.who:hover{color:var(--ink);text-decoration:underline}
 .who:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 /* An empty button still has a focus stop and a hit area. */
 .who:empty{display:none}
@@ -411,6 +411,70 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .pw-msg{font-size:12.5px;min-height:1em;line-height:1.45;color:var(--ink2)}
 .pw-msg.bad{color:var(--crit)}
 .pw-msg.good{color:var(--good)}
+/* The account panel: who is signed in, then one section per thing to change. */
+.account-panel{padding:0;width:100%;max-width:580px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;overflow:hidden}
+.account-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.account-head h3{font-size:17px}
+.account-who{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.account-close{font-size:15px;line-height:1}
+.account-body{overflow-y:auto;flex:1 1 auto}
+.account-section{padding:14px 20px;display:flex;flex-direction:column;gap:14px}
+.account-section+.account-section{border-top:1px solid var(--line)}
+.account-section-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.account-section h4{margin:0;font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-size:15px;font-weight:600}
+.account-section p{margin:3px 0 0;font-size:13px;color:var(--ink2)}
+.account-form{display:flex;flex-direction:column;gap:12px;max-width:400px}
+.account-sub{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
+.btn.danger{background:var(--crit);border-color:var(--crit);color:var(--surface)}
+.btn.pressed{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.resume-group{display:flex;flex-direction:column;gap:8px}
+.resume-quiet{font-size:12px;color:var(--ink3);margin:0}
+.resume-bad{font-size:13px;color:var(--crit);margin:0}
+.resume-good{font-size:13px;color:var(--good)}
+.resume-row{border:1px solid var(--line);border-radius:9px;padding:11px 12px;display:flex;flex-direction:column;gap:10px;background:var(--surface)}
+.resume-row.new{border-color:var(--accent)}
+.resume-row.alert{border-color:var(--crit)}
+.resume-row.uploading{border-style:dashed}
+.resume-row-top{display:flex;align-items:flex-start;gap:10px}
+.resume-icon{color:var(--ink2);flex:none;margin-top:2px}
+.resume-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.resume-row-title{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.resume-name{font-weight:600;overflow-wrap:anywhere}
+.resume-row-top .btn.ghost{padding:4px 8px;font-size:13px}
+.resume-used{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.resume-chip{font-size:12px;font-weight:500;padding:1px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.resume-unused{font-size:12px;font-style:italic;color:var(--ink3)}
+.resume-below{border-top:1px solid var(--line);padding-top:10px}
+.resume-confirm{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--ink2)}
+.resume-confirm .modal-actions{margin:0;flex:none}
+.resume-progress{height:6px;border-radius:99px;background:var(--surface2);overflow:hidden;position:relative}
+.resume-progress::after{content:"";position:absolute;inset:0 auto 0 0;width:40%;border-radius:99px;background:var(--accent);animation:resume-slide 1.2s ease-in-out infinite}
+@keyframes resume-slide{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+.resume-attach{display:flex;flex-direction:column;gap:6px}
+.resume-attach-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.resume-paste{border:1px solid var(--accent);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.resume-paste-name{display:flex;align-items:center;gap:6px}
+.resume-paste-name input{flex:1}
+.resume-paste textarea{width:100%;box-sizing:border-box;resize:vertical}
+.resume-paste-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.resume-paste-foot .modal-actions{margin:0}
+.resume-pick{display:flex;flex-direction:column;gap:7px;padding:10px 0;border-top:1px solid var(--line)}
+.resume-pick-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.resume-pick-row label{font-weight:600}
+.resume-pick select{width:260px;max-width:100%}
+.resume-pick select.changed{border-color:var(--accent)}
+.resume-changed{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
+.resume-note{font-size:12.5px;color:var(--ink3)}
+.resume-note.wait{color:var(--ink2);background:var(--surface2);border-radius:7px;padding:8px 10px}
+.resume-unsaved{position:sticky;bottom:0;margin:0 -20px -14px;padding:12px 20px;border-top:1px solid var(--line);background:var(--surface2);display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--ink2)}
+.resume-unsaved .modal-actions{margin:0;flex:none}
+@media (max-width:700px){
+  .modal-overlay:has(.account-panel){padding:0}
+  .account-panel{max-width:none;height:100%;max-height:none;border-radius:0}
+  .resume-pick-row{flex-direction:column;align-items:stretch;gap:6px}
+  .resume-pick select{width:100%}
+  .resume-confirm{flex-direction:column;align-items:stretch}
+}
 
 .stage-hist table{width:100%;border-collapse:collapse}
 .stage-hist tr+tr td,.stage-hist tr+tr th{border-top:1px solid var(--line)}
