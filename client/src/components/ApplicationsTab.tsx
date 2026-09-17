@@ -16,7 +16,7 @@ import { DrillChip, ExportButton, SortSelect, ViewSwitch } from "./listControls"
 import { GeoBadge, GeoKey } from "./location";
 import { Pill } from "./Pill";
 import { TrashIcon } from "./TrashIcon";
-import { AppFactsCards, AutofillNote, NotesBlock } from "./facts";
+import { AppFactsCards, AutofillNote, NotesBlock } from "./detailFields";
 import { ExpandableRow, SelectableRow } from "./listRows";
 import { AppStatusSelect, EditableField, StageDateModal, type PendingStage } from "./writes";
 

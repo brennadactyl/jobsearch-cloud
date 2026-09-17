@@ -22,7 +22,7 @@ import { GeoBadge, GeoKey } from "./location";
 import { Pill } from "./Pill";
 import { RunStamp } from "./RunStamp";
 import { TrashIcon } from "./TrashIcon";
-import { LeadFactsCard, NotesBlock } from "./facts";
+import { LeadFactsCard, NotesBlock } from "./detailFields";
 import { ExpandableRow, SelectableRow } from "./listRows";
 import { EditableField, LeadStatusSelect } from "./writes";
 

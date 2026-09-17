@@ -1,3 +1,8 @@
+/**
+ * The blocks a lead's or application's detail shows, in Detail view and in a Grid
+ * row opened out: its role fields and stage dates, edited in place, its notes,
+ * and what the nightly fill couldn't read.
+ */
 import type { Application, Lead } from "../api/schema";
 import { APP_ROLE_FIELDS, LABELS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "../domain/constants";
 import { safeUrl } from "../domain/format";
