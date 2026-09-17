@@ -1,60 +1,11 @@
+/** The controls above a leads or applications list: view, sort, the drill filter chip and CSV export. */
 import { Link } from "react-router-dom";
-import type { Settings, Track } from "../api/schema";
-import { exportFilename, toCsv, type Column } from "../domain/export";
-import { downloadFile } from "../ui/download";
-import { APP_SORTS, LEAD_SORTS, pillFor } from "../domain/constants";
+import { APP_SORTS, LEAD_SORTS } from "../domain/constants";
 import { drillLabel, type DrillContext } from "../domain/drills";
-import { isoDay, relWhen } from "../domain/format";
-import { geo } from "../domain/geo";
-import { runState, runSummary } from "../domain/runs";
+import { exportFilename, toCsv, type Column } from "../domain/export";
+import { isoDay } from "../domain/format";
+import { downloadFile } from "../ui/download";
 import { setPrefs, usePrefs } from "../ui/prefs";
-
-export function Pill({ status }: { status: string }) {
-  return <span className={`pill ${pillFor(status)}`}>{status}</span>;
-}
-
-export function GeoBadge({ location, settings }: { location: string; settings: Settings }) {
-  const g = geo(location, settings.priority_locations);
-  if (!g) return null;
-  return <span className={`geo ${g.p}`}>{g.label}</span>;
-}
-
-/** Numbered, because past two tiers colour alone doesn't say which outranks which. */
-export function GeoKey({ settings }: { settings: Settings }) {
-  return (
-    <>
-      {settings.priority_locations.map((r, i) => (
-        <span key={r.label}>
-          <i style={{ background: i < 5 ? `var(--pri-${i})` : "var(--ink3)" }} />
-          {i + 1}. {r.label}
-        </span>
-      ))}
-    </>
-  );
-}
-
-export function RunStamp({ track, settings }: { track: Track | undefined; settings: Settings }) {
-  if (!track) return null;
-  const run = track.last_run;
-  const st = runState(run, settings);
-  if (st === "never") {
-    return (
-      <span
-        className="runstamp none"
-        title="This track has no recorded run yet - its first scheduled search will fill this in"
-      >
-        No run recorded yet
-      </span>
-    );
-  }
-  return (
-    <span className={`runstamp ${st}`} title={`Last run ${run.at}${run.on ? ` (local date ${run.on})` : ""}`}>
-      <i className="rdot" />
-      Ran {relWhen(run.at)}
-      {run.on && <span className="mono"> {run.on}</span>} &middot; {runSummary(run)}
-    </span>
-  );
-}
 
 export function ViewSwitch() {
   const { view } = usePrefs();
@@ -123,28 +74,6 @@ export function DrillChip({
         ×
       </span>
     </Link>
-  );
-}
-
-/** stroke is currentColor, so the button's colour (.icon-btn.danger) colours the icon. */
-export function TrashIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3 4.5h10" />
-      <path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" />
-      <path d="M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" />
-      <path d="M6.7 7v4M9.3 7v4" />
-    </svg>
   );
 }
 
