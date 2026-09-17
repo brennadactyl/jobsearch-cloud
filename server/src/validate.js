@@ -152,6 +152,40 @@ export function trackDocumentsError(list) {
   return null;
 }
 
+// What an overnight run can read as it is. A Word resume is read through the
+// text the server extracts beside it on upload, so a list names that text, never
+// the .docx (routes/documents.js). The client's READABLE_RESUME_EXTENSIONS adds
+// docx for the same reason: the person attaches the Word file.
+export const READABLE_DOCUMENT_EXTENSIONS = ["txt", "md", "pdf"];
+
+/** @param {string} path @returns {string} the lowercased extension, '' for none */
+export function documentExtension(path) {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+/**
+ * Why a search reading this `documents` list would have no resume to read, or
+ * null. Separate from trackDocumentsError because the callers exempt a list
+ * that is unchanged from what is stored: posting config back as it was read
+ * isn't a choice of documents, and refusing it would block every other edit
+ * to a search set up before this rule.
+ * @param {string[]} list already passed trackDocumentsError
+ * @returns {string|null}
+ */
+export function unreadableDocumentsError(list) {
+  if (list.length === 0) return "a search needs at least one document to read - its resume";
+  const word = list.filter((p) => ["docx", "doc"].includes(documentExtension(p)));
+  if (word.length) {
+    return `a run can't read a Word file: ${word.map((p) => JSON.stringify(p)).join(", ")} - list the .txt read from it instead`;
+  }
+  if (!list.some((p) => READABLE_DOCUMENT_EXTENSIONS.includes(documentExtension(p)))) {
+    return `none of these documents can be read by a run - a search needs at least one .${READABLE_DOCUMENT_EXTENSIONS.join(", .")} file`;
+  }
+  return null;
+}
+
 // Names the whole rule rather than the offending part: the callers are a
 // PowerShell script and an LLM run, and what they may send is the useful answer.
 export function badDocumentPath(path) {

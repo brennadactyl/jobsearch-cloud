@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0017_track_documents.sql` applied in order. This is the
+`0001_schema.sql` through `0018_profile_stale.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -108,6 +108,8 @@ erDiagram
         TEXT fed_by FK
         INTEGER sweep_cursor
         TEXT documents "JSON list of paths"
+        TEXT profile_stale_since
+        TEXT resume_was
     }
     search_runs {
         TEXT user_id PK, FK
@@ -295,7 +297,16 @@ search of its own.
   its `doc_file` - its resume, and any reference file. A run downloads its
   `doc_file` and these, not everything its person has, and a track whose list
   is empty has no documents served to it at all (`GET /api/documents?search=`).
-  A `fed_by` tab is served the list of the search that fills it.
+  A `fed_by` tab is served the list of the search that fills it. A write
+  that changes it must leave at least one `.txt`, `.md` or `.pdf` and no Word
+  file, which is read through its extracted `.txt`.
+- `profile_stale_since` is set, to the ISO 8601 instant of the change, when
+  this search's resume changes after its candidate profile was written: another
+  resume chosen (`POST /api/settings`), or the listed file replaced with new
+  contents. `resume_was` is the file the profile was written from, kept
+  through later changes. Both go back to `''` when the next run has rewritten
+  the profile and echoes the mark it read (`POST /api/writeup`,
+  `profile_refreshed`). Only a track that runs its own search is marked.
 
 ### search_runs
 

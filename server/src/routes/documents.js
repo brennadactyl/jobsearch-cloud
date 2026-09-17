@@ -19,7 +19,17 @@
 
 import { json, CORS_HEADERS } from "../http.js";
 import { parseDocumentList } from "../db.js";
-import { docxText, DocxError, MIN_WORDS } from "../docx.js";
+import { countWords, docxText, DocxError, MIN_WORDS } from "../docx.js";
+import {
+  fileName,
+  isChoosableResume,
+  joinNames,
+  listedPathFor,
+  resumeParts,
+  resumeUsage,
+  samePairName,
+  searchesReading,
+} from "../resumes.js";
 import { searchRootOf } from "../tracks.js";
 import { badDocumentPath, isDocumentPath, unknownTrack } from "../validate.js";
 
@@ -71,15 +81,27 @@ function missingBucket(docs) {
 
 /**
  * GET /api/documents[?search=<key>] - requires a Bearer token -> `{ documents:
- * [...] }`, or with `search`, `{ search, documents: [...], missing: [path, ...] }`;
- * with `search`, 404 for a track this person doesn't have and 409 for one whose
- * `documents` list is empty.
+ * [...] }`, or with `search`, `{ search, documents: [...], missing: [path, ...],
+ * profile_stale }`; with `search`, 404 for a track this person doesn't have and
+ * 409 for one whose `documents` list is empty.
  *
- * Path, kind, content type, size, etag and upload time for each, with no
- * bodies, so the listing stays cheap.
+ * Path, kind, content type, size, etag, upload time and stored word count for
+ * each, with no bodies, so the listing stays cheap.
  *
- * Without `search`, everything this person has - what the backup and the
- * import script want. With it, only what that one search reads: its tracking
+ * Without `search`, everything this person has - what the backup, the import
+ * script and the resume section of the page want. Each file under resumes/
+ * also says what the page shows about it (docs/account-settings-plan.md#your-resume):
+ *
+ * - `readable`: whether a search can be pointed at it (../resumes.js
+ *   isChoosableResume).
+ * - `text_path` on a Word file, the text a search reads for it, and
+ *   `paired_with` on that text, the Word file it was read from. The page shows
+ *   the pair as the Word file.
+ * - `used_by`: `[{search, tabs, state}]`, which searches read it and the tabs
+ *   each fills, and whether its profile is caught up (../resumes.js
+ *   resumeUsage).
+ *
+ * With `search`, only what that one search reads: its tracking
  * doc (`doc_file`) and its `documents` list (migrations/0017). The nightly run
  * asks with `search`, so a person with two searches doesn't hand each one the
  * other's tracking doc and resumes. A tab another search fills is served that
@@ -92,6 +114,11 @@ function missingBucket(docs) {
  * An empty `documents` list is refused, not served as the tracking doc alone. A
  * search with no resume runs anyway and searches for nothing in particular, and
  * the refusal is the loud version of that.
+ *
+ * `profile_stale` is `{since, was}` while the search's resume has changed since
+ * its candidate profile was written, and null otherwise
+ * (migrations/0018_profile_stale.sql). The runner rewrites the profile when it
+ * is set, and echoes `since` to POST /api/writeup to clear it.
  */
 export async function handleListDocuments({ docs, db, url }) {
   const unconfigured = missingBucket(docs);
@@ -104,10 +131,32 @@ export async function handleListDocuments({ docs, db, url }) {
     bytes: d.bytes,
     etag: d.etag,
     uploaded: d.uploaded,
+    words: d.words,
   }));
 
   const search = url.searchParams.get("search");
-  if (search === null) return json({ documents: all });
+  if (search === null) {
+    const rows = await db.getResumeState();
+    const stored = all.map((d) => d.path);
+    return json({
+      documents: all.map((d) => {
+        const parts = resumeParts(d.path);
+        if (!parts) return d;
+        const pairing =
+          parts.ext === "docx"
+            ? { text_path: listedPathFor(stored, d.path) }
+            : parts.ext === "txt" && samePairName(stored, d.path, "docx").length
+              ? { paired_with: samePairName(stored, d.path, "docx")[0] }
+              : {};
+        return {
+          ...d,
+          ...pairing,
+          readable: isChoosableResume(stored, d.path),
+          used_by: resumeUsage(rows, stored, d.path),
+        };
+      }),
+    });
+  }
 
   const track = await db.getTrack(search);
   if (!track) return unknownTrack(search);
@@ -133,6 +182,7 @@ export async function handleListDocuments({ docs, db, url }) {
     search: runs.key,
     documents: wanted.filter((p) => byPath.has(p)).map((p) => byPath.get(p)),
     missing: wanted.filter((p) => !byPath.has(p)),
+    profile_stale: runs.profile_stale_since ? { since: runs.profile_stale_since, was: runs.resume_was } : null,
   });
 }
 
@@ -182,6 +232,13 @@ export async function handleGetDocument({ docs, params }) {
  * ignoring case, since a run downloads onto a Windows disk where `resume.txt`
  * and `Resume.txt` are one file.
  *
+ * A .txt or .md resume is stored with its word count, as a Word file's text is,
+ * so the page lists it without reading the file.
+ *
+ * Replacing a resume a search reads - different contents under the same name -
+ * marks that search's profile stale, as choosing another resume does: the list
+ * still names the file, but the profile was written from what it used to say.
+ *
  * With `If-Match`, a stale etag writes nothing. A nightly run reads the
  * baseline doc at the start of a long turn and writes its edited copy at the
  * end, so an unconditional write would erase anything saved in between;
@@ -189,7 +246,7 @@ export async function handleGetDocument({ docs, params }) {
  * `If-Match` the write is unconditional, for callers establishing a document
  * rather than revising one they read.
  */
-export async function handlePutDocument({ request, docs, params }) {
+export async function handlePutDocument({ request, docs, db, params }) {
   const unconfigured = missingBucket(docs);
   if (unconfigured) return unconfigured;
 
@@ -209,11 +266,13 @@ export async function handlePutDocument({ request, docs, params }) {
   if (bytes.byteLength > MAX_DOCUMENT_BYTES) return tooLarge(bytes.byteLength, path);
 
   const resume = resumeParts(path);
+  const before = resume ? await docs.list() : [];
+  const storedBefore = before.map((d) => d.path);
   if (resume?.ext === "doc") {
     return json({ error: `${resume.name} is an older Word file - Save it as .docx or PDF and attach that`, ...RESUME_FIELD }, 415);
   }
   if (resume?.ext === "txt") {
-    const wordFile = await pairedWordFile(docs, resume);
+    const wordFile = samePairName(storedBefore, path, "docx")[0];
     if (wordFile) return textIsServerOwned(wordFile, "replace");
   }
 
@@ -238,11 +297,14 @@ export async function handlePutDocument({ request, docs, params }) {
       );
     }
   }
+  const words =
+    extracted?.words ??
+    (resume && ["txt", "md"].includes(resume.ext) ? countWords(new TextDecoder().decode(bytes)) : undefined);
 
   // The Word file goes first because it is the conditional write: a stale
   // If-Match writes nothing at all. Its text follows, unconditionally, and
   // sending the same file again rewrites both if the second write was lost.
-  const written = await docs.put(path, bytes, contentType, ifMatch);
+  const written = await docs.put(path, bytes, contentType, ifMatch, words);
   if (!written) {
     return json(
       {
@@ -252,62 +314,29 @@ export async function handlePutDocument({ request, docs, params }) {
       412
     );
   }
-  if (!extracted) return json({ path, etag: written.etag, bytes: written.bytes });
 
-  const textPath = `resumes/${resume.base}.txt`;
-  await docs.put(textPath, new TextEncoder().encode(extracted.text), "text/plain; charset=utf-8");
-  // A text file of the same name in another case would be the same file on the
-  // Windows disk a run downloads to, and whichever arrived second would win.
-  for (const other of await pairedTextFiles(docs, resume)) {
-    if (other !== textPath) await docs.delete(other);
+  const textPath = extracted ? `resumes/${resume.base}.txt` : null;
+  if (extracted) {
+    await docs.put(textPath, new TextEncoder().encode(extracted.text), "text/plain; charset=utf-8", "", extracted.words);
+    // A text file of the same name in another case would be the same file on the
+    // Windows disk a run downloads to, and whichever arrived second would win.
+    for (const other of samePairName(storedBefore, path, "txt")) {
+      if (other !== textPath) await docs.delete(other);
+    }
   }
+
+  // R2's etag is a digest of the contents, so the same file sent again is not a
+  // change and leaves the profile alone.
+  const previous = before.find((d) => d.path === path);
+  if (previous && previous.etag !== written.etag) {
+    const listed = textPath || path;
+    const rows = await db.getResumeState();
+    const readers = searchesReading(rows, storedBefore, path).filter((s) => s.list.includes(listed));
+    await db.markProfilesStale(readers.map((s) => s.key), listed, new Date().toISOString());
+  }
+
+  if (!extracted) return json({ path, etag: written.etag, bytes: written.bytes });
   return json({ path, etag: written.etag, bytes: written.bytes, text_path: textPath, words: extracted.words });
-}
-
-/**
- * A path under resumes/, split into its file name, base name and lowercased
- * extension; null for anything else. Word pairing lives only under resumes/.
- * @param {string} path
- */
-function resumeParts(path) {
-  if (!path.startsWith("resumes/")) return null;
-  const name = path.slice("resumes/".length);
-  const dot = name.lastIndexOf(".");
-  if (dot <= 0) return { name, base: name, ext: "" };
-  return { name, base: name.slice(0, dot), ext: name.slice(dot + 1).toLowerCase() };
-}
-
-/**
- * The stored .docx a resume text file is read from, or null. Matched on the
- * base name ignoring case, for the same reason the text is: runs download onto
- * a disk where `resume` and `Resume` are one name.
- * @param {import("../r2.js").Docs} docs
- * @param {{base: string}} resume
- * @returns {Promise<string|null>}
- */
-async function pairedWordFile(docs, resume) {
-  const want = resume.base.toLowerCase();
-  const match = (await docs.list()).find((d) => {
-    const p = resumeParts(d.path);
-    return p?.ext === "docx" && p.base.toLowerCase() === want;
-  });
-  return match ? match.path : null;
-}
-
-/**
- * Every stored resume .txt paired with a Word file of this base name, ignoring case.
- * @param {import("../r2.js").Docs} docs
- * @param {{base: string}} resume
- * @returns {Promise<string[]>}
- */
-async function pairedTextFiles(docs, resume) {
-  const want = resume.base.toLowerCase();
-  return (await docs.list())
-    .map((d) => d.path)
-    .filter((p) => {
-      const parts = resumeParts(p);
-      return parts?.ext === "txt" && parts.base.toLowerCase() === want;
-    });
 }
 
 /**
@@ -331,20 +360,39 @@ function textIsServerOwned(wordFile, action) {
  * `removed`. Removing that text on its own is a 409 with `paired_with`, as
  * writing it is.
  *
+ * A file a search reads - its list names it (for a Word file, its text), or it
+ * is the search's tracking doc - is a 409 naming those searches in `searches`,
+ * with the page's sentence in `error`: a run would otherwise stop on a missing
+ * document, or search with no resume. The search has to be pointed elsewhere
+ * first (POST /api/settings). A file a search has only just been switched away
+ * from isn't read by the next run, so it can go.
+ *
  * R2 deletes a missing key without complaint; the 404 tells a caller its path
  * was wrong instead of reporting a cleanup that did nothing.
  */
-export async function handleDeleteDocument({ docs, params }) {
+export async function handleDeleteDocument({ docs, db, params }) {
   const unconfigured = missingBucket(docs);
   if (unconfigured) return unconfigured;
 
   const path = params[0];
   if (!isDocumentPath(path)) return badDocumentPath(path);
 
+  const stored = (await docs.list()).map((d) => d.path);
   const resume = resumeParts(path);
   if (resume?.ext === "txt") {
-    const wordFile = await pairedWordFile(docs, resume);
+    const wordFile = samePairName(stored, path, "docx")[0];
     if (wordFile) return textIsServerOwned(wordFile, "remove");
+  }
+
+  const readers = searchesReading(await db.getResumeState(), stored, path);
+  if (readers.length) {
+    const names = joinNames(readers.map((s) => s.label || s.key));
+    const verb = readers.length === 1 ? "reads" : "read";
+    const pronoun = readers.length === 1 ? "that search" : "them";
+    const error = resume
+      ? `${names} ${verb} this resume, so it can't be removed. Choose another resume for ${pronoun} below first.`
+      : `${names} ${verb} ${fileName(path)}, so it can't be removed.`;
+    return json({ error, searches: readers.map((s) => s.key), ...(resume ? RESUME_FIELD : {}) }, 409);
   }
 
   const deleted = await docs.delete(path);
@@ -355,7 +403,7 @@ export async function handleDeleteDocument({ docs, params }) {
   // text file with nothing claiming it, which can then be removed directly.
   if (resume?.ext === "docx") {
     const removed = [];
-    for (const text of await pairedTextFiles(docs, resume)) {
+    for (const text of samePairName(stored, path, "txt")) {
       if (await docs.delete(text)) removed.push(text);
     }
     return json({ path, deleted: true, removed });

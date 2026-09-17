@@ -1,0 +1,33 @@
+-- tracks.profile_stale_since and tracks.resume_was: a search whose resume has
+-- changed since its candidate profile was written.
+--
+-- A search's tracking doc opens with a candidate profile the overnight run
+-- wrote from the resume it read then. Choosing another resume from the tracker
+-- page (POST /api/settings) changes the file the next run downloads, but the
+-- profile in the doc still describes the old one, and the run screens against
+-- the profile. So a change marks the search, and its next run rewrites that
+-- section from the new file before searching, then clears the mark
+-- (docs/account-settings-plan.md#your-resume).
+--
+--   profile_stale_since  ISO 8601 instant of the latest resume change, '' when
+--                        the profile is current. A run clears the mark by
+--                        echoing the value it read (POST /api/writeup,
+--                        `profile_refreshed`), so a change made while that run
+--                        was working leaves the mark for the next night.
+--   resume_was           the resume the profile was last written from, '' when
+--                        current. Kept through a second change before a run,
+--                        so the page can say which file the search still
+--                        reflects until then.
+--
+-- Set on the track that runs the search, never on a tab it fills: one resume
+-- can drive several searches framed differently, and the profile belongs to
+-- the search.
+--
+-- Two columns rather than meta rows keyed by track: they live and die with the
+-- track row, so removing a search leaves nothing behind.
+--
+-- Every existing track defaults to current. Its profile was written from the
+-- resume it lists today, or by hand.
+
+ALTER TABLE tracks ADD COLUMN profile_stale_since TEXT NOT NULL DEFAULT '';
+ALTER TABLE tracks ADD COLUMN resume_was TEXT NOT NULL DEFAULT '';

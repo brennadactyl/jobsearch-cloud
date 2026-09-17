@@ -25,6 +25,7 @@
  * @property {number} bytes
  * @property {string} etag - unquoted; what a conditional write matches on
  * @property {string} uploaded - ISO 8601 UTC instant
+ * @property {number|null} words - the word count stored at upload, for a resume read as text; null otherwise
  */
 
 /**
@@ -37,6 +38,18 @@
  */
 function bareEtag(value) {
   return String(value || "").replace(/^W\//, "").replace(/^"|"$/g, "");
+}
+
+/**
+ * The word count stored on an object at upload, or null. Stored rather than
+ * counted on every listing, which would read every resume's body to draw one
+ * page.
+ * @param {R2Object} obj
+ * @returns {number|null}
+ */
+function wordsOf(obj) {
+  const stored = obj.customMetadata?.words;
+  return stored !== undefined && /^\d+$/.test(stored) ? Number(stored) : null;
 }
 
 export class Docs {
@@ -64,7 +77,7 @@ export class Docs {
    */
   async list() {
     const prefix = `${this.userId}/`;
-    const result = await this.bucket.list({ prefix, include: ["httpMetadata"] });
+    const result = await this.bucket.list({ prefix, include: ["httpMetadata", "customMetadata"] });
     return result.objects.map((obj) => {
       const path = obj.key.slice(prefix.length);
       return {
@@ -74,6 +87,7 @@ export class Docs {
         bytes: obj.size,
         etag: obj.etag,
         uploaded: obj.uploaded.toISOString(),
+        words: wordsOf(obj),
       };
     });
   }
@@ -103,11 +117,13 @@ export class Docs {
    * @param {ReadableStream|ArrayBuffer|string} body
    * @param {string} contentType
    * @param {string} [ifMatch] unquoted or quoted etag; unconditional if absent
+   * @param {number} [words] the word count to store with it, for a resume read as text
    * @returns {Promise<{etag: string, bytes: number}|null>}
    */
-  async put(path, body, contentType, ifMatch) {
+  async put(path, body, contentType, ifMatch, words) {
     /** @type {R2PutOptions} */
     const options = { httpMetadata: { contentType } };
+    if (Number.isInteger(words)) options.customMetadata = { words: String(words) };
     if (ifMatch) options.onlyIf = { etagMatches: bareEtag(ifMatch) };
 
     const obj = await this.bucket.put(this.#key(path), body, options);
