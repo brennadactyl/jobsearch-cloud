@@ -1,0 +1,38 @@
+nocmd|ok|
+unknown|ok|bogus
+extra|ok|leads a.json b.json
+noenv|ok|dedup
+dedup|ok|dedup
+dedup-out|ok|dedup --out d2.json
+dedup-unscoped|unscoped|dedup
+dedup-mixed|mixed|dedup
+dedup-search|ok|dedup --search CPM
+companies|ok|companies
+known-hit|ok|known "initech globex"
+known-hit-cached|ok|known ACME
+known-miss|ok|known "Nope Inc"
+known-empty|ok|known "!!!"
+known-none|ok|known
+leads|ok|leads leads.json
+leads-wrapped|ok|leads leads-wrapped.json
+leads-empty|ok|leads empty.json
+leads-blank|ok|leads blank.json
+leads-missing|ok|leads missing.json
+leads-bad|ok|leads bad.json
+leads-nofile|ok|leads
+leads-scalar|ok|leads scalar.json
+screened|ok|screened screened.json
+screened-empty|ok|screened empty.json
+verified|ok|verified urls.json
+verified-wrapped|ok|verified urls-wrapped.json
+delist|ok|delist urls.json
+delist-empty|ok|delist empty.json
+swept|ok|swept swept.json
+swept-empty|ok|swept empty.json
+run|ok|run --status OK --note "8 new, 34 screened — out"
+run-positional|ok|run error
+run-bad|ok|run --status maybe
+run-nonote|ok|run
+retry|retry|leads leads.json
+e400|e400|screened screened.json
+e503|e503|companies
