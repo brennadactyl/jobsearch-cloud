@@ -13,8 +13,8 @@ its siblings.
 |---|---|---|
 | `scripts/tracker.ps1` | the mechanics of every API call a run makes - the route, the body, the track key, the date, what a bad row does | every track, every person, on the next run; nothing to deploy |
 | `server/src/prompt.js` | which command each numbered step invokes and what only the run can decide - what counts as verified, what to report | every track, every person, on the next server deploy |
-| D1 track config (`/api/config`) | one track's stored prose - role line, resume line, fit filter, company list, location guidance | that one track, immediately, no deploy |
-| `docs/tracked_<key>_postings.md` in the tracker (`/api/documents`) | knowledge with no DB equivalent - fit reasoning, per-company fetch-reliability notes, scope rules | that one track, immediately, everywhere - a run fetches it fresh |
+| D1 track config (`/api/config`) | one track's stored prose - role line, how the resume is framed, every rule that screens a posting out (scope, fit clause, fit step) | that one track, immediately, no deploy |
+| `docs/tracked_<key>_postings.md` in the tracker (`/api/documents`) | what has no other home - the profile the resume gives, what the person is looking for, how to weigh fit, why companies were tried. Never a screening rule, never a fetch fact | that one track, immediately, everywhere - a run fetches it fresh |
 
 **If the change has a single right answer, it goes in `tracker.ps1`, not in
 the prompt** - the helper cannot get it wrong; prose can. The helper already
@@ -107,9 +107,10 @@ looking for*, it belongs in `prompt.js` instead.
 
 ## Changing a track doc, and reconciling the rest
 
-The run edits the doc as it goes. It holds fit reasoning, the candidate
-profile (including the kinds of employer to favour in discovery), and the
-per-company fetch-reliability notes. It holds no company list: a search covers
+The run edits the doc as it goes. It holds the candidate profile (only what
+the resume says), what the search is looking for, how to weigh fit, and notes
+on companies tried. It holds no screening rule - those live in the config -
+and no fetch facts, which live on the shared list. It holds no company list: a search covers
 its batch of the shared list, and a list in a doc becomes a set swept every
 night. It lives in the tracker: a run
 fetches every document into a throwaway directory and writes back the ones it
@@ -136,8 +137,8 @@ means runs read instructions their prompt doesn't know.
    Every person, every track - not just the one you were iterating on. Each
    account has its own token, so this is once per account.
 3. For each, `GET /api/documents/docs/<file>`, edit, and `PUT` it back. Do not
-   paste the template over it: the track's own knowledge - fit reasoning,
-   reliability notes - is not recoverable.
+   paste the template over it: the track's own knowledge - its profile, what
+   it is looking for, why companies were tried - is not recoverable.
 4. **Send `If-Match` with the etag the GET returned**, or a run finishing
    after you silently erases your edit (or you erase its). A 412 means a run
    landed while you were editing - re-fetch and redo the edit on top.

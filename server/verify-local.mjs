@@ -703,6 +703,20 @@ const listed = buildSearchPrompt({
     stepOf(legacy, "2") === "2. Read the resume: `resumes/Only.docx`.");
 }
 
+{
+  const plain = buildSearchPrompt({
+    user: { id: "u", name: "Nobody" },
+    track: { key: "T", label: "T", full_description: "t", role_search_line: "r" },
+    settings: {},
+    feeds: [],
+  });
+  const docStep = plain.split("\n").find((l) => l.startsWith("8b. ")) || "";
+  check("the default doc-update step sends a fit or scope refinement to the report, not the doc",
+    docStep.includes("is not a doc edit") && docStep.includes("step-10 report") && !/update the relevant section/.test(docStep));
+  check("and asks for a doc stated as it stands, not dated notes",
+    docStep.includes("correct a line in place") && docStep.includes("dated note"));
+}
+
 check("a company list stored on a track never reaches the prompt",
   !listed.includes("Zyqfold Robotics") && !listed.includes("Quennet Labs") && !listed.includes("drawn from"));
 check("the default doc-update step never asks a run to keep company groups",

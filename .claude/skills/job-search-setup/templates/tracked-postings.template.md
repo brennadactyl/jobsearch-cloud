@@ -1,6 +1,6 @@
 # Tracked Job Postings — Daily Search Baseline ({{TRACK_TITLE}})
 
-This doc is the running knowledge base for the daily "{{SEARCH_GOAL_SENTENCE}}" search - candidate profile, scope rules, and why a company is worth searching.{{SIBLING_DOCS_NOTE}}
+This doc is the running knowledge base for the daily "{{SEARCH_GOAL_SENTENCE}}" search - candidate profile, what the search is looking for, how to weigh fit, and why a company is worth searching.{{SIBLING_DOCS_NOTE}}
 
 **Posting data lives in the tracker DB, not this doc.** The "found" list (what's already tracked) and the "screened" list (what's been looked at and rejected) are both fetched from the tracker each run - see step 1b of the daily prompt (composed by the tracker - `GET /api/prompt/{{TRACK_KEY}}`). This doc holds only the knowledge that has no DB equivalent.
 
@@ -57,7 +57,7 @@ doc stay as reference.
 
 ## Scope rules (apply on every run)
 
-{{GEO_SCOPE_PARAGRAPH}}
+Where this search may look is step 5 of the daily prompt, from this search's settings. It isn't restated here, so the two can't disagree.
 
 **Location strings drive priority - write them precisely.** The tracker classifies each row automatically from its `location` text (see `priority_locations` in the tracker's `/api/config` - this table must stay consistent with whatever was configured there); there is no priority field to set. Always include city and state (or region) where known, and use an explicit remote phrasing when a role is remote.
 
@@ -68,12 +68,17 @@ doc stay as reference.
 
 Out-of-scope candidates get recorded via `./tracker screened` (step 6b above), not a list here.
 
-## Candidate Profile (from {{RESUME_FILENAME}})
+## Candidate Profile
 {{CANDIDATE_PROFILE_PARAGRAPH}}
 
 Best-fit roles: {{BEST_FIT_SENTENCE}}
 
-**Fit philosophy (apply when filtering):** it's fine - expected, even - for a posting to state a qualification not literally met on paper. Treat a stated requirement as a signal to weigh against the demonstrated background above, not an automatic bar: if there's a credible substitute case for what the role actually needs, it's a finding, not a screen-out. This applies as much to a *category of role* as to a specific requirement line - don't let "my resume doesn't document this" quietly become "exclude this whole role type," even if that exclusion started out written down somewhere as a caveat. A resume is written for a specific audience and routinely omits adjacent experience that would make a real stretch case; a gap on paper is not the same claim as a gap in ability. Reserve exclusion for an actual, verifiable mismatch - a skill, language, location, or level the posting requires and the candidate genuinely doesn't have - not a role category the resume happens not to emphasize. When in doubt, list it and let the person searching decide, rather than pre-filtering it out of view.
+## What this search is looking for
+{{LOOKING_FOR_PARAGRAPH}}
+
+## How to weigh fit (apply when filtering)
+
+What screens a posting out is this search's fit rules, in the daily prompt - not this doc. This is how to weigh everything short of those: it's fine - expected, even - for a posting to state a qualification not literally met on paper. Treat a stated requirement as a signal to weigh against the demonstrated background above, not an automatic bar: if there's a credible substitute case for what the role actually needs, it's a finding, not a screen-out. This applies as much to a *category of role* as to a specific requirement line - don't let "my resume doesn't document this" quietly become "exclude this whole role type," even if that exclusion started out written down somewhere as a caveat. A resume is written for a specific audience and routinely omits adjacent experience that would make a real stretch case; a gap on paper is not the same claim as a gap in ability. Reserve exclusion for an actual, verifiable mismatch - a skill, language, location, or level the posting requires and the candidate genuinely doesn't have - not a role category the resume happens not to emphasize. When in doubt, list it and let the person searching decide, rather than pre-filtering it out of view.
 
 ## Company notes
 

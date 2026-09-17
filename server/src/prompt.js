@@ -73,7 +73,7 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
   const doc = track.doc_file || `docs/tracked_${key}_postings.md`;
   const docSummary =
     track.doc_summary ||
-    "candidate profile, verification requirement, and per-company fetch-reliability notes";
+    "candidate profile, what this search is looking for, how to weigh fit, and notes on companies tried";
   // Runs into "Do the following:" as one paragraph: a track's note reads as
   // preamble, not as a heading.
   const intro = track.intro_note ? `${track.intro_note} ` : "";
@@ -86,14 +86,23 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
   const fitFilterStep = track.fit_filter_step ? `6b. ${track.fit_filter_step}\n` : "";
   const captureNum = track.fit_filter_step ? "6c" : "6b";
 
+  // What a run may add to its doc is what has no other home. A rule that
+  // screens postings belongs in the config, where the prompt reads it: written
+  // into the doc as well, the two copies drift and nothing says which a run
+  // follows. A dated note costs every later run a read, and outlives the
+  // thing it described.
   const docUpdateLine =
     track.doc_update_line ||
-    'If you learned something worth keeping about this search - a refinement ' +
-      'to the fit filter or the scope rules - update the relevant ' +
-      `section of \`${doc}\`. A blocked domain or a working URL format is not a ` +
-      "doc edit: it is a `wall`, `endpoint` or `url_shape` in step 9d, where every " +
-      "search reads it. Do not add a found-postings table or a screened/dead-link " +
-      "list to the doc; those live in the tracker only.";
+    'If this run learned something worth keeping that has nowhere else to go - ' +
+      'why a company outside the shared list was tried, and what came of it - add ' +
+      `it to \`${doc}\`'s Company notes, as things stand now: correct a line in place ` +
+      'rather than adding a dated note or a correction beneath it. A refinement to ' +
+      "what fits or to the scope is not a doc edit: the rules that screen a posting " +
+      "live in this search's config, so say it in your step-10 report for a person " +
+      'to change there. A blocked domain or a working URL format is not a doc edit ' +
+      'either: it is a `wall`, `endpoint` or `url_shape` in step 9d, where every ' +
+      'search reads it. Do not add a found-postings table or a screened/dead-link ' +
+      'list to the doc; those live in the tracker only.';
 
   // A search has no company list of its own. It covers the step-1c slice of the
   // one shared list and finds new employers in step 3b; a list kept per search
