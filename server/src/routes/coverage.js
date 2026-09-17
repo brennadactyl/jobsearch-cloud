@@ -134,6 +134,10 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
  * blocked still gets stamped, or the rotation retries it every run and the rest
  * of the list starves. A company not yet on the shared list joins it, so it is
  * in every search's rotation from then on.
+ *
+ * The steps, in order: refuse what can't be recorded; put new companies on the
+ * shared list; record this search's sweep; share what the rows say about
+ * reaching each company; move this search's cursor.
  */
 export async function handleRecordSweeps({ request, db, companyList, user }) {
   // A demo account's companies are invented, and this route writes the list
@@ -154,10 +158,7 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   if (!key) return json({ error: "missing search (track key)" }, 400);
   if (!(await db.trackExists(key))) return unknownTrack(key);
 
-  const incoming = Array.isArray(body.swept) ? body.swept : [];
-  const valid = incoming
-    .filter((i) => i && typeof i.company === "string" && i.company.trim())
-    .map((i) => ({ ...i, company: i.company.trim() }));
+  const valid = sweptCompanies(body.swept);
   if (valid.length === 0) return json({ error: "no companies provided" }, 400);
 
   // The run's own date: the worker only knows UTC, and a 01:00 local run is
@@ -173,9 +174,9 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   // this size.
   //
   // A seeding flag only. A run reporting a real sweep advances the cursor by
-  // the rule at the bottom of this function, and a second rule moving the same
-  // number from the same call is two answers to one question - so it is refused
-  // rather than ignored, and the caller hears which call it belongs on.
+  // advanceCursorPastReported, and a second rule moving the same number from
+  // the same call is two answers to one question - so it is refused rather than
+  // ignored, and the caller hears which call it belongs on.
   const startHere = body.start_here === true;
   if (startHere && on !== "") {
     return json({ error: "start_here starts a new search at the companies it is seeded with - send it with `on`: \"\"" }, 400);
@@ -214,50 +215,8 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   const log = await db.getCoverage(key);
   const onList = new Map(log.map((c) => [normalize(c.company), c]));
 
-  // A new company appends past the highest position, so it neither jumps the
-  // queue nor lands behind a cursor and waits a full cycle. Positions go only
-  // to companies that are actually new: counting the batch, or starting from
-  // the list's length, leaves gaps and eventually two companies with one
-  // position.
-  let nextPos = log.length ? Math.max(...log.map((c) => c.position)) + 1 : 0;
-
-  // New companies are positioned in shuffled order: a written list is usually
-  // alphabetical or grouped by theme, and arrival order would carry that bias
-  // into the rotation. A batch naming one company in two spellings adds it
-  // once, under the first.
-  const fresh = [];
-  const seenFresh = new Set();
-  for (const i of allowed) {
-    const k = normalize(i.company);
-    if (onList.has(k) || seenFresh.has(k)) continue;
-    seenFresh.add(k);
-    fresh.push(i);
-  }
-  for (let i = fresh.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [fresh[i], fresh[j]] = [fresh[j], fresh[i]];
-  }
-  const joining = new Map(
-    fresh.map((i) => [normalize(i.company), { company: i.company, position: nextPos++ }])
-  );
+  const joining = positionNewCompanies(allowed, log, onList);
   const added = await companyList.addCompanies([...joining.values()]);
-
-  // A row reporting a `wall` beside a `board` or `endpoint` contradicts itself:
-  // a wall means no route to the listings worked, a board or endpoint is one
-  // that did. Trusting the board lets a failed fetch erase a true wall for
-  // every search (upsertCompanyFetch clears a wall when a route is reported);
-  // trusting the wall makes a reachable company one every search skips until
-  // the wall expires. So the row shares nothing - no wall, board, endpoint or
-  // url_shape. The sweep itself is still recorded, and `withheld` counts these
-  // rows.
-  //
-  // `url_shape` is not a route: it builds one posting's URL, and a posting can
-  // load while its listing is walled, so that row shares as normal.
-  //
-  // Enforced here, not only in scripts/tracker.ps1, so every caller meets it.
-  const contradicts = (i) =>
-    typeof i.wall === "string" && i.wall !== "" &&
-    ((typeof i.board === "string" && i.board !== "") || (typeof i.endpoint === "string" && i.endpoint !== ""));
 
   // Every report lands on the company as the list names it, so two spellings of
   // one company are one row in this search's record.
@@ -282,71 +241,148 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   // An undated fact is stamped with the server's date (upsertCompanyFetch takes
   // `on || today()`): `verified_on` records when a fact was established, not
   // whose night it was.
-  const withheld = allowed.filter(contradicts).length;
-  const shared = await companyList.upsertCompanyFetch(
-    allowed.filter((i) => !contradicts(i)).map((i) => ({
-      company: i.company,
-      board: typeof i.board === "string" ? i.board : "",
-      endpoint: typeof i.endpoint === "string" ? i.endpoint : "",
-      url_shape: typeof i.url_shape === "string" ? i.url_shape : "",
-      dead_signal: typeof i.dead_signal === "string" ? i.dead_signal : "",
-      wall: typeof i.wall === "string" ? i.wall : "",
-      // `note` stays out: it is prose, and prose carries a search's own
-      // reasoning ("skipped, nothing at my level here"). A shared note
-      // needs its own field, not this private one.
-    })),
-    on
-  );
+  const withheld = allowed.filter(contradictsItself).length;
+  const shared = await companyList.upsertCompanyFetch(allowed.filter((i) => !contradictsItself(i)).map(sharedFacts), on);
 
-  // Advance the cursor past the last company reported from the slice this
-  // search was served, so the next read - including a replacements read in the
-  // same run - starts after it.
-  //
-  // Committed only after the sweep is recorded, so a run that dies before
-  // reporting leaves the cursor where it was. Seeding (`on: ""`) claims no
-  // coverage, so it never advances the cursor; `start_here` is the one thing
-  // that moves it on a seeding call, and it sets it backwards, to the
-  // companies just added.
-  //
-  // The served slice is rebuilt with sliceAt, as GET built it. Companies outside
-  // it are recorded but don't move the cursor: one already on the list can sit
-  // anywhere along it, a re-sent one sits behind the cursor, and a newly joined
-  // one is past every cursor, so advancing to any of them would move the cursor
-  // further than the run read. The slice is in rotation order, wrap included,
-  // so the last one reported is the furthest along - not the highest position,
-  // which is wrong for a slice that wraps.
-  //
-  // Reading never moves the cursor, so the rebuild matches what the run was
-  // served. If the list changes between read and report, the worst case is the
-  // cursor stopping short and a company being served twice; the cursor only
-  // passes companies this report named.
   let cursor = await db.getSweepCursor(key);
   if (on !== "") {
-    const reported = new Set(allowed.map((i) => normalize(i.company)));
-    const served = sliceAt(log.filter((c) => !isExcluded(c.company)), cursor);
-    const lastServed = served.findLast((c) => reported.has(normalize(c.company)));
-    if (lastServed) cursor = await db.setSweepCursor(key, lastServed.position + 1);
+    cursor = await advanceCursorPastReported(db, key, cursor, allowed, log, isExcluded);
   } else if (startHere && added) {
-    // The first seeded company in rotation order - the lowest position, since
-    // the batch was shuffled before it was positioned. The rotation wraps, so
-    // starting here skips nothing: the rest of the list follows tonight's
-    // batch and comes round on later nights.
-    //
-    // Read back from the list rather than taken from the positions this call
-    // handed out. addCompanies does nothing on conflict, so a company another
-    // account added in the same moment keeps the position it already had, and
-    // the cursor has to name a position that exists. A cursor past the end of
-    // the list is not an error - sliceAt wraps - but it would quietly start
-    // the search at position 0, which is the behaviour this flag exists to
-    // avoid.
-    //
-    // Only companies this call added count. If every name was already on the
-    // list there is nothing to start at - they sit wherever the list already
-    // put them - so the cursor stays where it is and `added: 0` says why.
-    const listed = await db.getCoverage(key);
-    const seeded = listed.filter((c) => joining.has(normalize(c.company))).map((c) => c.position);
-    if (seeded.length) cursor = await db.setSweepCursor(key, Math.min(...seeded));
+    cursor = await startCursorAtSeeded(db, key, cursor, joining);
   }
 
   return json({ recorded, added, excluded, on, cursor, shared: shared.written, withheld });
+}
+
+/** The reported companies with a usable name, trimmed; anything else is dropped. */
+function sweptCompanies(swept) {
+  const incoming = Array.isArray(swept) ? swept : [];
+  return incoming
+    .filter((i) => i && typeof i.company === "string" && i.company.trim())
+    .map((i) => ({ ...i, company: i.company.trim() }));
+}
+
+/**
+ * The companies in this report that aren't on the list yet, each with the
+ * position it will join at, keyed by normalize().
+ *
+ * A new company appends past the highest position, so it neither jumps the
+ * queue nor lands behind a cursor and waits a full cycle. Positions go only
+ * to companies that are actually new: counting the batch, or starting from
+ * the list's length, leaves gaps and eventually two companies with one
+ * position.
+ *
+ * New companies are positioned in shuffled order: a written list is usually
+ * alphabetical or grouped by theme, and arrival order would carry that bias
+ * into the rotation. A batch naming one company in two spellings adds it
+ * once, under the first.
+ * @returns {Map<string, {company: string, position: number}>}
+ */
+function positionNewCompanies(allowed, log, onList) {
+  let nextPos = log.length ? Math.max(...log.map((c) => c.position)) + 1 : 0;
+  const fresh = [];
+  const seenFresh = new Set();
+  for (const i of allowed) {
+    const k = normalize(i.company);
+    if (onList.has(k) || seenFresh.has(k)) continue;
+    seenFresh.add(k);
+    fresh.push(i);
+  }
+  for (let i = fresh.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [fresh[i], fresh[j]] = [fresh[j], fresh[i]];
+  }
+  return new Map(fresh.map((i) => [normalize(i.company), { company: i.company, position: nextPos++ }]));
+}
+
+/**
+ * A row reporting a `wall` beside a `board` or `endpoint` contradicts itself:
+ * a wall means no route to the listings worked, a board or endpoint is one
+ * that did. Trusting the board lets a failed fetch erase a true wall for
+ * every search (upsertCompanyFetch clears a wall when a route is reported);
+ * trusting the wall makes a reachable company one every search skips until
+ * the wall expires. So the row shares nothing - no wall, board, endpoint or
+ * url_shape. The sweep itself is still recorded, and `withheld` counts these
+ * rows.
+ *
+ * `url_shape` is not a route: it builds one posting's URL, and a posting can
+ * load while its listing is walled, so that row shares as normal.
+ *
+ * Enforced here, not only in scripts/tracker.ps1, so every caller meets it.
+ */
+function contradictsItself(i) {
+  return (
+    typeof i.wall === "string" && i.wall !== "" &&
+    ((typeof i.board === "string" && i.board !== "") || (typeof i.endpoint === "string" && i.endpoint !== ""))
+  );
+}
+
+/** The fields of a report that describe a company's website, for the shared list. */
+function sharedFacts(i) {
+  return {
+    company: i.company,
+    board: typeof i.board === "string" ? i.board : "",
+    endpoint: typeof i.endpoint === "string" ? i.endpoint : "",
+    url_shape: typeof i.url_shape === "string" ? i.url_shape : "",
+    dead_signal: typeof i.dead_signal === "string" ? i.dead_signal : "",
+    wall: typeof i.wall === "string" ? i.wall : "",
+    // `note` stays out: it is prose, and prose carries a search's own
+    // reasoning ("skipped, nothing at my level here"). A shared note
+    // needs its own field, not this private one.
+  };
+}
+
+/**
+ * Advance the cursor past the last company reported from the slice this
+ * search was served, so the next read - including a replacements read in the
+ * same run - starts after it. Returns the cursor, moved or not.
+ *
+ * Committed only after the sweep is recorded, so a run that dies before
+ * reporting leaves the cursor where it was.
+ *
+ * The served slice is rebuilt with sliceAt, as GET built it. Companies outside
+ * it are recorded but don't move the cursor: one already on the list can sit
+ * anywhere along it, a re-sent one sits behind the cursor, and a newly joined
+ * one is past every cursor, so advancing to any of them would move the cursor
+ * further than the run read. The slice is in rotation order, wrap included,
+ * so the last one reported is the furthest along - not the highest position,
+ * which is wrong for a slice that wraps.
+ *
+ * Reading never moves the cursor, so the rebuild matches what the run was
+ * served. If the list changes between read and report, the worst case is the
+ * cursor stopping short and a company being served twice; the cursor only
+ * passes companies this report named.
+ */
+async function advanceCursorPastReported(db, key, cursor, allowed, log, isExcluded) {
+  const reported = new Set(allowed.map((i) => normalize(i.company)));
+  const served = sliceAt(log.filter((c) => !isExcluded(c.company)), cursor);
+  const lastServed = served.findLast((c) => reported.has(normalize(c.company)));
+  return lastServed ? db.setSweepCursor(key, lastServed.position + 1) : cursor;
+}
+
+/**
+ * For a seeding call with `start_here`: point the cursor at the first company
+ * this call added, in rotation order - the lowest position, since the batch was
+ * shuffled before it was positioned. Seeding claims no coverage, so this is the
+ * one way a seeding call moves the cursor, and it moves it backwards. The
+ * rotation wraps, so starting here skips nothing: the rest of the list follows
+ * tonight's batch and comes round on later nights. Returns the cursor, moved or
+ * not.
+ *
+ * Read back from the list rather than taken from the positions this call
+ * handed out. addCompanies does nothing on conflict, so a company another
+ * account added in the same moment keeps the position it already had, and
+ * the cursor has to name a position that exists. A cursor past the end of
+ * the list is not an error - sliceAt wraps - but it would quietly start
+ * the search at position 0, which is the behaviour this flag exists to
+ * avoid.
+ *
+ * Only companies this call added count. If every name was already on the
+ * list there is nothing to start at - they sit wherever the list already
+ * put them - so the cursor stays where it is and `added: 0` says why.
+ */
+async function startCursorAtSeeded(db, key, cursor, joining) {
+  const listed = await db.getCoverage(key);
+  const seeded = listed.filter((c) => joining.has(normalize(c.company))).map((c) => c.position);
+  return seeded.length ? db.setSweepCursor(key, Math.min(...seeded)) : cursor;
 }
