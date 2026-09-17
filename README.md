@@ -367,6 +367,13 @@ scripts keep copies outside Cloudflare:
 checks each export before keeping it - right size, has tables, has rows, not
 dramatically smaller than yesterday's.
 
+Cloudflare's management API refuses a request now and then for a few minutes,
+so the export is tried up to three times, 30 seconds and two minutes apart. A
+failure that won't fix itself, such as a wrong database name, stops at once.
+Every run writes `private\backups\last-backup-status.json` - what happened, why
+and when - so a night that failed, or a job that stopped running at all, is
+visible without reading the log.
+
 `archive-backups.ps1` copies new exports into the archive. That folder is owned
 by Administrators and read-only to everyone else, so an unelevated process - a
 scheduled task, a script, an AI agent - can read the backups but not write,
