@@ -2987,5 +2987,50 @@ const clRespelled = await clSweep(CL_A, "2026-09-06", [{ company: CL_NEW.toUpper
 check("a run reporting the new name in another spelling lands on the clRenamed company",
   clRespelled.json?.added === 0 && clFind(await clAll(CL_A), CL_NEW)?.last_swept === "2026-09-06", JSON.stringify(clRespelled.json));
 
+
+{
+  console.log("\n== how far a run got through the rotation ==");
+  // A run record counts the companies the search stamped with the run's date
+  // (migrations/0019_run_swept.sql), so a thin night shows whether the rotation
+  // was covered.
+  const swRun = Date.now();
+  const swName = `Swept ${swRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name: swName, password: "swept-long-password-1" } });
+  const SW = (await req("POST", "/api/login", { body: { name: swName, password: "swept-long-password-1" } })).json.token;
+  await req("POST", "/api/config", { token: SW, body: { tracks: [
+    { key: "SWE", label: "SWE" },
+    { key: "swe-ai", label: "AI", fed_by: "SWE" },
+  ] } });
+  const swToday = "2026-09-12", swYesterday = "2026-09-11";
+  await req("POST", "/api/coverage", { token: SW, body: { search: "SWE", on: swYesterday,
+    swept: [{ company: `Swept Old ${swRun}` }] } });
+  await req("POST", "/api/coverage", { token: SW, body: { search: "SWE", on: swToday,
+    swept: [{ company: `Swept A ${swRun}` }, { company: `Swept B ${swRun}` }, { company: `Swept C ${swRun}` }] } });
+
+  const swRec = await req("POST", "/api/runs", { token: SW, body: { search: "SWE", status: "ok", on: swToday } });
+  check("a run record says how many companies the search covered that date",
+    swRec.status === 200 && swRec.json?.run?.swept === 3, JSON.stringify(swRec.json?.run));
+  check("a tab the search fills records none of its own",
+    swRec.json?.also?.[0]?.swept === 0, JSON.stringify(swRec.json?.also));
+  const swConfig = (await req("GET", "/api/config", { token: SW })).json?.tracks || [];
+  check("the count is served with the rest of the last run",
+    swConfig.find((t) => t.key === "SWE")?.last_run?.swept === 3,
+    JSON.stringify(swConfig.find((t) => t.key === "SWE")?.last_run));
+
+  // The same companies re-stamped for a later date move with it: the sweep row
+  // keeps only the latest date, which is what the count reads.
+  const swLater = await req("POST", "/api/runs", { token: SW, body: { search: "SWE", status: "ok", on: swYesterday } });
+  check("a run on another date counts only that date's companies",
+    swLater.json?.run?.swept === 1, JSON.stringify(swLater.json?.run));
+  // A second account with the same track key and the same company names: its
+  // run must count none of the first account's sweeps.
+  const swOtherName = `Swept other ${swRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name: swOtherName, password: "swept-long-password-2" } });
+  const SW_B = (await req("POST", "/api/login", { body: { name: swOtherName, password: "swept-long-password-2" } })).json.token;
+  await req("POST", "/api/config", { token: SW_B, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+  check("another person's sweeps are never counted into this run",
+    (await req("POST", "/api/runs", { token: SW_B, body: { search: "SWE", status: "ok", on: swToday } })).json?.run?.swept === 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

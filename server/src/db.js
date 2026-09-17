@@ -105,6 +105,7 @@
  * @property {number} leads_added
  * @property {number} screened_added
  * @property {number} delisted
+ * @property {number} swept
  * @property {string} note
  */
 
@@ -134,7 +135,7 @@
  */
 
 /**
- * @typedef {Track & {last_run: {at: string, on: string, status: string, leads_added: number, screened_added: number, delisted: number, note: string}}} TrackWithRun
+ * @typedef {Track & {last_run: {at: string, on: string, status: string, leads_added: number, screened_added: number, delisted: number, swept: number, note: string}}} TrackWithRun
  */
 
 /**
@@ -770,7 +771,7 @@ export class Db {
         .prepare(
           `SELECT ${trackCols},
                   r.last_run_at, r.last_run_on, r.status AS last_run_status,
-                  r.leads_added, r.screened_added, r.delisted, r.note
+                  r.leads_added, r.screened_added, r.delisted, r.swept, r.note
            FROM tracks t
            LEFT JOIN search_runs r ON r.track_key = t.key AND r.user_id = t.user_id
            WHERE t.user_id = ?
@@ -817,6 +818,7 @@ export class Db {
         leads_added: row.leads_added || 0,
         screened_added: row.screened_added || 0,
         delisted: row.delisted || 0,
+        swept: row.swept || 0,
         note: row.note || "",
       };
       return track;
@@ -1043,12 +1045,17 @@ export class Db {
    * the UTC date, and after 17:00 PT that is the next day - rows stamped one way
    * and a record asked for the other count zero.
    *
+   * `swept` is how far the night got through the company rotation: the
+   * companies this search stamped with that date through /api/coverage
+   * (migrations/0019_run_swept.sql). A tab another search fills stamps none of
+   * its own and reads 0; the search that ran carries the number.
+   *
    * @param {string} key - track key
    * @param {string} on - YYYY-MM-DD, the run's own local date
-   * @returns {Promise<{leadsAdded: number, screenedAdded: number, delisted: number}>}
+   * @returns {Promise<{leadsAdded: number, screenedAdded: number, delisted: number, swept: number}>}
    */
   async countRunActivity(key, on) {
-    const [leads, screened] = await Promise.all([
+    const [leads, screened, swept] = await Promise.all([
       this.d1
         .prepare("SELECT COUNT(*) AS leadsAdded FROM leads WHERE user_id = ? AND search = ? AND found = ?")
         .bind(this.userId, key, on)
@@ -1063,12 +1070,20 @@ export class Db {
         )
         .bind(DELISTED_REASON, DELISTED_REASON, this.userId, key, on)
         .first(),
+      // company_sweeps keeps only each company's latest sweep, so this counts
+      // the companies whose latest sweep is this run's - which is every company
+      // it covered, until a later night covers one again.
+      this.d1
+        .prepare("SELECT COUNT(*) AS swept FROM company_sweeps WHERE user_id = ? AND search = ? AND last_swept = ?")
+        .bind(this.userId, key, on)
+        .first(),
     ]);
     // SUM over zero rows is NULL in SQLite, and a quiet day is normal.
     return {
       leadsAdded: leads?.leadsAdded || 0,
       screenedAdded: screened?.screenedAdded || 0,
       delisted: screened?.delisted || 0,
+      swept: swept?.swept || 0,
     };
   }
 
@@ -1090,26 +1105,26 @@ export class Db {
    * The caller computes the counts first: they are reads, and stay outside the
    * write transaction.
    *
-   * @param {Array<{key: string, at: string, on: string, status: string, leadsAdded: number, screenedAdded: number, delisted: number, note: string}>} runs
+   * @param {Array<{key: string, at: string, on: string, status: string, leadsAdded: number, screenedAdded: number, delisted: number, swept: number, note: string}>} runs
    * @returns {Promise<SearchRun[]>} the written rows, in the order asked for
    */
   async recordRuns(runs) {
     if (!runs.length) return [];
     const stmt = this.d1.prepare(
       `INSERT INTO search_runs
-         (user_id, track_key, last_run_at, last_run_on, status, leads_added, screened_added, delisted, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (user_id, track_key, last_run_at, last_run_on, status, leads_added, screened_added, delisted, swept, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, track_key) DO UPDATE SET
          last_run_at = excluded.last_run_at, last_run_on = excluded.last_run_on,
          status = excluded.status, leads_added = excluded.leads_added,
          screened_added = excluded.screened_added, delisted = excluded.delisted,
-         note = excluded.note`
+         swept = excluded.swept, note = excluded.note`
     );
     await this.d1.batch(
       runs.map((r) =>
         stmt.bind(
           this.userId, r.key, r.at, r.on, r.status,
-          r.leadsAdded, r.screenedAdded, r.delisted, r.note
+          r.leadsAdded, r.screenedAdded, r.delisted, r.swept, r.note
         )
       )
     );

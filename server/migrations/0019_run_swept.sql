@@ -1,0 +1,26 @@
+-- search_runs.swept: how many companies a search covered on the run's date.
+--
+-- A run record says what a night produced - leads added, postings screened,
+-- postings delisted - but not how much of the company rotation it got through,
+-- which is the number that says whether the night's thin results mean a quiet
+-- market or a run that stalled after four companies.
+--
+-- Counted from the rows themselves like the others (db.countRunActivity), from
+-- the `company_sweeps` rows this search stamped with the run's date, so a run
+-- reports nothing new and no prompt changes. Companies are stamped through
+-- /api/coverage as they are covered, which is what a nightly run already does.
+--
+--   swept  INTEGER, the count at the moment the record was written, 0 for a
+--          run that recorded no sweeps.
+--
+-- Per search, not per feed group: a tab another search fills records no sweeps
+-- of its own, so its record reads 0 and the search that ran carries the count.
+-- Adding the root's number to each tab would report one night's rotation
+-- several times over.
+--
+-- Existing records default to 0. The count comes from rows that are still
+-- there, so a night's number could be recomputed, but a backfill would have to
+-- guess which rows a given night stamped: `company_sweeps` keeps only the last
+-- sweep per company, so an older night's companies now carry later dates.
+
+ALTER TABLE search_runs ADD COLUMN swept INTEGER NOT NULL DEFAULT 0;
