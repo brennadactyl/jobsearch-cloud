@@ -76,6 +76,11 @@ leads, applications, page titles and location rules.
   URL, which is the same text for everybody.
 - `verify-local.mjs`, `verify-migration.mjs`, `verify-schema-doc.mjs` - the
   checks to run before a deploy. See [Verifying a change](#verifying-a-change).
+- `inspect-backup.mjs` - runs one SELECT against the newest local backup
+  (`node server/inspect-backup.mjs "SELECT ..."`, or `--file <backup.sql>`),
+  for questions about live data, which is never read from D1 directly. Loads
+  the backup into an in-memory SQLite database that refuses writes, and prints
+  which backup answered: the data is as of that backup.
 - `migrations/` - the numbered schema migrations. What they build, table by
   table, is [`../docs/schema.md`](../docs/schema.md).
 
