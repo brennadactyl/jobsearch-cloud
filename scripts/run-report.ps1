@@ -10,8 +10,8 @@
   problems it logged.
 
   It prints no lead, company or file names and no free text from a log - only
-  times, counts and fixed labels - so the table is safe to paste anywhere. A
-  problem line is shown as the label for its kind, never as written.
+  times, counts and the runner's fixed problem tags - so the table is safe to paste
+  anywhere. A problem line is shown as its tag, never as written.
 
   It is a fixed parse of the runner's own lines (run-search.ps1, run-lock.ps1).
   The model's output block is skipped: nothing a run says about itself is read.
@@ -61,27 +61,36 @@ if (-not $DataDir -or -not (Test-Path $DataDir)) {
 $from = $Night.Date.AddHours(12)
 $to   = $from.AddDays(1)
 
-# Every problem line maps to one of these labels, in this order, so a reworded
-# sentence falls through to "other" rather than being printed.
-$PROBLEM_KINDS = @(
-    @{ Label = "doc over limit";      Pattern = "over the \d+-byte limit" }
-    @{ Label = "doc changed";         Pattern = "changed underneath this run|changed during the run" }
-    @{ Label = "write-back failed";   Pattern = "couldn't write back|is gone from the run directory" }
-    @{ Label = "no run record";       Pattern = "wrote no run record" }
-    @{ Label = "run recorded error";  Pattern = "recorded itself as an error" }
-    @{ Label = "not signed in";       Pattern = "not authenticated|not logged in" }
-    @{ Label = "profile not rewritten"; Pattern = "rewrite the profile|marked current|during a profile refresh" }
-    @{ Label = "log upload failed";   Pattern = "upload this run's log" }
-    @{ Label = "run record unread";   Pattern = "run record|record the failed run|add to the run record" }
+# run-search.ps1 tags every WARNING and ERROR (`WARNING [doc-over-limit]: ...`),
+# and only the tag is printed. Logs written before the tags carry none, so
+# those lines are matched to the same tag by their wording, in this order; a
+# line matching nothing is counted as "other" rather than printed.
+$UNTAGGED = @(
+    @{ Tag = "doc-over-limit";         Pattern = "over the \d+-byte limit" }
+    @{ Tag = "refresh-refused";        Pattern = "during a profile refresh" }
+    @{ Tag = "doc-changed-underneath"; Pattern = "changed underneath this run" }
+    @{ Tag = "non-doc-changed";        Pattern = "changed during the run" }
+    @{ Tag = "doc-missing";            Pattern = "is gone from the run directory" }
+    @{ Tag = "write-back-failed";      Pattern = "couldn't write back" }
+    @{ Tag = "no-run-record";          Pattern = "wrote no run record" }
+    @{ Tag = "run-recorded-error";     Pattern = "recorded itself as an error" }
+    @{ Tag = "run-failed";             Pattern = "not authenticated|not logged in" }
+    @{ Tag = "profile-mark-failed";    Pattern = "couldn't be marked current" }
+    @{ Tag = "profile-not-refreshed";  Pattern = "rewrite the profile" }
+    @{ Tag = "log-upload-failed";      Pattern = "upload this run's log" }
+    @{ Tag = "failed-run-unrecorded";  Pattern = "record the failed run" }
+    @{ Tag = "run-note-failed";        Pattern = "add to the run record" }
+    @{ Tag = "record-baseline-unread"; Pattern = "run record before starting" }
+    @{ Tag = "record-check-skipped";   Pattern = "no baseline was read" }
+    @{ Tag = "record-check-failed";    Pattern = "whether a run record was written" }
 )
 
-function Get-ProblemLabel([string]$text) {
-    foreach ($kind in $PROBLEM_KINDS) {
-        if ($text -match $kind.Pattern) { return $kind.Label }
+function Get-UntaggedProblem([string]$text) {
+    foreach ($kind in $UNTAGGED) {
+        if ($text -match $kind.Pattern) { return $kind.Tag }
     }
     return "other"
 }
-
 $LOG_LINE = '^(?<at>\d{4}-\d\d-\d\dT[\d:.]+[-+]\d\d:\d\d) - (?<text>.*)$'
 
 $accounts = Get-ChildItem $DataDir -Directory -ErrorAction SilentlyContinue |
@@ -119,7 +128,7 @@ foreach ($log in $logs) {
                 [pscustomobject]@{
                     Account = $account.Substring(0, [Math]::Min(8, $account.Length))
                     Search = $Matches[1]; Start = $at; Minutes = $null; Waited = $queueWait
-                    Exit = $null; Status = "-"; Leads = "-"; Screened = "-"; Swept = "-"
+                    Exit = $null; Status = "-"; Leads = "-"; Screened = "-"; Delisted = "-"
                     DocUpdated = $null; DocRefused = $null; Profile = "none"
                     Problems = New-Object System.Collections.Generic.List[string]
                 }
@@ -138,18 +147,18 @@ foreach ($log in $logs) {
         elseif ($text -match '^run record:\s+(.*)$') {
             foreach ($pair in ($Matches[1] -split '\s+')) {
                 $k, $v = $pair -split '=', 2
-                switch ($k) { "status" { $run.Status = $v } "leads" { $run.Leads = $v } "screened" { $run.Screened = $v } "swept" { $run.Swept = $v } }
+                switch ($k) { "status" { $run.Status = $v } "leads_added" { $run.Leads = $v } "screened_added" { $run.Screened = $v } "delisted" { $run.Delisted = $v } }
             }
         }
         elseif ($text -match '^write-back:\s+(\d+) document') { $run.DocUpdated = [int]$Matches[1] }
         elseif ($text -match '^profile:\s+rewritten') { $run.Profile = "rewritten" }
         elseif ($text -match '^profile:\s+stale since') { if ($run.Profile -eq "none") { $run.Profile = "kept stale" } }
-        elseif ($text -match '^(WARNING|ERROR): ') {
-            $label = Get-ProblemLabel $text
-            if ($label -eq "doc over limit" -and $text -match 'grew (\d+) bytes .* over the (\d+)-byte limit') {
-                $run.DocRefused = [int]$Matches[1] - [int]$Matches[2]
+        elseif ($text -match '^(WARNING|ERROR)( \[(?<tag>[a-z0-9-]+)\])?: ') {
+            $label = if ($Matches.tag) { $Matches.tag } else { Get-UntaggedProblem $text }
+            if ($label -eq "doc-over-limit" -or $label -eq "refresh-refused") {
+                $run.DocRefused = if ($text -match 'grew (\d+) bytes .* over the (\d+)-byte limit') { [int]$Matches[1] - [int]$Matches[2] } else { 0 }
             }
-            if ($label -eq "profile not rewritten") { $run.Profile = "kept stale" }
+            if ($label -eq "refresh-refused" -or $label -eq "profile-not-refreshed" -or $label -eq "profile-mark-failed") { $run.Profile = "kept stale" }
             $run.Problems.Add($label)
         }
         elseif ($text -eq "===== done =====") { $rows.Add($run); $run = $null }
@@ -176,8 +185,9 @@ $rows | Sort-Object Start | ForEach-Object {
         Status   = $_.Status
         Leads    = $_.Leads
         Screened = $_.Screened
-        Swept    = $_.Swept
-        Doc      = if ($null -ne $_.DocRefused) { "refused, +$($_.DocRefused) over" }
+        Delisted = $_.Delisted
+        Doc      = if ($_.DocRefused -gt 0) { "refused, +$($_.DocRefused) over" }
+                   elseif ($null -ne $_.DocRefused) { "refused" }
                    elseif ($_.DocUpdated -gt 0) { "updated" }
                    elseif ($null -ne $_.DocUpdated) { "none" }
                    else { "-" }
