@@ -556,8 +556,8 @@ foreach ($item in $queue) {
             Log "      their pasted resume would overwrite the text of their Word file - reading $resumePath instead"
         } elseif ($resumeText.Trim()) {
             # Uploaded as well as staged: the nightly run reads the resume from
-            # the tracker, like every other document, and `resume_line` names
-            # this path.
+            # the tracker, like every other document, and the search's
+            # documents list names this path.
             $resumePath = $pastedPath
             Write-Utf8 (Join-Path $stage "resumes\$pastedName") $resumeText
             Invoke-WithRetry "PUT /api/documents/$resumePath" {
@@ -631,7 +631,7 @@ out\config.json:
       "full_description": "<what belongs in this tab>",
       "role_search_line": "<the titles to search for, as it reads mid-sentence>",
       "search_note": "<optional: how those companies are searched>",
-      "resume_line": "<the whole read-the-resume instruction, naming $resumePath>",
+      "resume_line": "<how this search frames the resume - never a file name: the search is handed the file itself>",
       "fit_clause": "<optional>",
       "fit_disqualifier": "<optional>",
       "fit_filter_step": "<optional: only for a real pivot>",
@@ -786,11 +786,13 @@ Rules for this run:
             if ($liveKeys -notcontains $key) { Stop-Person "the model turn wrote a track keyed '$key', which isn't one of theirs ($($liveKeys -join ', '))" $null }
             if ($seen -contains $key) { Stop-Person "two tracks share the key '$key'" $null }
             $seen += $key
-            foreach ($required in @("role_search_line", "resume_line")) {
-                if (-not ([string]$d.$required).Trim()) { Stop-Person "track '$key' has no $required" $null }
-            }
-            if (([string]$d.resume_line) -notlike "*$resumePath*") {
-                Stop-Person "track '$key' has a resume_line that doesn't name $resumePath" $null
+            if (-not ([string]$d.role_search_line).Trim()) { Stop-Person "track '$key' has no role_search_line" $null }
+            # The resume a search reads is the one its documents list names, so a
+            # resume can be swapped without editing prose. A file named here goes
+            # stale the day that happens, and the run would read one file while
+            # the doc talks about another.
+            if (([string]$d.resume_line) -match '(resumes|reference)/|\.(txt|md|pdf|docx?|rtf|pages)\b') {
+                Stop-Person "track '$key' has a resume_line that names a file - it frames the resume, and the documents list names the file" $null
             }
 
             $writeup = @{
@@ -832,8 +834,9 @@ Rules for this run:
             $body = $t.Body.Clone()
             if ($first) { foreach ($k in $scopeBody.Keys) { $body[$k] = $scopeBody[$k] } }
             # The documents the search reads besides its tracking doc: the one
-            # resume this run chose, which resume_line was checked to name. A
-            # track with no list is refused its documents at run time.
+            # resume this run chose. This list, not resume_line, is where a
+            # search's resume is named. A track with no list is refused its
+            # documents at run time.
             $body["documents"] = @($resumePath)
             $written = Api POST "/api/writeup" $personToken $body
             Log "      wrote up $($t.Key) at $($t.Slot): $(($written.written) -join ', ')"
