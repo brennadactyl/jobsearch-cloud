@@ -61,8 +61,8 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 #themeToggle{font-size:15px;line-height:1;padding:6px 9px}
 .stamp{font-size:12px;color:var(--ink3);display:flex;align-items:center;gap:9px}
 .who{appearance:none;border:0;background:none;padding:0;font:inherit;
-  font-size:12px;color:var(--ink3);cursor:pointer;border-radius:4px}
-.who:hover{color:var(--ink2);text-decoration:underline}
+  font-size:12px;color:var(--ink2);cursor:pointer;border-radius:4px}
+.who:hover{color:var(--ink);text-decoration:underline}
 .who:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 /* An empty button still has a focus stop and a hit area. */
 .who:empty{display:none}
