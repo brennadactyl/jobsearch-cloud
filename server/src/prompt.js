@@ -17,6 +17,9 @@
  * mostly prose, on purpose".
  */
 
+import { parseDocumentList } from "./db.js";
+import { documentExtension, READABLE_DOCUMENT_EXTENSIONS } from "./validate.js";
+
 // Unset falls back to they/them: the server knows nothing about a name beyond
 // the name. POST /api/intake accepts exactly these keys, and the page offers
 // the same three (PRONOUNS in client/src/api/schema.ts).
@@ -109,7 +112,37 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
     ? ` Don't spend the run's time on ${joinAnd(excluded)} - permanently excluded, including via broader discovery. Skip a hit there rather than verifying it, and don't screen it either: an exclusion isn't a candidate that was considered and ruled out, so it earns no row.`
     : "";
 
-  const resumeLine = track.resume_line || "Read the resume.";
+  // The resume is whatever this search's documents list names - the one place a
+  // resume is chosen - so choosing a new one can't leave prose pointing at the
+  // old file. resume_line carries only how this search frames the resume. Files
+  // under resumes/ are the resume; a list with none there (a text copy kept
+  // under reference/) still names what the run can read.
+  const readableDocuments = parseDocumentList(track.documents).filter((p) =>
+    READABLE_DOCUMENT_EXTENSIONS.includes(documentExtension(p))
+  );
+  const resumeFiles = readableDocuments.filter((p) => p.startsWith("resumes/"));
+  const resumeRead = resumeFiles.length ? resumeFiles : readableDocuments;
+  const resumeLine = resumeRead.length
+    ? `Read the resume: ${joinAnd(resumeRead.map((p) => `\`${p}\``))}.${track.resume_line ? ` ${track.resume_line}` : ""}`
+    : track.resume_line || "Read the resume.";
+
+  // A resume chosen since this search's profile was written. The profile in the
+  // doc was drawn from the old one, so a run that searched first would screen
+  // tonight's postings against a person who no longer exists. The rewrite is
+  // confined to one section, and scripts/run-search.ps1 refuses a doc changed
+  // anywhere else - so no other doc edit is asked for on the same night.
+  const profileRefreshStep = track.profile_stale_since
+    ? `2b. THE RESUME HAS CHANGED - REWRITE THE PROFILE BEFORE YOU SEARCH. ` +
+      `This search's profile in \`${doc}\` was written from ` +
+      `${track.resume_was ? `\`${track.resume_was}\`` : "an earlier resume"}, and step 2's resume replaces it. ` +
+      `Rewrite the section of \`${doc}\` that starts at the heading beginning \`## Candidate Profile\` and runs to the next \`## \` heading: ` +
+      `the candidate profile, the best-fit roles, and anything else there drawn from the resume, from the new one. ` +
+      `Keep the heading beginning \`## Candidate Profile\`, and don't name a resume file in it. ` +
+      `Change nothing else in the doc tonight - every other section must come back exactly as it was, ` +
+      `or the whole doc is refused and the profile stays out of date. ` +
+      `So skip step 8b's other doc edits tonight and put what you would have written in your step-10 report. ` +
+      `Then search against the profile you just wrote.\n`
+    : "";
   const roleLine = track.role_search_line || "roles matching the resume";
 
   // Built from optional parts so a track with no fit filter or geographic scope
@@ -286,7 +319,7 @@ ${intro}Do the following:
 1. Read \`${doc}\` - ${docSummary}. Follow its numbered process. The doc doesn't keep a found-postings table or a screened/dead-link list - dedup data comes from step 1b instead.
 1b. Fetch what this track has already seen: \`./tracker dedup\`. It writes \`dedup.json\`: \`leads[]\` as \`{url, status}\`, with \`recheck: true\` on the ones due a re-check tonight - postings already tracked, where \`url\` is what step 8 reports back and \`status\` is context for your report (that's how you tell a stale lead nobody's touched from one ${name} has already applied to) - and \`screened[]\`, urls already looked at and rejected at tonight's companies or in the last few days, which is what stops you re-verifying the same dead or out-of-scope candidate. Older rejections at other companies aren't in it; if you verify one of those and report it, the tracker recognises it, so it costs a check and never a duplicate.${dedupNote}
 ${coverageStep}2. ${resumeLine}
-3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}.${searchNote}${exclusionNote}
+${profileRefreshStep}3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}.${searchNote}${exclusionNote}
 3b. NOW LOOK OUTSIDE THAT LIST. Step 3 is the companies already known to be worth checking; this step is how that list ever grows, and it is not optional. Search for ${roleLine} at companies **not already on the shared list** - including outside tech entirely: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities, manufacturing, and sports (leagues and the larger franchises, plus the data, streaming and betting companies built around them). All of them run real engineering orgs and all of them are easy to miss when the named list reads as big tech. Rotate through a couple of verticals per run rather than attempting all of them.
 
    **Check each company before you spend anything on it: \`./tracker known "<company>"\`.** Tonight's slice is a small part of the list, and another search may have added a company earlier tonight. If it says the company is on the list, skip it - its turn comes in the rotation.
