@@ -34,7 +34,9 @@
 
   The same outcome is written to <BackupDir>\last-backup-status.json and logged
   as a RESULT line, so a night that failed can be seen without reading the log
-  or the scheduler: `{status, reason, finishedAt, exitCode}` plus what landed.
+  or the scheduler: `{status, tags, reason, finishedAt, exitCode}` plus what
+  landed. `tags` is a fixed vocabulary safe to print anywhere; `reason` says the
+  same thing in words and can carry a path.
   It is rewritten on every run, so a stale finishedAt means the job itself
   stopped running. scripts/run-report.ps1 reads it.
 
@@ -131,12 +133,18 @@ function Log($msg) {
 $statusFile = Join-Path $BackupDir "last-backup-status.json"
 $script:statusFacts = [ordered]@{}
 
-function Complete-Backup([string]$Status, [string]$Reason) {
+function Complete-Backup([string]$Status, [string]$Tag, [string]$Reason) {
     $exitCode = 0
     if ($Status -eq "failed") { $exitCode = 1 }
     elseif ($Status -eq "warnings") { $exitCode = 2 }
     $record = [ordered]@{
         status     = $Status
+        # `tags` is the fixed vocabulary a report can print anywhere: the words
+        # beside each problem below, and `export-failed` or `config` for the two
+        # ways a run stops early. `reason` is the readable version of the same
+        # thing and can carry a path or an API message, so it belongs in a log
+        # rather than in something pasted around.
+        tags       = @($Tag -split "," | Where-Object { $_ })
         reason     = $Reason
         finishedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         exitCode   = $exitCode
@@ -149,7 +157,7 @@ function Complete-Backup([string]$Status, [string]$Reason) {
     } catch {
         Log "WARNING: could not write $statusFile - $($_.Exception.Message)"
     }
-    Log ("RESULT status={0} exit={1} reason={2}" -f $Status, $exitCode, $(if ($Reason) { $Reason } else { "-" }))
+    Log ("RESULT status={0} exit={1} tags={2} reason={3}" -f $Status, $exitCode, $(if ($Tag) { $Tag } else { "-" }), $(if ($Reason) { $Reason } else { "-" }))
     if ($Status -eq "ok") { Log "===== done =====" }
     elseif ($Status -eq "warnings") { Log "===== done, WITH WARNINGS =====" }
     else { Log "===== FAILED =====" }
@@ -163,12 +171,12 @@ Log "===== backup-tracker starting ====="
 $wranglerToml = Join-Path $RepoDir "server\wrangler.toml"
 if (-not (Test-Path $wranglerToml)) {
     Log "ERROR: no server\wrangler.toml under $RepoDir - can't tell which database to export."
-    Complete-Backup "failed" "no server\wrangler.toml under $RepoDir"
+    Complete-Backup "failed" "config" "no server\wrangler.toml under $RepoDir"
 }
 $dbName = ([regex]::Match((Get-Content $wranglerToml -Raw), 'database_name\s*=\s*"([^"]+)"')).Groups[1].Value
 if (-not $dbName) {
     Log "ERROR: server\wrangler.toml has no database_name."
-    Complete-Backup "failed" "server\wrangler.toml has no database_name"
+    Complete-Backup "failed" "config" "server\wrangler.toml has no database_name"
 }
 Log "database: $dbName"
 
@@ -249,7 +257,7 @@ if ($code -ne 0 -or -not (Test-Path $staging)) {
     Log "ERROR: wrangler d1 export failed (exit $code). Nothing was written."
     Get-Content $outFile -ErrorAction SilentlyContinue | ForEach-Object { Log "  wrangler: $_" }
     Get-Content $errFile -ErrorAction SilentlyContinue | ForEach-Object { Log "  wrangler: $_" }
-    Complete-Backup "failed" "wrangler d1 export failed (exit $code)"
+    Complete-Backup "failed" "export-failed" "wrangler d1 export failed (exit $code)"
 }
 
 # ---- Validate the staged file before it becomes a backup. ------------------
@@ -290,14 +298,18 @@ foreach ($m in [regex]::Matches($text, '(?im)^\s*INSERT INTO\s+"?users"?\s[^\r\n
 $expectedAccounts = $userCount - $demoIds.Count
 
 $problems = @()
-if ($size -lt $MinBytes) { $problems += "only $size bytes (under the $MinBytes floor)" }
-if ($tables -lt 1)       { $problems += "no CREATE TABLE statements" }
-if ($inserts -lt 1)      { $problems += "no INSERT statements - the schema came back but no data" }
+# A short fixed word per problem, for a report that has to be safe to paste:
+# the matching $problems text can carry a path or an API message.
+$problemTags = @()
+if ($size -lt $MinBytes) { $problemTags += "export-small"; $problems += "only $size bytes (under the $MinBytes floor)" }
+if ($tables -lt 1)       { $problemTags += "export-no-tables"; $problems += "no CREATE TABLE statements" }
+if ($inserts -lt 1)      { $problemTags += "export-no-rows"; $problems += "no INSERT statements - the schema came back but no data" }
 
 # A partial dump still reads as a valid file, so compare with the last backup.
 $previous = Get-ChildItem $BackupDir -Filter "*.sql" -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($previous -and $size -lt ($previous.Length * 0.5)) {
+    $problemTags += "export-shrank"
     $problems += ("less than half the size of the previous backup ({0:N0} vs {1:N0} bytes)" -f $size, $previous.Length)
 }
 
@@ -343,6 +355,7 @@ if (-not $NoDocuments) {
     if ($accounts.Count -eq 0) {
         Log "WARNING: no <user-id>\tracker.json under $DataDir - no document backup taken."
         Log "         Set -DataDir or JOB_SEARCH_DATA_DIR. See private.example/README.md."
+        $problemTags += "no-account-folders"
         $problems += "no accounts found for the document backup"
     } else {
         # PS 5.1 draws a progress bar per web request, slow enough to dominate
@@ -384,6 +397,7 @@ if (-not $NoDocuments) {
                     break
                 }
                 Log "WARNING: could not list documents for $($acct.Name) (HTTP $status) - $($_.Exception.Message)"
+                $problemTags += "documents-list-failed"
                 $problems += "document listing failed for $($acct.Name)"
                 continue
             }
@@ -394,6 +408,7 @@ if (-not $NoDocuments) {
                 # because the path is joined onto a local directory and written.
                 if ($doc.path -notmatch '^(docs|resumes|reference)/[\w][\w .-]*$') {
                     Log "WARNING: skipping unexpected document path for $($acct.Name): $($doc.path)"
+                    $problemTags += "documents-bad-path"
                     $problems += "unexpected document path from the API"
                     continue
                 }
@@ -404,6 +419,7 @@ if (-not $NoDocuments) {
                 if ($dest.Length -ge 260) {
                     Log ("WARNING: path too long for Windows ({0} chars, limit 260): {1}" -f $dest.Length, $dest)
                     Log "         Use a shorter -BackupDir, or enable long paths (LongPathsEnabled)."
+                    $problemTags += "documents-path-too-long"
                     $problems += "path over MAX_PATH: $($acct.Name)\$($doc.path)"
                     continue
                 }
@@ -421,11 +437,13 @@ if (-not $NoDocuments) {
                     # compare with the size R2 reports.
                     if ($doc.bytes -and $got -ne $doc.bytes) {
                         Log ("WARNING: {0}\{1} came back {2:N0} bytes, expected {3:N0}" -f $acct.Name, $doc.path, $got, $doc.bytes)
+                        $problemTags += "documents-short"
                         $problems += "short download: $($acct.Name)\$($doc.path)"
                     }
                     $docTotal++; $docBytes += $got
                 } catch {
                     Log "WARNING: failed to download $($acct.Name)\$($doc.path) - $($_.Exception.Message)"
+                    $problemTags += "documents-download-failed"
                     $problems += "document download failed: $($acct.Name)\$($doc.path)"
                 }
             }
@@ -510,6 +528,6 @@ Log "$kept backup file(s) now in $BackupDir"
 $script:statusFacts["kept"] = $kept
 
 if ($problems.Count -gt 0) {
-    Complete-Backup "warnings" ($problems -join "; ")
+    Complete-Backup "warnings" (($problemTags | Select-Object -Unique) -join ",") ($problems -join "; ")
 }
-Complete-Backup "ok" ""
+Complete-Backup "ok" "" ""
