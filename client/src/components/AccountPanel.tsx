@@ -2,30 +2,46 @@
  * The account panel, opened from "My account" in the header: who is signed in,
  * then one section per thing a person can change about their own account.
  */
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { changePassword, UnauthorizedError } from "../api/client";
+import type { Track } from "../api/schema";
 import { MIN_PASSWORD } from "../domain/onboarding";
+import ResumeSection, { type Unsaved } from "./ResumeSection";
 
-export default function AccountPanel({ open, name, onClose }: { open: boolean; name: string; onClose: () => void }) {
-  // Mounts per opening, so nothing typed in one visit is still there in the next.
+type Props = { open: boolean; name: string; tracks: readonly Track[]; onClose: () => void };
+
+export default function AccountPanel({ open, ...props }: Props) {
+  // Mounts per opening, so nothing typed or chosen in one visit is still there in the next.
   if (!open) return null;
-  return <AccountDialog name={name} onClose={onClose} />;
+  return <AccountDialog {...props} />;
 }
 
-function AccountDialog({ name, onClose }: { name: string; onClose: () => void }) {
+function AccountDialog({ name, tracks, onClose }: Omit<Props, "open">) {
+  const [unsaved, setUnsaved] = useState<Unsaved | null>(null);
+  const [asking, setAsking] = useState(false);
+  const onUnsaved = useCallback((u: Unsaved | null) => setUnsaved(u), []);
+
+  // Every way out comes through here, so unsaved choices are never lost without asking.
+  const leave = useCallback(() => {
+    if (unsaved) setAsking(true);
+    else onClose();
+  }, [unsaved, onClose]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (asking) setAsking(false);
+      else leave();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [asking, leave]);
 
   return (
     <div
       className="modal-overlay"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) leave();
       }}
     >
       <div className="card account-panel" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
@@ -34,14 +50,31 @@ function AccountDialog({ name, onClose }: { name: string; onClose: () => void })
             <h3 id="accountTitle">My account</h3>
             <div className="account-who">Signed in as {name}</div>
           </div>
-          <button className="btn ghost account-close" type="button" aria-label="Close" onClick={onClose}>
+          <button className="btn ghost account-close" type="button" aria-label="Close" onClick={leave}>
             ✕
           </button>
         </div>
         <div className="account-body">
           <PasswordSection />
+          <ResumeSection tracks={tracks} onUnsaved={onUnsaved} />
         </div>
       </div>
+      {asking && unsaved && (
+        <div className="modal-overlay">
+          <div className="card modal-card wide" role="alertdialog" aria-modal="true" aria-labelledby="leaveTitle">
+            <h3 id="leaveTitle">Leave without saving?</h3>
+            <p>{unsaved.sentence}</p>
+            <div className="modal-actions">
+              <button className="btn" type="button" onClick={onClose}>
+                {unsaved.count === 1 ? "Discard change" : "Discard changes"}
+              </button>
+              <button className="btn primary" type="button" autoFocus onClick={() => setAsking(false)}>
+                Keep editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

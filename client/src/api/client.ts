@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   intakeResponseSchema,
   intakeSentSchema,
+  storedResumeSchema,
   inviteCheckSchema,
   applicationSchema,
   dataSchema,
@@ -18,6 +19,7 @@ import {
   type IntakeAnswers,
   type InviteCheck,
   type Lead,
+  type StoredResume,
   type TrackerData,
 } from "./schema";
 
@@ -245,6 +247,24 @@ export function putDocument(path: string, file: Blob): Promise<StoredDocument> {
   });
 }
 
+/** Every stored document, with what the server read of each resume and which searches read it. */
+export async function listDocuments(): Promise<StoredResume[]> {
+  return (await request("/api/documents", z.object({ documents: z.array(storedResumeSchema) }))).documents;
+}
+
+/**
+ * Sets the resume each named search reads, all at once or not at all. Send only
+ * the searches that changed; each takes its new resume on its next run. A
+ * refusal names the search it's about.
+ */
+export function saveResumes(picks: Record<string, string>) {
+  return request("/api/settings", z.object({ resumes: z.record(z.string(), z.unknown()) }), {
+    method: "POST",
+    body: { resumes: picks },
+  });
+}
+
+/** A refusal to remove a file a search reads says which searches, in a sentence worth showing. */
 export function deleteDocument(path: string): Promise<{ path: string }> {
   return request(`/api/documents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, documentWriteSchema, {
     method: "DELETE",

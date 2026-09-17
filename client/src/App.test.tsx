@@ -315,6 +315,8 @@ describe("every input is reachable by the stylesheet", () => {
       expect(type, `an input rendered with no type attribute: #${el.id || el.getAttribute("aria-label")}`).not.toBeNull();
       // Checkboxes and radios are styled separately and deliberately.
       if (["checkbox", "radio"].includes(type!)) continue;
+      // A hidden file input is opened by its button and never drawn.
+      if (type === "file" && el.hidden) continue;
       expect(STYLED, `type="${type}" is not one the stylesheet targets`).toContain(type);
     }
   }

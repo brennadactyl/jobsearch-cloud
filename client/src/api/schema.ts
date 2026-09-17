@@ -119,6 +119,8 @@ export const trackSchema = z.object({
   full_description: text,
   sort_order: z.number().default(0),
   last_run: lastRunSchema,
+  /** The search that fills this tab, "" when it runs its own. The account panel gives only running searches a resume. */
+  fed_by: text,
   // TRACK_CONFIG_FIELDS are on the payload too, but the page renders none of
   // them; listing them here would be a second copy of the server's config
   // vocabulary.
@@ -236,3 +238,32 @@ export type InviteReason = (typeof INVITE_REASONS)[number];
 export type RoleAnswer = z.infer<typeof roleAnswerSchema>;
 export type IntakeAnswers = z.infer<typeof intakeAnswersSchema>;
 export type Intake = z.infer<typeof intakeSchema>;
+
+/**
+ * One stored document, from `GET /api/documents`. The fields past `uploaded`
+ * are on resumes only: what the server could read of it, and which searches read
+ * it. A .docx carries the words and searches of the text read from it, and that
+ * text is listed too, with `paired_with` naming the .docx.
+ */
+export const storedResumeSchema = z.object({
+  path: str,
+  bytes: z.number().default(0),
+  uploaded: text,
+  readable: z.boolean().default(false),
+  words: z.number().nullish(),
+  text_path: z.string().optional(),
+  paired_with: z.string().optional(),
+  used_by: z
+    .array(
+      z.object({
+        /** A running search's key. */
+        search: str,
+        /** That search's tab first, then the tabs it fills. */
+        tabs: z.array(str),
+        /** "from_next_run" and "until_next_run" hold while a saved change waits for the search's next run. */
+        state: z.enum(["reads", "from_next_run", "until_next_run"]),
+      }),
+    )
+    .default([]),
+});
+export type StoredResume = z.infer<typeof storedResumeSchema>;

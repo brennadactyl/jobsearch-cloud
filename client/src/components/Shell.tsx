@@ -129,7 +129,7 @@ export default function Shell({
           </Routes>
         </main>
       </div>
-      <AccountPanel open={accountOpen} name={data.user.name} onClose={() => setAccountOpen(false)} />
+      <AccountPanel open={accountOpen} name={data.user.name} tracks={data.tracks} onClose={() => setAccountOpen(false)} />
     </div>
   );
 }
