@@ -344,12 +344,12 @@ describe("every input is reachable by the stylesheet", () => {
     assertAllTyped();
   });
 
-  it("in the password dialog", async () => {
+  it("in the account panel's password form", async () => {
     signedIn();
     renderApp();
     await screen.findByRole("heading", { name: "Fixture Search" });
-    await userEvent.click(screen.getByRole("button", { name: /signed in as/i }));
-    await screen.findByRole("dialog");
+    await userEvent.click(screen.getByRole("button", { name: "My account" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Change password" }));
     assertAllTyped();
   });
 });

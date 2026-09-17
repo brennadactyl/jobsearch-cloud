@@ -411,6 +411,23 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .pw-msg{font-size:12.5px;min-height:1em;line-height:1.45;color:var(--ink2)}
 .pw-msg.bad{color:var(--crit)}
 .pw-msg.good{color:var(--good)}
+/* The account panel: who is signed in, then one section per thing to change. */
+.account-panel{padding:0;width:100%;max-width:580px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;overflow:hidden}
+.account-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.account-head h3{font-size:17px}
+.account-who{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.account-close{font-size:15px;line-height:1}
+.account-body{overflow-y:auto;flex:1 1 auto}
+.account-section{padding:14px 20px;display:flex;flex-direction:column;gap:14px}
+.account-section+.account-section{border-top:1px solid var(--line)}
+.account-section-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.account-section h4{margin:0;font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-size:15px;font-weight:600}
+.account-section p{margin:3px 0 0;font-size:13px;color:var(--ink2)}
+.account-form{display:flex;flex-direction:column;gap:12px;max-width:400px}
+@media (max-width:700px){
+  .modal-overlay:has(.account-panel){padding:0}
+  .account-panel{max-width:none;height:100%;max-height:none;border-radius:0}
+}
 
 .stage-hist table{width:100%;border-collapse:collapse}
 .stage-hist tr+tr td,.stage-hist tr+tr th{border-top:1px solid var(--line)}
