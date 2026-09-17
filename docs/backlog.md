@@ -66,14 +66,6 @@ Kept by whoever is holding the product manager role.
 
 ## Small
 
-- **Three client readability refactors**, handed to Fullstack Friend with Client
-  Comrade reviewing, each behaviour-preserving with client tests unedited:
-  location tiers get one set of names in `domain/geo.ts` (`{ cssClass, label,
-  rank }`, a named tier-colour count), now that the `bits.tsx` split has merged
-  into location.tsx, listControls.tsx, RunStamp.tsx, Pill.tsx, TrashIcon.tsx and
-  detailFields.tsx; the
-  draft-held-until-settled timing in `writes.tsx` becomes a named hook; the sort
-  rules in `domain/rows.ts` become named helpers (blanks last, To Apply first).
 - A stray phrase in `prompt.js` step 3b, "when the named list reads as big
   tech", left over from per-search company lists. Next change that touches
   `prompt.js`.
