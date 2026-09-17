@@ -127,8 +127,8 @@ export const trackSchema = z.object({
 });
 
 /**
- * One ordered location-matching rule. `geo()` walks these in order and the
- * first match wins, so index is rank: 0 is the top tier.
+ * One ordered location-matching rule. `matchLocationTier()` walks these in
+ * order and the first match wins, so the index is the rank: 0 is the top tier.
  */
 export const priorityLocationSchema = z.object({
   label: str,

@@ -11,7 +11,7 @@ import { ALL_LEADS, LABELS, LEAD_STATUS } from "../domain/constants";
 import { ALL_FILTER, OPEN_FILTER, drillKeeps, leadFilterKeeps, leadRows, resolveLeadFilter } from "../domain/drills";
 import { leadColumns } from "../domain/export";
 import { safeUrl } from "../domain/format";
-import { geo } from "../domain/geo";
+import { matchLocationTier } from "../domain/geo";
 import { leadComparator } from "../domain/rows";
 import { runState } from "../domain/runs";
 import { buildTracks, pathForTab, pathWithoutDrill, trackCountLine } from "../domain/tabs";
@@ -231,12 +231,12 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
       <div className="md">
         <div className="md-list" ref={revealSelectedRow} data-wheel-target>
           {rows.map((l) => {
-            const g = geo(l.location, settings.priority_locations);
+            const g = matchLocationTier(l.location, settings.priority_locations);
             return (
               <SelectableRow
                 key={l.id}
                 selected={l.id === sel.id}
-                tierClass={g ? g.p : ""}
+                tierClass={g ? g.cssClass : ""}
                 onSelect={() => selectRow(trackKey, String(l.id))}
               >
                 <div className="md-row-top">
@@ -318,9 +318,9 @@ function LeadsGrid({
         </thead>
         <tbody>
           {rows.map((l) => {
-            const g = geo(l.location, settings.priority_locations);
+            const g = matchLocationTier(l.location, settings.priority_locations);
             const open = !!prefs.expanded[l.id];
-            const cls = [g ? g.p : "", l.id === shownId ? "gr-sel" : ""]
+            const cls = [g ? g.cssClass : "", l.id === shownId ? "gr-sel" : ""]
               .filter(Boolean)
               .join(" ");
             const toggle = () => toggleGridRow(trackKey, l.id);
@@ -393,7 +393,7 @@ function LeadDetail({
   onLeave: (lead: Lead, status: string) => LeavingView | undefined;
 }) {
   const { settings } = data;
-  const g = geo(lead.location, settings.priority_locations);
+  const g = matchLocationTier(lead.location, settings.priority_locations);
   const url = safeUrl(lead.url);
   return (
     <>
@@ -406,7 +406,7 @@ function LeadDetail({
           {g && (
             <>
               {" · "}
-              <span className={`geo ${g.p}`}>{g.label}</span>
+              <span className={`geo ${g.cssClass}`}>{g.label}</span>
             </>
           )}
           {url && (

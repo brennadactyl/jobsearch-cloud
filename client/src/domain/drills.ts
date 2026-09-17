@@ -12,7 +12,7 @@
 import type { Application, Lead, Screened, Settings, Track } from "../api/schema";
 import { ACTIVE, ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
 import { daysSince, localDay, shortDate, weekOf } from "./format";
-import { geo } from "./geo";
+import { matchLocationTier } from "./geo";
 import {
   FLOW_SEGMENT_LABELS,
   FLOW_SEGMENTS,
@@ -66,8 +66,8 @@ const base: Record<string, Drill> = {
     scope: "leads",
     label: (c) => `${c.settings.priority_locations[0]?.label ?? "Top locations"} · still open`,
     test: (l, c) => {
-      const g = geo(l.location, c.settings.priority_locations);
-      return !!g && g.i === 0 && l.status !== "Not a fit";
+      const g = matchLocationTier(l.location, c.settings.priority_locations);
+      return !!g && g.rank === 0 && l.status !== "Not a fit";
     },
   },
   "in-conversation": {
@@ -348,8 +348,8 @@ function sent(a: Application): boolean {
 
 /** A location's tier as a drill parameter: its rank, or `other`. */
 export function tierKey(location: string, settings: Settings): string {
-  const g = geo(location, settings.priority_locations);
-  return g ? String(g.i) : "other";
+  const g = matchLocationTier(location, settings.priority_locations);
+  return g ? String(g.rank) : "other";
 }
 
 function splitOnce(s: string): [string, string] {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { geo } from "./geo";
+import { matchLocationTier } from "./geo";
 import { locationRules, parseLocation, parseLocations, tooManyLocations } from "./locations";
 
 /** Location strings in the shapes postings write them. A rule is right when it ranks these. */
@@ -9,7 +9,7 @@ const REMOTE_US = [
 ];
 const MULTI_CITY = "Seattle, WA / Denver, CO / Austin, TX";
 
-const rank = (answer: string, location: string) => geo(location, locationRules(parseLocations(answer)))?.label ?? null;
+const tierLabel = (answer: string, location: string) => matchLocationTier(location, locationRules(parseLocations(answer)))?.label ?? null;
 
 describe("parseLocations", () => {
   it("keeps the order typed, and drops empty entries", () => {
@@ -23,12 +23,12 @@ describe("parseLocations", () => {
 
 describe("Remote with a country", () => {
   it.each(REMOTE_US)("matches %j, as postings write remote in the US", (location) => {
-    expect(rank("Remote US", location)).toBe("Remote US");
+    expect(tierLabel("Remote US", location)).toBe("Remote US");
   });
 
   it("doesn't match an on-site posting that happens to contain the letters us", () => {
-    expect(rank("Remote US", MULTI_CITY)).toBeNull();
-    expect(rank("Remote US", "Austin, TX")).toBeNull();
+    expect(tierLabel("Remote US", MULTI_CITY)).toBeNull();
+    expect(tierLabel("Remote US", "Austin, TX")).toBeNull();
   });
 
   it("reads back what it matches", () => {
@@ -38,28 +38,28 @@ describe("Remote with a country", () => {
 
   it("reads bare Remote as remote anywhere", () => {
     expect(parseLocation("Remote")).toMatchObject({ rule: { allOf: ["remote"] }, means: "remote, anywhere" });
-    expect(rank("Remote", "Remote (North America, incl. U.S.)")).toBe("Remote");
+    expect(tierLabel("Remote", "Remote (North America, incl. U.S.)")).toBe("Remote");
   });
 });
 
 describe("a city with its state", () => {
   it("matches only that state's city, for a name several places share", () => {
     for (const location of ["Portland, OR", "Portland, OR (Hybrid)", "Tacoma, WA / Portland, OR / multiple locations", "Portland OR"]) {
-      expect(rank("Portland OR", location), location).toBe("Portland OR");
+      expect(tierLabel("Portland OR", location), location).toBe("Portland OR");
     }
-    expect(rank("Portland Oregon", "Portland, Oregon")).toBe("Portland Oregon");
-    expect(rank("Portland OR", "Portland, ME")).toBeNull();
+    expect(tierLabel("Portland Oregon", "Portland, Oregon")).toBe("Portland Oregon");
+    expect(tierLabel("Portland OR", "Portland, ME")).toBeNull();
     // "or" as a word elsewhere in the string doesn't count as Oregon.
-    expect(rank("Portland OR", "Portland, ME (or Boston, MA)")).toBeNull();
+    expect(tierLabel("Portland OR", "Portland, ME (or Boston, MA)")).toBeNull();
   });
 
   it("knows Canadian provinces for the names shared across the border", () => {
-    expect(rank("Vancouver BC", "Vancouver, BC, Canada")).toBe("Vancouver BC");
-    expect(rank("Vancouver BC", "Vancouver, WA")).toBeNull();
+    expect(tierLabel("Vancouver BC", "Vancouver, BC, Canada")).toBe("Vancouver BC");
+    expect(tierLabel("Vancouver BC", "Vancouver, WA")).toBeNull();
   });
 
   it("matches any other city by name alone, so a posting that omits the state still ranks", () => {
-    expect(rank("Austin TX", "Austin/Denver/Chicago")).toBe("Austin TX");
+    expect(tierLabel("Austin TX", "Austin/Denver/Chicago")).toBe("Austin TX");
     expect(parseLocation("Austin TX")).toMatchObject({ means: "Austin, Texas" });
   });
 
@@ -70,8 +70,8 @@ describe("a city with its state", () => {
 
 describe("a plain city", () => {
   it("matches a posting that names it anywhere, including a multi-city posting", () => {
-    expect(rank("Seattle", MULTI_CITY)).toBe("Seattle");
-    expect(rank("Seattle", "Boulder, CO (also Chicago, Seattle, or remote)")).toBe("Seattle");
+    expect(tierLabel("Seattle", MULTI_CITY)).toBe("Seattle");
+    expect(tierLabel("Seattle", "Boulder, CO (also Chicago, Seattle, or remote)")).toBe("Seattle");
   });
 
   it("asks for the state rather than choosing, for a name several places share", () => {
@@ -79,17 +79,17 @@ describe("a plain city", () => {
   });
 
   it("expands the short forms people type", () => {
-    expect(rank("NYC", "New York, NY")).toBe("NYC");
-    expect(rank("SF", "San Francisco, CA")).toBe("SF");
+    expect(tierLabel("NYC", "New York, NY")).toBe("NYC");
+    expect(tierLabel("SF", "San Francisco, CA")).toBe("SF");
   });
 
   it("ranks a multi-city posting by the best city it mentions anywhere", () => {
-    expect(rank("Seattle, Bellevue", "Boulder, CO (also Bellevue, Seattle)")).toBe("Seattle");
+    expect(tierLabel("Seattle, Bellevue", "Boulder, CO (also Bellevue, Seattle)")).toBe("Seattle");
   });
 
   it("ranks the first entry a posting matches", () => {
-    expect(rank("Bellevue, Seattle", MULTI_CITY)).toBe("Seattle");
-    expect(rank("Seattle, Remote US", "Seattle, WA (Remote - US)")).toBe("Seattle");
+    expect(tierLabel("Bellevue, Seattle", MULTI_CITY)).toBe("Seattle");
+    expect(tierLabel("Seattle, Remote US", "Seattle, WA (Remote - US)")).toBe("Seattle");
   });
 });
 

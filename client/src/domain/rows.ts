@@ -1,6 +1,6 @@
 import type { Application, Lead, PriorityLocation } from "../api/schema";
 import { safeUrl } from "./format";
-import { rank } from "./geo";
+import { tierRank } from "./geo";
 import { isWaiting, lastMoved } from "./stages";
 
 /**
@@ -19,7 +19,7 @@ export function leadComparator(
     const na = a.status === "Not a fit" ? 1 : 0;
     const nb = b.status === "Not a fit" ? 1 : 0;
     if (na !== nb) return na - nb;
-    const d = rank(a, rules) - rank(b, rules);
+    const d = tierRank(a, rules) - tierRank(b, rules);
     if (d) return d;
     return String(b.found).localeCompare(String(a.found));
   };

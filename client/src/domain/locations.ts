@@ -2,8 +2,8 @@
  * Turns the setup form's "Which locations should come first?" answer - places
  * in order of preference, comma-separated - into `priority_locations` rules.
  *
- * geo() matches a rule's terms as lowercase substrings of a posting's location,
- * and postings spell places many ways ("Remote (U.S.)", "USA - Remote"). So a
+ * matchLocationTier() matches a rule's terms as lowercase substrings of a
+ * posting's location, and postings spell places many ways ("Remote (U.S.)", "USA - Remote"). So a
  * typed entry is expanded here from fixed tables rather than matched as typed,
  * and the same entry always produces the same rule. No term is a bare word of
  * three letters or fewer: "us" is inside "Austin", "ca" inside "Chicago".
