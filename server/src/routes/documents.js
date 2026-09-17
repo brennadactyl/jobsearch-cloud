@@ -94,7 +94,8 @@ function missingBucket(docs) {
  *
  * - `readable`: whether a search can be pointed at it (../resumes.js
  *   isChoosableResume).
- * - `text_path` on a Word file, the text a search reads for it, and
+ * - `text_path` on a Word file, the text a search reads for it (null when none
+ *   is stored beside it), and
  *   `paired_with` on that text, the Word file it was read from. The page shows
  *   the pair as the Word file.
  * - `used_by`: `[{search, tabs, state}]`, which searches read it and the tabs
