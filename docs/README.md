@@ -28,6 +28,7 @@ reference docs above are the authority.
 - [`react-adoption-plan.md`](react-adoption-plan.md) — the tracker page rebuilt in React, beside the one that ships
 - [`rotation-always-on-plan.md`](rotation-always-on-plan.md) — every search rotates through its companies
 - [`one-company-list-plan.md`](one-company-list-plan.md) — one global company list that every search indexes into
+- [`team-setup-plan.md`](team-setup-plan.md) — the team’s roles and rules live in the repo, and one skill brings the teammates up on any PC
 - [`word-resumes-plan.md`](word-resumes-plan.md) — a .docx resume is read by extracting its text on upload
 - [`token-split-plan.md`](token-split-plan.md) — a machine’s token can report findings, not act as the person
 - [`account-settings-plan.md`](account-settings-plan.md) — a person edits their own search where the password dialog already is
