@@ -74,23 +74,35 @@ describe("joinNames", () => {
 });
 
 describe("attachRefusal", () => {
-  const stored = [resume("resumes/Eng.pdf")];
+  const stored = [
+    resume("resumes/Eng.pdf", { used_by: [{ search: "ai", tabs: ["ai"], state: "reads" }] }),
+    resume("resumes/AI.docx", { text_path: "resumes/AI.txt", used_by: [{ search: "gaming", tabs: ["gaming"], state: "reads" }] }),
+    resume("resumes/AI.txt", { paired_with: "resumes/AI.docx", used_by: [{ search: "gaming", tabs: ["gaming"], state: "reads" }] }),
+    resume("resumes/Spare.pdf"),
+  ];
+  const labelOf = (key: string) => ({ ai: "Eng - AI", gaming: "Eng - Gaming" })[key] ?? key;
 
   it("lets a readable file under a new name through", () => {
-    expect(attachRefusal("AI.docx", 5000, "resumes/AI.docx", stored)).toBeNull();
+    expect(attachRefusal("New.docx", 5000, "resumes/New.docx", stored, labelOf)).toBeNull();
   });
 
   it("refuses before uploading: too big, the older Word format, or a format no search reads", () => {
-    expect(attachRefusal("Portfolio.pdf", 11.4 * 1024 * 1024, "resumes/Portfolio.pdf", stored)).toBe(
+    expect(attachRefusal("Portfolio.pdf", 11.4 * 1024 * 1024, "resumes/Portfolio.pdf", stored, labelOf)).toBe(
       "Portfolio.pdf wasn't attached: it's 11.4 MB, and files can be up to 8 MB.",
     );
-    expect(attachRefusal("Old.doc", 100, "resumes/Old.doc", stored)).toContain("older Word format");
-    expect(attachRefusal("scan.png", 100, "resumes/scan.png", stored)).toContain("can read PDF, Word (.docx), .txt or .md");
+    expect(attachRefusal("Old.doc", 100, "resumes/Old.doc", stored, labelOf)).toContain("older Word format");
+    expect(attachRefusal("scan.png", 100, "resumes/scan.png", stored, labelOf)).toContain("can read PDF, Word (.docx), .txt or .md");
   });
 
-  it("refuses a name already stored, in any case, since storing over it would change a search without a Save", () => {
-    expect(attachRefusal("eng.PDF", 100, "resumes/eng.PDF", stored)).toBe(
-      "eng.PDF wasn't attached: you already have a resume called eng.PDF. Rename it and attach it again.",
+  it("refuses a name a search reads, in any case, since storing over it would change that search without a Save", () => {
+    expect(attachRefusal("eng.PDF", 100, "resumes/eng.PDF", stored, labelOf)).toBe(
+      "Eng - AI reads a resume called eng.PDF. Attach this one under a new name, then choose it and save.",
     );
+    // A Word file and its text are one resume: pasting over the text is the same change.
+    expect(attachRefusal("AI.txt", 100, "resumes/AI.txt", stored, labelOf)).toContain("Eng - Gaming reads");
+  });
+
+  it("lets a same-name file replace one no search reads, since nothing changes for any search", () => {
+    expect(attachRefusal("Spare.pdf", 100, "resumes/Spare.pdf", stored, labelOf)).toBeNull();
   });
 });

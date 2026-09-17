@@ -70,14 +70,18 @@ export function joinNames(names: readonly string[]): string {
 
 /**
  * Why a file can't be attached, before anything uploads, or null when it can.
- * A name already listed is refused too: storing over it would change what a
- * search reads without a Save.
+ *
+ * A name some search reads is refused too: storing over it would change what
+ * that search reads without a Save. The same name on a file no search reads
+ * just replaces it. The server allows both, so that an operator's import can
+ * restore a backup over existing paths; this rule is the panel's.
  */
 export function attachRefusal(
   name: string,
   bytes: number,
   storedPath: string,
-  stored: readonly { path: string }[],
+  stored: readonly StoredResume[],
+  labelOf: (search: string) => string,
 ): string | null {
   if (bytes > MAX_FILE_BYTES) {
     return `${name} wasn't attached: it's ${(bytes / 1024 / 1024).toFixed(1)} MB, and files can be up to 8 MB.`;
@@ -88,8 +92,14 @@ export function attachRefusal(
   if (!isReadableResume(name)) {
     return `${name} wasn't attached: a search can read PDF, Word (.docx), .txt or .md files.`;
   }
-  if (stored.some((d) => d.path.toLowerCase() === storedPath.toLowerCase())) {
-    return `${name} wasn't attached: you already have a resume called ${fileNameOf(storedPath)}. Rename it and attach it again.`;
+  const same = (path: string | undefined) => path?.toLowerCase() === storedPath.toLowerCase();
+  // A Word file and the text read from it are one resume, so either name counts.
+  const readers = stored
+    .filter((d) => same(d.path) || same(d.text_path) || same(d.paired_with))
+    .flatMap((d) => d.used_by.map((u) => u.search));
+  const searches = [...new Set(readers)].map(labelOf);
+  if (searches.length) {
+    return `${joinNames(searches)} ${searches.length === 1 ? "reads" : "read"} a resume called ${fileNameOf(storedPath)}. Attach this one under a new name, then choose it and save.`;
   }
   return null;
 }

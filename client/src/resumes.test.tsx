@@ -106,7 +106,7 @@ describe("attaching a resume", () => {
     expect(screen.queryByText(/unsaved change/)).toBeNull();
   });
 
-  it("refuses an older .doc, and a name already listed, without uploading", async () => {
+  it("refuses an older .doc, and a name a search reads, without uploading", async () => {
     const put = vi.spyOn(client, "putDocument");
     await openResumes();
     // The picker hints at the readable types, but "All files" still lets anything through.
@@ -116,7 +116,9 @@ describe("attaching a resume", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Old.doc wasn't attached: it's the older Word format");
 
     await user.upload(screen.getByLabelText("Attach a resume"), new File(["x"], "Brenna_Engineering.pdf"));
-    expect(screen.getByRole("alert")).toHaveTextContent("you already have a resume called Brenna_Engineering.pdf");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Eng - Gaming and Eng - AI read a resume called Brenna_Engineering.pdf. Attach this one under a new name, then choose it and save.",
+    );
     expect(put).not.toHaveBeenCalled();
   });
 

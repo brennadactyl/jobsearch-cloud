@@ -90,7 +90,7 @@ export default function ResumeSection({
 
   async function store(name: string, path: string, body: Blob, how: "uploaded" | "pasted"): Promise<boolean> {
     setRemoving(null);
-    const refusal = attachRefusal(name, body.size, path, stored);
+    const refusal = attachRefusal(name, body.size, path, stored, labelOf);
     if (refusal) {
       setAttachMsg({ text: refusal, tone: "bad" });
       return false;
