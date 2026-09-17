@@ -61,7 +61,7 @@ Kept by whoever is holding the product manager role.
   strangers' resumes it needs a retention policy and a deletion path a person
   can invoke themselves. The delete-account route is the operator half of this.
 - **Company discovery as its own nightly job**
-  ([company-discovery-plan.md](company-discovery-plan.md), unmerged) - searches
+  (planned on the unmerged `company-discovery-plan` branch) - searches
   re-evaluate the same companies on the same nights.
 
 ## Small
@@ -69,7 +69,9 @@ Kept by whoever is holding the product manager role.
 - **Three client readability refactors**, handed to Fullstack Friend with Client
   Comrade reviewing, each behaviour-preserving with client tests unedited:
   location tiers get one set of names in `domain/geo.ts` (`{ cssClass, label,
-  rank }`, a named tier-colour count), after the `bits.tsx` split merges; the
+  rank }`, a named tier-colour count), now that the `bits.tsx` split has merged
+  into location.tsx, listControls.tsx, RunStamp.tsx, Pill.tsx, TrashIcon.tsx and
+  detailFields.tsx; the
   draft-held-until-settled timing in `writes.tsx` becomes a named hook; the sort
   rules in `domain/rows.ts` become named helpers (blanks last, To Apply first).
 - A stray phrase in `prompt.js` step 3b, "when the named list reads as big
