@@ -713,6 +713,18 @@ const listed = buildSearchPrompt({
   const docStep = plain.split("\n").find((l) => l.startsWith("8b. ")) || "";
   check("the default doc-update step sends a fit or scope refinement to the report, not the doc",
     docStep.includes("is not a doc edit") && docStep.includes("step-10 report") && !/update the relevant section/.test(docStep));
+  check("with no budget passed, step 8b states the default doc budget",
+    docStep.includes("Add at most 1000 bytes to the doc in this run"));
+  const withOverride = buildSearchPrompt({
+    user: { id: "u", name: "Nobody" },
+    track: { key: "T", label: "T", full_description: "t", role_search_line: "r", doc_update_line: "Custom doc rule." },
+    settings: {},
+    feeds: [],
+    docBudget: 1234,
+  });
+  const overrideStep = withOverride.split("\n").find((l) => l.startsWith("8b. ")) || "";
+  check("a track's own doc-update line still carries the budget it was given",
+    overrideStep.startsWith("8b. Custom doc rule. Add at most 1234 bytes"));
   check("and asks for a doc stated as it stands, not dated notes",
     docStep.includes("correct a line in place") && docStep.includes("dated note"));
 }
@@ -725,6 +737,17 @@ check("a deployment with an empty company list still gets every rotation step",
   bareSteps.includes("1c. Get this run's companies")
   && bareSteps.includes("9d. RECORD WHAT YOU COVERED")
   && bareSteps.includes("9e. REPLACE THE COMPANIES YOU COULDN'T READ"));
+
+// The runner passes the doc budget it enforces; the route must print it, and
+// must never fail a night's prompt over a bad value.
+const budgetStep = (t) => t.split("\n").find((l) => l.startsWith("8b. ")) || "";
+check("GET /api/prompt passes ?doc_budget into step 8b",
+  budgetStep((await req("GET", "/api/prompt/SWE?doc_budget=1000", { token: A_TOK })).text).includes("at most 1000 bytes")
+  && budgetStep((await req("GET", "/api/prompt/SWE?doc_budget=2500", { token: A_TOK })).text).includes("at most 2500 bytes"));
+check("a doc_budget that isn't a whole number in range falls back to the default rather than failing the request",
+  (await Promise.all(["abc", "-5", "12.5", "50", "99999", ""].map((v) =>
+    req("GET", `/api/prompt/SWE?doc_budget=${encodeURIComponent(v)}`, { token: A_TOK }))))
+    .every((r) => r.status === 200 && budgetStep(r.text).includes("at most 1000 bytes")));
 
 // ---- Every call the nightly run has to make, still reachable from the text.
 //

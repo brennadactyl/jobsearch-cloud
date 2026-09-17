@@ -36,6 +36,12 @@ function joinAnd(parts) {
   return p.slice(0, -1).join(", ") + ", and " + p[p.length - 1];
 }
 
+// How much a run may add to its doc in one night, when the caller names no
+// budget. run-search.ps1 passes its own and refuses an edit well over it, so the
+// number a run is told and the number it is held to come from one place; this
+// default is what a prompt read without one shows.
+export const DEFAULT_DOC_BUDGET_BYTES = 1000;
+
 const DEFAULT_LOCATION_GUIDANCE =
   "Write accurate location strings - the tracker derives priority from them " +
   "automatically, so precision matters. There is no priority field to set - " +
@@ -154,8 +160,8 @@ function tabsThisRunFills(track, feeds) {
  * follows. A dated note costs every later run a read, and outlives the
  * thing it described.
  */
-function docUpdateLine(track, doc) {
-  return (
+function docUpdateLine(track, doc, docBudget) {
+  const rule =
     track.doc_update_line ||
     'If this run learned something worth keeping that has nowhere else to go - ' +
       'why a company outside the shared list was tried, and what came of it - add ' +
@@ -166,7 +172,11 @@ function docUpdateLine(track, doc) {
       'to change there. A blocked domain or a working URL format is not a doc edit ' +
       'either: it is a `wall`, `endpoint` or `url_shape` in step 9d, where every ' +
       'search reads it. Do not add a found-postings table or a screened/dead-link ' +
-      'list to the doc; those live in the tracker only.'
+      'list to the doc; those live in the tracker only.';
+  // Said for every track, override or not: the runner holds every doc to it.
+  return (
+    `${rule} Add at most ${docBudget} bytes to the doc in this run - one short line per company. ` +
+    'An edit far over that is not saved, and everything it added is lost.'
   );
 }
 
@@ -312,12 +322,13 @@ function runFanoutNote({ fed, multi }) {
 }
 
 /**
- * @param {{user: {id: string, name: string}, track: import("./db.js").Track, settings: import("./db.js").Settings, feeds?: import("./db.js").Track[]}} args
+ * @param {{user: {id: string, name: string}, track: import("./db.js").Track, settings: import("./db.js").Settings, feeds?: import("./db.js").Track[], docBudget?: number}} args
  * @param {import("./db.js").Track[]} [args.feeds] tracks whose `fed_by` names
  *   this one - tabs this run also fills. See docs/glossary.md#searches-and-tracks.
+ * @param {number} [args.docBudget] bytes step 8b says a run may add to its doc.
  * @returns {string} the full prompt text
  */
-export function buildSearchPrompt({ user, track, settings, feeds }) {
+export function buildSearchPrompt({ user, track, settings, feeds, docBudget = DEFAULT_DOC_BUDGET_BYTES }) {
   const name = user.name;
   const pn = PRONOUNS[settings.pronouns] || PRONOUNS["they/them"];
   const key = track.key;
@@ -357,7 +368,7 @@ export function buildSearchPrompt({ user, track, settings, feeds }) {
   // The fragments that depend on this track, settings or tabs, each built by a
   // function above.
   const alsoFills = alsoFillsHeader(tabs);
-  const docUpdate = docUpdateLine(track, doc);
+  const docUpdate = docUpdateLine(track, doc, docBudget);
   const exclusion = exclusionNote(settings);
   const resume = resumeLine(track);
   const profileRefresh = profileRefreshStep(track, doc);
