@@ -156,7 +156,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
     <>
       {toolbar}
       <div className="md">
-        <div className="md-list" ref={revealSelectedRow}>
+        <div className="md-list" ref={revealSelectedRow} data-wheel-target>
           {rows.map((a) => {
             const g = geo(a.location, settings.priority_locations);
             const d = daysSince(a.dateApplied);

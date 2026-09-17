@@ -54,7 +54,7 @@ function AccountDialog({ name, tracks, onClose }: Omit<Props, "open">) {
             ✕
           </button>
         </div>
-        <div className="account-body">
+        <div className="account-body" data-wheel-target>
           <PasswordSection />
           <ResumeSection tracks={tracks} onUnsaved={onUnsaved} />
         </div>

@@ -123,7 +123,7 @@ export default function Overview({
         })}
       </div>
 
-      <div className={`panel-scroll${scrolled ? " scrolled" : ""}`} ref={scrollRef} onScroll={onScroll}>
+      <div className={`panel-scroll${scrolled ? " scrolled" : ""}`} ref={scrollRef} onScroll={onScroll} data-wheel-target>
         {/* What a person acts on first; the longer view last. */}
         <FoldLayer>
           <SearchesSection data={data} trackKeys={trackKeys} tracks={tracks} />
