@@ -2,7 +2,7 @@
  * Editable controls. A field commits on blur, not per keystroke - the right
  * granularity for text someone is still typing.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent, type FocusEvent } from "react";
 import type { Application, Lead } from "../api/schema";
 import { useSetApplicationStatus, useSetLeadStatus, useUpdateField, type LeavingView } from "../api/mutations";
 import { APP_STAGE_DATE_MAP, APP_STATUS, LEAD_STATUS } from "../domain/constants";
@@ -11,7 +11,35 @@ import { today } from "../domain/format";
 /** Stages booked ahead, so the date logged is often in the future; the dialog asks accordingly. */
 const STAGE_SCHEDULED = new Set(["Recruiter Screen", "Tech Screen", "Onsite / Loop"]);
 
-/** Shows the local draft while there is one, so a refetch landing mid-edit can't replace the text under the cursor. */
+/**
+ * One field's text while someone is typing it: the draft is shown while there
+ * is one, so a refetch landing mid-edit can't replace the text under the
+ * cursor, and it is committed on blur.
+ *
+ * The draft outlives the save's start on purpose. The optimistic patch lands a
+ * tick later (onMutate awaits cancelQueries), so clearing on mutate would flash
+ * the old value; by onSettled the cache holds the new value or the rollback.
+ */
+function useDraftUntilSaved(kind: "lead" | "application", id: number, field: string, serverValue: string) {
+  const update = useUpdateField();
+  const [draft, setDraft] = useState<string | null>(null);
+
+  return {
+    value: draft ?? serverValue,
+    onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
+    // Read the value from the event, not `draft`: the last keystroke's state may
+    // not have committed when blur runs, and a stale draft skips the save.
+    onBlur: (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      if (value === serverValue) {
+        setDraft(null);
+        return;
+      }
+      update.mutate({ kind, id, field, value }, { onSettled: () => setDraft(null) });
+    },
+  };
+}
+
 export function EditableField({
   row,
   kind,
@@ -32,41 +60,21 @@ export function EditableField({
   /** Width in characters - the application header's location input sizes itself to its value. */
   size?: number;
 }) {
-  const update = useUpdateField();
-  const serverValue = ((row as unknown as Record<string, string>)[field] ?? "");
-  const [draft, setDraft] = useState<string | null>(null);
-  const value = draft ?? serverValue;
+  const draft = useDraftUntilSaved(kind, row.id, field, (row as unknown as Record<string, string>)[field] ?? "");
 
   return (
     <input
       type={type}
       className={className}
       size={size}
-      value={value}
       placeholder={placeholder}
       aria-label={ariaLabel ?? field}
-      onChange={(e) => setDraft(e.target.value)}
-      // Read the value from e.target, not `draft`: the last keystroke's state
-      // may not have committed when blur runs, and a stale draft skips the save.
-      onBlur={(e) => {
-        const value = e.target.value;
-        if (value === serverValue) {
-          setDraft(null);
-          return;
-        }
-        // Hold the draft until onSettled. The optimistic patch lands a tick
-        // later (onMutate awaits cancelQueries), so clearing now flashes the old
-        // value; by onSettled the cache holds the new value or the rollback.
-        update.mutate(
-          { kind, id: row.id, field, value },
-          { onSettled: () => setDraft(null) },
-        );
-      }}
+      {...draft}
     />
   );
 }
 
-/** Same commit-on-blur contract as EditableField, and the same reason for reading the event. */
+/** Same commit-on-blur contract as EditableField. */
 export function EditableNotes({
   row,
   kind,
@@ -76,31 +84,9 @@ export function EditableNotes({
   kind: "lead" | "application";
   placeholder?: string;
 }) {
-  const update = useUpdateField();
-  const serverValue = row.notes ?? "";
-  const [draft, setDraft] = useState<string | null>(null);
+  const draft = useDraftUntilSaved(kind, row.id, "notes", row.notes ?? "");
 
-  return (
-    <textarea
-      rows={3}
-      placeholder={placeholder}
-      aria-label="Notes"
-      value={draft ?? serverValue}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={(e) => {
-        const value = e.target.value;
-        if (value === serverValue) {
-          setDraft(null);
-          return;
-        }
-        // Held until settled, same as EditableField - see the note there.
-        update.mutate(
-          { kind, id: row.id, field: "notes", value },
-          { onSettled: () => setDraft(null) },
-        );
-      }}
-    />
-  );
+  return <textarea rows={3} placeholder={placeholder} aria-label="Notes" {...draft} />;
 }
 
 export function LeadStatusSelect({
