@@ -10,7 +10,9 @@
  *
  * What one search did with each company - when it last tried, what it noted,
  * where its cursor is - is that search's own, and stays on Db
- * (getCoverage, recordSweeps, getSweepCursor, setSweepCursor).
+ * (getCoverage, recordSweeps, getSweepCursor, setSweepCursor). The one
+ * exception is cleanUpCompanies, an operator's merge, which has to carry every
+ * search's record of a company across with it.
  *
  * addCompanies and upsertCompanyFetch change what every account's searches are
  * served, so a caller refuses a demo account before either write, as
@@ -19,6 +21,7 @@
  */
 
 import { ID_CHUNK } from "./db.js";
+import { namedKeys, planCleanup } from "./company-cleanup.js";
 import { normalize as normalizeCompany } from "./exclude.js";
 import { dateDaysAgo, today } from "./validate.js";
 
@@ -201,5 +204,80 @@ export class CompanyList {
       rows.map((i) => stmt.bind(normalizeCompany(i.company), String(i.company).trim(), i.position))
     );
     return res.reduce((n, x) => n + (x.meta.changes || 0), 0);
+  }
+
+  /**
+   * Merge duplicate companies and rename acquired ones, as ../company-cleanup.js
+   * plans it, in one transaction.
+   *
+   * The one method here that reads and writes company_sweeps, which is every
+   * search's own record: a merge has to move each search's record of the
+   * absorbed company onto the kept one, across every account, or those searches
+   * would lose when they last tried it. The route is ADMIN_TOKEN only.
+   *
+   * Positions are left as they are. A kept company keeps its place, an absorbed
+   * one leaves a gap, and gaps are ordinary (Db.setSweepCursor): a cursor reads
+   * "the first position at or after me", so no search skips or repeats a
+   * stretch of the list.
+   *
+   * @param {Object} body see planCleanup
+   * @param {boolean} dryRun plan and report, write nothing
+   * @returns {Promise<{error: string, status: number} | {changes: import("./company-cleanup.js").Change[]}>}
+   */
+  async cleanUpCompanies(body, dryRun) {
+    const keys = [...new Set(namedKeys(body))];
+    const inList = (col) => `${col} IN (${keys.map(() => "?").join(",")})`;
+    const [fetched, swept] = keys.length
+      ? await this.d1.batch([
+          this.d1.prepare(`SELECT * FROM company_fetch WHERE ${inList("company_key")}`).bind(...keys),
+          this.d1
+            .prepare(`SELECT user_id, search, company_key, last_swept, note FROM company_sweeps WHERE ${inList("company_key")}`)
+            .bind(...keys),
+        ])
+      : [{ results: [] }, { results: [] }];
+    const plan = planCleanup(body, fetched.results, swept.results);
+    if ("error" in plan || dryRun) return plan;
+
+    const statements = [];
+    for (const c of plan.changes) {
+      const old = [c.from_key, ...c.absorbed_keys];
+      const placeholders = old.map(() => "?").join(",");
+      statements.push(
+        this.d1.prepare(`DELETE FROM company_sweeps WHERE company_key IN (${placeholders})`).bind(...old)
+      );
+      if (c.absorbed_keys.length) {
+        statements.push(
+          this.d1
+            .prepare(`DELETE FROM company_fetch WHERE company_key IN (${c.absorbed_keys.map(() => "?").join(",")})`)
+            .bind(...c.absorbed_keys)
+        );
+      }
+      const r = c.row;
+      statements.push(
+        this.d1
+          .prepare(
+            `UPDATE company_fetch
+                SET company_key = ?, display_name = ?, board = ?, endpoint = ?, url_shape = ?, dead_signal = ?,
+                    note = ?, verified_on = ?, wall = ?, wall_first_on = ?, wall_last_on = ?, wall_dates = ?
+              WHERE company_key = ?`
+          )
+          .bind(
+            r.company_key, r.display_name, r.board, r.endpoint, r.url_shape, r.dead_signal,
+            r.note, r.verified_on, r.wall, r.wall_first_on, r.wall_last_on, r.wall_dates,
+            c.from_key
+          )
+      );
+      for (const s of c.sweeps) {
+        statements.push(
+          this.d1
+            .prepare(
+              "INSERT INTO company_sweeps (user_id, search, company_key, last_swept, note) VALUES (?, ?, ?, ?, ?)"
+            )
+            .bind(s.user_id, s.search, s.company_key, s.last_swept, s.note)
+        );
+      }
+    }
+    await this.d1.batch(statements);
+    return plan;
   }
 }

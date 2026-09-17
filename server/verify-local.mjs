@@ -2885,5 +2885,84 @@ check("another person can't choose this person's resume for their own search of 
 check("and this person's searches are unchanged by it",
   JSON.stringify((await searchDocs(R, "SWE"))?.documents?.map((d) => d.path)) ===
   JSON.stringify(["docs/tracked_swe_postings.md", "resumes/Pasted.txt", "reference/notes.txt"]));
+
+console.log("\n== cleaning up the shared company list ==");
+// Merging two spellings of one employer and renaming an acquired one
+// (src/company-clCleanup.js). The list is shared and outlives a run, so every
+// name carries this run's stamp.
+const clRun = Date.now();
+const clUser = async (tag) => {
+  const name = `Cleanup ${tag} ${clRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: `clCleanup-${tag}-long-password` } });
+  const token = (await req("POST", "/api/login", { body: { name, password: `clCleanup-${tag}-long-password` } })).json.token;
+  await req("POST", "/api/config", { token, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+  return token;
+};
+const CL_A = await clUser("a"), CL_B = await clUser("b");
+const CL_KEEP = `Merge Keep ${clRun}`, CL_ABSORB = `Merge Absorb ${clRun}`, CL_OLD = `Acquired Co ${clRun}`, CL_NEW = `Acquirer Co ${clRun}`;
+const clSweep = (token, on, swept) => req("POST", "/api/coverage", { token, body: { search: "SWE", on, swept } });
+await clSweep(CL_A, "", [
+  { company: CL_KEEP, endpoint: "https://keep.example/jobs" },
+  { company: CL_ABSORB, board: "greenhouse", endpoint: "https://absorb.example/jobs", url_shape: "https://absorb.example/job/{id}", dead_signal: "404" },
+  { company: CL_OLD, url_shape: "https://old-tenant.example/job/{id}" },
+]);
+await clSweep(CL_A, "2026-09-01", [{ company: CL_KEEP, note: "a on keep" }]);
+await clSweep(CL_A, "2026-09-05", [{ company: CL_ABSORB }]);
+await clSweep(CL_A, "2026-09-04", [{ company: CL_OLD, note: "a on old" }]);
+await clSweep(CL_B, "2026-09-03", [{ company: CL_ABSORB, note: "b on absorb" }]);
+
+const clAll = async (token) => (await req("GET", "/api/coverage/SWE?all=1", { token })).json;
+const clFind = (list, name) => (list?.companies || []).find((c) => c.company === name);
+const clBeforeA = await clAll(CL_A);
+const clKeepPos = clFind(clBeforeA, CL_KEEP)?.position, clOldPos = clFind(clBeforeA, CL_OLD)?.position;
+const clCleanup = (body) => req("POST", "/api/companies/cleanup", { admin: true, body });
+const clBody = { merges: [{ keep: CL_KEEP, absorb: [CL_ABSORB] }], renames: [{ from: CL_OLD, to: CL_NEW, clear_facts: true }] };
+
+check("cleaning up the company list needs the admin token",
+  (await req("POST", "/api/companies/cleanup", { token: CL_A, body: clBody })).status === 401);
+for (const [why, body, status] of [
+  ["nothing asked for", {}, 400],
+  ["a name not on the list", { merges: [{ keep: CL_KEEP, absorb: [`Nobody ${clRun}`] }] }, 404],
+  ["a company named twice", { merges: [{ keep: CL_KEEP, absorb: [CL_ABSORB] }], renames: [{ from: CL_ABSORB, to: `Else ${clRun}` }] }, 400],
+  ["a new name already on the list", { renames: [{ from: CL_OLD, to: CL_KEEP }] }, 409],
+  ["a merge with nothing to absorb", { merges: [{ keep: CL_KEEP, absorb: [] }] }, 400],
+]) {
+  const res = await clCleanup(body);
+  check(`a clCleanup is refused: ${why}`, res.status === status && !!res.json?.error, JSON.stringify(res.json));
+}
+const clPartBad = await clCleanup({ merges: [{ keep: CL_KEEP, absorb: [CL_ABSORB] }], renames: [{ from: `Nobody ${clRun}`, to: CL_NEW }] });
+check("one refused change refuses the whole request, and nothing is written",
+  clPartBad.status === 404 && !!clFind(await clAll(CL_A), CL_ABSORB));
+
+const clDry = await clCleanup({ ...clBody, dryRun: true });
+check("a dry run reports the changes and writes nothing",
+  clDry.status === 200 && clDry.json?.dryRun === true && clDry.json?.changes?.length === 2 &&
+  !!clFind(await clAll(CL_A), CL_ABSORB) && !!clFind(await clAll(CL_A), CL_OLD), JSON.stringify(clDry.json));
+
+const clDone = await clCleanup(clBody);
+const clAfterA = await clAll(CL_A), clAfterB = await clAll(CL_B);
+const clKept = clFind(clAfterA, CL_KEEP);
+check("a merge leaves one company, in the clKept one's place, and the absorbed one gone",
+  clDone.status === 200 && clDone.json?.dryRun === false && clKept?.position === clKeepPos &&
+  !clFind(clAfterA, CL_ABSORB) && clAfterA.total === clBeforeA.total - 1, JSON.stringify({ clKept, total: [clBeforeA.total, clAfterA.total] }));
+check("the kept company's facts win, and the absorbed one fills only what was empty",
+  clKept?.known?.endpoint === "https://keep.example/jobs" && clKept?.known?.board === "greenhouse" &&
+  clKept?.known?.url_shape === "https://absorb.example/job/{id}" && clKept?.known?.dead_signal === "404", JSON.stringify(clKept?.known));
+check("each search keeps one record of the company, the most recent sweep's, with the note it had",
+  clKept?.last_swept === "2026-09-05" && clKept?.note === "a on keep", JSON.stringify(clKept));
+check("a search that only knew the absorbed spelling has its record moved to the kept company",
+  clFind(clAfterB, CL_KEEP)?.last_swept === "2026-09-03" && clFind(clAfterB, CL_KEEP)?.note === "b on absorb", JSON.stringify(clFind(clAfterB, CL_KEEP)));
+const clRenamed = clFind(clAfterA, CL_NEW);
+check("a rename keeps the company's place and each search's record under the new name",
+  clRenamed?.position === clOldPos && clRenamed?.last_swept === "2026-09-04" && clRenamed?.note === "a on old" && !clFind(clAfterA, CL_OLD),
+  JSON.stringify(clRenamed));
+check("clear_facts drops what was known about the old careers site",
+  !clRenamed?.known, JSON.stringify(clRenamed?.known));
+check("the search's cursor is untouched",
+  clAfterA.cursor === clBeforeA.cursor);
+const clRespelled = await clSweep(CL_A, "2026-09-06", [{ company: CL_NEW.toUpperCase() }]);
+check("a run reporting the new name in another spelling lands on the clRenamed company",
+  clRespelled.json?.added === 0 && clFind(await clAll(CL_A), CL_NEW)?.last_swept === "2026-09-06", JSON.stringify(clRespelled.json));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

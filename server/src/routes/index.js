@@ -27,7 +27,7 @@ import {
   handleLogout,
   handleUpsertUser,
 } from "./accounts.js";
-import { handlePurgeSearch } from "./admin.js";
+import { handleCleanUpCompanies, handlePurgeSearch } from "./admin.js";
 import {
   handleDeleteApplication,
   handleGetAutofillQueue,
@@ -108,6 +108,9 @@ export const ADMIN_ROUTES = [
   ["DELETE", /^\/api\/users\/([^/]+)$/, handleDeleteUser],
   // Removing the rows a retired search left behind, for the account named in the body.
   ["POST", "/api/purge", handlePurgeSearch],
+  // Merging duplicate companies and renaming acquired ones, on the list every
+  // account shares.
+  ["POST", "/api/companies/cleanup", handleCleanUpCompanies],
 ];
 
 /**
