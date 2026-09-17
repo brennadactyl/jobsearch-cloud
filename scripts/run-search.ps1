@@ -222,6 +222,32 @@ function Record-FailedRun($reason) {
 # of fetch notes doesn't. A doc may always shrink.
 $DocGrowthLimitBytes = 1500
 
+# ---- The one section a profile refresh may rewrite. ------------------------
+#
+# When a search's resume has changed, its run rewrites the profile drawn from
+# the old one (the prompt's step 2b). The prompt asks it to leave the rest of
+# the doc alone; this is what holds it to that. Everything outside the section
+# must come back exactly as it arrived, so a refresh can't quietly drop the
+# fetch notes and fit reasoning earlier runs built up.
+#
+# The section runs from the first line starting "## Candidate Profile" to the
+# next "## " heading. Live docs title it differently ("& Role Fit",
+# "(from Brady_Jerin_Resume.pdf)"), so it is found by that prefix.
+#
+# Returns $null for a doc with no such heading; otherwise the section, and the
+# doc with the section cut out - which is what must match.
+function Split-ProfileSection([string]$text) {
+    $heading = [regex]::Match($text, '(?m)^## Candidate Profile[^\r\n]*(\r?\n)?')
+    if (-not $heading.Success) { return $null }
+    $bodyStart = $heading.Index + $heading.Length
+    $next = [regex]::Match($text.Substring($bodyStart), '(?m)^## ')
+    $end = if ($next.Success) { $bodyStart + $next.Index } else { $text.Length }
+    return @{
+        Section = $text.Substring($heading.Index, $end - $heading.Index)
+        Outside = $text.Substring(0, $heading.Index) + "`0" + $text.Substring($end)
+    }
+}
+
 # Puts a sentence in front of this track's run record note, so something the
 # runner decided after the run shows on the page rather than only in a log
 # nobody reads. In front, because the tracker keeps 500 characters and cuts
@@ -375,6 +401,11 @@ if ($UseLocalFiles) {
     Log "documents:        SKIPPED (-UseLocalFiles) - running against $workDir as-is"
 } else {
     $index = $null
+    # A profile refresh: whether one is due, which doc it rewrote, and whether
+    # the tracker took that doc. See "Mark a rewritten profile current".
+    $profileStale = $null
+    $profileDoc = $null
+    $profileWrittenBack = $false
     try {
         $index = Invoke-WithRetry "GET /api/documents?search=$Task" {
             Invoke-RestMethod -Uri "$trackerUrl/api/documents?search=$([uri]::EscapeDataString($Task))" -Headers $headers -ErrorAction Stop
@@ -406,6 +437,14 @@ if ($UseLocalFiles) {
         # which looks like a quiet night. Usually the import has not been run.
         if (-not $index.documents -or $index.documents.Count -eq 0) {
             Stop-Run "the tracker holds no documents for this account" "No documents for this account - run scripts\import-documents.ps1 first. Refusing to search against an empty profile."
+        }
+
+        # Set when a resume was chosen since this search's profile was written.
+        # The prompt then asks the run to rewrite the profile first, and the
+        # write-back below holds that rewrite to its own section.
+        $profileStale = $index.profile_stale
+        if ($profileStale) {
+            Log "profile:          stale since $($profileStale.since), written from $($profileStale.was) - this run rewrites it"
         }
 
         $runDir = Join-Path (Join-Path $workDir ".run") $Task
@@ -459,6 +498,9 @@ if ($UseLocalFiles) {
                 etag  = $doc.etag
                 sha   = (Get-FileHash -Path $dest -Algorithm SHA256).Hash
                 bytes = $got
+                # A track doc's text as it arrived: a profile refresh is checked
+                # against it section by section.
+                text  = if ($doc.path -like "docs/*") { [System.IO.File]::ReadAllText($dest, [System.Text.Encoding]::UTF8) } else { $null }
             }
             $bytes += $got
         }
@@ -671,15 +713,36 @@ if ($runDir -and $manifest.Count -gt 0) {
             continue
         }
 
-        $grew = (Get-Item $local).Length - $manifest[$rel].bytes
-        if ($grew -gt $DocGrowthLimitBytes) {
-            # Not a failed run: the search itself is fine. The edit is kept for a
-            # person to look at rather than sent, and the run record says where.
-            $kept = Join-Path $logDir "$Task-doc-refused-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
-            Copy-Item $local $kept -Force
-            Log "WARNING: $rel grew $grew bytes in this run, over the $DocGrowthLimitBytes-byte limit - not written back. This run's version: $kept"
-            Add-RunNote "$rel grew $grew bytes, over the $DocGrowthLimitBytes-byte limit, so this run's doc edit wasn't saved - it is in logs\$(Split-Path $kept -Leaf)"
-            continue
+        if ($profileStale) {
+            # A refresh run rewrites one section and nothing else. The growth
+            # limit doesn't apply to it: a new resume can be longer than the old.
+            $old = Split-ProfileSection $manifest[$rel].text
+            $new = Split-ProfileSection ([System.IO.File]::ReadAllText($local, [System.Text.Encoding]::UTF8))
+            $refusal = if (-not $old) { "has no Candidate Profile section to rewrite" }
+                       elseif (-not $new) { "lost its Candidate Profile heading" }
+                       elseif ($old.Outside -cne $new.Outside) { "changed outside its Candidate Profile section" }
+                       else { $null }
+            if ($refusal) {
+                # Not a failed run: the search itself is fine. The profile stays
+                # marked out of date, so the next run tries the rewrite again.
+                $kept = Join-Path $logDir "$Task-doc-refused-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
+                Copy-Item $local $kept -Force
+                Log "WARNING: $rel $refusal during a profile refresh - not written back, and the profile stays marked out of date. This run's version: $kept"
+                Add-RunNote "the profile refresh $refusal, so it wasn't saved and runs again next time - this run's version is in logs\$(Split-Path $kept -Leaf)"
+                continue
+            }
+            $profileDoc = $rel
+        } else {
+            $grew = (Get-Item $local).Length - $manifest[$rel].bytes
+            if ($grew -gt $DocGrowthLimitBytes) {
+                # Not a failed run: the search itself is fine. The edit is kept for a
+                # person to look at rather than sent, and the run record says where.
+                $kept = Join-Path $logDir "$Task-doc-refused-$(Get-Date -Format 'yyyy-MM-dd-HHmmss').md"
+                Copy-Item $local $kept -Force
+                Log "WARNING: $rel grew $grew bytes in this run, over the $DocGrowthLimitBytes-byte limit - not written back. This run's version: $kept"
+                Add-RunNote "$rel grew $grew bytes, over the $DocGrowthLimitBytes-byte limit, so this run's doc edit wasn't saved - it is in logs\$(Split-Path $kept -Leaf)"
+                continue
+            }
         }
 
         try {
@@ -695,6 +758,7 @@ if ($runDir -and $manifest.Count -gt 0) {
                     -Body $body -ContentType "text/markdown" -UseBasicParsing -ErrorAction Stop
             }
             $sent++
+            if ($rel -eq $profileDoc) { $profileWrittenBack = $true }
             Log ("wrote back {0} ({1:N0} bytes)" -f $rel, $body.Length)
         } catch {
             $status = Get-HttpStatus $_
@@ -723,6 +787,35 @@ if ($runDir -and $manifest.Count -gt 0) {
         }
     }
     Log "write-back:       $sent document(s) updated"
+
+    # ---- Mark a rewritten profile current. ----------------------------------
+    #
+    # Only after the tracker holds the rewritten doc: a refresh that was refused,
+    # or never happened, leaves the mark, so the next run tries again. Sent with
+    # the `since` this run read, so a resume chosen again mid-run keeps the mark
+    # and is refreshed next time - the server clears it only on a match.
+    if ($profileStale) {
+        if ($profileWrittenBack) {
+            try {
+                $cleared = Invoke-WithRetry "POST /api/writeup" {
+                    Invoke-RestMethod -Uri "$trackerUrl/api/writeup" -Method Post -TimeoutSec 30 `
+                        -Headers @{ Authorization = "Bearer $trackerToken" } -ContentType "application/json" `
+                        -Body (@{ search = $Task; profile_refreshed = [string]$profileStale.since } | ConvertTo-Json -Compress) `
+                        -ErrorAction Stop
+                }
+                if (@($cleared.written) -contains "profile_refreshed") {
+                    Log "profile:          rewritten and marked current"
+                } else {
+                    Log "profile:          rewritten, but the resume changed again during this run - it stays marked, and the next run rewrites it from the newer one"
+                }
+            } catch {
+                Log "WARNING: the profile was rewritten but couldn't be marked current ($(Get-HttpStatus $_)) - the next run rewrites it again"
+            }
+        } else {
+            Log "WARNING: this run was asked to rewrite the profile from the new resume and didn't - it stays marked for the next run"
+            Add-RunNote "the resume changed, but this run's profile rewrite wasn't saved - the next run tries again"
+        }
+    }
 }
 
 $elapsed = [int]((Get-Date) - $start).TotalSeconds

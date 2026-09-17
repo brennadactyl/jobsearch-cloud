@@ -110,16 +110,16 @@ read. An older `.doc` is refused. A scan or a photo is pictures of text and
 gives a run nothing. With nothing readable, have the installer paste their
 experience in chat.
 
-**Upload whatever they gave you**, and point `resume_line` (step 4) at a file a
-run can actually read - the `.pdf` itself is fine, and for a `.docx` it is the
+**Upload whatever they gave you**, and list a file a run can actually read in
+the search's `documents` (step 4) - the `.pdf` itself is fine, and for a `.docx` it is the
 extracted `.txt`, never the `.docx`. The server owns that `.txt`: writing to it
 directly is refused while its `.docx` is stored, so a new Word resume is a new
 upload of the `.docx`. For an `.rtf`, `.pages` or a scan, upload a plain-text
-copy too and name that instead: a run pointed at a file it can't read still
+copy too and list that instead: a run pointed at a file it can't read still
 completes and reports success, having screened every posting against an empty
 profile. Name a text copy
-`<Name>_Resume.txt` and keep that name, so a new resume is a content swap
-rather than a config edit.
+`<Name>_Resume.txt`. When they choose a new resume later, the search's
+`documents` list changes and nothing else does.
 
 Upload from anywhere:
 
@@ -246,12 +246,16 @@ finished sentence the search should read:
   (`../add-target-company/SKILL.md`), never on the search.
 - `search_note` - anything qualifying how the step-1c companies are searched
   ("surface any matching role, not only ones in a particular product area").
-- `resume_line` - the whole "read the resume" instruction: the file to read (the
-  extracted `.txt` for a Word resume), and how this track frames the resume.
+- `resume_line` - how this track frames the resume ("weigh it as an individual
+  contributor; the management years are context"). **Never a file name.** The
+  prompt names the resume from `documents` and puts this after it, so a
+  resume can be swapped without a word of prose going stale. The onboarding
+  run refuses a `resume_line` that names a file.
 - `documents` - the list of document paths this search reads besides its
-  `doc_file`: every file `resume_line` names, and any reference file the track
-  uses, e.g. `["resumes/Jane_Resume.txt"]` - for a Word resume that is the
-  extracted `.txt`, since a run cannot read the `.docx`. A
+  `doc_file`, and the one place its resume is named: the resume file, and any
+  reference file the track uses, e.g. `["resumes/Jane_Resume.txt"]` - for a
+  Word resume that is the extracted `.txt`, since a run cannot read the
+  `.docx`. A list naming only a `.docx` or nothing readable is refused. A
   nightly run downloads its `doc_file` and these and nothing else, and a track
   with an empty list is refused its documents, so it never runs. List only this
   track's files - a person's other searches keep their own.
@@ -288,7 +292,7 @@ curl -s "$TRACKER_URL/api/prompt/<key>" -H "Authorization: Bearer $TOKEN"
 ```
 
 It is the exact text the search runs each morning. Read each step to its end -
-qualifying clauses come last - for a `resume_line` naming a missing file, a fit
+qualifying clauses come last - for step 2 naming no resume, a fit
 filter harsher than meant, or a geo scope that says nothing.
 
 ### 6. Push config to the tracker API
@@ -441,7 +445,7 @@ Write `out\config.json` in the shape the run's prompt gives, and one
 `target_companies`, `fed_by`, `doc_file` and `sort_order` out: the script owns
 them, and it drops them if you send them. A track whose doc still holds a
 `{{PLACEHOLDER}}`, whose key isn't a lowercase-hyphenated slug, or whose
-`resume_line` doesn't name the staged resume is refused, and the person is told
+`resume_line` names a file is refused, and the person is told
 their setup didn't finish - so check those three before your turn ends.
 
 ### 8. Offer a test run
