@@ -3,68 +3,96 @@ import { safeUrl } from "./format";
 import { tierRank } from "./geo";
 import { isWaiting, lastMoved } from "./stages";
 
-/**
- * "priority" sinks "Not a fit" to the bottom, then orders by location rank, then
- * newest-found. The other sorts are exactly what they say.
- */
-export function leadComparator(
-  sortKey: string,
-  rules: readonly PriorityLocation[],
-): (a: Lead, b: Lead) => number {
-  if (sortKey === "found-desc") return (a, b) => String(b.found).localeCompare(String(a.found));
-  if (sortKey === "found-asc") return (a, b) => String(a.found).localeCompare(String(b.found));
-  if (sortKey === "location-asc") return (a, b) => String(a.location).localeCompare(String(b.location));
-  if (sortKey === "company-asc") return (a, b) => String(a.company).localeCompare(String(b.company));
+type Compare<T> = (a: T, b: T) => number;
+
+/** Text order by one field, or its reverse. A missing value compares as "". */
+function byText<T>(of: (row: T) => unknown, desc = false): Compare<T> {
+  return (a, b) => String(of(desc ? b : a)).localeCompare(String(of(desc ? a : b)));
+}
+
+/** Smallest number first. */
+function byNumber<T>(of: (row: T) => number): Compare<T> {
+  return (a, b) => of(a) - of(b);
+}
+
+/** The rows this matches go first, whatever the comparators after it say. */
+function firstIf<T>(matches: (row: T) => boolean): Compare<T> {
+  return (a, b) => (matches(a) ? 0 : 1) - (matches(b) ? 0 : 1);
+}
+
+/** The rows this matches go last, the same way. */
+function lastIf<T>(matches: (row: T) => boolean): Compare<T> {
+  return firstIf((row: T) => !matches(row));
+}
+
+/** The first comparator that doesn't tie decides. */
+function inOrder<T>(...steps: Compare<T>[]): Compare<T> {
   return (a, b) => {
-    const na = a.status === "Not a fit" ? 1 : 0;
-    const nb = b.status === "Not a fit" ? 1 : 0;
-    if (na !== nb) return na - nb;
-    const d = tierRank(a, rules) - tierRank(b, rules);
-    if (d) return d;
-    return String(b.found).localeCompare(String(a.found));
+    for (const step of steps) {
+      const d = step(a, b);
+      if (d) return d;
+    }
+    return 0;
   };
+}
+
+// A Map, not an object: a sort key arrives from the stored view preferences, and
+// a lookup in an object would answer names like "constructor" with a function.
+const LEAD_SORTS = new Map<string, Compare<Lead>>([
+  ["found-desc", byText((l) => l.found, true)],
+  ["found-asc", byText((l) => l.found)],
+  ["location-asc", byText((l) => l.location)],
+  ["company-asc", byText((l) => l.company)],
+]);
+
+/**
+ * "priority", the default, sinks "Not a fit" to the bottom, then orders by
+ * location rank, then newest-found. The other sorts are exactly what they say.
+ */
+export function leadComparator(sortKey: string, rules: readonly PriorityLocation[]): Compare<Lead> {
+  return (
+    LEAD_SORTS.get(sortKey) ??
+    inOrder<Lead>(
+      lastIf((l) => l.status === "Not a fit"),
+      byNumber((l) => tierRank(l, rules)),
+      byText((l) => l.found, true),
+    )
+  );
 }
 
 /**
  * Applications have no location or "found" date to sort by - just when you
  * applied and who to.
+ *
+ * Branches rather than a lookup like the lead sorts: each of these is a
+ * sequence of steps, not one comparator.
  */
-export function appComparator(sortKey: string): (a: Application, b: Application) => number {
-  if (sortKey === "company-asc") return (a, b) => String(a.company).localeCompare(String(b.company));
+export function appComparator(sortKey: string): Compare<Application> {
+  if (sortKey === "company-asc") return byText((a) => a.company);
   if (sortKey === "location-asc") {
-    return (a, b) => {
+    return inOrder<Application>(
       // A hand-added application can have no location, and "" would sort first
       // in the sort that asks about location, so blanks sink.
-      const ea = a.location ? 0 : 1;
-      const eb = b.location ? 0 : 1;
-      if (ea !== eb) return ea - eb;
-      return String(a.location).localeCompare(String(b.location));
-    };
+      lastIf((a) => !a.location),
+      byText((a) => a.location),
+    );
   }
   if (sortKey === "waiting-desc") {
     // The Overview's waiting list, in full: rows still waiting on the company
     // first, the one that last moved longest ago at the top. Rows with no date
     // to measure from, and rows the company has closed, follow.
-    return (a, b) => {
-      const ga = waitGroup(a);
-      const gb = waitGroup(b);
-      if (ga !== gb) return ga - gb;
-      return (lastMoved(a)?.getTime() ?? 0) - (lastMoved(b)?.getTime() ?? 0);
-    };
+    return inOrder<Application>(
+      byNumber(waitGroup),
+      byNumber((a) => lastMoved(a)?.getTime() ?? 0),
+    );
   }
-  const byDate =
-    sortKey === "applied-asc"
-      ? (a: Application, b: Application) => String(a.dateApplied).localeCompare(String(b.dateApplied))
-      : (a: Application, b: Application) => String(b.dateApplied).localeCompare(String(a.dateApplied));
   // "To Apply" rows have no applied date and are the only rows still owing an
   // application, so both date sorts float them rather than clump them on "".
   // Company A-Z stays exactly alphabetical.
-  return (a, b) => {
-    const ta = a.status === "To Apply" ? 0 : 1;
-    const tb = b.status === "To Apply" ? 0 : 1;
-    if (ta !== tb) return ta - tb;
-    return byDate(a, b);
-  };
+  return inOrder<Application>(
+    firstIf((a) => a.status === "To Apply"),
+    byText((a) => a.dateApplied, sortKey !== "applied-asc"),
+  );
 }
 
 function waitGroup(a: Application): number {
