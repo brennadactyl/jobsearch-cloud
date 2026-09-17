@@ -939,7 +939,9 @@ Rules for this run:
         if ($fresh.Count -gt 0 -and [string]$fresh[0].updated_at -ne [string]$item.updated_at) {
             # They sent new answers while this was running. What was just built
             # is from the old ones, so it stays pending and tomorrow night
-            # builds what they actually asked for.
+            # builds what they actually asked for. Intake answers are write-once
+            # today, so this can't happen yet; it stays for when setup answers
+            # become editable (docs/account-settings-plan.md) - not dead code.
             Log "      their answers changed while this ran - left pending, so tomorrow builds the new ones"
             continue
         }

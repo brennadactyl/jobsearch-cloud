@@ -1,6 +1,6 @@
 ---
 name: job-search-setup
-description: Onboards a person into this job-search tracker (or adds a track to an existing one) - provisions their account, reads their resume(s), asks about desired role tracks and locations, uploads their resume and per-track baseline doc, posts their search config and page config to /api/config, and registers their scheduled tasks. Use when someone wants to set up this repo for themselves, add a second person to an existing deployment, or add/change a tracked search.
+description: Onboards a person into this job-search tracker (or adds a track to an existing one) - provisions their account, reads their resume(s), asks about desired role tracks and locations, uploads their resume and per-track baseline doc, posts their search config and page config to /api/config (an unattended intake instead writes each search up through /api/writeup), and registers their scheduled tasks. Use when someone wants to set up this repo for themselves, add a second person to an existing deployment, or add/change a tracked search.
 ---
 
 # Job search setup
@@ -435,7 +435,7 @@ from and where the output goes.
 | 3, asking | `answers.json` is the interview, already answered. Nothing is confirmed with anyone: decide from what they wrote. Where an answer is thin, write the search anyway - a thin search they can see and correct beats no search. |
 | 4, doc and config | Same fields, same template. They go in `out\` as files, not to the API. |
 | 5, confirming | Nobody to confirm with. Prefer the reading that surfaces more jobs: an over-tight fit filter hides work they asked for and nobody is watching. |
-| 6, posting | The script posts it, with their token, after checking it. |
+| 6, posting | The script uploads the docs and writes each search up through `POST /api/writeup`, with their token, after checking it. The form already wrote the tracks and page settings. |
 | 7, scheduling | The script does it. |
 
 The answers map onto the config like this:

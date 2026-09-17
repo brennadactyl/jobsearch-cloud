@@ -6,9 +6,9 @@
 .DESCRIPTION
   run-search.ps1, run-fill.ps1 and run-onboarding.ps1 all drive the same CLI on
   the same machine, so whether it can be found, whether it is logged in and
-  whether it started are one set of facts. Each script used to keep its own
-  copy of these checks, and the copies drifted: a failure wording one of them
-  caught, another let through as a success.
+  whether it started are one set of facts. They share this one copy of the
+  checks, so a failure wording one run catches, every run catches - separate
+  copies drift, and a wording one catches another lets through as a success.
 
   What each run does about a failure stays in that run, because each one
   reports to someone different - see Get-CliFailure.
