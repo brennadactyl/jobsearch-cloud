@@ -272,8 +272,8 @@ switch ($Command) {
       # `| Where-Object { $_ }` throughout, because @($null) in PowerShell is a
       # one-element array holding $null - a foreach over an absent property
       # runs once on nothing rather than not at all.
-      foreach ($t in @($config.tracks | Where-Object { $_ })) {
-          if ($t.fed_by -eq $Search -and $t.key -ne $Search) { $keys += $t.key }
+      foreach ($track in @($config.tracks | Where-Object { $_ })) {
+          if ($track.fed_by -eq $Search -and $track.key -ne $Search) { $keys += $track.key }
       }
 
       $leads = @()
@@ -362,7 +362,7 @@ switch ($Command) {
       # characters outside a-z and 0-9 collapsed to one space, trimmed - so it
       # agrees with how the list itself tells two names apart. Change both together.
       if (-not $PositionalArg) { Fail "known needs a company name - usage: tracker known ""<company>""" }
-      $norm = { param($s) (([string]$s).ToLowerInvariant() -creplace "[^a-z0-9]+", " ").Trim() }
+      $norm = { param($companyName) (([string]$companyName).ToLowerInvariant() -creplace "[^a-z0-9]+", " ").Trim() }
       $want = & $norm $PositionalArg
       if (-not $want) { Fail "'$PositionalArg' has no letters or digits to match on" }
       if (Test-Path $KnownCache) {
