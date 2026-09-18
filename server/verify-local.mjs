@@ -3032,5 +3032,68 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await req("POST", "/api/runs", { token: SW_B, body: { search: "SWE", status: "ok", on: swToday } })).json?.run?.swept === 0);
 }
 
+
+{
+  console.log("\n== a merged name keeps meaning the company it became ==");
+  // Aliases (migrations/0020_company_aliases.sql): a name merged or renamed away
+  // resolves to the company it became, so a run can't add it back.
+  const alRun = Date.now();
+  const alName = `Alias ${alRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name: alName, password: "alias-long-password-1" } });
+  const AL = (await req("POST", "/api/login", { body: { name: alName, password: "alias-long-password-1" } })).json.token;
+  await req("POST", "/api/config", { token: AL, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+  const KEEP = `Alias Keep ${alRun}`, SHORT = `Alias Short ${alRun}`, OTHER = `Alias Other ${alRun}`;
+  const NEWNAME = `Alias Renamed ${alRun}`, EXTRA = `Alias Extra ${alRun}`, ZED = `Alias Zed ${alRun}`;
+  await req("POST", "/api/coverage", { token: AL, body: { search: "SWE", on: "", swept: [
+    { company: KEEP }, { company: SHORT }, { company: OTHER }, { company: ZED }] } });
+  const alAll = async () => (await req("GET", "/api/coverage/SWE?all=1", { token: AL })).json?.companies || [];
+  const alFind = async (name) => (await alAll()).find((c) => c.company === name);
+  const alClean = (body) => req("POST", "/api/companies/cleanup", { admin: true, body });
+  const alSweep = (on, company) => req("POST", "/api/coverage", { token: AL, body: { search: "SWE", on, swept: [{ company }] } });
+
+  const alDry = await alClean({ merges: [{ keep: KEEP, absorb: [SHORT] }], dryRun: true });
+  check("a merge's dry run shows the absorbed name kept as an alias",
+    JSON.stringify(alDry.json?.changes?.[0]?.aliases) === JSON.stringify([SHORT]), JSON.stringify(alDry.json));
+  await alClean({ merges: [{ keep: KEEP, absorb: [SHORT] }] });
+  check("the full list serves a company's aliases, for a run's own lookups",
+    JSON.stringify((await alFind(KEEP))?.aliases) === JSON.stringify([SHORT]), JSON.stringify(await alFind(KEEP)));
+
+  const alReport = await alSweep("2026-09-12", SHORT.toUpperCase());
+  check("a run reporting a merged name in any spelling is recorded against the company it became, adding nothing",
+    alReport.json?.aliased === 1 && alReport.json?.added === 0 &&
+    (await alFind(KEEP))?.last_swept === "2026-09-12" && !(await alFind(SHORT)), JSON.stringify(alReport.json));
+
+  const alAdd = await alClean({ aliases: [{ name: EXTRA, company: KEEP }, { name: EXTRA.toLowerCase(), company: KEEP }] });
+  check("an alias is added by naming it and the company, and the server keeps the list - once per name",
+    alAdd.status === 200 && JSON.stringify((await alFind(KEEP))?.aliases) === JSON.stringify([SHORT, EXTRA]),
+    JSON.stringify([alAdd.json, (await alFind(KEEP))?.aliases]));
+  check("adding the same alias again changes nothing",
+    (await alClean({ aliases: [{ name: EXTRA, company: KEEP }] })).status === 200 &&
+    JSON.stringify((await alFind(KEEP))?.aliases) === JSON.stringify([SHORT, EXTRA]));
+  for (const [why, body, status] of [
+    ["a name that is a company on the list", { aliases: [{ name: OTHER, company: KEEP }] }, 409],
+    ["a name that already means another company", { aliases: [{ name: EXTRA, company: OTHER }] }, 409],
+    ["a company that isn't on the list", { aliases: [{ name: `Nobody ${alRun}`, company: `Nowhere ${alRun}` }] }, 404],
+  ]) {
+    const res = await alClean(body);
+    check(`an alias is refused: ${why}`, res.status === status && !!res.json?.error, JSON.stringify(res.json));
+  }
+
+  await alClean({ renames: [{ from: KEEP, to: NEWNAME }] });
+  const alRenamed = await alFind(NEWNAME);
+  check("a rename carries the aliases, and adds the old name to them",
+    JSON.stringify(alRenamed?.aliases) === JSON.stringify([SHORT, EXTRA, KEEP]), JSON.stringify(alRenamed));
+  check("so the oldest name still reaches the company through two changes",
+    (await alSweep("2026-09-13", SHORT)).json?.aliased === 1 && (await alFind(NEWNAME))?.last_swept === "2026-09-13");
+
+  await alClean({ merges: [{ keep: ZED, absorb: [NEWNAME] }] });
+  check("merging a company carries its aliases to the one it joins",
+    JSON.stringify((await alFind(ZED))?.aliases) === JSON.stringify([SHORT, EXTRA, KEEP, NEWNAME]), JSON.stringify(await alFind(ZED)));
+  check("and a name that is not an alias still joins the list as before",
+    (await alSweep("2026-09-14", `Alias Fresh ${alRun}`)).json?.added === 1);
+  check("the nightly slice doesn't carry aliases, only the full list does",
+    ((await req("GET", "/api/coverage/SWE", { token: AL })).json?.companies || []).every((c) => c.aliases === undefined));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -72,10 +72,18 @@ export async function handlePurgeSearch({ request, env }) {
 /**
  * POST /api/companies/cleanup - requires the ADMIN_TOKEN secret as Bearer. Body
  * `{ merges?: [{keep, absorb: [name, ...], rename?}], renames?: [{from, to,
- * clear_facts?}], dryRun? }` -> `{ dryRun, changes: [{company, position, from,
- * facts, sweeps}] }`; 400 for a malformed request or a company named twice, 404
- * for a name not on the list, 409 for a retracted row or a new name already on
- * the list.
+ * clear_facts?}], aliases?: [{name, company}], dryRun? }` -> `{ dryRun, changes:
+ * [{company, position, from, facts, sweeps, aliases}], aliases: [{company,
+ * aliases}] }`; 400 for a malformed request or a company named twice, 404 for a
+ * name not on the list, 409 for a retracted row, a new name already on the list,
+ * an alias that is a company on the list, or one that already means another
+ * company.
+ *
+ * Every name a merge absorbs or a rename replaces is kept as an alias of the
+ * company it became, carried with the company from then on, and a run that
+ * reports it is recorded against that company (routes/coverage.js). `aliases`
+ * adds one without a merge: send the alias and the company, and the server adds
+ * it to that company's list - de-duplicated, never the company's own name.
  *
  * Tidies the shared company list (../company-cleanup.js): a merge folds each
  * absorbed row into the kept one - its facts filling only what the kept row
@@ -106,6 +114,10 @@ export async function handleCleanUpCompanies({ request, env }) {
         ["board", "endpoint", "url_shape", "dead_signal", "note", "verified_on", "wall", "wall_dates"].map((f) => [f, c.row[f]])
       ),
       sweeps: c.sweeps.length,
+      aliases: c.row.aliases,
     })),
+    // Aliases added to companies no merge or rename touched, with the whole
+    // list each one now has.
+    aliases: result.aliasOnly.map((a) => ({ company: a.company, aliases: a.aliases })),
   });
 }

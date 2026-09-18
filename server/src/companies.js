@@ -21,7 +21,7 @@
  */
 
 import { ID_CHUNK } from "./db.js";
-import { namedKeys, planCleanup } from "./company-cleanup.js";
+import { namedKeys, parseAliases, planCleanup } from "./company-cleanup.js";
 import { normalize as normalizeCompany } from "./exclude.js";
 import { dateDaysAgo, today } from "./validate.js";
 
@@ -227,15 +227,16 @@ export class CompanyList {
   async cleanUpCompanies(body, dryRun) {
     const keys = [...new Set(namedKeys(body))];
     const inList = (col) => `${col} IN (${keys.map(() => "?").join(",")})`;
-    const [fetched, swept] = keys.length
+    const [fetched, swept, aliased] = keys.length
       ? await this.d1.batch([
           this.d1.prepare(`SELECT * FROM company_fetch WHERE ${inList("company_key")}`).bind(...keys),
           this.d1
             .prepare(`SELECT user_id, search, company_key, last_swept, note FROM company_sweeps WHERE ${inList("company_key")}`)
             .bind(...keys),
+          this.d1.prepare("SELECT company_key, display_name, aliases FROM company_fetch WHERE aliases <> '[]'"),
         ])
-      : [{ results: [] }, { results: [] }];
-    const plan = planCleanup(body, fetched.results, swept.results);
+      : [{ results: [] }, { results: [] }, { results: [] }];
+    const plan = planCleanup(body, fetched.results, swept.results, aliased.results);
     if ("error" in plan || dryRun) return plan;
 
     const statements = [];
@@ -258,13 +259,14 @@ export class CompanyList {
           .prepare(
             `UPDATE company_fetch
                 SET company_key = ?, display_name = ?, board = ?, endpoint = ?, url_shape = ?, dead_signal = ?,
-                    note = ?, verified_on = ?, wall = ?, wall_first_on = ?, wall_last_on = ?, wall_dates = ?
+                    note = ?, verified_on = ?, wall = ?, wall_first_on = ?, wall_last_on = ?, wall_dates = ?,
+                    aliases = ?
               WHERE company_key = ?`
           )
           .bind(
             r.company_key, r.display_name, r.board, r.endpoint, r.url_shape, r.dead_signal,
             r.note, r.verified_on, r.wall, r.wall_first_on, r.wall_last_on, r.wall_dates,
-            c.from_key
+            JSON.stringify(r.aliases), c.from_key
           )
       );
       for (const s of c.sweeps) {
@@ -277,7 +279,35 @@ export class CompanyList {
         );
       }
     }
+    for (const a of plan.aliasOnly) {
+      statements.push(
+        this.d1.prepare("UPDATE company_fetch SET aliases = ? WHERE company_key = ?").bind(JSON.stringify(a.aliases), a.company_key)
+      );
+    }
     await this.d1.batch(statements);
     return plan;
+  }
+
+  /**
+   * For each name that is another company's alias, the name of that company
+   * (migrations/0020_company_aliases.sql), keyed by normalize(). A name that
+   * isn't an alias isn't in the map.
+   *
+   * Reads every company that has aliases - a few rows on a list of a couple of
+   * hundred - rather than searching inside the JSON.
+   * @returns {Promise<Map<string, string>>}
+   */
+  async aliasMap() {
+    const rows = await this.d1
+      .prepare(
+        `SELECT COALESCE(NULLIF(display_name, ''), company_key) AS company, aliases
+           FROM company_fetch WHERE aliases <> '[]' AND retracted_on = ''`
+      )
+      .all();
+    const map = new Map();
+    for (const r of rows.results) {
+      for (const name of parseAliases(r.aliases)) map.set(normalizeCompany(name), r.company);
+    }
+    return map;
   }
 }
