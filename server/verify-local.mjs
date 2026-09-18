@@ -1206,7 +1206,7 @@ check("but two independent tracks may each hold it",
   indie.json.added === 2, JSON.stringify(indie.json));
 const fedPrompt = await req("GET", "/api/prompt/LEAD", { token: A_TOK });
 check("a fed track has no prompt of its own, and the refusal names the one to run",
-  fedPrompt.status === 409 && /"SWE"/.test(fedPrompt.json.error), fedPrompt.text.slice(0, 120));
+  fedPrompt.status === 409 && /"SWE"/.test(fedPrompt.json.error) && fedPrompt.json.code === "fed_tab", fedPrompt.text.slice(0, 120));
 const feedPrompt = (await req("GET", "/api/prompt/SWE", { token: A_TOK })).text;
 // `./tracker dedup` merges the fed tabs itself, so a run learns the fed tab
 // exists only from the header and the filing step.
@@ -2319,7 +2319,7 @@ check("one person's setup is invisible to another",
 // all night and report success.
 const unwritten = await req("GET", "/api/prompt/engineering", { token: I_TOK });
 check("a track with no role_search_line has no prompt, and the refusal names the field",
-  unwritten.status === 409 && unwritten.json.field === "role_search_line", JSON.stringify(unwritten.json));
+  unwritten.status === 409 && unwritten.json.field === "role_search_line" && unwritten.json.code === "not_written_up", JSON.stringify(unwritten.json));
 
 // The ownership split, in the direction the run could break it.
 const formFieldWrite = await req("POST", "/api/writeup", { token: I_TOK, body: {
@@ -3536,6 +3536,116 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     JSON.stringify(arOther.json));
   check("a person can't set a lead's area by hand",
     (await req("POST", "/api/update", { token: AR, body: { type: "lead", id: exactId, area: "Remote US" } })).json?.lead?.area !== "Remote US");
+}
+
+
+{
+  console.log("\n== pausing a search ==");
+  // A paused search runs nothing and keeps everything it found
+  // (migrations/0025_track_paused.sql, docs/pause-search-plan.md).
+  const psRun = Date.now();
+  const psUser = async (tag) => {
+    const name = `Pause ${tag} ${psRun}`;
+    await req("POST", "/api/users", { admin: true, body: { name, password: `pause-${tag}-long-password` } });
+    const token = (await req("POST", "/api/login", { body: { name, password: `pause-${tag}-long-password` } })).json.token;
+    await req("POST", "/api/config", { token, body: { tracks: [
+      { key: "CPM", label: "CPM", doc_file: "docs/tracked_cpm_postings.md" },
+      { key: "cpm-lead", label: "CPM lead", fed_by: "CPM" },
+      { key: "SWE", label: "SWE" },
+    ] } });
+    for (const key of ["CPM", "SWE"]) {
+      await req("POST", "/api/writeup", { token, body: { search: key, role_search_line: `${key} roles` } });
+    }
+    return token;
+  };
+  const PS = await psUser("a"), PS_B = await psUser("b");
+  const psUrl = (n) => `https://example.com/pause/${psRun}/${n}`;
+  await req("PUT", "/api/documents/docs/tracked_cpm_postings.md", { token: PS, raw: "# CPM", type: "text/markdown" });
+  await req("POST", "/api/leads", { token: PS, body: { on: "2026-09-10", leads: [
+    { search: "CPM", company: "Acme", title: "Program Manager", location: "Remote", url: psUrl("lead") },
+    { search: "cpm-lead", company: "Acme", title: "Lead PM", location: "Remote", url: psUrl("fed-lead") }] } });
+  const psLeadId = (await req("GET", "/api/data", { token: PS })).json.leads.find((l) => l.url === psUrl("lead"))?.id;
+  await req("POST", `/api/leads/${psLeadId}/status`, { token: PS, body: { status: "Applied" } });
+  await req("POST", "/api/screened", { token: PS, body: { on: "2026-09-10", screened: [
+    { search: "CPM", url: psUrl("screened"), company: "Acme", title: "Intern", reason: "too junior" }] } });
+  await req("POST", "/api/coverage", { token: PS, body: { search: "CPM", on: "2026-09-10",
+    swept: [{ company: `Pause Co ${psRun}`, note: "looked" }] } });
+
+  // Everything a pause must leave alone, in one comparable string.
+  const psSnapshot = async () => {
+    const data = (await req("GET", "/api/data", { token: PS })).json;
+    const coverage = (await req("GET", "/api/coverage/CPM?all=1", { token: PS })).json;
+    const docs = (await req("GET", "/api/documents", { token: PS })).json.documents || [];
+    return JSON.stringify({
+      leads: data.leads.filter((l) => ["CPM", "cpm-lead"].includes(l.search)).map((l) => [l.id, l.status, l.url]),
+      applications: data.applications.map((a) => [a.id, a.status, a.link]),
+      screened: data.screened.filter((s) => s.search === "CPM").map((s) => s.url),
+      cursor: coverage.cursor,
+      sweeps: coverage.companies.filter((c) => c.last_swept).map((c) => [c.company, c.last_swept, c.note]),
+      docs: docs.map((d) => [d.path, d.etag]),
+    });
+  };
+  const psBefore = await psSnapshot();
+  const psTracks = async (token) => (await req("GET", "/api/config", { token })).json?.tracks || [];
+  const psTrack = (tracks, key) => tracks.find((t) => t.key === key);
+
+  const psRunning = await psTracks(PS);
+  check("a search runs until it is paused, and every track says so",
+    psRunning.every((t) => t.paused_since === "" && t.paused === ""), JSON.stringify(psRunning.map((t) => [t.key, t.paused_since, t.paused])));
+
+  const pausedAt = "2026-09-18T10:00:00-07:00";
+  const psPause = await req("POST", "/api/config", { token: PS, body: { tracks: psRunning.map((t) =>
+    t.key === "CPM" ? { ...t, paused_since: pausedAt } : t) } });
+  const psPaused = await psTracks(PS);
+  check("pausing through the config stores the instant in one ISO form",
+    psPause.status === 200 && psTrack(psPaused, "CPM")?.paused_since === "2026-09-18T17:00:00.000Z",
+    JSON.stringify(psPause.json?.error || psTrack(psPaused, "CPM")));
+  check("a tab the search fills follows it, without a stamp of its own",
+    psTrack(psPaused, "cpm-lead")?.paused === "2026-09-18T17:00:00.000Z" && psTrack(psPaused, "cpm-lead")?.paused_since === "",
+    JSON.stringify(psTrack(psPaused, "cpm-lead")));
+  check("the account's other searches keep running",
+    psTrack(psPaused, "SWE")?.paused === "");
+  check("/api/data serves the same, for the page",
+    (await req("GET", "/api/data", { token: PS })).json?.tracks?.find((t) => t.key === "cpm-lead")?.paused === "2026-09-18T17:00:00.000Z");
+
+  const psPrompt = await req("GET", "/api/prompt/CPM", { token: PS });
+  check("a paused search's prompt is refused, saying since when",
+    psPrompt.status === 409 && psPrompt.json?.paused_since === "2026-09-18T17:00:00.000Z" && /paused since/.test(psPrompt.json?.error || ""),
+    JSON.stringify(psPrompt.json));
+  // A runner branches on the code, not the sentence: the three 409s mean a
+  // leftover task, a search someone stopped, and one not yet written up.
+  check("and carries a code a runner can branch on, distinct from the other refusals",
+    psPrompt.json?.code === "paused" &&
+    (await req("GET", "/api/prompt/cpm-lead", { token: PS })).json?.code === "fed_tab",
+    JSON.stringify([psPrompt.json?.code, (await req("GET", "/api/prompt/cpm-lead", { token: PS })).json?.code]));
+  check("while the account's running search is still served",
+    (await req("GET", "/api/prompt/SWE", { token: PS })).status === 200);
+  check("pausing touches no lead, application, screened row, sweep, doc or cursor",
+    (await psSnapshot()) === psBefore, await psSnapshot());
+
+  for (const [why, tracks] of [
+    ["on a tab another search fills", psPaused.map((t) => (t.key === "cpm-lead" ? { ...t, paused_since: pausedAt } : t))],
+    ["as something that isn't an instant", psPaused.map((t) => (t.key === "SWE" ? { ...t, paused_since: "soon" } : t))],
+  ]) {
+    const res = await req("POST", "/api/config", { token: PS, body: { tracks } });
+    check(`a pause is refused ${why}`, res.status === 400 && res.json?.field === "paused_since", JSON.stringify(res.json));
+  }
+  check("config read while paused and posted back is accepted, and stays paused",
+    (await req("POST", "/api/config", { token: PS, body: { tracks: psPaused } })).status === 200 &&
+    psTrack(await psTracks(PS), "CPM")?.paused_since === "2026-09-18T17:00:00.000Z");
+  check("another account's search of the same name is not paused",
+    psTrack(await psTracks(PS_B), "CPM")?.paused === "" &&
+    (await req("GET", "/api/prompt/CPM", { token: PS_B })).status === 200);
+
+  const psResume = await req("POST", "/api/config", { token: PS, body: { tracks: (await psTracks(PS)).map((t) =>
+    t.key === "CPM" ? { ...t, paused_since: "" } : t) } });
+  const psResumed = await psTracks(PS);
+  check("resuming clears the stamp on the search and its tabs",
+    psResume.status === 200 && psResumed.every((t) => t.paused === ""), JSON.stringify(psResumed.map((t) => [t.key, t.paused])));
+  check("and its prompt is served again",
+    (await req("GET", "/api/prompt/CPM", { token: PS })).status === 200);
+  check("resuming leaves everything as it was before the pause",
+    (await psSnapshot()) === psBefore);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

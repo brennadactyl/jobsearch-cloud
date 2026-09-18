@@ -19,6 +19,31 @@ import { locationSettingError, trackDocumentsError, unknownTrack, unreadableDocu
  * @param {string} fedBy the track's `fed_by` once this write lands
  * @returns {string|null}
  */
+/**
+ * What is wrong with a track's `paused_since` as posted, or null, normalising a
+ * valid one in place (migrations/0025_track_paused.sql).
+ *
+ * "" resumes the search; anything else must be an instant, stored in the one
+ * ISO form so the page and the prompt refusal print it the same way. Only the
+ * track that runs a search is paused: a tab another search fills follows it, so
+ * a stamp on the tab would be a second switch that disagrees with the first.
+ *
+ * @param {Object} t the track as posted; `t.paused_since` is rewritten when valid
+ * @param {{fed_by?: string}|undefined} was the track as stored
+ * @returns {string|null}
+ */
+function pausedSinceError(t, was) {
+  if (t.paused_since === undefined || t.paused_since === "") return null;
+  if (typeof t.paused_since !== "string" || Number.isNaN(Date.parse(t.paused_since))) {
+    return "paused_since must be an ISO 8601 instant, or \"\" to resume";
+  }
+  // replaceTracks keeps a stored fed_by that the post leaves out.
+  const fedBy = typeof t.fed_by === "string" ? t.fed_by : was?.fed_by || "";
+  if (fedBy) return `a tab filled by "${fedBy}" is paused with that search - pause "${fedBy}" instead`;
+  t.paused_since = new Date(t.paused_since).toISOString();
+  return null;
+}
+
 function documentsChoiceError(list, storedList, fedBy) {
   if (fedBy) return null;
   const deduped = [...new Set(list)];
@@ -145,6 +170,8 @@ export async function handleSetConfig({ request, db }) {
       if (t.fed_by && (t.fed_by === t.key || !keys.has(t.fed_by))) {
         return json({ error: `track "${t.key}" is fed_by "${t.fed_by}", which is not another track in this list` }, 400);
       }
+      const paused = pausedSinceError(t, stored.get(t.key));
+      if (paused) return json({ error: `track "${t.key}": ${paused}`, field: "paused_since" }, 400);
       if (t.documents !== undefined) {
         const problem = trackDocumentsError(t.documents);
         if (problem) return json({ error: `track "${t.key}": ${problem}`, field: "documents" }, 400);

@@ -11,7 +11,12 @@ import { unknownTrack } from "../validate.js";
 /**
  * GET /api/prompt/:key - requires a Bearer token -> text/plain; 404 for an
  * unknown track, 409 for a track with `fed_by` set (the error names the one to
- * run) or with no search config.
+ * run), a paused search (with `paused_since`), or one with no search config.
+ *
+ * Each 409 body carries a `code` - `fed_tab`, `paused` or `not_written_up` -
+ * because the three mean different things to a runner: a leftover task, a
+ * search someone stopped, and one the overnight run has still to write up.
+ * scripts/run-search.ps1 branches on it, so the sentences stay free to change.
  *
  * `?doc_budget=<bytes>` sets how much step 8b tells the run it may add to its
  * doc. scripts/run-search.ps1 passes the budget it enforces, so the number lives
@@ -34,6 +39,22 @@ export async function handleGetPrompt({ db, user, params, url }) {
     return json(
       {
         error: `track "${key}" has no search of its own - "${track.fed_by}" fills it. Run that track instead.`,
+        code: "fed_tab",
+      },
+      409
+    );
+  }
+
+  // A paused search keeps everything it found and runs nothing
+  // (migrations/0025_track_paused.sql). setup-scheduler.ps1 registers no task
+  // for one, so this is reached by a task left over on some machine: refused
+  // here so that task can't run it, with the date so its log says why.
+  if (track.paused_since) {
+    return json(
+      {
+        error: `search "${key}" has been paused since ${track.paused_since} - resume it in the tracker's config to run it again`,
+        code: "paused",
+        paused_since: track.paused_since,
       },
       409
     );
@@ -50,6 +71,7 @@ export async function handleGetPrompt({ db, user, params, url }) {
     return json(
       {
         error: `track "${key}" has no role_search_line yet, so there is nothing to search for - the overnight run writes it up`,
+        code: "not_written_up",
         field: "role_search_line",
       },
       409
