@@ -1,8 +1,8 @@
 /**
  * The Export control against the list it sits over. "Shown" holds exactly the
  * rows the list renders, in order, and its count is the list's length; "all"
- * holds every row the tab has, in the same sort. One button when the two are
- * the same, a button with a menu when they differ.
+ * holds every row the tab has, in the same sort. The button reads "Export":
+ * it downloads when the two are the same, and opens a menu when they differ.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -60,8 +60,9 @@ function parseCsv(text: string): string[][] {
   return records;
 }
 
-/** The button that exports what the list shows: the single one, or the split button's main half. */
-const shownButton = () => screen.getByRole("button", { name: /^Export \d+( shown)?$/ });
+const exportButton = () => screen.getByRole("button", { name: "Export" });
+/** Whether Export opens a menu (shown and all differ) rather than downloading. */
+const hasMenu = () => exportButton().getAttribute("aria-haspopup") === "menu";
 
 /** Runs `click` and returns what would have been downloaded. */
 async function download_(click: () => Promise<void>) {
@@ -75,17 +76,35 @@ async function download_(click: () => Promise<void>) {
   return { filename, type, header, rows, col };
 }
 
-/** Exports what the list shows. */
-const exportRows = () => download_(() => userEvent.click(shownButton()));
+/** Exports what the list shows: straight from the button, or its menu's first choice. */
+const exportRows = () =>
+  download_(async () => {
+    const menu = hasMenu();
+    await userEvent.click(exportButton());
+    if (menu) await userEvent.click(screen.getByRole("menuitem", { name: /^Export \d+ shown$/ }));
+  });
 
 /** Opens the menu and exports every row the tab holds. */
 const exportAll = () =>
   download_(async () => {
-    await userEvent.click(screen.getByRole("button", { name: "More ways to export" }));
+    await userEvent.click(exportButton());
     await userEvent.click(screen.getByRole("menuitem", { name: /^Export all \d+$/ }));
   });
 
-const exportCount = () => Number(/\d+/.exec(shownButton().textContent!)![0]);
+/**
+ * How many rows "what's shown" would export: from the menu's first choice, or
+ * the tooltip when there's no menu. Leaves the menu closed.
+ */
+async function exportCount(): Promise<number> {
+  if (!hasMenu()) {
+    const title = exportButton().getAttribute("title")!;
+    return title.startsWith("Nothing") ? 0 : title.includes("the one row") ? 1 : Number(/all (\d+) rows/.exec(title)![1]);
+  }
+  await userEvent.click(exportButton());
+  const n = Number(/^Export (\d+) shown$/.exec(screen.getAllByRole("menuitem")[0].textContent!)![1]);
+  await userEvent.keyboard("{Escape}");
+  return n;
+}
 const listed = () => [...document.querySelectorAll(".md-row .co")].map((e) => e.textContent);
 
 beforeEach(() => {
@@ -109,7 +128,7 @@ describe("exporting a leads list", () => {
     const file = await exportRows();
 
     expect(file.col(LABELS.company)).toEqual(shown);
-    expect(file.rows).toHaveLength(exportCount());
+    expect(file.rows).toHaveLength(await exportCount());
     expect(file.type).toBe("text/csv;charset=utf-8");
     expect(file.filename).toMatch(/^All leads-shown-\d{4}-\d{2}-\d{2}\.csv$/);
   });
@@ -172,31 +191,30 @@ describe("the Export button", () => {
     await renderAt(path);
     const rendered = document.querySelectorAll(view === "grid" ? "tr[data-expand]" : ".md-row").length;
     expect(rendered).toBeGreaterThan(0);
-    expect(exportCount()).toBe(rendered);
+    expect(await exportCount()).toBe(rendered);
   });
 
   it("is the N in a leads tab's 'N of M shown'", async () => {
     await renderAt("/all-leads?filter=New");
-    expect(document.querySelector(".note")!.textContent).toContain(`${exportCount()} of `);
+    expect(document.querySelector(".note")!.textContent).toContain(`${await exportCount()} of `);
   });
 
   it("disables what's shown when the list is empty, and still offers all", async () => {
     const save = vi.spyOn(download, "downloadFile");
     await renderAt("/all-leads?q=no-such-company");
-    const button = screen.getByRole("button", { name: "Export 0 shown" });
-    expect(button).toBeDisabled();
-    await userEvent.click(button);
+    await userEvent.click(exportButton());
+    const shown = screen.getByRole("menuitem", { name: "Export 0 shown" });
+    expect(shown).toBeDisabled();
+    await userEvent.click(shown);
     expect(save).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole("button", { name: "More ways to export" }));
-    expect(screen.getByRole("menuitem", { name: "Export 0 shown" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: /^Export all \d+$/ })).toBeEnabled();
   });
 
-  it("is one disabled button when the tab holds nothing at all", async () => {
+  it("is disabled, with no menu, when the tab holds nothing at all", async () => {
     await renderAt("/applications", { ...fixture, applications: [] });
-    expect(screen.getByRole("button", { name: "Export 0" })).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "More ways to export" })).toBeNull();
+    expect(exportButton()).toBeDisabled();
+    expect(hasMenu()).toBe(false);
+    expect(exportButton()).toHaveAttribute("title", "Nothing in this list to export");
   });
 
   it("leaves the save indicator alone", async () => {
@@ -238,22 +256,31 @@ describe("exporting everything a tab holds", () => {
   it.each([
     ["a leads tab under All, unfiltered", "/all-leads?filter=All"],
     ["Applications with no drill", "/applications"],
-  ])("is one button, with no menu, on %s", async (_, path) => {
+  ])("downloads everything straight from the button, with no menu, on %s", async (_, path) => {
     await renderAt(path);
-    expect(shownButton()).toHaveTextContent(/^Export \d+$/);
-    expect(screen.queryByRole("button", { name: "More ways to export" })).toBeNull();
+    expect(exportButton()).toHaveTextContent(/^Export$/);
+    expect(hasMenu()).toBe(false);
+    expect(exportButton().getAttribute("title")).toMatch(/^Download all \d+ rows as a CSV file$/);
+    const file = await exportRows();
     // With nothing filtered, what's shown is everything, so its file is named as all.
-    expect((await exportRows()).filename).not.toContain("-shown-");
+    expect(file.filename).not.toContain("-shown-");
+    expect(file.rows).toHaveLength(Number(/all (\d+) rows/.exec(exportButton().getAttribute("title")!)![1]));
   });
 
   it.each([
     ["a leads tab on its default Open chip", "/all-leads"],
     ["a leads tab with a search", "/all-leads?filter=All&q=acme"],
     ["Applications with a drill", "/applications?drill=applied"],
-  ])("offers shown or all, shown first, on %s", async (_, path) => {
+  ])("opens a menu of shown or all, shown first, on %s", async (_, path) => {
+    const save = vi.spyOn(download, "downloadFile");
     await renderAt(path);
-    const n = exportCount();
-    await userEvent.click(screen.getByRole("button", { name: "More ways to export" }));
+    expect(exportButton()).toHaveTextContent(/^Export/);
+    expect(hasMenu()).toBe(true);
+    const n = await exportCount();
+    await userEvent.click(exportButton());
+    // Opening the menu downloads nothing.
+    expect(save).not.toHaveBeenCalled();
+    expect(exportButton()).toHaveAttribute("aria-expanded", "true");
     const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
     expect(items[0]).toBe(`Export ${n} shown`);
     expect(items[1]).toMatch(/^Export all \d+$/);
@@ -263,7 +290,7 @@ describe("exporting everything a tab holds", () => {
   it("closes the menu on Escape without downloading", async () => {
     const save = vi.spyOn(download, "downloadFile");
     await renderAt("/all-leads");
-    await userEvent.click(screen.getByRole("button", { name: "More ways to export" }));
+    await userEvent.click(exportButton());
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();

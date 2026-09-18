@@ -83,11 +83,11 @@ export function DrillChip({
  *
  * `shown` must be the array the list renders, filtered and sorted, never a
  * second filtering of its own; `all` is the tab's every row in the same sort.
- * When the two are the same length they are the same rows, so there is one
- * button; otherwise the button exports what's shown and a menu offers all. The
- * counts decide it, so the control never offers a choice that makes no
- * difference. Nothing is written to the server, so the save indicator stays
- * silent.
+ * The button always reads "Export". When the two differ it opens a menu of
+ * both, with the counts; when they're the same length they're the same rows,
+ * so a click downloads them and the tooltip gives the count. The counts decide
+ * it, so the control never offers a choice that makes no difference. Nothing
+ * is written to the server, so the save indicator stays silent.
  */
 export function ExportButton<T>({
   shown,
@@ -129,9 +129,11 @@ export function ExportButton<T>({
 
   if (shown.length === all.length) {
     const n = all.length;
+    const title =
+      n === 0 ? "Nothing in this list to export" : n === 1 ? "Download the one row as a CSV file" : `Download all ${n} rows as a CSV file`;
     return (
-      <button className="btn" type="button" disabled={!n} title={rowsTitle(n, "this list's")} onClick={() => save(all, false)}>
-        Export {n}
+      <button className="btn" type="button" disabled={!n} title={title} onClick={() => save(all, false)}>
+        Export
       </button>
     );
   }
@@ -146,25 +148,12 @@ export function ExportButton<T>({
   };
 
   return (
-    <div className="export-split" ref={wrap}>
-      <button
-        className="btn export-main"
-        type="button"
-        disabled={!shown.length}
-        title={rowsTitle(shown.length, "the")}
-        onClick={() => save(shown, true)}
-      >
-        Export {shown.length} shown
-      </button>
-      <button
-        className="btn export-more"
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="More ways to export"
-        onClick={() => setOpen((o) => !o)}
-      >
-        ▾
+    <div className="export-wrap" ref={wrap}>
+      <button className="btn" type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        Export
+        <svg className="export-caret" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
       {open && (
         <div className="export-menu" role="menu" aria-label="Export" onKeyDown={moveFocus}>
@@ -185,10 +174,4 @@ export function ExportButton<T>({
       )}
     </div>
   );
-}
-
-/** A download button's tooltip: what the file will hold. */
-function rowsTitle(n: number, whose: string): string {
-  if (n === 0) return "Nothing in this list to export";
-  return n === 1 ? `Download ${whose} one row as a CSV file` : `Download ${whose} ${n} rows as a CSV file`;
 }
