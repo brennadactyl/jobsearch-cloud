@@ -664,10 +664,11 @@ if ($failure) {
 #
 # The check ends in one fixed line, whatever it found: what a run did is
 # otherwise only in the model's prose, which scripts/run-report.ps1 won't parse.
-# The counts are the record's own, which the tracker derives from the rows that
-# landed. `swept` is this search's own number - a tab another search fills reads
-# 0 - and is left off entirely by a deployment that doesn't keep one, so a
-# report shows "no count" rather than a false zero.
+# The counts are the records' own, which the tracker derives from the rows that
+# landed, summed over every tab the run fills. `swept` is this search's own
+# number, never summed - a tab another search fills reads 0 - and is left off
+# entirely by a deployment that doesn't keep one, so a report shows "no count"
+# rather than a false zero.
 $recordSummary = "status=unchecked"
 if ($exitCode -eq 0) {
     if ($null -eq $recordBefore) {
@@ -688,7 +689,16 @@ if ($exitCode -eq 0) {
                 $exitCode = 1
             } else {
                 $r = $track.last_run
-                $recordSummary = "status=$([string]$r.status) leads_added=$([int]$r.leads_added) screened_added=$([int]$r.screened_added) delisted=$([int]$r.delisted)"
+                # A search that fills other tabs lands most of its rows there,
+                # and each tab keeps its own counts, so the search's numbers are
+                # the sum over every tab this run recorded - matched on the
+                # record's instant, which one ./tracker run stamps on all of them.
+                $group = @($cfg.tracks | Where-Object {
+                    $_ -and ($_.key -eq $Task -or $_.fed_by -eq $Task) -and
+                    $_.last_run -and [string]$_.last_run.at -eq $recordedAt
+                })
+                $sum = { param($field) ($group | ForEach-Object { [int]$_.last_run.$field } | Measure-Object -Sum).Sum }
+                $recordSummary = "status=$([string]$r.status) leads_added=$(& $sum 'leads_added') screened_added=$(& $sum 'screened_added') delisted=$(& $sum 'delisted')"
                 if ($null -ne $r.PSObject.Properties["swept"] -and $null -ne $r.swept) {
                     $recordSummary += " swept=$([int]$r.swept)"
                 }
