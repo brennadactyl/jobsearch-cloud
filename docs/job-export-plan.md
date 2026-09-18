@@ -27,26 +27,33 @@ in Detail view.
 
 ## What the person sees
 
-An **Export** button in the toolbar of every leads tab (each track and the
-pooled "All leads" tab) and of the Applications tab. Its label carries the
-count, `Export 12`, and its tooltip says "Download these 12 rows as a CSV
-file".
+An **Export** control in the toolbar of every leads tab (each track and the
+pooled "All leads" tab) and of the Applications tab. It offers two files:
 
-- **It exports the rows the list is showing**, in the order it shows them:
+- **What's shown** - the rows the list is showing, in the order it shows them:
   the status chip, the text filter, a drill from an Overview tile and the sort
-  all apply. The count is the length of the list the tab renders, which is
-  the same array it exports; on a leads tab that is also the N in its "N of M
-  shown" note. To export everything, clear the filters, the same as seeing
-  everything.
+  all apply. Its count is the length of the list the tab renders, the same
+  array it exports; on a leads tab that is also the N in its "N of M shown"
+  note.
+- **All** - every row the tab holds, whatever is filtered: on a leads tab every
+  status, `Not a fit` included (the M of "N of M shown"); on Applications every
+  application. In the tab's current sort.
+
+When nothing is filtered the two are the same rows, and the control is a single
+button, `Export 40`. When they differ it is a button with a menu:
+`Export 12 shown` and `Export all 40`, the first as the default. The counts are
+what decide which appears, so it can't offer a choice that makes no difference.
+
 - **Grid arranges the list; it doesn't change the file.** Applications in Grid
   view groups rows by fill state, and a group can be folded. The file holds the
   whole list in its sort order, folded groups included, the same as Detail.
 - **It exports every field, not the visible columns.** The file has the same
   columns in Grid and Detail view.
-- **When the list is empty the button is disabled.** An empty file is never
-  downloaded.
-- **Filename:** `<tab label>-<YYYY-MM-DD>.csv`, for example
-  `Applications-2026-09-15.csv`. The date is today's local date, since the
+- **An option with no rows is disabled.** An empty file is never downloaded;
+  a tab with nothing in it at all has the whole control disabled.
+- **Filename:** `<tab label>-<YYYY-MM-DD>.csv` for all rows, and
+  `<tab label>-shown-<YYYY-MM-DD>.csv` for a filtered export, for example
+  `Applications-2026-09-15.csv` and `Applications-shown-2026-09-15.csv`. The date is today's local date, since the
   person and the nightly runs are in the same timezone. Characters that aren't
   allowed in filenames become `-`.
 - A click downloads the file directly: no dialog, and nothing to confirm.
@@ -127,6 +134,10 @@ they can't interpret in the file.
   the exported rows equal the rendered rows, in the same order. This extends the
   drill invariant the page already enforces, so an export can never quietly
   include a row the list hid.
+- **All:** on a leads tab, the rows equal the tab's `filter=All` rows with no
+  text query or drill, in the current sort, and their count is the M in "N of M
+  shown"; on Applications, every application. The single button shows only when
+  the two counts are equal, and the menu only when they differ.
 - Every header comes from `constants.ts`, not from a literal in `export.ts`.
 - The button is disabled on an empty list. On every tab, in both views, its
   count equals the number of rows the list renders, which on a leads tab is the
