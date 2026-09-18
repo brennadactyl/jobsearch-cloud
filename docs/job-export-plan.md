@@ -39,10 +39,12 @@ pooled "All leads" tab) and of the Applications tab. It offers two files:
   status, `Not a fit` included (the M of "N of M shown"); on Applications every
   application. In the tab's current sort.
 
-When nothing is filtered the two are the same rows, and the control is a single
-button, `Export 40`. When they differ it is a button with a menu:
-`Export 12 shown` and `Export all 40`, the first as the default. The counts are
-what decide which appears, so it can't offer a choice that makes no difference.
+The button reads **Export**. When the two are different rows it carries a menu
+caret, and a click opens the menu - `Export 21 shown` first, then `Export all
+25` - rather than downloading. When nothing is filtered the two are the same rows,
+so there is no menu: a click downloads all of them, and the tooltip gives the
+count. The counts decide which appears, so it never offers a choice that makes
+no difference.
 
 - **Grid arranges the list; it doesn't change the file.** Applications in Grid
   view groups rows by fill state, and a group can be folded. The file holds the
@@ -136,8 +138,8 @@ they can't interpret in the file.
   include a row the list hid.
 - **All:** on a leads tab, the rows equal the tab's `filter=All` rows with no
   text query or drill, in the current sort, and their count is the M in "N of M
-  shown"; on Applications, every application. The single button shows only when
-  the two counts are equal, and the menu only when they differ.
+  shown"; on Applications, every application. The button downloads directly only
+  when the two counts are equal, and opens the menu only when they differ.
 - Every header comes from `constants.ts`, not from a literal in `export.ts`.
 - The button is disabled on an empty list. On every tab, in both views, its
   count equals the number of rows the list renders, which on a leads tab is the
