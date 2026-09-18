@@ -48,9 +48,11 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   const narrowed = (l: Lead) =>
     drillKeeps(drill, "leads", l, data) &&
     (!needle || `${l.company} ${l.title} ${l.location}`.toLowerCase().includes(needle));
-  const rows = all
-    .filter((l) => leadFilterKeeps(filter, l) && narrowed(l))
-    .sort(leadComparator(prefs.leadSort, settings.priority_locations));
+  const byChosenSort = leadComparator(prefs.leadSort, settings.priority_locations);
+  const rows = all.filter((l) => leadFilterKeeps(filter, l) && narrowed(l)).sort(byChosenSort);
+  // What "Export all" writes: the tab under the All chip, with no search or
+  // drill, in the same sort. Its length is the M in "N of M shown".
+  const everyRow = all.filter((l) => leadFilterKeeps(ALL_FILTER, l)).sort(byChosenSort);
 
   const withFilter = (f: string) => {
     const next = new URLSearchParams(params);
@@ -117,7 +119,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
           <DrillChip drill={drill} ctx={data} clearTo={pathWithoutDrill(trackKey, params)} />
         </div>
         <ViewSwitch />
-        <ExportButton rows={rows} columns={leadColumns(tracks, settings)} label={scopeLabel} />
+        <ExportButton shown={rows} all={everyRow} columns={leadColumns(tracks, settings)} label={scopeLabel} />
       </div>
       {/* Sort sits in this quieter row: it is glanced at, not touched constantly. */}
       <div className="key">

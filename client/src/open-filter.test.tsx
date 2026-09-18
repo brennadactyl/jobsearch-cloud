@@ -191,7 +191,8 @@ describe("exporting from a leads tab", () => {
   async function exported(path: string) {
     const save = vi.spyOn(download, "downloadFile").mockImplementation(() => {});
     await renderAt(path);
-    await userEvent.click(screen.getByRole("button", { name: /^Export \d+$/ }));
+    // What the list shows: the single button, or the split button's main half.
+    await userEvent.click(screen.getByRole("button", { name: /^Export \d+( shown)?$/ }));
     return save.mock.calls[0][1];
   }
 
