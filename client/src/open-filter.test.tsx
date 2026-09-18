@@ -191,7 +191,10 @@ describe("exporting from a leads tab", () => {
   async function exported(path: string) {
     const save = vi.spyOn(download, "downloadFile").mockImplementation(() => {});
     await renderAt(path);
-    await userEvent.click(screen.getByRole("button", { name: /^Export \d+$/ }));
+    // What the list shows: the button itself, or its menu's first choice.
+    const button = screen.getByRole("button", { name: "Export" });
+    await userEvent.click(button);
+    if (button.getAttribute("aria-haspopup")) await userEvent.click(screen.getByRole("menuitem", { name: /^Export \d+ shown$/ }));
     return save.mock.calls[0][1];
   }
 

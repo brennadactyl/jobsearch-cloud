@@ -1,4 +1,5 @@
 /** The controls above a leads or applications list: view, sort, the drill filter chip and CSV export. */
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { APP_SORTS, LEAD_SORTS } from "../domain/constants";
 import { drillLabel, type DrillContext } from "../domain/drills";
@@ -78,35 +79,99 @@ export function DrillChip({
 }
 
 /**
- * Downloads the rows a list shows as CSV. `rows` must be the array the list
- * renders, filtered and sorted, never a second filtering of its own. Nothing is
- * written to the server, so the save indicator stays silent.
+ * Downloads a list as CSV: either the rows it shows, or every row the tab holds.
+ *
+ * `shown` must be the array the list renders, filtered and sorted, never a
+ * second filtering of its own; `all` is the tab's every row in the same sort.
+ * The button always reads "Export". When the two differ it opens a menu of
+ * both, with the counts; when they're the same length they're the same rows,
+ * so a click downloads them and the tooltip gives the count. The counts decide
+ * it, so the control never offers a choice that makes no difference. Nothing
+ * is written to the server, so the save indicator stays silent.
  */
 export function ExportButton<T>({
-  rows,
+  shown,
+  all,
   columns,
   label,
 }: {
-  rows: readonly T[];
+  shown: readonly T[];
+  all: readonly T[];
   columns: readonly Column<T>[];
   label: string;
 }) {
-  const n = rows.length;
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+
+  // Closes on a click anywhere else, and on Escape, like any menu.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const save = (rows: readonly T[], filtered: boolean) => {
+    setOpen(false);
+    if (!rows.length) return;
+    const name = exportFilename(filtered ? `${label}-shown` : label, isoDay(new Date()));
+    downloadFile(name, toCsv(columns, rows), "text/csv;charset=utf-8");
+  };
+
+  if (shown.length === all.length) {
+    const n = all.length;
+    const title =
+      n === 0 ? "Nothing in this list to export" : n === 1 ? "Download the one row as a CSV file" : `Download all ${n} rows as a CSV file`;
+    return (
+      <button className="btn" type="button" disabled={!n} title={title} onClick={() => save(all, false)}>
+        Export
+      </button>
+    );
+  }
+
+  // Up and Down move between the two choices, as in any menu.
+  const moveFocus = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+  };
+
   return (
-    <button
-      className="btn"
-      type="button"
-      disabled={!n}
-      title={
-        n === 0
-          ? "Nothing in this list to export"
-          : n === 1
-            ? "Download this row as a CSV file"
-            : `Download these ${n} rows as a CSV file`
-      }
-      onClick={() => downloadFile(exportFilename(label, isoDay(new Date())), toCsv(columns, rows), "text/csv;charset=utf-8")}
-    >
-      Export {n}
-    </button>
+    <div className="export-wrap" ref={wrap}>
+      <button className="btn" type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        Export
+        <svg className="export-caret" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="export-menu" role="menu" aria-label="Export" onKeyDown={moveFocus}>
+          <button
+            className="export-item"
+            type="button"
+            role="menuitem"
+            disabled={!shown.length}
+            autoFocus={!!shown.length}
+            onClick={() => save(shown, true)}
+          >
+            Export {shown.length} shown
+          </button>
+          <button className="export-item" type="button" role="menuitem" autoFocus={!shown.length} onClick={() => save(all, false)}>
+            Export all {all.length}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

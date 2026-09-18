@@ -92,7 +92,8 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
         {/* The sorted list both views draw from. Grid's fill-state groups and
             folds only arrange that list on screen, so they don't change the file. */}
         <ExportButton
-          rows={rows}
+          shown={rows}
+          all={all}
           columns={applicationColumns(settings)}
           label={settings.applications_label || "Applications"}
         />
