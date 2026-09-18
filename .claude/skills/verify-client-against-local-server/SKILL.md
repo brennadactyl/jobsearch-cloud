@@ -99,6 +99,10 @@ Gotchas:
    ```powershell
    Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'wrangler.*--port 8791' } | ForEach-Object { taskkill /PID $_.ProcessId /T /F }
    ```
+
+   The match catches both the `npx.cmd` wrapper's node process and its child,
+   so a "process not found" from the second is expected: the first tree kill
+   already took it.
 3. Remove the junction only:
    `cmd /c rmdir C:\VibeCoding\_srv\server\node_modules`. Never
    `Remove-Item -Recurse` on it, which follows the junction into the main
