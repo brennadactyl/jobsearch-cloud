@@ -9,8 +9,7 @@
  */
 import type { ReactNode } from "react";
 import { listEntries, type PlaceKey, type Places } from "../domain/places";
-
-const TIER_COLOURS = ["var(--pri-0)", "var(--pri-1)", "var(--pri-2)", "var(--pri-3)", "var(--pri-4)"];
+import { PlaceEntries, RankedPlaces } from "./location";
 
 export default function LocationsSection({
   values,
@@ -54,7 +53,7 @@ export default function LocationsSection({
         hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
       >
         {/* Empty doesn't mean anywhere: the search looks only where the ranked list says. */}
-        <Entries lead="Searched:" entries={searched} empty="Only the ranked places" />
+        <PlaceEntries lead="Searched:" entries={searched} empty="Only the ranked places" />
       </PlaceField>
 
       <PlaceField
@@ -63,16 +62,7 @@ export default function LocationsSection({
         placeholder="Seattle area, Portland OR, Remote US"
         hint="In order — the first is the one you want most. Anywhere you don't name still shows up, just lower."
       >
-        {ranked.length > 0 && (
-          <div className="key loc-ranked">
-            {ranked.map((place, i) => (
-              <span key={`${i}-${place}`}>
-                <i style={{ background: TIER_COLOURS[i] ?? "var(--ink3)" }} />
-                {i + 1}. {place}
-              </span>
-            ))}
-          </div>
-        )}
+        <RankedPlaces entries={ranked} />
       </PlaceField>
 
       <PlaceField
@@ -82,7 +72,7 @@ export default function LocationsSection({
         placeholder="Portland OR, Texas"
         hint="Optional, and only a rule-out: somewhere inside the searched area that you still couldn't take. It never narrows where the search looks on its own."
       >
-        <Entries lead="Ruled out:" entries={ruledOut} />
+        <PlaceEntries lead="Ruled out:" entries={ruledOut} />
       </PlaceField>
 
       <PlaceField
@@ -151,25 +141,6 @@ function PlaceField({
         </p>
       )}
       <p className="loc-hint">{hint}</p>
-    </div>
-  );
-}
-
-/** An unranked list as the commas split it, so a person sees how it was read. */
-function Entries({ lead, entries, empty }: { lead: string; entries: string[]; empty?: string }) {
-  if (!entries.length && !empty) return null;
-  return (
-    <div className="loc-entries">
-      <span>{lead}</span>
-      {entries.length ? (
-        entries.map((e, i) => (
-          <span className="loc-entry" key={`${i}-${e}`}>
-            {e}
-          </span>
-        ))
-      ) : (
-        <span className="loc-empty">{empty}</span>
-      )}
     </div>
   );
 }

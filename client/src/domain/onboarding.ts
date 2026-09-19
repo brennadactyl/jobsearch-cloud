@@ -5,7 +5,6 @@
  */
 import { DEFAULT_STALE_RUN_HOURS, type IntakeAnswers, type InviteReason, type RoleAnswer } from "../api/schema";
 import { HOUR_MS } from "./format";
-import { parseLocations, tooManyLocations } from "./locations";
 
 export const MAX_NAME = 60;
 /** The documents route refuses anything larger. */
@@ -74,7 +73,7 @@ export function emptyAnswers(displayName: string): IntakeAnswers {
     work_scope: "",
     location_limits: "",
     locations_first: "",
-    priority_locations: [],
+    location_note: "",
     roles: [emptyRole()],
     never_work_for: "",
     preferences: "",
@@ -82,7 +81,9 @@ export function emptyAnswers(displayName: string): IntakeAnswers {
 }
 
 /** Messages keyed by where they sit on the form; empty means it can send. */
-export type SetupProblems = Partial<Record<"attach" | "work_scope" | "locations" | `role-${number}`, string>>;
+export type SetupProblems = Partial<
+  Record<"attach" | "work_scope" | "locations_first" | "location_limits" | "location_note" | `role-${number}`, string>
+>;
 
 /**
  * What stops a send. `files` is every attachment the resume section lists, stored
@@ -102,10 +103,6 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
   if (!answers.work_scope.trim()) {
     found.work_scope = "Say what locations should be searched — the search needs somewhere to look.";
   }
-  const entries = parseLocations(answers.locations_first);
-  const tooMany = tooManyLocations(entries);
-  if (tooMany) found.locations = tooMany;
-  else if (entries.some((e) => "problem" in e)) found.locations = "Fix the highlighted place before sending.";
   const usable = answers.roles.some((r) => r.name.trim() && r.titles.trim());
   if (!usable) {
     const i = Math.max(0, answers.roles.findIndex((r) => !r.name.trim() || !r.titles.trim()));

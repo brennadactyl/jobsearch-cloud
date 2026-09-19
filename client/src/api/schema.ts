@@ -11,7 +11,6 @@
  * `server/src/routes/data.js` for the envelope.
  */
 import { z } from "zod";
-import { locationRules, parseLocations } from "../domain/locations";
 import { listEntries } from "../domain/places";
 
 /** Text columns are `NOT NULL DEFAULT ''` throughout, so "" is the empty case, not null. */
@@ -132,25 +131,8 @@ export const trackSchema = z.object({
   // vocabulary.
 });
 
-/** One location rule the setup form builds from a ranked entry it can read. */
-export const priorityLocationSchema = z.object({
-  label: str,
-  allOf: z.array(z.string()).optional(),
-  anyOf: z.array(z.string()).optional(),
-});
-
 /** The server's default too (DEFAULT_SETTINGS in server/src/db.js); used wherever a stored value is missing or zero. */
 export const DEFAULT_STALE_RUN_HOURS = 36;
-
-/**
- * The ranked places a sent setup carries, as the rules the setup form built
- * from them. A list that arrives as text is built into rules the same way; an
- * entry the form can't read builds no rule.
- */
-const rankedPlaces = z
-  .union([z.string(), z.array(priorityLocationSchema)])
-  .nullish()
-  .transform((v) => (typeof v === "string" ? locationRules(parseLocations(v)) : (v ?? [])));
 
 const placeText = z
   .string()
@@ -237,7 +219,7 @@ export const intakeAnswersSchema = z.object({
   work_scope: str.default(""),
   location_limits: str.default(""),
   locations_first: str.default(""),
-  priority_locations: rankedPlaces,
+  location_note: str.default(""),
   roles: z.array(roleAnswerSchema).default([]),
   never_work_for: str.default(""),
   preferences: str.default(""),
@@ -260,7 +242,6 @@ export type Application = z.infer<typeof applicationSchema>;
 export type Screened = z.infer<typeof screenedSchema>;
 export type Track = z.infer<typeof trackSchema>;
 export type LastRun = z.infer<typeof lastRunSchema>;
-export type PriorityLocation = z.infer<typeof priorityLocationSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type User = z.infer<typeof userSchema>;
 export type TrackerData = z.infer<typeof dataSchema>;
