@@ -53,6 +53,11 @@ rule arrays does - see Existing searches.
   the ends, and the prompt interprets it - including "Portland, OR", "WA" or
   "Greater Seattle area". The page's read-back only shows how the commas split
   each list, and the ranked list's order and tier colour.
+- **One split rule, everywhere:** a list's entries are its text split on commas,
+  each trimmed, empties dropped; an area matches an entry exactly, case included.
+  "Portland, OR" is two entries, "Portland" and "OR", and the read-back shows
+  it that way. The server, `tracker.ps1`, the page and the one-time fill use this
+  rule and no other.
 - **Tier colours come from each lead's area** (below), not from matching text.
 - **An optional note, `location_note`,** keeps what a list can't say - "open to relocating for
   the right team" - and reaches the prompt as context.
