@@ -37,6 +37,38 @@ export const LOCATION_LIST_KEYS = ["search_locations", "excluded_locations", "pr
 export const LOCATION_LIST_MAX_CHARS = 4000;
 export const LOCATION_NOTE_MAX_CHARS = 1000;
 
+// A migrated account's ranking rules, kept as they were: `[{label, allOf?,
+// anyOf?}]`, each array a list of strings a lead's location is matched against
+// (docs/location-settings-plan.md, "The stand-in rules"). Only an operator
+// writes them, restoring what an account had; a person's own list replaces them.
+export const PRIORITY_RULES_MAX = 20;
+
+/** The first thing wrong with a set of ranking rules, or "" for none. */
+export function priorityRulesError(rules) {
+  if (!Array.isArray(rules)) return "priority_rules must be a list";
+  if (rules.length > PRIORITY_RULES_MAX) return `at most ${PRIORITY_RULES_MAX} ranking rules`;
+  for (const [i, rule] of rules.entries()) {
+    const at = `ranking rule ${i + 1}`;
+    if (!rule || typeof rule !== "object" || Array.isArray(rule)) return `${at} must be an object`;
+    const unknown = Object.keys(rule).find((k) => !["label", "allOf", "anyOf"].includes(k));
+    if (unknown) return `${at} has an unknown field "${unknown}"`;
+    if (typeof rule.label !== "string" || !rule.label.trim() || rule.label.length > 60) {
+      return `${at} needs a label of 1 to 60 characters`;
+    }
+    let terms = 0;
+    for (const key of ["allOf", "anyOf"]) {
+      if (rule[key] === undefined) continue;
+      const list = rule[key];
+      if (!Array.isArray(list) || list.length > 20 || list.some((t) => typeof t !== "string" || !t || t.length > 80)) {
+        return `${at}'s ${key} must be at most 20 strings of 1 to 80 characters`;
+      }
+      terms += list.length;
+    }
+    if (!terms) return `${at} needs at least one term in allOf or anyOf`;
+  }
+  return "";
+}
+
 /**
  * What is wrong with one location setting as sent, or "" for nothing. The
  * value is judged after trimming, which is how it is stored.

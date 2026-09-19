@@ -138,6 +138,30 @@ account's operator before it is written - it's a person's search geography, and
 a wrong conversion would silently narrow or widen it. Then the prose fields are
 cleared and the tier tables removed from the docs.
 
+### The stand-in rules
+
+A label alone doesn't rebuild the rule it named. An account whose rules were
+set by hand or by the setup skill matched more than its labels - "Seattle area"
+stood for Seattle, Bellevue, Redmond and Kirkland - so after the migration most
+of its leads lost their tier. Those accounts keep their old rules, as they were,
+in one more setting:
+
+- **`priority_rules`**, the account's old `[{label, allOf?, anyOf?}]` array, or
+  `[]`. The page ranks by it while it is set, and builds from
+  `priority_locations` when it is empty. It is restored from the backup taken
+  before the migration, and only for accounts whose tiers the migration changed.
+- **Only an operator writes it,** through `POST /api/config`, checked for the
+  rules' shape. `POST /api/settings` refuses it.
+- **The person's own list replaces it.** The first time `priority_locations`
+  is saved with a different value, `priority_rules` is dropped in the same
+  write, so a stand-in can never contradict a list the person typed. Saving the
+  same list again, as a save of another field does, keeps it. An operator write
+  of a different `priority_locations` drops it too, unless it also sets
+  `priority_rules`.
+- **What the person loses on that first edit** is whatever their labels didn't
+  say: "Seattle area" then matches only its own words unless they list Bellevue
+  and Redmond themselves. The page says so beside the list.
+
 ## Releasing
 
 The page ships first, reading `priority_locations` either as typed or as the

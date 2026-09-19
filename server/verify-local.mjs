@@ -3210,5 +3210,67 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await lcSettings(LC_B)).priority_locations === "" && (await lcSettings(LC_B)).search_locations === "x".repeat(4000));
 }
 
+
+{
+  console.log("\n== a migrated account's ranking rules, until the person types their own ==");
+  // The stand-in rules (docs/location-settings-plan.md): an operator restores
+  // the rules an account had, and the first different ranked list the person
+  // saves drops them.
+  const prRun = Date.now();
+  const prUser = async (tag) => {
+    const name = `Rules ${tag} ${prRun}`;
+    await req("POST", "/api/users", { admin: true, body: { name, password: `rules-${tag}-long-password` } });
+    const token = (await req("POST", "/api/login", { body: { name, password: `rules-${tag}-long-password` } })).json.token;
+    await req("POST", "/api/config", { token, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+    return token;
+  };
+  const PR = await prUser("a"), PR_B = await prUser("b");
+  const prSettings = async (token) => (await req("GET", "/api/config", { token })).json?.settings || {};
+  const kept = [
+    { label: "Seattle area", anyOf: ["seattle", "bellevue", "redmond", "kirkland"] },
+    { label: "Remote US", allOf: ["remote"] },
+  ];
+
+  check("an account with no stand-in rules reads them as an empty list",
+    JSON.stringify((await prSettings(PR)).priority_rules) === "[]");
+  const prRestore = await req("POST", "/api/config", { token: PR, body: {
+    priority_locations: "Seattle area, Remote US", priority_rules: kept } });
+  const restored = await prSettings(PR);
+  check("an operator restores an account's rules alongside its list",
+    prRestore.status === 200 && JSON.stringify(restored.priority_rules) === JSON.stringify(kept) &&
+    restored.priority_locations === "Seattle area, Remote US", JSON.stringify(restored.priority_rules));
+  check("and /api/data serves them to the page",
+    JSON.stringify((await req("GET", "/api/data", { token: PR })).json?.settings?.priority_rules) === JSON.stringify(kept));
+
+  for (const [why, rules] of [
+    ["something other than a list", "Seattle"],
+    ["a rule with an unknown field", [{ label: "Seattle", anyOf: ["seattle"], tier: 1 }]],
+    ["a rule with no terms", [{ label: "Seattle", anyOf: [] }]],
+    ["more than twenty rules", Array.from({ length: 21 }, (_, i) => ({ label: `L${i}`, anyOf: ["x"] }))],
+  ]) {
+    const res = await req("POST", "/api/config", { token: PR, body: { priority_rules: rules } });
+    check(`stand-in rules are refused: ${why}`, res.status === 400 && res.json?.field === "priority_rules", JSON.stringify(res.json));
+  }
+  check("the person's own route can't write them",
+    (await req("POST", "/api/settings", { token: PR, body: { priority_rules: kept } })).json?.field === "priority_rules");
+
+  await req("POST", "/api/settings", { token: PR, body: { priority_locations: " Seattle area, Remote US ", location_note: "a note" } });
+  check("saving the same ranked list again keeps them - a save of another field isn't an edit of the list",
+    JSON.stringify((await prSettings(PR)).priority_rules) === JSON.stringify(kept));
+
+  await req("POST", "/api/settings", { token: PR, body: { priority_locations: "Seattle, Bellevue, Remote US" } });
+  const edited = await prSettings(PR);
+  check("the first different list the person saves drops them, so their list rules",
+    JSON.stringify(edited.priority_rules) === "[]" && edited.priority_locations === "Seattle, Bellevue, Remote US",
+    JSON.stringify(edited.priority_rules));
+
+  await req("POST", "/api/config", { token: PR_B, body: { priority_locations: "Boston", priority_rules: [{ label: "Boston", anyOf: ["boston"] }] } });
+  await req("POST", "/api/config", { token: PR_B, body: { priority_locations: "Austin" } });
+  check("an operator's different list drops them too, unless it sets them",
+    JSON.stringify((await prSettings(PR_B)).priority_rules) === "[]");
+  check("another account's rules are its own",
+    JSON.stringify((await prSettings(PR)).priority_rules) === "[]" && (await prSettings(PR_B)).priority_locations === "Austin");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

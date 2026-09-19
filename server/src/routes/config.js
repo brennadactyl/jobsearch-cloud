@@ -7,7 +7,7 @@
 
 import { LOCATION_SETTING_KEYS, parseDocumentList, WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
 import { json, readJson } from "../http.js";
-import { locationSettingError, trackDocumentsError, unknownTrack, unreadableDocumentsError } from "../validate.js";
+import { locationSettingError, priorityRulesError, trackDocumentsError, unknownTrack, unreadableDocumentsError } from "../validate.js";
 
 /**
  * The refusal for a `documents` list a search couldn't read its resume from,
@@ -110,11 +110,17 @@ export async function handleWriteUp({ request, db }) {
  * POST /api/config - requires a Bearer token. Body `{ tracks?, display_title?,
  * overview_label?, applications_label?, all_leads_label?, stale_run_hours?,
  * search_locations?, excluded_locations?, priority_locations?, location_note?,
- * excluded_companies?, geo_scope_line?, scope_clause?, scope_disqualifier?,
+ * priority_rules?, excluded_companies?, geo_scope_line?, scope_clause?, scope_disqualifier?,
  * location_guidance?, footer_note?, pronouns? }` -> `{ tracks[], settings }`;
  * 400 for an empty or invalid track list, a `fed_by` that isn't another listed
  * track, a non-positive `stale_run_hours`, or a location setting that isn't
- * text or is too long (validate.js locationSettingError).
+ * text or is too long (validate.js locationSettingError), or `priority_rules` that
+ * aren't ranking rules (validate.js priorityRulesError).
+ *
+ * `priority_rules` is how an operator restores a migrated account's ranking
+ * (docs/location-settings-plan.md); it is not the person's to write, so POST
+ * /api/settings refuses it. A `priority_locations` that differs from the stored
+ * one drops them unless the same write sets them (db.setSettings).
  *
  * `tracks` replaces the whole track list, since setup writes the complete set
  * at once. Leads and applications under a removed track keep their `search`
@@ -131,6 +137,10 @@ export async function handleSetConfig({ request, db }) {
     if (body[key] === undefined) continue;
     const problem = locationSettingError(key, body[key]);
     if (problem) return json({ error: problem, field: key }, 400);
+  }
+  if (body.priority_rules !== undefined) {
+    const problem = priorityRulesError(body.priority_rules);
+    if (problem) return json({ error: problem, field: "priority_rules" }, 400);
   }
 
   if (Array.isArray(body.tracks)) {
