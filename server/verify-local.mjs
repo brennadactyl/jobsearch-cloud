@@ -2298,8 +2298,8 @@ check("the location answers become the location settings, as typed and trimmed a
   builtConfig.settings?.location_note === "open to relocating",
   JSON.stringify(builtConfig.settings));
 check("nothing the run owns is written on send",
-  builtConfig.tracks?.every((t) => t.role_search_line === "" && t.fit_clause === "" && t.schedule_time === "") &&
-  !builtConfig.settings?.geo_scope_line, JSON.stringify(builtConfig.tracks[0]));
+  builtConfig.tracks?.every((t) => t.role_search_line === "" && t.fit_clause === "" && t.schedule_time === ""),
+  JSON.stringify(builtConfig.tracks[0]));
 check("a second send is refused whatever the state - there is no re-send",
   (await postIntake(I_TOK, instAnswers)).status === 409);
 check("one person's setup is invisible to another",
@@ -2321,10 +2321,20 @@ check("and nothing in that call was written",
   (await req("GET", "/api/config", { token: I_TOK })).json.tracks?.[0]?.role_search_line === "");
 const writeUp = await req("POST", "/api/writeup", { token: I_TOK, body: {
   search: "engineering", role_search_line: "engineering manager roles", fit_clause: "must be remote",
-  schedule_time: "01:00", geo_scope_line: "Search the US." } });
-check("the run writes its own fields, per-track and per-account, in one call",
+  schedule_time: "01:00" } });
+check("the run writes its own fields in one call",
   writeUp.status === 200 && writeUp.json.written?.includes("role_search_line") &&
-  writeUp.json.written?.includes("geo_scope_line"), JSON.stringify(writeUp.json));
+  writeUp.json.written?.includes("schedule_time"), JSON.stringify(writeUp.json));
+// Where a search looks is the person's now (docs/location-settings-plan.md),
+// so the run's old scope wording is refused by name like any other field it
+// doesn't own.
+for (const field of ["geo_scope_line", "scope_clause", "scope_disqualifier"]) {
+  check(`the run can't write the retired scope wording: ${field}`,
+    (await req("POST", "/api/writeup", { token: I_TOK, body: { search: "engineering", [field]: "Search the US." } })).json?.field === field);
+}
+check("and an operator can't set the retired location guidance either - it isn't served back",
+  (await req("POST", "/api/config", { token: I_TOK, body: { location_guidance: "old" } })).status === 200 &&
+  (await req("GET", "/api/config", { token: I_TOK })).json.settings?.location_guidance === undefined);
 const afterWriteUp = (await req("GET", "/api/config", { token: I_TOK })).json;
 check("and the form's fields come through it untouched",
   afterWriteUp.tracks?.[0]?.label === "Engineering" && afterWriteUp.tracks?.[0]?.sort_order === 0 &&

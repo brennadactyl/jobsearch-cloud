@@ -5,7 +5,7 @@
  * object, which is what lets one deployment hold several people's searches.
  */
 
-import { LOCATION_SETTING_KEYS, parseDocumentList, WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
+import { LOCATION_SETTING_KEYS, parseDocumentList, WRITEUP_FIELDS } from "../db.js";
 import { json, readJson } from "../http.js";
 import { locationSettingError, priorityRulesError, trackDocumentsError, unknownTrack, unreadableDocumentsError } from "../validate.js";
 
@@ -47,7 +47,7 @@ export async function handleGetConfig({ db }) {
  * the setup form's fields - `label`, `sort_order`, the title, the location
  * lists - as a side effect of every night it ran. This route makes "the run
  * leaves those alone" a guarantee: db.writeUpTrack builds its UPDATE from
- * WRITEUP_FIELDS and WRITEUP_SETTINGS, so a form-owned field is unreachable
+ * WRITEUP_FIELDS, so a form-owned field is unreachable
  * here whatever the body says (docs/onboarding.md#why-it-is-split-this-way).
  *
  * An unaccepted key is refused rather than dropped, naming the key: a run that
@@ -72,7 +72,7 @@ export async function handleWriteUp({ request, db }) {
   const key = typeof body.search === "string" ? body.search.trim() : "";
   if (!key) return json({ error: "missing search (track key)" }, 400);
 
-  const accepted = new Set([...WRITEUP_FIELDS, ...WRITEUP_SETTINGS, "search", "profile_refreshed"]);
+  const accepted = new Set([...WRITEUP_FIELDS, "search", "profile_refreshed"]);
   for (const sent of Object.keys(body)) {
     if (!accepted.has(sent)) {
       return json(
@@ -110,8 +110,7 @@ export async function handleWriteUp({ request, db }) {
  * POST /api/config - requires a Bearer token. Body `{ tracks?, display_title?,
  * overview_label?, applications_label?, all_leads_label?, stale_run_hours?,
  * search_locations?, excluded_locations?, priority_locations?, location_note?,
- * priority_rules?, excluded_companies?, geo_scope_line?, scope_clause?, scope_disqualifier?,
- * location_guidance?, footer_note?, pronouns? }` -> `{ tracks[], settings }`;
+ * priority_rules?, excluded_companies?, footer_note?, pronouns? }` -> `{ tracks[], settings }`;
  * 400 for an empty or invalid track list, a `fed_by` that isn't another listed
  * track, a non-positive `stale_run_hours`, or a location setting that isn't
  * text or is too long (validate.js locationSettingError), or `priority_rules` that

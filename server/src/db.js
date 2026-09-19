@@ -153,10 +153,6 @@
  * @property {string} location_note - what the three lists can't say
  * @property {Array<Object>} priority_rules - a migrated account's ranking rules, kept until the person's own list replaces them; [] otherwise
  * @property {string[]} excluded_companies
- * @property {string} geo_scope_line
- * @property {string} scope_clause
- * @property {string} scope_disqualifier
- * @property {string} location_guidance
  * @property {string} footer_note
  * @property {string} pronouns
  */
@@ -235,16 +231,6 @@ export const WRITEUP_FIELDS = [
   "screened_examples", "schedule_time", "documents",
 ];
 
-/**
- * The run's half of the per-account settings, written by the same route: where
- * the search may look, in the prose prompt.js reads verbatim. They are settings
- * rather than track fields because one person's searches share a scope.
- *
- * `priority_locations`, `display_title`, `pronouns` and `excluded_companies`
- * are the form's, and are not here.
- */
-export const WRITEUP_SETTINGS = ["geo_scope_line", "scope_clause", "scope_disqualifier"];
-
 // Settings the client renders from...
 export const SETTING_KEYS = [
   "display_title", "overview_label", "applications_label", "all_leads_label",
@@ -261,10 +247,7 @@ export const LOCATION_SETTING_KEYS = ["search_locations", "excluded_locations", 
 // (TRACK_CONFIG_FIELDS is the per-track half). Stored as verbatim prose - don't
 // rebuild these sentences from keywords, which would drop hand-written detail
 // the searches depend on.
-export const PROMPT_SETTING_KEYS = [
-  "geo_scope_line", "scope_clause", "scope_disqualifier",
-  "location_guidance", "footer_note", "pronouns",
-];
+export const PROMPT_SETTING_KEYS = ["footer_note", "pronouns"];
 
 export const DEFAULT_SETTINGS = {
   display_title: "Job Search Tracker",
@@ -283,15 +266,6 @@ export const DEFAULT_SETTINGS = {
   // A list rather than a sentence in a track's prose, so "is X excluded?" is a
   // lookup and adding a company is an append.
   excluded_companies: [],
-  // No geographic restriction by default: an unconfigured deployment shouldn't
-  // filter out postings it was never told to exclude.
-  geo_scope_line: "",
-  scope_clause: "",
-  scope_disqualifier: "",
-  location_guidance:
-    "Write accurate location strings - the tracker derives priority from them " +
-    "automatically, so precision matters. There is no priority field to set - " +
-    "just get the location text right.",
   footer_note: "",
   pronouns: "they/them",
 };
@@ -523,10 +497,8 @@ export class Db {
    * that read the whole config, edited it and posted it back would re-write the
    * form's fields as a side effect every night it ran.
    *
-   * The scope wording is per-account rather than per-track (WRITEUP_SETTINGS),
-   * so it travels with the same call and lands in the same batch: a run that
-   * wrote the track's prose and then failed to write the scope would leave a
-   * search half described.
+   * Where the search looks is the person's, in the location settings, and
+   * nothing here writes it (docs/location-settings-plan.md).
    *
    * @param {string} key the track
    * @param {Record<string, string>} body whatever the run sent
@@ -535,9 +507,8 @@ export class Db {
   async writeUpTrack(key, body) {
     if (!(await this.trackExists(key))) return null;
     const fields = WRITEUP_FIELDS.filter((f) => typeof body[f] === "string");
-    const settings = WRITEUP_SETTINGS.filter((f) => typeof body[f] === "string");
     const refreshed = typeof body.profile_refreshed === "string" && body.profile_refreshed ? body.profile_refreshed : "";
-    if (fields.length === 0 && settings.length === 0 && !refreshed) return [];
+    if (fields.length === 0 && !refreshed) return [];
 
     const statements = [];
     // Last in the batch, so its result is the last one. It matches on the mark
@@ -561,20 +532,10 @@ export class Db {
           .bind(...fields.map((f) => body[f]), this.userId, key)
       );
     }
-    for (const key2 of settings) {
-      statements.push(
-        this.d1
-          .prepare(
-            `INSERT INTO meta (user_id, key, value) VALUES (?, ?, ?)
-             ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value`
-          )
-          .bind(this.userId, key2, body[key2])
-      );
-    }
     if (clearMark) statements.push(clearMark);
     const results = await this.d1.batch(statements);
     const cleared = clearMark && (results[results.length - 1].meta.changes || 0) > 0;
-    return [...fields, ...settings, ...(cleared ? ["profile_refreshed"] : [])];
+    return [...fields, ...(cleared ? ["profile_refreshed"] : [])];
   }
 
   /**

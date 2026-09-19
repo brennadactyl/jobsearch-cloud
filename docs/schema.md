@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0022_lead_area.sql` applied in order. This is the
+`0001_schema.sql` through `0023_retire_scope_prose.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -389,8 +389,7 @@ Per-user key/value rows. The keys in use:
   tiers its labels alone don't rebuild; the page ranks by it until the person
   saves a different `priority_locations`, which drops it
 - `excluded_companies` — a JSON array
-- search prompt prose: `geo_scope_line`, `scope_clause`, `scope_disqualifier`,
-  `location_guidance`, `footer_note`, `pronouns`
+- search prompt prose: `footer_note`, `pronouns`
 
 A setting with no row falls back to `DEFAULT_SETTINGS` in `server/src/db.js`.
 
