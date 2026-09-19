@@ -20,6 +20,17 @@ export function listEntries(text: string): string[] {
   return text.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+/**
+ * Why the places can't be sent, or "": a search needs somewhere to look, and
+ * the ranked places alone are enough, since they're always searched. The
+ * server refuses both lists empty; this says so before sending.
+ */
+export function nowhereToSearch(searched: string, ranked: string): string {
+  return listEntries(searched).length || listEntries(ranked).length
+    ? ""
+    : "Say what locations should be searched, or rank some places first — the search needs somewhere to look.";
+}
+
 /** What each setting is called in the sentence about leaving without saving. */
 const CALLED: Readonly<Record<PlaceKey, string>> = {
   search_locations: "the places searched",

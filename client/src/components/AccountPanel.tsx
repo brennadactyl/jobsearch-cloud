@@ -12,7 +12,14 @@ import { changePassword, failureOf, saveSettings, UnauthorizedError } from "../a
 import { DATA_KEY, DOCUMENTS_KEY } from "../api/mutations";
 import { settingsSchema, type Settings, type TrackerData, type Track } from "../api/schema";
 import { MIN_PASSWORD } from "../domain/account";
-import { changedPlaces, PLACE_KEYS, unsavedPlacesSentence, type PlaceKey, type Places } from "../domain/places";
+import {
+  changedPlaces,
+  nowhereToSearch,
+  PLACE_KEYS,
+  unsavedPlacesSentence,
+  type PlaceKey,
+  type Places,
+} from "../domain/places";
 import { saved } from "../ui/saved";
 import LocationsSection from "./LocationsSection";
 import ResumeSection from "./ResumeSection";
@@ -78,6 +85,10 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
   }
 
   async function save() {
+    const nowhere = Object.keys(places).length
+      ? nowhereToSearch(draft.search_locations ?? stored.search_locations, draft.priority_locations ?? stored.priority_locations)
+      : "";
+    if (nowhere) return setSaveError({ message: nowhere, field: "search_locations" });
     setSaving(true);
     setSaveError(null);
     saved.saving();

@@ -89,6 +89,19 @@ describe("the Locations section", () => {
     expect(within(section).getByText("Searched:").parentElement).toHaveTextContent("Searched:Only the ranked places");
   });
 
+  it("won't save both lists empty, and says so beside the searched list without sending", async () => {
+    const save = vi.spyOn(client, "saveSettings");
+    const section = await openPanel({ search_locations: "" });
+    await userEvent.clear(ranked());
+    expect(within(section).queryByText("Searched:")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const alert = within(section).getByRole("alert");
+    expect(alert).toHaveTextContent("Say what locations should be searched, or rank some places first");
+    expect(alert.closest(".loc-field")).toContainElement(within(section).getByLabelText(/What locations should be searched/));
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("flags nothing a person types", async () => {
     const section = await openPanel();
     await userEvent.clear(ranked());

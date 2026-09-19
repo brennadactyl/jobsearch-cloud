@@ -53,7 +53,7 @@ export default function LocationsSection({
         hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
       >
         {/* Empty doesn't mean anywhere: the search looks only where the ranked list says. */}
-        <PlaceEntries lead="Searched:" entries={searched} empty="Only the ranked places" />
+        <PlaceEntries lead="Searched:" entries={searched} empty={ranked.length ? "Only the ranked places" : undefined} />
       </PlaceField>
 
       <PlaceField
