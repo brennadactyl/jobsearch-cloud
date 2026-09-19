@@ -42,18 +42,20 @@ function joinAnd(parts) {
 // default is what a prompt read without one shows.
 export const DEFAULT_DOC_BUDGET_BYTES = 1000;
 
-// How a lead's `location` is written, the same for every search. The page tiers
-// a lead by matching this text against the places ranked first, and its matcher
-// is tested over exactly these forms (client/src/domain/location-forms.json,
-// which verify-local checks this sentence against), so a lead written any other
-// way can silently lose its tier.
+// How a lead's `location` is written, the same for every search, so the page can
+// read it and the one-time area fill can match it. The forms are the ones in
+// client/src/domain/location-forms.json, which verify-local checks this
+// sentence against. Which ranked place a lead belongs to is its `area` (step
+// 9), not something to encode in this text.
 const LOCATION_FORMS_STEP =
-  "Write each lead's `location` in one of these forms, as the posting gives it, so the " +
-  "page can rank it: \"City, ST\" for a US city (\"Seattle, WA\"); \"City, Country\" " +
-  "anywhere else (\"Toronto, Canada\"); \"Remote (US)\" or \"Remote (<country>)\" for a " +
-  "remote role (\"Remote (Canada)\"); and several locations joined with \"; \" " +
+  "Write each lead's `location` in one of these forms, as the posting gives it: " +
+  "\"City, ST\" for a US city (\"Seattle, WA\"); \"City, Country\" anywhere else " +
+  "(\"Toronto, Canada\"); \"Remote (US)\" or \"Remote (<country>)\" for a remote role " +
+  "(\"Remote (Canada)\"); \"Remote (US - CA/TX/WA)\" for a remote role open only in the " +
+  "states it names, so the limit shows; and several locations joined with \"; \" " +
   "(\"Seattle, WA; Remote (US)\"). Not a bare \"Remote\", and not a bare state or country: " +
-  "neither says enough to rank. There is no priority field to set - the location text is it.";
+  "neither says where the role is. Which of the places ranked first it falls in goes in " +
+  "`area` (step 9), not in the location text.";
 
 const DEFAULT_SCREENED_EXAMPLES =
   '"outside scope: London, UK", "404 - closed", "duplicate of req 7829580003", "below target level"';

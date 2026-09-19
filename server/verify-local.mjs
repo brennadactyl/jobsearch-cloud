@@ -798,6 +798,7 @@ const listed = buildSearchPrompt({
     "city-country": '"City, Country"',
     "remote-us": '"Remote (US)"',
     "remote-country": '"Remote (<country>)"',
+    "remote-us-states": '"Remote (US - CA/TX/WA)"',
     joined: 'joined with "; "',
   };
   const formIds = Object.keys(file?.forms || {});
