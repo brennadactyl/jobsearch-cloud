@@ -6,7 +6,7 @@ settings. The nightly prompt is composed from it every run, the person edits it
 in their account panel. The server passes the places to the prompt, and the
 nightly search decides whether a posting's location fits them.
 
-This changes `server/` (settings and the prompt), `client/` (the setup form, the account panel, one shared matcher) and
+This changes `server/` (settings and the prompt), `client/` (the setup form and the account panel) and
 the track docs (the tier table leaves them). The settings today are in
 [schema.md](schema.md); the account panel is
 [account-settings-plan.md](account-settings-plan.md).
