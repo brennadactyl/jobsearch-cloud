@@ -59,6 +59,29 @@ rule arrays does - see Existing searches.
 - **An optional note, `location_note`,** keeps what a list can't say - "open to relocating for
   the right team" - and reaches the prompt as context.
 
+## A ranked place can name its towns
+
+A ranked entry may list, in brackets, the places it stands for: `Seattle area
+(Seattle, Bellevue, Redmond, Kirkland), Portland OR, Remote US`. It is one tier
+and one colour, matching any of the bracketed places. Commas inside brackets
+list a tier's places; commas outside separate tiers. The prompt prints the
+entry as typed, and the page's read-back shows the tier with its places.
+
+## Restoring the tiers the migration lost
+
+Accounts whose ranked places were set up by hand stored hand-picked terms under
+each label, and converting to labels lost them, so most of their leads lost
+their tier colour. Two steps put it right:
+
+1. **Now:** each affected account's original rules are restored from the
+   pre-migration backup as `priority_rules`, and the page tiers by those when
+   present. Saving the ranked places in My account clears them.
+2. **Then:** each account's `priority_rules` are rewritten as a typed list
+   using brackets - a label that rebuilds the same matches stays bare, and one
+   that doesn't gets its terms in brackets. A probe with the page's own matcher
+   confirms every lead location lands in the same tier before and after; only
+   then is `priority_rules` cleared, account by account.
+
 ## One matcher
 
 The rules are built by one module in the page, used to turn typed places into
