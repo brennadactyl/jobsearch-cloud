@@ -57,6 +57,27 @@ The rules are built by one module in the page, used to turn typed places into
 rules, read them back, and rank leads into tiers. The server only validates
 the rules' shape.
 
+## Rules the prompt states for every search
+
+Fixed in `prompt.js`, the same for every account, so no night's model decides
+them:
+
+- **How a lead's location is written:** "City, ST" for a US city and "City,
+  Country" elsewhere, as the posting gives it; "Remote (US)" or "Remote
+  (<country>)" for a remote role; several locations joined with "; ". The page's
+  matcher is guaranteed to recognise exactly these forms, and a test round-trips
+  each through it, so a lead never silently loses its tier. `location_guidance`
+  is retired with the scope prose.
+- **Remote:** a remote role is in scope when it is open to someone in a searched
+  place; one restricted to a region or time zone outside the searched places is
+  out.
+- **Precedence:** a preferred place always qualifies; otherwise an excluded
+  place is out; otherwise a searched place qualifies. A posting with several
+  locations qualifies when any one of them does.
+- **General rules every search shares** - hybrid or on-site in a place not
+  searched is out, and no relocation is assumed - are stated here once. The
+  person's note carries only what is personal to them.
+
 ## The prompt reads the database
 
 `prompt.js` composes the location step from the three settings every run: the
@@ -78,6 +99,10 @@ rewrite.
 - **Leads** keep their tier badges; acceptable places get their own tier.
 
 ## Existing searches
+
+Each draft also lists anything in that account's current prose that neither its
+lists nor the fixed rules cover, so nothing is dropped silently.
+
 
 Each built search has scope prose and no acceptable list. For each account, a
 draft of its three lists is made from its current prose and shown to the
