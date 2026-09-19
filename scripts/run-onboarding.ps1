@@ -356,7 +356,6 @@ $MODEL_TIMEOUT_MINUTES = 25
 # they can do, and never what a run was doing when it broke.
 $NOTE_GENERIC = "Setting your search up didn't finish tonight. It will be tried again tomorrow night, and there's nothing you need to do unless this message is still here after that."
 $NOTE_RESUME = "Your resume couldn't be read overnight, so your search wasn't built yet. An older Word .doc, an RTF or Pages file, or a picture of a resume, can't be opened with nobody there - a PDF, a Word .docx or a .txt can. Ask whoever invited you to help get a readable copy in."
-$NOTE_NO_SCOPE = "Your setup doesn't say where you can work, so there was nowhere for your search to look and it wasn't built yet. Ask whoever invited you to help fill that in."
 $NOTE_NO_SLOT = "There's no room left in the nightly schedule on the machine that runs these searches, so yours couldn't be added. Let whoever invited you know - this one needs their attention, not yours."
 
 # "Jordan O'Neil" -> "Jordan-O-Neil". The documents route takes word characters,
@@ -402,47 +401,6 @@ $MODEL_TRACK_FIELDS = @(
     "full_description", "role_search_line", "search_note", "resume_line",
     "fit_clause", "fit_disqualifier", "fit_filter_step", "intro_note", "doc_summary"
 )
-$MODEL_SETTING_FIELDS = @("geo_scope_line", "scope_clause", "scope_disqualifier")
-
-# The distinctive words of a free-text answer about places, for checking that
-# what came back was written from the answer it was supposed to be written from.
-# Four letters and up: "US", "or" and "to" are in every sentence, and "WA" is in
-# none of the prose that matters.
-function Get-PlaceWords([string]$text) {
-    return @(($text -split '[^A-Za-z]+') | Where-Object { $_.Length -ge 4 } | ForEach-Object { $_.ToLower() } | Sort-Object -Unique)
-}
-
-function Test-MentionsAny([string]$haystack, [string[]]$words) {
-    $lower = $haystack.ToLower()
-    foreach ($w in $words) { if ($lower.Contains($w)) { return $true } }
-    return $false
-}
-
-# "A", "A or B", "A, B or C".
-function Join-Or([string[]]$items) {
-    if ($items.Count -le 1) { return ($items -join "") }
-    return (($items[0..($items.Count - 2)]) -join ", ") + " or " + $items[-1]
-}
-
-# The places someone ranked first are in scope whatever else their answers say,
-# so this run - not the model - writes them into all three scope fields. A
-# model reading two answers that disagree can drop a place; appending it here
-# can't. `where they can work` may already name one: saying it twice costs a
-# few words, leaving it out costs every posting there.
-function Add-PreferredPlaces($settings, [string[]]$places) {
-    $out = @{}
-    foreach ($field in $MODEL_SETTING_FIELDS) { $out[$field] = ([string]$settings.$field).Trim() }
-    if ($places.Count -eq 0) { return $out }
-    $list = Join-Or $places
-    $out.geo_scope_line = ("$($out.geo_scope_line) Also in scope, whatever the rest of this says: " +
-        "any posting in $list - on-site, hybrid or remote - since these are the places they asked to see first.").Trim()
-    $out.scope_clause = if ($out.scope_clause) { "$($out.scope_clause), or in $list" } else { "in $list" }
-    if ($out.scope_disqualifier) {
-        $out.scope_disqualifier = "$($out.scope_disqualifier) - except a posting in $list, which is always in scope"
-    }
-    return $out
-}
-
 # ---- Build each person. ----------------------------------------------------
 $built = @()
 $exitCode = 0
@@ -512,20 +470,6 @@ foreach ($item in $queue) {
         $personConfig = Api GET "/api/config" $personToken $null
         $liveTracks = @($personConfig.tracks |
             Where-Object { -not $_.fed_by } | Sort-Object sort_order)
-        # The places they ranked first on the form. When their answers about
-        # where they can work disagree, the place is included rather than
-        # excluded: someone who ranks Portland first wants Portland searched,
-        # whatever else they wrote. See Add-PreferredPlaces.
-        # Stored as the list they typed (docs/location-settings-plan.md), kept
-        # whole rather than split on commas, since "Portland, OR" is one place;
-        # an account still holding ranking rules gives their labels.
-        $ranked = $personConfig.settings.priority_locations
-        $preferred = if ($ranked -is [string]) {
-            @($ranked.Trim() | Where-Object { $_ })
-        } else {
-            @($ranked | Where-Object { $_ -and $_.label } |
-                ForEach-Object { ([string]$_.label).Trim() } | Where-Object { $_ })
-        }
         if ($liveTracks.Count -eq 0) {
             Stop-Person "their account has no tracks to write up" $null
         }
@@ -615,13 +559,6 @@ foreach ($item in $queue) {
             Stop-Person "no readable resume - only unreadable attachments and no pasted text" $NOTE_RESUME
         }
 
-        # Where they can work is the one answer a search cannot be built
-        # without: with no scope there is nothing to look inside, and every
-        # other answer only narrows or ranks.
-        $scopeAnswer = [string]$answers.work_scope
-        $limitsAnswer = [string]$answers.location_limits
-        if (-not $scopeAnswer.Trim()) { Stop-Person "no work_scope answer - nothing says where this search may look" $NOTE_NO_SCOPE }
-
         Write-Utf8 (Join-Path $stage "answers.json") ($answers | ConvertTo-Json -Depth 12)
         Copy-Item -Path $templateFile -Destination (Join-Path $stage "template.md") -Force
         Copy-Item -Path $skillFile -Destination (Join-Path $stage "setup-skill.md") -Force
@@ -679,11 +616,6 @@ out\config.json:
       "doc_summary": "<what this track's doc holds>"
     }
   ],
-  "settings": {
-    "geo_scope_line": "<a paragraph with worked examples, written from work_scope: where the search MAY look>",
-    "scope_clause": "<the same scope, short, as it reads mid-sentence>",
-    "scope_disqualifier": "<written from location_limits: what puts a posting out, for the disqualified list>"
-  },
   "named_companies": ["<companies they named as ones they want searched>"]
 }
 
@@ -694,21 +626,10 @@ looking at empty while reading as a success:
 $($roleLines -join "`n")
 
 Rules for this run:
-- **Two different answers, two different fields.** `work_scope` ("What
-  locations should be searched?") is what you write the scope from: it becomes
-  geo_scope_line and scope_clause, and they say where the search may look (the
-  ranked places below are added to it). `location_limits`
-  ("Anywhere you can't take a job?") is an exclusion and becomes
-  scope_disqualifier alone. Never scope a search to a place someone ruled out,
-  and never let an exclusion narrow the scope to itself - a search scoped to
-  the one state they can't work in screens out everything it finds, all night,
-  and reports a quiet night.
-- **The places they ranked first are always in scope.** When their answers
-  disagree about a place, include it rather than exclude it. A place in
-  `priority_locations` is searched even if "What locations should be searched?" leaves it out
-  or "Anywhere you can't take a job?" names it - so never write one into
-  scope_disqualifier. This script adds every ranked place to the scope fields
-  itself after you write them; write the rest as if it will.
+- **Where the search looks isn't yours to write.** The places they listed -
+  where to search, what comes first, what they ruled out - are their own
+  settings, which the nightly search reads directly. Don't restate them, or
+  any rule about location, in the config prose or the track doc.
 - No search keeps a company list. The kinds of employer they like go in the
   track doc's `## What this search is looking for`, as guidance for discovery; a company they
   named goes in named_companies, which the script puts on the shared list
@@ -797,34 +718,6 @@ Rules for this run:
             Stop-Person "out\config.json is not valid JSON" $null
         }
 
-        # ---- Is the scope the scope they asked for?
-        #
-        # A search scoped to a place someone ruled out finds nothing, every
-        # night, and reports a quiet night rather than a broken one - so the
-        # scope prose is checked against the answer it was supposed to come
-        # from, before any of it is posted.
-        $scopeWords = Get-PlaceWords $scopeAnswer
-        # A place they ranked first is never an exclusion, even when their
-        # "can't take a job" answer names it, so it neither has to reach the
-        # disqualifier nor counts as one inverted into the scope.
-        $preferredWords = Get-PlaceWords ($preferred -join " ")
-        $limitWords = @(Get-PlaceWords $limitsAnswer | Where-Object { $preferredWords -notcontains $_ })
-        $scopeProse = "$([string]$draft.settings.geo_scope_line) $([string]$draft.settings.scope_clause)"
-        if ($scopeWords.Count -gt 0 -and -not (Test-MentionsAny $scopeProse $scopeWords)) {
-            Stop-Person "the scope came back naming none of the places in their work_scope answer" $null
-        }
-        # An exclusion that reached neither the disqualifier nor the scope has
-        # been dropped; one that reached the scope has been inverted into it.
-        if ($limitWords.Count -gt 0) {
-            $disqProse = [string]$draft.settings.scope_disqualifier
-            if (-not (Test-MentionsAny $disqProse $limitWords)) {
-                Stop-Person "what they can't take didn't reach scope_disqualifier" $null
-            }
-            $onlyLimits = @($limitWords | Where-Object { $scopeWords -notcontains $_ })
-            if ($onlyLimits.Count -gt 0 -and (Test-MentionsAny ([string]$draft.settings.scope_clause) $onlyLimits)) {
-                Stop-Person "the scope clause is built from what they ruled out, not from where they can work" $null
-            }
-        }
         $draftTracks = @($draft.tracks)
         $liveKeys = @($liveTracks | ForEach-Object { [string]$_.key })
         if ($draftTracks.Count -ne $liveKeys.Count) {
@@ -879,16 +772,8 @@ Rules for this run:
             Log "      wrote $($t.DocPath) ($($t.DocText.Length) chars)"
         }
 
-        # Their scope wording travels with the first write-up call: it is
-        # per-account rather than per-track, and sending it beside a track's
-        # prose keeps a search from being half described if a later call fails.
-        $scopeBody = Add-PreferredPlaces $draft.settings $preferred
-        if ($preferred.Count -gt 0) { Log "      scope includes their ranked places: $($preferred -join ', ')" }
-
-        $first = $true
         foreach ($t in $tracks) {
             $body = $t.Body.Clone()
-            if ($first) { foreach ($k in $scopeBody.Keys) { $body[$k] = $scopeBody[$k] } }
             # The documents the search reads besides its tracking doc: the one
             # resume this run chose. This list, not resume_line, is where a
             # search's resume is named. A track with no list is refused its
@@ -896,7 +781,6 @@ Rules for this run:
             $body["documents"] = @($resumePath)
             $written = Api POST "/api/writeup" $personToken $body
             Log "      wrote up $($t.Key) at $($t.Slot): $(($written.written) -join ', ')"
-            $first = $false
         }
 
         # The companies they named, onto the one shared list every search reads.
