@@ -118,7 +118,9 @@ them:
 
 - **How a lead's location is written:** "City, ST" for a US city and "City,
   Country" elsewhere, as the posting gives it; "Remote (US)" or "Remote
-  (<country>)" for a remote role; several locations joined with "; ". The forms
+  (<country>)" for a remote role, and "Remote (US - CA/TX/WA)" for one open
+  only in the states it names, so the person can see a residency limit on the
+  card; several locations joined with "; ". The forms
   live in one file, `client/src/domain/location-forms.json`, owned by Client
   Comrade. `verify-local` reads it by path and fails if the prompt doesn't
   teach every form in it. `location_guidance`
@@ -163,6 +165,8 @@ rewrite.
   the note. Changes save through the account
   page's one Save and Discard, shared with every other section, and take effect on
   the next run, and the section says so.
+- **An empty searched list reads "Only the ranked places"** in the panel and the
+  setup read-back, so it isn't taken for "anywhere".
 - **Leads** keep their tier badges, from the ranked places as today.
 
 ## Existing searches
