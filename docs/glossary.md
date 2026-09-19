@@ -225,12 +225,19 @@ rule, so a number and its list cannot disagree. `drills.test.ts` enforces it.
 **Open filter** - a leads tab's default status filter: `New` or `Reviewing`,
 the leads still waiting on a decision. `All` shows every status.
 
-**location tier / priority / geo** - one idea under several names.
-`priority_locations` is a person's ranked list of location rules, each matched
-against a posting's location text. The first matching rule's index is the
-posting's tier, 0 highest, and a location matching none sorts last
-(`client/src/domain/geo.ts`). The default Priority sort puts `Not a fit` last,
-then orders by tier, then newest.
+**location tier / priority / geo / area** - one idea under several names.
+`priority_locations` is the places a person wants searched first, as they typed
+them, in rank order. Each lead and application carries an `area`: the entry of
+that list the nightly run placed it in, kept only when it matches an entry
+exactly, ignoring case (`storedArea`). A row's tier is its area's position in
+the list, 0 highest; a row with no area, or an area no longer ranked, has no
+tier and sorts last (`client/src/domain/geo.ts`). The default Priority sort
+puts `Not a fit` last, then orders by tier, then newest.
+
+**location settings** - `search_locations`, `excluded_locations`,
+`priority_locations` and `location_note`: where a person's searches look, as
+they typed it, printed into every prompt and combined by a fixed rule. See
+[`onboarding.md`](onboarding.md#where-a-search-looks).
 
 ## Accounts
 

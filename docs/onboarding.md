@@ -46,13 +46,14 @@ hold it together. Terms are defined in [`glossary.md`](glossary.md).
 
 **The form owns values; the night owns prose.** Everything the form collects
 is a value that needs no judgement, so it is written at send: `label`,
-`sort_order`, `display_title`, `pronouns`, `priority_locations` and
-`excluded_companies`. Turning a resume and "senior backend, Seattle or remote"
-into the sentences `server/src/prompt.js` reads verbatim needs a model, so that
-waits for the night. The two sets don't overlap. `POST /api/writeup` accepts
-only the night's half - `WRITEUP_FIELDS` and `WRITEUP_SETTINGS` in
-`server/src/db.js` - and refuses any other key by name, so a run cannot
-overwrite what the person chose. `fed_by` is in neither; pairing tabs is the
+`sort_order`, `display_title`, `pronouns`, the four location settings (see
+[Where a search looks](#where-a-search-looks)) and `excluded_companies`.
+Turning a resume and "senior backend" into the track prose
+`server/src/prompt.js` reads verbatim needs a model, so that waits for the
+night. The two sets don't overlap. `POST /api/writeup` accepts only the night's
+half - `WRITEUP_FIELDS` in `server/src/db.js` - and refuses any other key by
+name, a location setting included, so a run cannot overwrite what the person
+chose. `fed_by` is in neither; pairing tabs is the
 tracker's own configuration, through `POST /api/config`.
 
 **The send is write-once.** A second `POST /api/intake` gets 409, whatever
@@ -73,24 +74,51 @@ it until a run has written it up.
 
 **The scope check runs at send, not overnight.** `scopeProblem` refuses a send
 with no answer to "What locations should be searched?", because the person is
-still on the form and can fix it. That is the only refusal: the places ranked
-under "Which locations should come first?" and that answer aren't compared.
-
-**A ranked place is always in scope.** Where the location answers disagree, the
-place is included rather than excluded. What a run searches comes from the
-scope prose the overnight write-up writes, and `run-onboarding.ps1` adds every
-ranked place to that prose itself after the model writes it, so a ranked place
-is searched even when "What locations should be searched?" leaves it out or
-"Anywhere you can't take a job?" names it. The rule is applied at write-up: a
-search's stored prose isn't rewritten when the rule changes. The ranked places
-also order the leads on the page.
-[location-settings-plan.md](location-settings-plan.md) plans location answers
-as settings the prompt reads directly.
+still on the form and can fix it. That is the only refusal: the location
+answers are never compared with each other, because the prompt settles every
+disagreement by a fixed rule (below).
 
 **Done and failed are read from the tracker, not from the model.** A person is
 `done` when the tracker has their written-up tracks and docs and the machine
 has their tasks. Anything short of that is `failed`, so their page stops
 promising a tracker and says what happened.
+
+## Where a search looks
+
+Four of the form's answers are stored at send, as typed, as account settings
+every search of that person reads. The person edits them later from their
+account's Locations section.
+
+| Question | Setting |
+|---|---|
+| What locations should be searched? | `search_locations` |
+| Anywhere you can't take a job? | `excluded_locations` |
+| Which locations should come first? | `priority_locations`, in rank order |
+| Anything else about where you'd work? (optional) | `location_note` |
+
+`server/src/prompt.js` prints all four into every run's prompt verbatim - the
+run reads "WA" or "Greater Seattle area" as the place it names - and fixes how
+they combine, so no night's model decides it. For each posting, the first rule
+that applies wins:
+
+1. a place wanted first always qualifies, whatever the other lists say;
+2. otherwise a place ruled out is out;
+3. otherwise a searched place qualifies, and anywhere else is out. With no
+   searched list the places wanted first are the whole search; with neither,
+   only the rule-outs narrow it.
+
+A posting listing several locations qualifies when any one does. A remote role
+qualifies when it is open to someone in a qualifying place.
+
+Nothing about location is prose the night writes, so a change to these settings
+reaches every search on its next run. They are the person's to edit, from their
+account settings or `POST /api/config`.
+
+**The ranked places also tier the leads.** A run names, for each lead, which
+entry of `priority_locations` it falls in, as the lead's `area`. The leads
+route keeps an area only when it matches an entry exactly, ignoring case
+(`storedArea` in `server/src/validate.js`), so a near-miss can't pass for a
+tier; the page tiers a lead by its area's position in the list.
 
 ## Retries
 

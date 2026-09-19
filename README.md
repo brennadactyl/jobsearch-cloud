@@ -174,7 +174,7 @@ cover the CLI path.
 
    **The page is empty at this point, and that's correct** - no track tabs,
    just Overview and Applications. A fresh database has no tracks, title or
-   location rules; step 5 fills them in.
+   locations; step 5 fills them in.
 5. **Set up your private data folder** - either:
    - **With Claude's help (recommended):** put your resume(s) somewhere
      Claude can read them, then ask it to run the
@@ -266,7 +266,7 @@ curl -s "$TRACKER_URL/api/prompt/<track key>" -H "Authorization: Bearer <their t
 ## Adding another person
 
 One deployment holds any number of job searches, each with its own tracks,
-leads, page title and location rules, and its own sign-in. Adding someone is
+leads, page title and locations, and its own sign-in. Adding someone is
 sending them an invite link.
 
 **Once, on the machine that runs the searches:** put `deployment.json` in the
