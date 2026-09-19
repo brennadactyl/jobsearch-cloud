@@ -5,6 +5,7 @@
  * because the token it carries is the one being discarded.
  */
 import { z } from "zod";
+import type { Places } from "../domain/places";
 import {
   intakeResponseSchema,
   intakeSentSchema,
@@ -254,15 +255,24 @@ export async function listDocuments(): Promise<StoredResume[]> {
   return (await request("/api/documents", storedResumeListSchema)).documents;
 }
 
+/** What the account panel's Save sends: only what changed. */
+export type SettingsChanges = { resumes?: Record<string, string> } & Partial<Places>;
+
 /**
- * Sets the resume each named search reads, all at once or not at all. Send only
- * the searches that changed; each takes its new resume on its next run. A
- * refusal names the search it's about.
+ * Saves the account panel's changes, all at once or not at all: the resume each
+ * named search reads, and any place setting. Each search takes them on its
+ * next run. A refusal's message names the search it's about; one about a place
+ * setting also names that setting as its `field`.
  */
-export function saveResumes(picks: Record<string, string>) {
-  return request("/api/settings", z.object({ resumes: z.record(z.string(), z.unknown()) }), {
+export function saveSettings(changes: SettingsChanges) {
+  const reply = z.object({
+    resumes: z.record(z.string(), z.unknown()),
+    /** Each place setting sent, as the server stored it. */
+    locations: z.record(z.string(), z.string()).default({}),
+  });
+  return request("/api/settings", reply, {
     method: "POST",
-    body: { resumes: picks },
+    body: changes,
   });
 }
 

@@ -53,6 +53,10 @@ export const settings: Settings = {
   applications_label: "Applications",
   all_leads_label: "All leads",
   stale_run_hours: 36,
+  search_locations: "Springfield, Shelbyville, Remote US",
+  excluded_locations: "",
+  priority_locations: "Metro core, Wider region",
+  location_note: "",
   areas: ["Metro core", "Wider region"],
   excluded_companies: [],
 };

@@ -104,7 +104,7 @@ describe("attaching a resume", () => {
       documents = [...documents, doc(path, { uploaded: new Date(NOW).toISOString(), words: 450 })];
       return { path, words: 450, text_path: path.replace(/\.docx$/, ".txt") };
     });
-    const saveSpy = vi.spyOn(client, "saveResumes");
+    const saveSpy = vi.spyOn(client, "saveSettings");
     await openResumes();
 
     await userEvent.upload(screen.getByLabelText("Attach a resume"), new File(["PK"], "Sam New.docx"));
@@ -183,18 +183,18 @@ describe("choosing a resume for a search", () => {
   });
 
   it("saves only the changed searches, then says what happens until tonight", async () => {
-    const saveSpy = vi.spyOn(client, "saveResumes").mockImplementation(async () => {
+    const saveSpy = vi.spyOn(client, "saveSettings").mockImplementation(async () => {
       documents = [
         doc(ENG, { used_by: [...reads("gaming"), { search: "ai", tabs: ["ai"], state: "until_next_run" }] }),
         doc(AI, { uploaded: "2026-09-12T17:00:00.000Z", words: 612, used_by: [{ search: "ai", tabs: ["ai"], state: "from_next_run" }] }),
       ];
-      return { resumes: {} };
+      return { resumes: {}, locations: {} };
     });
     await openResumes();
     await userEvent.selectOptions(picker("Eng - AI"), AI);
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(saveSpy).toHaveBeenCalledWith({ ai: AI });
+    expect(saveSpy).toHaveBeenCalledWith({ resumes: { ai: AI } });
     expect(
       await screen.findByText(
         "Saved. Waiting for tonight's run: until then Eng - AI still searches with Brenna_Engineering.pdf. Tonight it reads Brenna_AI_Roles.docx and rewrites its profile from it before searching.",
@@ -206,7 +206,7 @@ describe("choosing a resume for a search", () => {
   });
 
   it("keeps the choices and shows the refusal when a save is refused", async () => {
-    vi.spyOn(client, "saveResumes").mockRejectedValue(Object.assign(new Error("Eng - AI can't read that file"), { status: 422 }));
+    vi.spyOn(client, "saveSettings").mockRejectedValue(Object.assign(new Error("Eng - AI can't read that file"), { status: 422 }));
     await openResumes();
     await userEvent.selectOptions(picker("Eng - AI"), AI);
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
