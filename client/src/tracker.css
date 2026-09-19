@@ -475,8 +475,24 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .resume-changed{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
 .resume-note{font-size:12.5px;color:var(--ink3)}
 .resume-note.wait{color:var(--ink2);background:var(--surface2);border-radius:7px;padding:8px 10px}
-.resume-unsaved{position:sticky;bottom:0;margin:0 -20px -14px;padding:12px 20px;border-top:1px solid var(--line);background:var(--surface2);display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--ink2)}
-.resume-unsaved .modal-actions{margin:0;flex:none}
+.loc-field{display:flex;flex-direction:column;gap:6px}
+.loc-field label{font-weight:600}
+.loc-field input,.loc-field textarea{width:100%;box-sizing:border-box}
+.loc-field .changed{border-color:var(--accent)}
+.loc-field [aria-invalid=true]{border-color:var(--crit)}
+.loc-optional{font-weight:400;color:var(--ink3)}
+.account-section .loc-hint{margin:0;font-size:12.5px;color:var(--ink3)}
+.account-section .loc-err{margin:0;font-size:12.5px;color:var(--crit)}
+.loc-entries{display:flex;flex-wrap:wrap;align-items:center;gap:5px;font-size:12.5px;color:var(--ink3)}
+.loc-entry{padding:1px 8px;border-radius:99px;background:var(--surface2);color:var(--ink2);white-space:nowrap}
+.loc-empty{color:var(--ink2);font-style:italic}
+.loc-ranked{gap:4px 14px;padding:0;color:var(--ink2)}
+.loc-ranked i{width:8px;height:8px;vertical-align:0}
+.loc-saved{font-size:13px;color:var(--good)}
+/* The panel's one Save and Discard, below every section: it counts what's unsaved in all of them. */
+.account-foot{flex:none;padding:12px 20px;border-top:1px solid var(--line);background:var(--surface2);display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--ink2)}
+.account-foot .modal-actions{margin:0;flex:none}
+.account-foot .resume-bad{margin-left:4px}
 @media (max-width:700px){
   .modal-overlay:has(.account-panel){padding:0}
   .account-panel{max-width:none;height:100%;max-height:none;border-radius:0}

@@ -4,19 +4,13 @@
  *
  * Adding a resume and choosing it are two steps. A file uploads (or pasted text
  * is stored) the moment it's added, and joins the list read by no search. The
- * pickers only change what a search reads on Save, which writes every changed
- * search at once; each takes its new resume on its next run.
+ * pickers only change what a search reads on the panel's Save, which writes
+ * every changed search at once; each takes its new resume on its next run.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import {
-  deleteDocument,
-  failureOf,
-  listDocuments,
-  putDocument,
-  saveResumes,
-  UnauthorizedError,
-} from "../api/client";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { deleteDocument, failureOf, listDocuments, putDocument, UnauthorizedError } from "../api/client";
+import { DOCUMENTS_KEY } from "../api/mutations";
 import type { StoredResume, Track } from "../api/schema";
 import { safeDocumentName } from "../domain/onboarding";
 import {
@@ -30,22 +24,21 @@ import {
   rootSearches,
   waitingChange,
 } from "../domain/resumes";
-import { saved } from "../ui/saved";
-
-const DOCUMENTS_KEY = ["documents"];
-
-/** What the panel needs to ask before it closes on unsaved choices. */
-export type Unsaved = { sentence: string; count: number };
 
 type Msg = { text: string; tone: "good" | "bad" } | null;
 
 export default function ResumeSection({
   tracks,
+  picks,
+  setPicks,
   onUnsaved,
 }: {
   tracks: readonly Track[];
-  /** Called with the unsaved choices whenever they change, null once there are none. */
-  onUnsaved: (unsaved: Unsaved | null) => void;
+  /** Only the searches whose picker differs from what they read; the panel saves them. */
+  picks: Record<string, string>;
+  setPicks: Dispatch<SetStateAction<Record<string, string>>>;
+  /** Called with what leaving now would lose, in the leave prompt's words; "" when nothing. */
+  onUnsaved: (sentence: string) => void;
 }) {
   const qc = useQueryClient();
   const docs = useQuery({ queryKey: DOCUMENTS_KEY, queryFn: listDocuments });
@@ -55,31 +48,16 @@ export default function ResumeSection({
   const searches = rootSearches(tracks);
   const labelOf = (key: string) => tracks.find((t) => t.key === key)?.label || key;
 
-  // Only the searches whose picker differs from what they read.
-  const [picks, setPicks] = useState<Record<string, string>>({});
   // Files added in this visit, which show "just now" and stand out in the list.
   const [added, setAdded] = useState<Record<string, "uploaded" | "pasted">>({});
   const [uploading, setUploading] = useState("");
   const [attachMsg, setAttachMsg] = useState<Msg>(null);
   const [pasting, setPasting] = useState(false);
   const [removing, setRemoving] = useState<{ path: string; refusal: string } | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const changed = Object.keys(picks);
   const unsavedSentence = unsavedSummary(picks, rows, labelOf, Object.keys(added).length);
-  useEffect(() => {
-    onUnsaved(changed.length ? { sentence: unsavedSentence, count: changed.length } : null);
-  }, [changed.length, unsavedSentence, onUnsaved]);
-
-  // Asks before the browser leaves the page too, not only the panel.
-  useEffect(() => {
-    if (!changed.length) return;
-    const hold = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", hold);
-    return () => window.removeEventListener("beforeunload", hold);
-  }, [changed.length]);
+  useEffect(() => onUnsaved(unsavedSentence), [unsavedSentence, onUnsaved]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: DOCUMENTS_KEY });
 
@@ -120,33 +98,12 @@ export default function ResumeSection({
 
   function choose(search: string, path: string) {
     setRemoving(null);
-    setSaveError("");
     setPicks((p) => {
       const next = { ...p };
       if (path === currentResume(rows, search)) delete next[search];
       else next[search] = path;
       return next;
     });
-  }
-
-  async function save() {
-    setSaving(true);
-    setSaveError("");
-    saved.saving();
-    try {
-      await saveResumes(picks);
-      await refresh();
-      setPicks({});
-      saved.ok();
-    } catch (err) {
-      const reason = reasonOf(err);
-      if (reason) {
-        setSaveError(reason);
-        saved.failed();
-      }
-    } finally {
-      setSaving(false);
-    }
   }
 
   function askToRemove(row: StoredResume) {
@@ -297,36 +254,6 @@ export default function ResumeSection({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {changed.length > 0 && (
-        <div className="resume-unsaved">
-          <span>
-            {changed.length === 1 ? "1 unsaved change" : `${changed.length} unsaved changes`}
-            {saveError && (
-              <span className="resume-bad" role="alert">
-                {" "}
-                {saveError}
-              </span>
-            )}
-          </span>
-          <div className="modal-actions">
-            <button
-              className="btn"
-              type="button"
-              disabled={saving}
-              onClick={() => {
-                setPicks({});
-                setSaveError("");
-              }}
-            >
-              Discard
-            </button>
-            <button className="btn primary" type="button" disabled={saving} onClick={() => void save()}>
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
         </div>
       )}
     </section>

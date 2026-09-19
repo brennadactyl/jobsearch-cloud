@@ -1,14 +1,23 @@
 /**
  * The account panel, opened from "My account" in the header: who is signed in,
  * then one section per thing a person can change about their own account.
+ *
+ * Choices wait for the panel's one Save and Discard, at its foot, which count
+ * and commit what's unsaved in every section together. Uploading a resume and
+ * changing the password happen at once instead: each is its own action.
  */
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { changePassword, UnauthorizedError } from "../api/client";
-import type { Track } from "../api/schema";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, type FormEvent } from "react";
+import { changePassword, failureOf, saveSettings, UnauthorizedError } from "../api/client";
+import { DATA_KEY, DOCUMENTS_KEY } from "../api/mutations";
+import { settingsSchema, type Settings, type TrackerData, type Track } from "../api/schema";
 import { MIN_PASSWORD } from "../domain/account";
-import ResumeSection, { type Unsaved } from "./ResumeSection";
+import { changedPlaces, PLACE_KEYS, unsavedPlacesSentence, type PlaceKey, type Places } from "../domain/places";
+import { saved } from "../ui/saved";
+import LocationsSection from "./LocationsSection";
+import ResumeSection from "./ResumeSection";
 
-type Props = { open: boolean; name: string; tracks: readonly Track[]; onClose: () => void };
+type Props = { open: boolean; name: string; tracks: readonly Track[]; settings: Settings; onClose: () => void };
 
 export default function AccountPanel({ open, ...props }: Props) {
   // Mounts per opening, so nothing typed or chosen in one visit is still there in the next.
@@ -16,26 +25,87 @@ export default function AccountPanel({ open, ...props }: Props) {
   return <AccountDialog {...props} />;
 }
 
-function AccountDialog({ name, tracks, onClose }: Omit<Props, "open">) {
-  const [unsaved, setUnsaved] = useState<Unsaved | null>(null);
+/** A refused save: the server's sentence, and the place setting it names, if any. */
+type SaveError = { message: string; field: PlaceKey | null };
+
+const isPlaceKey = (field: string | undefined): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
+
+function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">) {
+  const qc = useQueryClient();
+  const stored = Object.fromEntries(PLACE_KEYS.map((k) => [k, settings[k]])) as Places;
+
+  const [picks, setPicks] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState<Partial<Places>>({});
+  const [resumeSentence, setResumeSentence] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<SaveError | null>(null);
+  const [placesSaved, setPlacesSaved] = useState(false);
   const [asking, setAsking] = useState(false);
-  const onUnsaved = useCallback((u: Unsaved | null) => setUnsaved(u), []);
+
+  const places = changedPlaces(stored, draft);
+  const count = Object.keys(picks).length + Object.keys(places).length;
+  const sentence = [resumeSentence, unsavedPlacesSentence(places)].filter(Boolean).join(" ");
 
   // Every way out comes through here, so unsaved choices are never lost without asking.
-  const leave = useCallback(() => {
-    if (unsaved) setAsking(true);
+  const leave = () => {
+    if (count) setAsking(true);
     else onClose();
-  }, [unsaved, onClose]);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (asking) setAsking(false);
-      else leave();
+      else if (count) setAsking(true);
+      else onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [asking, leave]);
+  }, [asking, count, onClose]);
+
+  // Asks before the browser leaves the page too, not only the panel.
+  useEffect(() => {
+    if (!count) return;
+    const hold = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", hold);
+    return () => window.removeEventListener("beforeunload", hold);
+  }, [count]);
+
+  function discard() {
+    setPicks({});
+    setDraft({});
+    setSaveError(null);
+  }
+
+  async function save() {
+    setSaving(true);
+    setSaveError(null);
+    saved.saving();
+    try {
+      const reply = await saveSettings({ ...(Object.keys(picks).length ? { resumes: picks } : {}), ...places });
+      // The page's copy of the settings takes what the server stored, so the
+      // fields and the ranked key show it without waiting for a refetch.
+      qc.setQueryData<TrackerData>(DATA_KEY, (d) =>
+        d ? { ...d, settings: settingsSchema.parse({ ...d.settings, ...reply.locations }) } : d,
+      );
+      await qc.invalidateQueries({ queryKey: DOCUMENTS_KEY });
+      setPlacesSaved(Object.keys(places).length > 0);
+      setPicks({});
+      setDraft({});
+      saved.ok();
+    } catch (err) {
+      // A 401 has already forgotten the session and shown the gate.
+      if (err instanceof UnauthorizedError) return;
+      const failure = failureOf(err);
+      setSaveError({
+        message: failure?.message ?? (err instanceof Error ? err.message : String(err)),
+        field: isPlaceKey(failure?.field) ? failure.field : null,
+      });
+      saved.failed();
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div
@@ -56,17 +126,56 @@ function AccountDialog({ name, tracks, onClose }: Omit<Props, "open">) {
         </div>
         <div className="account-body" data-wheel-target>
           <PasswordSection />
-          <ResumeSection tracks={tracks} onUnsaved={onUnsaved} />
+          <ResumeSection
+            tracks={tracks}
+            picks={picks}
+            setPicks={(next) => {
+              setSaveError(null);
+              setPicks(next);
+            }}
+            onUnsaved={setResumeSentence}
+          />
+          <LocationsSection
+            values={{ ...stored, ...draft }}
+            changed={new Set(Object.keys(places) as PlaceKey[])}
+            problem={saveError?.field ? { field: saveError.field, message: saveError.message } : null}
+            saved={placesSaved}
+            onChange={(key, value) => {
+              setDraft((d) => ({ ...d, [key]: value }));
+              setPlacesSaved(false);
+              if (saveError?.field === key) setSaveError(null);
+            }}
+          />
         </div>
+        {count > 0 && (
+          <div className="account-foot">
+            <span>
+              {count === 1 ? "1 unsaved change" : `${count} unsaved changes`}
+              {saveError && !saveError.field && (
+                <span className="resume-bad" role="alert">
+                  {saveError.message}
+                </span>
+              )}
+            </span>
+            <div className="modal-actions">
+              <button className="btn" type="button" disabled={saving} onClick={discard}>
+                Discard
+              </button>
+              <button className="btn primary" type="button" disabled={saving} onClick={() => void save()}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-      {asking && unsaved && (
+      {asking && count > 0 && (
         <div className="modal-overlay">
           <div className="card modal-card wide" role="alertdialog" aria-modal="true" aria-labelledby="leaveTitle">
             <h3 id="leaveTitle">Leave without saving?</h3>
-            <p>{unsaved.sentence}</p>
+            <p>{sentence}</p>
             <div className="modal-actions">
               <button className="btn" type="button" onClick={onClose}>
-                {unsaved.count === 1 ? "Discard change" : "Discard changes"}
+                {count === 1 ? "Discard change" : "Discard changes"}
               </button>
               <button className="btn primary" type="button" autoFocus onClick={() => setAsking(false)}>
                 Keep editing

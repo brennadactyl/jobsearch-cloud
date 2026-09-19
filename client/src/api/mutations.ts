@@ -14,6 +14,8 @@ import * as api from "./client";
 import type { Application, Lead, TrackerData } from "./schema";
 
 export const DATA_KEY = ["data"] as const;
+/** The account's stored documents, which the account panel lists and its Save changes. */
+export const DOCUMENTS_KEY = ["documents"] as const;
 
 function replaceById<T extends { id: number }>(list: T[], item: T): T[] {
   return list.map((r) => (r.id === item.id ? item : r));

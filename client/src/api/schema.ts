@@ -11,7 +11,8 @@
  * `server/src/routes/data.js` for the envelope.
  */
 import { z } from "zod";
-import { areaNames, locationRules, parseLocations } from "../domain/locations";
+import { locationRules, parseLocations } from "../domain/locations";
+import { listEntries } from "../domain/places";
 
 /** Text columns are `NOT NULL DEFAULT ''` throughout, so "" is the empty case, not null. */
 const str = z.string();
@@ -151,6 +152,11 @@ const rankedPlaces = z
   .nullish()
   .transform((v) => (typeof v === "string" ? locationRules(parseLocations(v)) : (v ?? [])));
 
+const placeText = z
+  .string()
+  .nullish()
+  .transform((v) => v ?? "");
+
 /**
  * Mirrors DEFAULT_SETTINGS in server/src/db.js. Every key defaults, because a
  * freshly created database has posted no config and must still render a usable
@@ -163,17 +169,21 @@ export const settingsSchema = z
     applications_label: z.string().default("Applications"),
     all_leads_label: z.string().default("All leads"),
     stale_run_hours: z.number().default(DEFAULT_STALE_RUN_HOURS),
-    priority_locations: z.string().nullish(),
+    // The place settings, each as the person typed it (domain/places.ts).
+    search_locations: placeText,
+    excluded_locations: placeText,
+    priority_locations: placeText,
+    location_note: placeText,
     excluded_companies: z.array(z.string()).default([]),
   })
-  .transform(({ priority_locations: ranked, ...s }) => ({
+  .transform((s) => ({
     ...s,
     /**
      * "Which locations should come first?" in order, each entry exactly as
      * typed. A lead's or application's `area` names one of these, and its
      * position here is the row's tier.
      */
-    areas: areaNames(ranked ?? ""),
+    areas: listEntries(s.priority_locations),
   }));
 
 export const userSchema = z.object({
