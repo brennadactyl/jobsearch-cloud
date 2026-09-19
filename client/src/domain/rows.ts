@@ -1,6 +1,6 @@
-import type { Application, Lead, PriorityLocation } from "../api/schema";
+import type { Application, Lead } from "../api/schema";
 import { safeUrl } from "./format";
-import { tierRank } from "./geo";
+import { tierRank, type TierSettings } from "./geo";
 import { isWaiting, lastMoved } from "./stages";
 
 type Compare<T> = (a: T, b: T) => number;
@@ -49,12 +49,12 @@ const LEAD_SORTS = new Map<string, Compare<Lead>>([
  * "priority", the default, sinks "Not a fit" to the bottom, then orders by
  * location rank, then newest-found. The other sorts are exactly what they say.
  */
-export function leadComparator(sortKey: string, rules: readonly PriorityLocation[]): Compare<Lead> {
+export function leadComparator(sortKey: string, settings: TierSettings): Compare<Lead> {
   return (
     LEAD_SORTS.get(sortKey) ??
     inOrder<Lead>(
       lastIf((l) => l.status === "Not a fit"),
-      byNumber((l) => tierRank(l, rules)),
+      byNumber((l) => tierRank(l, settings)),
       byText((l) => l.found, true),
     )
   );

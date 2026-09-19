@@ -5,7 +5,7 @@
  *
  * Settings are passed in rather than read from a global, so these are testable.
  */
-import type { Lead, PriorityLocation } from "../api/schema";
+import type { PriorityLocation, Settings } from "../api/schema";
 
 /** How many tiers the stylesheet colours: `.pri0` to `.pri4` in tracker.css. */
 export const TIER_CLASS_COUNT = 5;
@@ -37,8 +37,20 @@ export function matchLocationTier(
   return null;
 }
 
-/** Rank for sorting. Unmatched locations sort last, not first. */
-export function tierRank(l: Pick<Lead, "location">, rules: readonly PriorityLocation[]): number {
-  const tier = matchLocationTier(l.location, rules);
-  return tier ? tier.rank : 999;
+/** What tiering a row needs from settings. */
+export type TierSettings = Pick<Settings, "areas">;
+
+/**
+ * A lead's or application's tier: its area's position in the ranked list. The
+ * nightly search places each row in an area, so the page matches no towns: a
+ * row with no area, or one whose area is no longer ranked, has no tier.
+ */
+export function tierOf(row: { area: string }, settings: TierSettings): LocationTier | null {
+  const rank = row.area ? settings.areas.indexOf(row.area) : -1;
+  return rank < 0 ? null : { cssClass: tierCssClass(rank), label: settings.areas[rank], rank };
+}
+
+/** Rank for sorting. A row with no tier sorts last, not first. */
+export function tierRank(row: { area: string }, settings: TierSettings): number {
+  return tierOf(row, settings)?.rank ?? 999;
 }

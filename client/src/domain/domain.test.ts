@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_LEADS } from "./constants";
 import { NOW, applications, leads, settings, tracks as trackList } from "./fixture";
 import { daysSince, hostOf, relWhen, safeUrl } from "./format";
-import { matchLocationTier, tierCssClass, tierRank } from "./geo";
+import { matchLocationTier, tierCssClass, tierOf, tierRank } from "./geo";
 import { appComparator, fillState, leadComparator } from "./rows";
 import { runState, runSummary, trackWarn } from "./runs";
 import { buildTabs, buildTracks, pathForTab } from "./tabs";
@@ -52,17 +52,28 @@ describe("hostOf", () => {
   });
 });
 
+describe("tierOf", () => {
+  it("ranks a row by its area's position in the ranked list, so index is the tier", () => {
+    expect(tierOf({ area: "Metro core" }, settings)?.rank).toBe(0);
+    expect(tierOf({ area: "Wider region" }, settings)?.rank).toBe(1);
+    expect(tierOf({ area: "Wider region" }, settings)?.cssClass).toBe("pri1");
+  });
+
+  it("gives no tier to a row with no area, or an area no longer ranked", () => {
+    expect(tierOf({ area: "" }, settings)).toBeNull();
+    expect(tierOf({ area: "Old region" }, settings)).toBeNull();
+  });
+
+  it("tiers by the area alone, whatever the location says", () => {
+    // The nightly search placed this row; the page doesn't second-guess it by matching towns.
+    const placed: { location: string; area: string } = { location: "Shelbyville", area: "Metro core" };
+    const unplaced: { location: string; area: string } = { location: "Springfield", area: "" };
+    expect(tierOf(placed, settings)?.label).toBe("Metro core");
+    expect(tierOf(unplaced, settings)).toBeNull();
+  });
+});
+
 describe("matchLocationTier", () => {
-  it("ranks by position in the list, so index is the tier", () => {
-    expect(matchLocationTier("Springfield, IL", settings.priority_locations)?.rank).toBe(0);
-    expect(matchLocationTier("Shelbyville", settings.priority_locations)?.rank).toBe(1);
-    expect(matchLocationTier("Ogdenville", settings.priority_locations)).toBeNull();
-  });
-
-  it("matches case-insensitively on a substring", () => {
-    expect(matchLocationTier("REMOTE (US)", settings.priority_locations)?.label).toBe("Metro core");
-  });
-
   it("requires every term of allOf and any term of anyOf", () => {
     const rules = [{ label: "Both", allOf: ["remote", "us"] }];
     expect(matchLocationTier("Remote - US", rules)?.label).toBe("Both");
@@ -75,21 +86,21 @@ describe("matchLocationTier", () => {
     expect(tierCssClass(5)).toBe("");
   });
 
-  it("sorts unmatched locations last rather than first", () => {
-    expect(tierRank({ location: "Ogdenville" }, settings.priority_locations)).toBe(999);
+  it("sorts a row with no tier last rather than first", () => {
+    expect(tierRank({ area: "" }, settings)).toBe(999);
   });
 });
 
 describe("leadComparator", () => {
   it("sinks Not a fit, then orders by tier, then newest found", () => {
-    const sorted = [...leads].sort(leadComparator("priority", settings.priority_locations));
+    const sorted = [...leads].sort(leadComparator("priority", settings));
     expect(sorted[sorted.length - 1].status).toBe("Not a fit");
-    const ranks = sorted.filter((l) => l.status !== "Not a fit").map((l) => tierRank(l, settings.priority_locations));
+    const ranks = sorted.filter((l) => l.status !== "Not a fit").map((l) => tierRank(l, settings));
     expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
   });
 
   it("makes an explicit sort exactly that sort", () => {
-    const byCompany = [...leads].sort(leadComparator("company-asc", settings.priority_locations));
+    const byCompany = [...leads].sort(leadComparator("company-asc", settings));
     expect(byCompany.map((l) => l.company)).toEqual([...leads.map((l) => l.company)].sort());
   });
 });

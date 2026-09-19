@@ -71,7 +71,7 @@ export default function Overview({
   // The complement of the count above, so the two cannot disagree about which
   // rows are which.
   const toApply = data.applications.length - appliedCount;
-  const topLabel = settings.priority_locations[0]?.label ?? "Top locations";
+  const topLabel = settings.areas[0] ?? "Top locations";
   const trackCount = data.tracks.length;
 
   const tiles: TileSpec[] = [

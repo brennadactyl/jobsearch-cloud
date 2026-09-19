@@ -12,7 +12,7 @@
 import type { Application, Lead, Screened, Settings, Track } from "../api/schema";
 import { ACTIVE, ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
 import { daysSince, localDay, shortDate, weekOf } from "./format";
-import { matchLocationTier } from "./geo";
+import { tierOf } from "./geo";
 import {
   FLOW_SEGMENT_LABELS,
   FLOW_SEGMENTS,
@@ -64,9 +64,9 @@ const base: Record<string, Drill> = {
    */
   "top-geo-open": {
     scope: "leads",
-    label: (c) => `${c.settings.priority_locations[0]?.label ?? "Top locations"} · still open`,
+    label: (c) => `${c.settings.areas[0] ?? "Top locations"} · still open`,
     test: (l, c) => {
-      const g = matchLocationTier(l.location, c.settings.priority_locations);
+      const g = tierOf(l, c.settings);
       return !!g && g.rank === 0 && l.status !== "Not a fit";
     },
   },
@@ -202,17 +202,17 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
     if (!(tier === "other" || /^\d+$/.test(tier))) return undefined;
     if (!(TIER_SEGMENTS as readonly string[]).includes(segment)) return undefined;
     const name = (c: DrillContext) =>
-      tier === "other" ? "Other locations" : (c.settings.priority_locations[Number(tier)]?.label ?? "Unknown tier");
-    const inTier = (location: string, c: DrillContext) => tierKey(location, c.settings) === tier;
+      tier === "other" ? "Other locations" : (c.settings.areas[Number(tier)] ?? "Unknown tier");
+    const inTier = (row: Lead | Application, c: DrillContext) => tierKey(row, c.settings) === tier;
     if (segment === "applied") {
-      return { scope: "apps", label: (c) => `${name(c)} · Applied`, test: (a, c) => sent(a) && inTier(a.location, c) };
+      return { scope: "apps", label: (c) => `${name(c)} · Applied`, test: (a, c) => sent(a) && inTier(a, c) };
     }
     return segment === "open"
-      ? { scope: "leads", label: (c) => `${name(c)} · Open`, test: (l, c) => isOpen(l) && inTier(l.location, c) }
+      ? { scope: "leads", label: (c) => `${name(c)} · Open`, test: (l, c) => isOpen(l) && inTier(l, c) }
       : {
           scope: "leads",
           label: (c) => `${name(c)} · Not a fit`,
-          test: (l, c) => l.status === "Not a fit" && inTier(l.location, c),
+          test: (l, c) => l.status === "Not a fit" && inTier(l, c),
         };
   },
   /** `flow:<stage slug>:<segment>`, or `flow:<stage slug>:reached` for the whole bar. */
@@ -346,9 +346,9 @@ function sent(a: Application): boolean {
   return a.status !== "To Apply";
 }
 
-/** A location's tier as a drill parameter: its rank, or `other`. */
-export function tierKey(location: string, settings: Settings): string {
-  const g = matchLocationTier(location, settings.priority_locations);
+/** A row's tier as a drill parameter: its rank, or `other`. */
+export function tierKey(row: { area: string }, settings: Settings): string {
+  const g = tierOf(row, settings);
   return g ? String(g.rank) : "other";
 }
 

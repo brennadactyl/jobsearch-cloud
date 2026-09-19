@@ -11,7 +11,7 @@ import { ALL_LEADS, LABELS, LEAD_STATUS } from "../domain/constants";
 import { ALL_FILTER, OPEN_FILTER, drillKeeps, leadFilterKeeps, leadRows, resolveLeadFilter } from "../domain/drills";
 import { leadColumns } from "../domain/export";
 import { safeUrl } from "../domain/format";
-import { matchLocationTier } from "../domain/geo";
+import { tierOf } from "../domain/geo";
 import { leadComparator } from "../domain/rows";
 import { runState } from "../domain/runs";
 import { buildTracks, pathForTab, pathWithoutDrill, trackCountLine } from "../domain/tabs";
@@ -48,7 +48,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   const narrowed = (l: Lead) =>
     drillKeeps(drill, "leads", l, data) &&
     (!needle || `${l.company} ${l.title} ${l.location}`.toLowerCase().includes(needle));
-  const byChosenSort = leadComparator(prefs.leadSort, settings.priority_locations);
+  const byChosenSort = leadComparator(prefs.leadSort, settings);
   const rows = all.filter((l) => leadFilterKeeps(filter, l) && narrowed(l)).sort(byChosenSort);
   // What "Export all" writes: the tab under the All chip, with no search or
   // drill, in the same sort. Its length is the M in "N of M shown".
@@ -233,7 +233,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
       <div className="md">
         <div className="md-list" ref={revealSelectedRow} data-wheel-target>
           {rows.map((l) => {
-            const g = matchLocationTier(l.location, settings.priority_locations);
+            const g = tierOf(l, settings);
             return (
               <SelectableRow
                 key={l.id}
@@ -253,7 +253,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
                 </div>
                 <div className="md-row-loc">
                   <span className="md-row-place">{l.location}</span>
-                  <GeoBadge location={l.location} settings={settings} />
+                  <GeoBadge row={l} settings={settings} />
                   <span className="md-row-found" title="Date this listing was added">
                     {LABELS.found} <span className="mono">{l.found}</span>
                   </span>
@@ -320,7 +320,7 @@ function LeadsGrid({
         </thead>
         <tbody>
           {rows.map((l) => {
-            const g = matchLocationTier(l.location, settings.priority_locations);
+            const g = tierOf(l, settings);
             const open = !!prefs.expanded[l.id];
             const cls = [g ? g.cssClass : "", l.id === shownId ? "gr-sel" : ""]
               .filter(Boolean)
@@ -395,7 +395,7 @@ function LeadDetail({
   onLeave: (lead: Lead, status: string) => LeavingView | undefined;
 }) {
   const { settings } = data;
-  const g = matchLocationTier(lead.location, settings.priority_locations);
+  const g = tierOf(lead, settings);
   const url = safeUrl(lead.url);
   return (
     <>

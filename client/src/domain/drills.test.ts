@@ -159,7 +159,7 @@ describe("drillId", () => {
 describe("drillLabel", () => {
   it("names the configured tier rather than a hardcoded place", () => {
     expect(drillLabel("top-geo-open", src)).toBe("Metro core · still open");
-    expect(drillLabel("top-geo-open", { ...src, settings: { ...settings, priority_locations: [] } })).toBe(
+    expect(drillLabel("top-geo-open", { ...src, settings: { ...settings, areas: [] } })).toBe(
       "Top locations · still open",
     );
   });

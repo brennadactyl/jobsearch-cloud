@@ -143,6 +143,11 @@ export function tooManyLocations(entries: readonly LocationEntry[]): string {
 }
 
 /** The rules to store, in rank order. Flagged entries are left out; the form won't send while there are any. */
+/** The ranked list's entries as typed, in order: the names a lead's area is one of. */
+export function areaNames(answer: string): string[] {
+  return answer.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export function locationRules(entries: readonly LocationEntry[]): PriorityLocation[] {
   return entries.flatMap((e) => ("rule" in e ? [e.rule] : []));
 }
