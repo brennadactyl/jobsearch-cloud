@@ -140,9 +140,10 @@ cleared and the tier tables removed from the docs.
 
 ## Releasing
 
-The server starts serving `priority_locations` as a string, which the live page
-can't read. So the server and the page deploy in one sitting, server a few
-minutes ahead, with no invite sent in between.
+The page ships first, reading `priority_locations` either as typed or as the
+old rule array, so it keeps working whichever the server serves. Then the
+server switches format and the migration runs. No same-sitting deploy is
+needed, and the page drops the old format once the migration has run.
 
 ## Order of work
 
