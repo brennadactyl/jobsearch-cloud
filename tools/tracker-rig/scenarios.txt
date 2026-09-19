@@ -10,6 +10,8 @@ dedup-search|ok|dedup --search CPM
 companies|ok|companies
 known-hit|ok|known "initech globex"
 known-hit-cached|ok|known ACME
+known-alias-cached|ok|known "initech corp"
+known-alias-other|ok|known INITRODE
 known-miss|ok|known "Nope Inc"
 known-empty|ok|known "!!!"
 known-none|ok|known
