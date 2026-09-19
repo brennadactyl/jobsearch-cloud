@@ -3,11 +3,10 @@
 Every place that matters to a search - where the person would most like to work,
 where else they'd accept, and anything ruled out - is structured data in their
 settings. The nightly prompt is composed from it every run, the person edits it
-in their account panel, and code, not a model's reading, decides whether a
-posting's location is acceptable.
+in their account panel. The server passes the places to the prompt, and the
+nightly search decides whether a posting's location fits them.
 
-This changes `server/` (settings, the prompt, a location check on reported
-leads), `client/` (the setup form, the account panel, one shared matcher) and
+This changes `server/` (settings and the prompt), `client/` (the setup form, the account panel, one shared matcher) and
 the track docs (the tier table leaves them). The settings today are in
 [schema.md](schema.md); the account panel is
 [account-settings-plan.md](account-settings-plan.md).
@@ -48,11 +47,9 @@ the server - and live in the account's settings:
 
 ## One matcher
 
-The rules and the check that a location matches them are one module, used by
-the page (to build rules, read them back and rank leads) and by the server (to
-check reported leads). It has one copy. Where it lives so both builds import it
-is Backend Buddy's and Client Comrade's call, and a test proves the page and the
-server classify the same location strings the same way.
+The rules are built by one module in the page, used to turn typed places into
+rules, read them back, and rank leads into tiers. The server only validates
+the rules' shape.
 
 ## The prompt reads the database
 
@@ -63,17 +60,6 @@ label. It stops reading `geo_scope_line`, `scope_clause` and
 every track doc; the prompt carries the tiers from the settings instead. A
 change to a person's places takes effect on their next run, with nothing to
 rewrite.
-
-## Code checks the location
-
-When a run reports a lead, the server classifies its location with the matcher:
-
-- **Inside the scope:** stored, with its tier.
-- **Outside the scope or in a rule-out:** refused, naming the reason, and the run
-  files it as screened out.
-- **No location the matcher can read** (blank, "Multiple locations", a remote
-  posting with no country): stored and marked "location unclear", so a person
-  sees it rather than it being lost or guessed at.
 
 ## What the person sees
 
@@ -97,10 +83,9 @@ cleared and the tier tables removed from the docs.
 
 1. **Mockup** of the setup form's location questions and the panel's Locations
    section, for approval before anything is built.
-2. **Matcher and settings** (Backend Buddy with Client Comrade): the shared
-   module, the two new settings, their validation, verify-local.
+2. **Settings** (Backend Buddy): the two new settings, their validation,
+   verify-local.
 3. **Prompt** (Prompt Bro): the location step from settings, the doc tier
    tables removed, the write-up no longer writing scope prose.
 4. **Page** (Client Comrade): the setup form and the Locations section.
-5. **Lead check** (Backend Buddy): classify, refuse, or mark unclear.
-6. **Existing searches** converted, each draft approved first.
+5. **Existing searches** converted, each draft approved first.
