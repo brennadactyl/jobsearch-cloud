@@ -789,20 +789,25 @@ const listed = buildSearchPrompt({
   // teaches, or a run writes locations the page can't rank.
   const { readFileSync } = await import("node:fs");
   const formsPath = new URL("../client/src/domain/location-forms.json", import.meta.url);
-  let forms = null;
-  try { forms = JSON.parse(readFileSync(formsPath, "utf8")); } catch { forms = null; }
-  const written = [];
-  const walk = (v) => {
-    if (Array.isArray(v)) v.forEach(walk);
-    else if (v && typeof v === "object") { if (typeof v.written === "string") written.push(v.written); Object.values(v).forEach(walk); }
+  let file = null;
+  try { file = JSON.parse(readFileSync(formsPath, "utf8")); } catch { file = null; }
+  // Each form the file names, and the words step 6 teaches it with. A form
+  // the file adds that isn't here fails, until the prompt teaches it too.
+  const TAUGHT_AS = {
+    "us-city": '"City, ST"',
+    "city-country": '"City, Country"',
+    "remote-us": '"Remote (US)"',
+    "remote-country": '"Remote (<country>)"',
+    joined: 'joined with "; "',
   };
-  walk(forms);
-  const formOf = (w) =>
-    w.includes("; ") ? "; " : /^Remote \(/.test(w) ? "Remote (" : /, [A-Z]{2}$/.test(w) ? "City, ST" : /, [A-Z][a-z]/.test(w) ? "City, Country" : null;
-  const untaught = [...new Set(written)].filter((w) => !formOf(w) || !stepOf6(full).includes(formOf(w)));
-  check("client/src/domain/location-forms.json exists and lists the forms runs write",
-    written.length > 0, String(formsPath));
+  const formIds = Object.keys(file?.forms || {});
+  const step6 = stepOf6(full);
+  const untaught = formIds.filter((id) => !TAUGHT_AS[id] || !step6.includes(TAUGHT_AS[id]));
+  const strayCases = (file?.cases || []).filter((c) => !formIds.includes(c.form)).map((c) => c.written);
+  check("client/src/domain/location-forms.json exists and names the forms runs write",
+    formIds.length > 0, String(formsPath));
   check("every form in it is one step 6 teaches", untaught.length === 0, untaught.join(" | "));
+  check("and every case in it belongs to one of those forms", strayCases.length === 0, strayCases.join(" | "));
 }
 function stepOf6(p) {
   return (p.split("\n").find((l) => l.startsWith("6. ")) || "");
