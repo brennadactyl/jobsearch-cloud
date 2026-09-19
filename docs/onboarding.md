@@ -72,13 +72,20 @@ answers 409 for such a track, and `setup-scheduler.ps1` registers no task for
 it until a run has written it up.
 
 **The scope check runs at send, not overnight.** `scopeProblem` refuses a send
-with no answer to "where can you work", because the person is still on the form
-and can fix it. That is the only refusal: the places ranked first and that
-answer aren't compared. The ranked places order the leads on the page, and what
-a run searches comes from the scope prose the overnight write-up writes.
-[location-settings-plan.md](location-settings-plan.md) plans how location
-answers will drive the search, with a place included rather than excluded
-where the answers disagree.
+with no answer to "What locations should be searched?", because the person is
+still on the form and can fix it. That is the only refusal: the places ranked
+under "Which locations should come first?" and that answer aren't compared.
+
+**A ranked place is always in scope.** Where the location answers disagree, the
+place is included rather than excluded. What a run searches comes from the
+scope prose the overnight write-up writes, and `run-onboarding.ps1` adds every
+ranked place to that prose itself after the model writes it, so a ranked place
+is searched even when "What locations should be searched?" leaves it out or
+"Anywhere you can't take a job?" names it. The rule is applied at write-up: a
+search's stored prose isn't rewritten when the rule changes. The ranked places
+also order the leads on the page.
+[location-settings-plan.md](location-settings-plan.md) plans location answers
+as settings the prompt reads directly.
 
 **Done and failed are read from the tracker, not from the model.** A person is
 `done` when the tracker has their written-up tracks and docs and the machine
