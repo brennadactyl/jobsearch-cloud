@@ -5,9 +5,9 @@
  * object, which is what lets one deployment hold several people's searches.
  */
 
-import { parseDocumentList, WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
+import { LOCATION_SETTING_KEYS, parseDocumentList, WRITEUP_FIELDS, WRITEUP_SETTINGS } from "../db.js";
 import { json, readJson } from "../http.js";
-import { trackDocumentsError, unknownTrack, unreadableDocumentsError } from "../validate.js";
+import { locationSettingError, trackDocumentsError, unknownTrack, unreadableDocumentsError } from "../validate.js";
 
 /**
  * The refusal for a `documents` list a search couldn't read its resume from,
@@ -29,7 +29,7 @@ function documentsChoiceError(list, storedList, fedBy) {
 /**
  * GET /api/config - requires a Bearer token -> `{ tracks[], settings }`.
  *
- * Track tabs, tab labels, display title, priority-location rules and the
+ * Track tabs, tab labels, display title, the location lists and the
  * staleness threshold, plus each track's search config and the prose settings.
  * Each track carries its own `last_run`.
  */
@@ -45,7 +45,7 @@ export async function handleGetConfig({ db }) {
  * The overnight run's only way into a track's config. A run that read the whole
  * config, edited it and posted it back through POST /api/config would re-write
  * the setup form's fields - `label`, `sort_order`, the title, the location
- * rules - as a side effect of every night it ran. This route makes "the run
+ * lists - as a side effect of every night it ran. This route makes "the run
  * leaves those alone" a guarantee: db.writeUpTrack builds its UPDATE from
  * WRITEUP_FIELDS and WRITEUP_SETTINGS, so a form-owned field is unreachable
  * here whatever the body says (docs/onboarding.md#why-it-is-split-this-way).
@@ -109,10 +109,12 @@ export async function handleWriteUp({ request, db }) {
 /**
  * POST /api/config - requires a Bearer token. Body `{ tracks?, display_title?,
  * overview_label?, applications_label?, all_leads_label?, stale_run_hours?,
- * priority_locations?, excluded_companies?, geo_scope_line?, scope_clause?,
- * scope_disqualifier?, location_guidance?, footer_note?, pronouns? }` ->
- * `{ tracks[], settings }`; 400 for an empty or invalid track list, a `fed_by`
- * that isn't another listed track, or a non-positive `stale_run_hours`.
+ * search_locations?, excluded_locations?, priority_locations?, location_note?,
+ * excluded_companies?, geo_scope_line?, scope_clause?, scope_disqualifier?,
+ * location_guidance?, footer_note?, pronouns? }` -> `{ tracks[], settings }`;
+ * 400 for an empty or invalid track list, a `fed_by` that isn't another listed
+ * track, a non-positive `stale_run_hours`, or a location setting that isn't
+ * text or is too long (validate.js locationSettingError).
  *
  * `tracks` replaces the whole track list, since setup writes the complete set
  * at once. Leads and applications under a removed track keep their `search`
@@ -122,6 +124,14 @@ export async function handleWriteUp({ request, db }) {
 export async function handleSetConfig({ request, db }) {
   const body = await readJson(request);
   if (body instanceof Response) return body;
+
+  // Checked before anything is written, so a refused value leaves the tracks as
+  // they were too.
+  for (const key of LOCATION_SETTING_KEYS) {
+    if (body[key] === undefined) continue;
+    const problem = locationSettingError(key, body[key]);
+    if (problem) return json({ error: problem, field: key }, 400);
+  }
 
   if (Array.isArray(body.tracks)) {
     const stored = new Map((await db.getTracksAndSettings()).tracks.map((t) => [t.key, t]));

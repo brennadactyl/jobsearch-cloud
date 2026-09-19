@@ -27,34 +27,27 @@ export function isoDate(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
 }
 
-// The first thing wrong with a set of location rules, or "" for none. The shape
-// the page and the prompt read: an array of `{label, allOf?, anyOf?}`, each
-// array a list of strings a posting's location is matched against. The caps are
-// generous for a person's ranked places and tight enough that nothing sent here
-// swells the config every prompt is composed from.
-export const LOCATION_RULES_MAX = 20;
-export function priorityLocationsError(rules) {
-  if (!Array.isArray(rules)) return "priority_locations must be an array";
-  if (rules.length > LOCATION_RULES_MAX) return `at most ${LOCATION_RULES_MAX} location rules`;
-  for (const [i, rule] of rules.entries()) {
-    const at = `location rule ${i + 1}`;
-    if (!rule || typeof rule !== "object" || Array.isArray(rule)) return `${at} must be an object`;
-    const unknown = Object.keys(rule).find((k) => !["label", "allOf", "anyOf"].includes(k));
-    if (unknown) return `${at} has an unknown field "${unknown}"`;
-    if (typeof rule.label !== "string" || !rule.label.trim() || rule.label.length > 60) {
-      return `${at} needs a label of 1 to 60 characters`;
-    }
-    let terms = 0;
-    for (const key of ["allOf", "anyOf"]) {
-      if (rule[key] === undefined) continue;
-      const list = rule[key];
-      if (!Array.isArray(list) || list.length > 20 || list.some((t) => typeof t !== "string" || !t || t.length > 80)) {
-        return `${at}'s ${key} must be at most 20 strings of 1 to 80 characters`;
-      }
-      terms += list.length;
-    }
-    if (!terms) return `${at} needs at least one term in allOf or anyOf`;
-  }
+// Where a person's search looks, as they typed it (docs/location-settings-plan.md):
+// three comma-separated lists and a note, each one `meta` value. Nothing is
+// split, matched or flagged here - the prompt reads each list as written, and
+// the page builds its ranking from `priority_locations` itself - so the only
+// checks are that each is text and fits. The caps keep a list to what a person
+// types, since the prompt carries every one of them every night.
+export const LOCATION_LIST_KEYS = ["search_locations", "excluded_locations", "priority_locations"];
+export const LOCATION_LIST_MAX_CHARS = 4000;
+export const LOCATION_NOTE_MAX_CHARS = 1000;
+
+/**
+ * What is wrong with one location setting as sent, or "" for nothing. The
+ * value is judged after trimming, which is how it is stored.
+ * @param {string} key one of LOCATION_LIST_KEYS, or "location_note"
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function locationSettingError(key, value) {
+  if (typeof value !== "string") return `${key} must be text`;
+  const max = key === "location_note" ? LOCATION_NOTE_MAX_CHARS : LOCATION_LIST_MAX_CHARS;
+  if (value.trim().length > max) return `${key} is longer than ${max} characters`;
   return "";
 }
 

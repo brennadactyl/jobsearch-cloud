@@ -7,11 +7,11 @@
  */
 
 import { json, readJson } from "../http.js";
-import { parseDocumentList } from "../db.js";
+import { LOCATION_SETTING_KEYS, parseDocumentList } from "../db.js";
 import { fileName, isChoosableResume, listedPathFor, resumeParts, samePairName, withResume } from "../resumes.js";
-import { unreadableDocumentsError } from "../validate.js";
+import { locationSettingError, unreadableDocumentsError } from "../validate.js";
 
-const ACCEPTED = ["resumes"];
+const ACCEPTED = ["resumes", ...LOCATION_SETTING_KEYS];
 
 // Every refusal about a chosen resume says which search it is about, so the
 // page can show it beside that search's picker.
@@ -20,8 +20,14 @@ function refuse(status, search, error) {
 }
 
 /**
- * POST /api/settings - requires a Bearer token. Body `{ resumes: { <search>:
- * <path> } }` -> `{ resumes: { <search>: { documents, profile_pending } } }`.
+ * POST /api/settings - requires a Bearer token. Body `{ resumes?: { <search>:
+ * <path> }, search_locations?, excluded_locations?, priority_locations?,
+ * location_note? }` -> `{ resumes: { <search>: { documents, profile_pending } },
+ * locations: { <key>: <stored value> } }`.
+ *
+ * The location lists and note are stored as typed, trimmed at the ends, and
+ * take effect on each search's next run (docs/location-settings-plan.md). Each
+ * must be text within its cap, or the request is a 400 naming it.
  *
  * Points each named search at a resume. Send only the searches that changed;
  * naming the resume a search already reads changes nothing.
@@ -39,7 +45,9 @@ function refuse(status, search, error) {
  * Refusals, each `{ error, search, field: "resume" }`: 404 for a search this
  * person doesn't have or a file that isn't stored; 400 for a tab another search
  * fills (its resume is that search's), or a path outside resumes/; 422 for a
- * file a search can't read. A key other than `resumes` is a 400 naming it.
+ * file a search can't read. Any other key is a 400 naming it.
+ *
+ * Every part of a request is checked before any of it is written.
  */
 export async function handlePostSettings({ request, db, docs }) {
   const body = await readJson(request);
@@ -50,8 +58,19 @@ export async function handlePostSettings({ request, db, docs }) {
       return json({ error: `"${sent}" is not a setting this page can change`, field: sent }, 400);
     }
   }
+  const locations = {};
+  for (const key of LOCATION_SETTING_KEYS) {
+    if (body[key] === undefined) continue;
+    const problem = locationSettingError(key, body[key]);
+    if (problem) return json({ error: problem, field: key }, 400);
+    locations[key] = body[key].trim();
+  }
+
   const resumes = body.resumes;
-  if (resumes === undefined) return json({ resumes: {} });
+  if (resumes === undefined) {
+    await db.setSettings(locations);
+    return json({ resumes: {}, locations });
+  }
   if (!resumes || typeof resumes !== "object" || Array.isArray(resumes)) {
     return json({ error: "resumes must be an object of search key to resume path", field: "resumes" }, 400);
   }
@@ -102,5 +121,6 @@ export async function handlePostSettings({ request, db, docs }) {
   }
 
   await db.setSearchResumes(changes, new Date().toISOString());
-  return json({ resumes: reply });
+  await db.setSettings(locations);
+  return json({ resumes: reply, locations });
 }

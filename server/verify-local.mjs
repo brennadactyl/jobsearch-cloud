@@ -2138,8 +2138,10 @@ console.log("\n== first-run setup ==");
 const intakeRole = { name: "Engineering", titles: "Senior Software Engineer", company_kinds: "", rule_outs: "", min_pay: "" };
 const baseAnswers = {
   page_title: `${newName}'s Job Search`, pronouns: "", resume_text: "Ten years of backend engineering.",
-  resume_files: [], location_limits: "", locations_first: "Seattle, Remote",
-  priority_locations: [{ label: "Seattle", anyOf: ["seattle"] }, { label: "Remote", anyOf: ["remote"] }],
+  resume_files: [], location_limits: "Texas ", locations_first: " Seattle, Portland, OR, Remote",
+  location_note: "open to relocating",
+  // Sent by a page built before the lists were stored as typed; ignored now.
+  priority_locations: [{ label: "Seattle", anyOf: ["seattle"] }],
   roles: [intakeRole], never_work_for: "", preferences: "", work_scope: "Seattle, or remote in the US",
 };
 const postIntake = (tok, answers) => req("POST", "/api/intake", { token: tok, body: { answers } });
@@ -2151,15 +2153,17 @@ check("and each role needs the roles to search for",
   (await postIntake(N_TOK, { ...baseAnswers, roles: [{ ...intakeRole, titles: " " }] })).json.field === "roles");
 check("setup needs a resume the run can find, and a named file that doesn't exist is not one",
   (await postIntake(N_TOK, { ...baseAnswers, resume_text: "", resume_files: ["resumes/missing.pdf"] })).json.field === "resume");
-for (const [why, rules] of [
-  ["an unknown field", [{ label: "Seattle", anyOf: ["seattle"], tier: "high" }]],
-  ["an empty label", [{ label: "", anyOf: ["seattle"] }]],
-  ["no terms", [{ label: "Seattle", anyOf: [] }]],
-  ["more than twenty rules", Array.from({ length: 21 }, (_, i) => ({ label: `L${i}`, anyOf: ["x"] }))],
-  ["a term that isn't text", [{ label: "Seattle", anyOf: [42] }]],
+// The location answers are stored as typed (docs/location-settings-plan.md), so
+// the only refusals are text that isn't text, or too much of it - named by the
+// answer, which is where the form shows it.
+for (const [why, answers, field] of [
+  // Caught by the check every text answer gets, which names the answers as a whole.
+  ["a list sent as anything but text", { locations_first: ["Seattle"] }, "answers"],
+  ["a list longer than 4000 characters", { work_scope: "x".repeat(4001) }, "work_scope"],
+  ["a note longer than 1000 characters", { location_note: "x".repeat(1001) }, "location_note"],
 ]) {
-  check(`a malformed location rule is refused: ${why}`,
-    (await postIntake(N_TOK, { ...baseAnswers, priority_locations: rules })).json.field === "priority_locations");
+  check(`a location answer is refused: ${why}`,
+    (await postIntake(N_TOK, { ...baseAnswers, ...answers })).json.field === field);
 }
 check("a refused setup stores nothing",
   (await req("GET", "/api/intake", { token: N_TOK })).json.intake === null);
@@ -2202,8 +2206,13 @@ check("the tracker exists the moment setup is sent: tabs, in form order, labelle
 check("and the settings the form owns, with a title defaulted from the name",
   builtConfig.settings?.display_title === `${instName}'s Job Search` &&
   builtConfig.settings?.pronouns === "she/her" &&
-  JSON.stringify(builtConfig.settings?.excluded_companies) === JSON.stringify(["Bad Corp", "Worse Inc"]) &&
-  JSON.stringify(builtConfig.settings?.priority_locations) === JSON.stringify(baseAnswers.priority_locations),
+  JSON.stringify(builtConfig.settings?.excluded_companies) === JSON.stringify(["Bad Corp", "Worse Inc"]),
+  JSON.stringify(builtConfig.settings));
+check("the location answers become the location settings, as typed and trimmed at the ends",
+  builtConfig.settings?.search_locations === "Seattle, or remote in the US" &&
+  builtConfig.settings?.excluded_locations === "Texas" &&
+  builtConfig.settings?.priority_locations === "Seattle, Portland, OR, Remote" &&
+  builtConfig.settings?.location_note === "open to relocating",
   JSON.stringify(builtConfig.settings));
 check("nothing the run owns is written on send",
   builtConfig.tracks?.every((t) => t.role_search_line === "" && t.fit_clause === "" && t.schedule_time === "") &&
@@ -2237,7 +2246,8 @@ const afterWriteUp = (await req("GET", "/api/config", { token: I_TOK })).json;
 check("and the form's fields come through it untouched",
   afterWriteUp.tracks?.[0]?.label === "Engineering" && afterWriteUp.tracks?.[0]?.sort_order === 0 &&
   afterWriteUp.settings?.display_title === `${instName}'s Job Search` &&
-  JSON.stringify(afterWriteUp.settings?.priority_locations) === JSON.stringify(baseAnswers.priority_locations),
+  afterWriteUp.settings?.priority_locations === "Seattle, Portland, OR, Remote" &&
+  afterWriteUp.settings?.search_locations === "Seattle, or remote in the US",
   JSON.stringify({ label: afterWriteUp.tracks?.[0]?.label, title: afterWriteUp.settings?.display_title }));
 check("a written-up track has a prompt again",
   (await req("GET", "/api/prompt/engineering", { token: I_TOK })).status === 200);
@@ -3131,6 +3141,73 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   await req("POST", "/api/settings", { token: NW, body: { resumes: { NEW: "resumes/Second.txt" } } });
   check("after its write-up, a search's resume change marks it stale",
     (await nwStale("NEW"))?.was === "resumes/First.txt", JSON.stringify(await nwStale("NEW")));
+}
+
+
+{
+  console.log("\n== where a search looks, as the person typed it ==");
+  // The location settings (docs/location-settings-plan.md): three lists and a
+  // note, each stored as typed, trimmed at the ends, written by the person or
+  // an operator and never by the overnight run.
+  const lcRun = Date.now();
+  const lcUser = async (tag) => {
+    const name = `Locations ${tag} ${lcRun}`;
+    await req("POST", "/api/users", { admin: true, body: { name, password: `locations-${tag}-long-password` } });
+    const token = (await req("POST", "/api/login", { body: { name, password: `locations-${tag}-long-password` } })).json.token;
+    await req("POST", "/api/config", { token, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+    return token;
+  };
+  const LC = await lcUser("a"), LC_B = await lcUser("b");
+  const lcSettings = async (token) => (await req("GET", "/api/config", { token })).json?.settings || {};
+
+  const unset = await lcSettings(LC);
+  check("an account that never set its places reads each as empty text",
+    ["search_locations", "excluded_locations", "priority_locations", "location_note"].every((k) => unset[k] === ""),
+    JSON.stringify(unset));
+
+  const lcSave = await req("POST", "/api/settings", { token: LC, body: {
+    search_locations: "  US, Greater Seattle area , Australia ",
+    excluded_locations: "Portland, OR",
+    priority_locations: "Seattle, Portland OR, Raleigh NC",
+    location_note: "open to relocating for the right team",
+  } });
+  const saved = await lcSettings(LC);
+  check("the account panel saves each list as typed, trimmed only at the ends",
+    lcSave.status === 200 && saved.search_locations === "US, Greater Seattle area , Australia" &&
+    saved.excluded_locations === "Portland, OR" && saved.priority_locations === "Seattle, Portland OR, Raleigh NC" &&
+    saved.location_note === "open to relocating for the right team", JSON.stringify([lcSave.json, saved]));
+  check("and says what it stored",
+    lcSave.json?.locations?.search_locations === "US, Greater Seattle area , Australia");
+  check("a list left out of a save keeps its value",
+    (await req("POST", "/api/settings", { token: LC, body: { location_note: "" } })).status === 200 &&
+    (await lcSettings(LC)).priority_locations === "Seattle, Portland OR, Raleigh NC" && (await lcSettings(LC)).location_note === "");
+
+  for (const [why, body, field] of [
+    ["a list that isn't text", { priority_locations: ["Seattle"] }, "priority_locations"],
+    ["a list over 4000 characters", { search_locations: "x".repeat(4001) }, "search_locations"],
+    ["a note over 1000 characters", { location_note: "x".repeat(1001) }, "location_note"],
+  ]) {
+    const res = await req("POST", "/api/settings", { token: LC, body });
+    check(`a location setting is refused: ${why}, naming it`, res.status === 400 && res.json?.field === field, JSON.stringify(res.json));
+  }
+  const lcHalf = await req("POST", "/api/settings", { token: LC, body: { excluded_locations: "Nowhere", location_note: "x".repeat(1001) } });
+  check("a refused save writes none of it",
+    lcHalf.status === 400 && (await lcSettings(LC)).excluded_locations === "Portland, OR");
+  check("a list 4000 characters long fits",
+    (await req("POST", "/api/settings", { token: LC_B, body: { search_locations: "x".repeat(4000) } })).status === 200);
+
+  const lcConfig = await req("POST", "/api/config", { token: LC, body: { priority_locations: " Boston " } });
+  check("an operator can set them through the config too",
+    lcConfig.status === 200 && (await lcSettings(LC)).priority_locations === "Boston", JSON.stringify(lcConfig.json));
+  const lcBadConfig = await req("POST", "/api/config", { token: LC, body: {
+    tracks: [{ key: "RENAMED", label: "Renamed" }], search_locations: 7 } });
+  check("and a refused location setting there leaves the tracks alone",
+    lcBadConfig.status === 400 && lcBadConfig.json?.field === "search_locations" &&
+    (await req("GET", "/api/config", { token: LC })).json?.tracks?.[0]?.key === "SWE", JSON.stringify(lcBadConfig.json));
+  check("the overnight run can't write them",
+    (await req("POST", "/api/writeup", { token: LC, body: { search: "SWE", search_locations: "anywhere" } })).json?.field === "search_locations");
+  check("another account's places are its own",
+    (await lcSettings(LC_B)).priority_locations === "" && (await lcSettings(LC_B)).search_locations === "x".repeat(4000));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

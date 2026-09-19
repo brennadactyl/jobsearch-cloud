@@ -145,7 +145,10 @@
  * @property {string} applications_label
  * @property {string} all_leads_label
  * @property {number} stale_run_hours
- * @property {Array<Object>} priority_locations
+ * @property {string} search_locations - where to search, as typed (docs/location-settings-plan.md)
+ * @property {string} excluded_locations - where the person can't take a job, as typed
+ * @property {string} priority_locations - the places to rank first, in order, as typed
+ * @property {string} location_note - what the three lists can't say
  * @property {string[]} excluded_companies
  * @property {string} geo_scope_line
  * @property {string} scope_clause
@@ -244,6 +247,13 @@ export const SETTING_KEYS = [
   "display_title", "overview_label", "applications_label", "all_leads_label",
   "stale_run_hours",
 ];
+// ...where the search looks, which both read (docs/location-settings-plan.md).
+// Each is stored exactly as the person typed it, trimmed at the ends: the
+// prompt interprets the lists and the page builds its ranking from
+// priority_locations, so nothing here splits or parses them. Written by the
+// person (POST /api/settings, POST /api/intake) or an operator (POST
+// /api/config), never by the overnight run.
+export const LOCATION_SETTING_KEYS = ["search_locations", "excluded_locations", "priority_locations", "location_note"];
 // ...and settings only prompt.js reads: the per-user half of the search config
 // (TRACK_CONFIG_FIELDS is the per-track half). Stored as verbatim prose - don't
 // rebuild these sentences from keywords, which would drop hand-written detail
@@ -262,7 +272,10 @@ export const DEFAULT_SETTINGS = {
   // The page falls back to the same number (DEFAULT_STALE_RUN_HOURS in
   // client/src/api/schema.ts).
   stale_run_hours: 36,
-  priority_locations: [],
+  search_locations: "",
+  excluded_locations: "",
+  priority_locations: "",
+  location_note: "",
   // A list rather than a sentence in a track's prose, so "is X excluded?" is a
   // lookup and adding a company is an append.
   excluded_companies: [],
@@ -779,7 +792,7 @@ export class Db {
     const trackCols = ["key", ...TRACK_DISPLAY_FIELDS, ...TRACK_CONFIG_FIELDS]
       .map((f) => `t.${f}`)
       .join(", ");
-    const settingKeys = ["priority_locations", "excluded_companies", ...SETTING_KEYS, ...PROMPT_SETTING_KEYS];
+    const settingKeys = ["excluded_companies", ...SETTING_KEYS, ...LOCATION_SETTING_KEYS, ...PROMPT_SETTING_KEYS];
     const [tracksRes, settingsRows] = await Promise.all([
       this.d1
         .prepare(
@@ -805,7 +818,7 @@ export class Db {
 
     const settings = { ...DEFAULT_SETTINGS };
     for (const row of settingsRows.results) {
-      if (row.key === "priority_locations" || row.key === "excluded_companies") {
+      if (row.key === "excluded_companies") {
         try {
           settings[row.key] = JSON.parse(row.value);
         } catch {
@@ -1014,8 +1027,8 @@ export class Db {
     if (patch.stale_run_hours != null) {
       await this.setSetting("stale_run_hours", String(patch.stale_run_hours));
     }
-    if (Array.isArray(patch.priority_locations)) {
-      await this.setSetting("priority_locations", JSON.stringify(patch.priority_locations));
+    for (const key of LOCATION_SETTING_KEYS) {
+      if (typeof patch[key] === "string") await this.setSetting(key, patch[key].trim());
     }
     // An empty array is a real instruction ("exclude no one"), so any array is written.
     if (Array.isArray(patch.excluded_companies)) {
