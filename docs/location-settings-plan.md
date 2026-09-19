@@ -66,12 +66,11 @@ them:
 - **How a lead's location is written:** "City, ST" for a US city and "City,
   Country" elsewhere, as the posting gives it; "Remote (US)" or "Remote
   (<country>)" for a remote role; several locations joined with "; ". The forms
-  live in one file, `server/src/location-forms.json`, owned by Prompt Bro:
-  examples grouped by form, imported by `prompt.js`, which prints its examples
-  from it, so the prompt can't teach a form the file lacks. The page's test in
-  `client/src/domain/locations.test.ts` reads the same file and checks each
-  example lands in its tier; must-not-match cases ("Portland, ME" against
-  "Portland OR") live only in that test. So a lead never silently loses its tier. `location_guidance`
+  live in one file, `client/src/domain/location-forms.json`, owned by Client
+  Comrade: each form, its expected tier, and must-not-match cases ("Portland,
+  ME" against "Portland OR"). The page's matcher test runs over it, and
+  `verify-local` reads it by path and fails if the prompt doesn't teach every
+  form in it. So a lead never silently loses its tier. `location_guidance`
   is retired with the scope prose.
 - **Remote:** a remote role is in scope when it is open to someone in a searched
   place; one restricted to a region or time zone outside the searched places is
