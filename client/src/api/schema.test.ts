@@ -98,6 +98,32 @@ describe("settingsSchema", () => {
     });
     expect(s.priority_locations.map((r) => r.label)).toEqual(["Metro core", "Wider region"]);
   });
+
+  it("builds the same tier rules from the list as typed as the server sends it built", () => {
+    const typed = "Seattle, Portland OR, Remote US";
+    const fromList = settingsSchema.parse({ priority_locations: typed }).priority_locations;
+    expect(fromList.map((r) => r.label)).toEqual(["Seattle", "Portland OR", "Remote US"]);
+    // Rules sent already built are read as they are, so either shape tiers leads alike.
+    expect(settingsSchema.parse({ priority_locations: fromList }).priority_locations).toEqual(fromList);
+  });
+
+  it("reads a list with an entry the matcher can't place, and builds no rule for that entry, rather than failing the page", () => {
+    const s = settingsSchema.parse({ priority_locations: "Seattle, SEA, Portland" });
+    // "SEA" is too short to match and a bare "Portland" names several places:
+    // they tier nothing, and the page still loads.
+    expect(s.priority_locations.map((r) => r.label)).toEqual(["Seattle"]);
+  });
+
+  it("treats an empty or missing list as no ranked places", () => {
+    for (const priority_locations of ["", "  ", null, undefined]) {
+      expect(settingsSchema.parse({ priority_locations }).priority_locations).toEqual([]);
+    }
+  });
+
+  it("loads a whole /api/data payload whose ranked places arrive as a typed list", () => {
+    const data = dataSchema.parse({ ...emptyPayload, settings: { priority_locations: "Seattle, Remote US" } });
+    expect(data.settings.priority_locations).toHaveLength(2);
+  });
 });
 
 describe("loginSchema", () => {

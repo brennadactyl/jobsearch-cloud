@@ -11,6 +11,7 @@
  * `server/src/routes/data.js` for the envelope.
  */
 import { z } from "zod";
+import { locationRules, parseLocations } from "../domain/locations";
 
 /** Text columns are `NOT NULL DEFAULT ''` throughout, so "" is the empty case, not null. */
 const str = z.string();
@@ -140,6 +141,19 @@ export const priorityLocationSchema = z.object({
 export const DEFAULT_STALE_RUN_HOURS = 36;
 
 /**
+ * The ranked places, as the rules the page sorts leads into tiers by. The
+ * server keeps the list as the person typed it, "Seattle, Portland OR", and
+ * the page builds the rules from it here, so every reader gets rules; a list
+ * that arrives as rules already built is read as it is. An entry the matcher
+ * can't read just builds no rule: nothing about a place is refused
+ * (docs/location-settings-plan.md).
+ */
+const rankedPlaces = z
+  .union([z.string(), z.array(priorityLocationSchema)])
+  .nullish()
+  .transform((v) => (typeof v === "string" ? locationRules(parseLocations(v)) : (v ?? [])));
+
+/**
  * Mirrors DEFAULT_SETTINGS in server/src/db.js. Every key defaults, because a
  * freshly created database has posted no config and must still render a usable
  * page - the same reason the server defaults them.
@@ -150,7 +164,7 @@ export const settingsSchema = z.object({
   applications_label: z.string().default("Applications"),
   all_leads_label: z.string().default("All leads"),
   stale_run_hours: z.number().default(DEFAULT_STALE_RUN_HOURS),
-  priority_locations: z.array(priorityLocationSchema).default([]),
+  priority_locations: rankedPlaces,
   excluded_companies: z.array(z.string()).default([]),
 });
 
@@ -205,7 +219,7 @@ export const intakeAnswersSchema = z.object({
   work_scope: str.default(""),
   location_limits: str.default(""),
   locations_first: str.default(""),
-  priority_locations: z.array(priorityLocationSchema).default([]),
+  priority_locations: rankedPlaces,
   roles: z.array(roleAnswerSchema).default([]),
   never_work_for: str.default(""),
   preferences: str.default(""),
