@@ -516,8 +516,16 @@ foreach ($item in $queue) {
         # where they can work disagree, the place is included rather than
         # excluded: someone who ranks Portland first wants Portland searched,
         # whatever else they wrote. See Add-PreferredPlaces.
-        $preferred = @($personConfig.settings.priority_locations | Where-Object { $_ -and $_.label } |
-            ForEach-Object { ([string]$_.label).Trim() } | Where-Object { $_ })
+        # Stored as the list they typed (docs/location-settings-plan.md), kept
+        # whole rather than split on commas, since "Portland, OR" is one place;
+        # an account still holding ranking rules gives their labels.
+        $ranked = $personConfig.settings.priority_locations
+        $preferred = if ($ranked -is [string]) {
+            @($ranked.Trim() | Where-Object { $_ })
+        } else {
+            @($ranked | Where-Object { $_ -and $_.label } |
+                ForEach-Object { ([string]$_.label).Trim() } | Where-Object { $_ })
+        }
         if ($liveTracks.Count -eq 0) {
             Stop-Person "their account has no tracks to write up" $null
         }
