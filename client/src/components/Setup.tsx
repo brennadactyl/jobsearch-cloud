@@ -430,19 +430,21 @@ export default function Setup({
             />
           </Field>
 
-          <SetupHeading title="Where you'll work">
-            Three different questions: everywhere you could work, anything ruled out inside that, and what you'd most
-            like.
+          <SetupHeading title="Where to search">
+            Three different questions: every area to search, anything ruled out inside it, and what you'd most like.
           </SetupHeading>
           <Field
-            label={<label htmlFor={`${id}-scope`}>Where can you work?</label>}
+            label={<label htmlFor={`${id}-scope`}>What locations should be searched?</label>}
             problem={problems.work_scope}
-            hint="This is the answer that sets where the search looks, so name the whole area you could take a job in — not only the part you'd prefer."
+            // The one place the page states that preferred places are always
+            // searched: a text match against this answer can't tell whether
+            // Seattle is "US only", so no note names a place as outside it.
+            hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
           >
             <textarea
               id={`${id}-scope`}
               rows={2}
-              placeholder="Anywhere in the US, remote or in the Denver area"
+              placeholder="US only, Greater Seattle area, Australia"
               aria-invalid={problems.work_scope ? true : undefined}
               value={answers.work_scope}
               onChange={(e) => set("work_scope", e.target.value)}

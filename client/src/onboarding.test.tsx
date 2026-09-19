@@ -145,10 +145,28 @@ describe("the setup form", () => {
 
   /** The two answers a form can't send without: where work is possible, and one role. */
   async function fillRequired() {
-    await userEvent.type(screen.getByLabelText("Where can you work?"), "Anywhere in the US, remote or around Denver");
+    await userEvent.type(screen.getByLabelText("What locations should be searched?"), "Anywhere in the US, remote or around Denver");
     await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
     await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
   }
+
+  it("says once that ranked places are always searched, and sends when they sit outside the area to search", async () => {
+    const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
+    await openSetup();
+    const scope = screen.getByLabelText("What locations should be searched?");
+    expect(scope).toHaveAttribute("placeholder", "US only, Greater Seattle area, Australia");
+    // Stated once, on the area field, as a fixed line: it names no place.
+    expect(scope.closest(".setup-field")).toHaveTextContent("The places you rank below are always searched too.");
+    expect(screen.getAllByText(/always searched/)).toHaveLength(1);
+    const preferred = screen.getByLabelText("Which locations should come first?");
+
+    await fillRequired();
+    await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+    await userEvent.type(preferred, "Portland OR, Raleigh NC");
+    await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit.mock.calls[0][0].priority_locations.map((r) => r.label)).toEqual(["Portland OR", "Raleigh NC"]);
+  });
 
   it("shows instead of an empty tracker, prefilled with the account's name", async () => {
     await openSetup();
@@ -286,7 +304,7 @@ describe("the setup form", () => {
     await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Nowhere in Texas");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
-    expect(screen.getByText("Say where you can work — it's what the search searches.")).toBeInTheDocument();
+    expect(screen.getByText("Say what locations should be searched — the search needs somewhere to look.")).toBeInTheDocument();
     expect(submit).not.toHaveBeenCalled();
   });
 

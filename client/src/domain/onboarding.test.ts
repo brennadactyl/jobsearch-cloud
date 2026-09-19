@@ -71,7 +71,7 @@ describe("setupProblems", () => {
 
   it("holds out for where the person can work, which is the only answer that scopes the search", () => {
     expect(setupProblems({ ...ready, work_scope: "  " }, []).work_scope).toBe(
-      "Say where you can work — it's what the search searches.",
+      "Say what locations should be searched — the search needs somewhere to look.",
     );
     // An exclusion is not a scope: on its own it still can't send.
     expect(setupProblems({ ...ready, work_scope: "", location_limits: "Nowhere in Texas" }, [])).toHaveProperty("work_scope");
