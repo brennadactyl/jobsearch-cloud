@@ -41,7 +41,14 @@ export const LOCATION_NOTE_MAX_CHARS = 1000;
 // anyOf?}]`, each array a list of strings a lead's location is matched against
 // (docs/location-settings-plan.md, "The stand-in rules"). Only an operator
 // writes them, restoring what an account had; a person's own list replaces them.
-export const PRIORITY_RULES_MAX = 20;
+//
+// Checked against what the page reads (priorityLocationSchema in
+// client/src/api/schema.ts) and no more: a text label, optional lists of text
+// terms. They are restored exactly as stored, and rules set up by hand carry
+// other fields and long term lists that the page ignores or uses as they are.
+// The caps only stop a value no ranking needs.
+export const PRIORITY_RULES_MAX = 50;
+const PRIORITY_RULE_TERMS_MAX = 200;
 
 /** The first thing wrong with a set of ranking rules, or "" for none. */
 export function priorityRulesError(rules) {
@@ -50,21 +57,14 @@ export function priorityRulesError(rules) {
   for (const [i, rule] of rules.entries()) {
     const at = `ranking rule ${i + 1}`;
     if (!rule || typeof rule !== "object" || Array.isArray(rule)) return `${at} must be an object`;
-    const unknown = Object.keys(rule).find((k) => !["label", "allOf", "anyOf"].includes(k));
-    if (unknown) return `${at} has an unknown field "${unknown}"`;
-    if (typeof rule.label !== "string" || !rule.label.trim() || rule.label.length > 60) {
-      return `${at} needs a label of 1 to 60 characters`;
-    }
-    let terms = 0;
+    if (typeof rule.label !== "string" || !rule.label.trim()) return `${at} needs a label`;
     for (const key of ["allOf", "anyOf"]) {
-      if (rule[key] === undefined) continue;
       const list = rule[key];
-      if (!Array.isArray(list) || list.length > 20 || list.some((t) => typeof t !== "string" || !t || t.length > 80)) {
-        return `${at}'s ${key} must be at most 20 strings of 1 to 80 characters`;
+      if (list === undefined) continue;
+      if (!Array.isArray(list) || list.length > PRIORITY_RULE_TERMS_MAX || list.some((t) => typeof t !== "string")) {
+        return `${at}'s ${key} must be a list of at most ${PRIORITY_RULE_TERMS_MAX} text terms`;
       }
-      terms += list.length;
     }
-    if (!terms) return `${at} needs at least one term in allOf or anyOf`;
   }
   return "";
 }

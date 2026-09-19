@@ -3242,11 +3242,17 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("and /api/data serves them to the page",
     JSON.stringify((await req("GET", "/api/data", { token: PR })).json?.settings?.priority_rules) === JSON.stringify(kept));
 
+  // Rules set up by hand carry more than the page reads - a `tier`, long term
+  // lists - and are restored exactly as stored.
+  const handSet = [{ tier: "high", label: "Seattle area", anyOf: Array.from({ length: 30 }, (_, i) => `town ${i}`) }];
+  check("rules as they were set up by hand are accepted as stored, extra fields included",
+    (await req("POST", "/api/config", { token: PR_B, body: { priority_rules: handSet } })).status === 200 &&
+    JSON.stringify((await prSettings(PR_B)).priority_rules) === JSON.stringify(handSet));
   for (const [why, rules] of [
     ["something other than a list", "Seattle"],
-    ["a rule with an unknown field", [{ label: "Seattle", anyOf: ["seattle"], tier: 1 }]],
-    ["a rule with no terms", [{ label: "Seattle", anyOf: [] }]],
-    ["more than twenty rules", Array.from({ length: 21 }, (_, i) => ({ label: `L${i}`, anyOf: ["x"] }))],
+    ["a rule without a label", [{ anyOf: ["seattle"] }]],
+    ["terms that aren't text", [{ label: "Seattle", anyOf: [42] }]],
+    ["more than fifty rules", Array.from({ length: 51 }, (_, i) => ({ label: `L${i}`, anyOf: ["x"] }))],
   ]) {
     const res = await req("POST", "/api/config", { token: PR, body: { priority_rules: rules } });
     check(`stand-in rules are refused: ${why}`, res.status === 400 && res.json?.field === "priority_rules", JSON.stringify(res.json));
