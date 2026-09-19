@@ -397,6 +397,26 @@ function Invoke-KnownCommand {
     }
 }
 
+# The places this person ranked first, as entries an `area` has to equal:
+# `priority_locations` split on commas, each trimmed, empties dropped. The
+# leads route applies the same rule (docs/location-settings-plan.md, "Each lead
+# carries its area"); change both together. Read once, and only when a row
+# carries an area.
+$script:RankedEntries = $null
+function Get-RankedEntries {
+    if ($null -eq $script:RankedEntries) {
+        $config = Invoke-Tracker "GET" "/api/config" $null
+        $ranked = $config.settings.priority_locations
+        # Wrapped in @(): an `if` that yields an empty array assigns $null,
+        # which would read the config again for every row.
+        $script:RankedEntries = @(if ($ranked -is [string]) {
+            $ranked -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        })
+    }
+    return , $script:RankedEntries
+}
+
+$script:AreaCleared = 0
 function Invoke-LeadsCommand {
     $rows = Read-Rows $PositionalArg "leads"
     $send = @()
@@ -413,11 +433,33 @@ function Invoke-LeadsCommand {
             $fieldValue = Get-TrimmedField $inputRow $fieldName
             if ($fieldValue) { $row[$fieldName] = $fieldValue }
         }
+        # An area is one of the ranked places or nothing: a near-miss like
+        # "Seattle" for "Seattle area" would give the lead no tier while
+        # looking filed. Case doesn't matter, and what is sent is the entry as
+        # the person typed it, so every lead in one place carries one spelling.
+        # The lead itself is always sent.
+        $area = Get-TrimmedField $inputRow "area"
+        if ($area) {
+            $entries = Get-RankedEntries
+            $match = @($entries | Where-Object { $_ -ieq $area }) | Select-Object -First 1
+            if ($match) {
+                $row["area"] = $match
+            } else {
+                $script:AreaCleared++
+                $known = if ($entries.Count) { $entries -join " | " } else { "none are set" }
+                Write-TrackerLine "area '$area' on $url is not one of the ranked places ($known) - sent without an area"
+            }
+        }
         $send += $row
     }
     if ($send.Count -eq 0) { Write-TrackerLine "leads: nothing to send (refused=$($script:Refused))"; exit 0 }
     $res = Invoke-Tracker "POST" "/api/leads" @{ on = $Today; leads = @($send) }
-    Write-TrackerLine "leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) on=$Today"
+    Write-TrackerLine "leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) area_cleared=$($script:AreaCleared) on=$Today"
+    # Every area sent was checked above, so the route clearing one means the
+    # two copies of the split rule disagree.
+    if ([int]$res.area_cleared -gt 0) {
+        Write-TrackerLine "WARNING: the tracker cleared $($res.area_cleared) area(s) this helper accepted - its ranked-place rule and this one have drifted apart"
+    }
 }
 
 function Invoke-ScreenedCommand {

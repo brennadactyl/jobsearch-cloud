@@ -393,6 +393,9 @@ const fillPrompt = await req("GET", "/api/prompt/_applications", { token: A_TOK 
 check("the fill prompt is served as its own reserved key, not as a track",
   fillPrompt.status === 200 && fillPrompt.text.includes("/api/applications/pending"),
   fillPrompt.text.slice(0, 120));
+check("the fill run reads each account's ranked places and files an area from them, copied as written",
+  fillPrompt.text.includes("settings.priority_locations") && fillPrompt.text.includes('"area":"..."') &&
+  fillPrompt.text.includes("copied as written") && fillPrompt.text.includes("area_cleared"));
 
 console.log("\n== dedup endpoint (what every scheduled run fetches) ==");
 const aDedup = await req("GET", "/api/dedup/SWE", { token: A_TOK });
@@ -727,6 +730,25 @@ const listed = buildSearchPrompt({
     overrideStep.startsWith("8b. Custom doc rule. Add at most 1234 bytes"));
   check("and asks for a doc stated as it stands, not dated notes",
     docStep.includes("correct a line in place") && docStep.includes("dated note"));
+}
+
+// ---- A lead's area: one of the places ranked first, copied exactly.
+{
+  const syncStep = (settings) => {
+    const p = buildSearchPrompt({
+      user: { id: "u", name: "Nobody" },
+      track: { key: "T", label: "T", full_description: "t", role_search_line: "r" },
+      settings,
+      feeds: [],
+    });
+    return p.slice(p.indexOf("9. SYNC"), p.indexOf("\n9b."));
+  };
+  const withRanked = syncStep({ priority_locations: "Seattle area, Portland OR, Remote US" });
+  check("step 9 asks for an area copied exactly from the ranked list, as typed",
+    withRanked.includes("comp, area}") && withRanked.includes('one entry from "Seattle area, Portland OR, Remote US"') &&
+    withRanked.includes("copied as written") && withRanked.includes("leave it out when the posting falls in none"));
+  check("a person with nothing ranked is asked for no area",
+    !/area/.test(syncStep({ priority_locations: "" })) && !/area/.test(syncStep({})));
 }
 
 check("a company list stored on a track never reaches the prompt",

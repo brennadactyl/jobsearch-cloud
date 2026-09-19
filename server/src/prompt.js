@@ -259,6 +259,23 @@ function geoStep(settings) {
     : "No geographic restriction is configured for this search - don't exclude a posting on location alone.";
 }
 
+// Step 9's `area`: which of the places ranked first a lead falls in, since the
+// page tiers by it (docs/location-settings-plan.md, "Each lead carries its
+// area"). The run judges it; tracker.ps1 and the leads route keep it only when
+// it equals an entry, ignoring case, so the wording asks for a copy, never a
+// paraphrase. A person with nothing ranked gets no area at all.
+function areaStep(settings, name) {
+  const ranked = typeof settings.priority_locations === "string" ? settings.priority_locations.trim() : "";
+  if (!ranked) return { areaKey: "", areaRule: "" };
+  return {
+    areaKey: ", area",
+    areaRule:
+      ` \`area\` is the one place ${name} ranked first that the posting falls in - one entry from "${ranked}", ` +
+      "copied as written - or leave it out when the posting falls in none of them. The posting's real " +
+      "location stays in `location`; `area` only files it, and anything but one of those entries is dropped.",
+  };
+}
+
 // ---- Multi-tab fragments: empty for a single-tab run unless noted.
 
 function alsoFillsHeader({ fed, multi, allKeys }) {
@@ -380,6 +397,7 @@ export function buildSearchPrompt({ user, track, settings, feeds, docBudget = DE
   const searchValue = searchValueRule(tabs);
   const delistTab = delistTabNote(tabs, name);
   const runFanout = runFanoutNote(tabs);
+  const { areaKey, areaRule } = areaStep(settings, name);
 
   // Step 3b sends discoveries to 9d because a company written into the doc
   // never reaches the rotation, and a search left with only its original
@@ -436,10 +454,10 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
 8b. ${docUpdate}
 9. SYNC NEW POSTINGS TO THE LIVE TRACKER WEBPAGE. Write today's new verified
    postings to \`leads.json\` - a JSON array of
-   \`{company, title, location, url, fit, team, setup, comp}\` - then run
+   \`{company, title, location, url, fit, team, setup, comp${areaKey}}\` - then run
    \`./tracker leads leads.json\`. \`team\`, \`setup\` and \`comp\` are the
    step-${captureNum} fields; leave a key out entirely for anything the posting
-   didn't state. Every row's \`"search"\` ${searchValue}${leadsNote}.
+   didn't state.${areaRule} Every row's \`"search"\` ${searchValue}${leadsNote}.
 9b. RECORD SCREENED-OUT CANDIDATES so tomorrow's run doesn't re-verify them.
    Write the disqualified-but-new candidates from step 7 to \`screened.json\` -
    \`{url, company, title, location, reason}\` - then run
@@ -533,8 +551,20 @@ Do the following, for each account in turn:
    account is empty that is the whole run, and it is not a problem to
    investigate.
 
+   For an account with anything waiting, also read the places it ranked first,
+   for step 3's \`area\`:
+
+   \`\`\`
+   curl -s "$TRACKER_URL/api/config" -H "Authorization: Bearer $TRACKER_TOKEN_1"
+   \`\`\`
+
+   \`settings.priority_locations\` is that list, as the person typed it,
+   comma-separated - "Seattle area, Portland OR, Remote US". Empty means they
+   ranked nothing.
+
    Collect every account's list before going on to step 2, keeping each row's
-   account alongside its \`id\` and \`link\`. Step 2 reads them all together.
+   account alongside its \`id\`, \`link\` and that account's ranked places. Step 2
+   reads them all together.
 
 2. FAN THE READING OUT. Postings are slow to fetch and completely independent
    of each other, so **dispatch one subagent per posting and let them run in
@@ -627,7 +657,7 @@ Do the following, for each account in turn:
    \`\`\`
    curl -s -X POST "$TRACKER_URL/api/applications/autofill" \\
      -H "Authorization: Bearer $TRACKER_TOKEN_1" -H "Content-Type: application/json" \\
-     -d '{"filled":[{"id":123,"company":"...","title":"...","location":"...","team":"...","setup":"...","comp":"..."}],
+     -d '{"filled":[{"id":123,"company":"...","title":"...","location":"...","team":"...","setup":"...","comp":"...","area":"..."}],
           "failed":[{"id":456,"reason":"posting has been taken down"}]}'
    \`\`\`
 
@@ -637,6 +667,14 @@ Do the following, for each account in turn:
    either may be omitted if it's empty. A \`filled\` row may carry a \`"note"\`
    alongside its fields - pass through whatever \`note\` the subagent returned,
    unchanged.
+
+   **Add \`area\` yourself**, not from the subagent: when a row's \`location\`
+   falls in one of that account's ranked places, set \`area\` to that entry,
+   copied as written from its list; otherwise leave \`area\` out. It files the
+   application under the place the person ranked, while \`location\` stays as the
+   posting gave it. The tracker keeps it only when it is one of that account's
+   entries, so another account's place, or a near-miss like "Seattle" for
+   "Seattle area", is simply dropped.
 
    **Anything a subagent established goes in \`filled\`, even one field.** Only a
    subagent that came back with \`failed\` - nothing established at all - goes in
@@ -665,7 +703,9 @@ Do the following, for each account in turn:
    to work out what is already in the row - you were not told, and that is
    deliberate.
 
-   The response is \`{"filled":N,"failed":N,"unmatched":[id,...]}\`. An id in
+   The response is \`{"filled":N,"failed":N,"unmatched":[id,...],"area_cleared":N}\`.
+   \`area_cleared\` counts areas that matched none of that account's ranked places
+   and were dropped; say so in your report when it isn't 0. An id in
    \`unmatched\` means that row was dealt with or deleted between step 1 and
    now - ordinary, and nothing to retry or work around.
 
