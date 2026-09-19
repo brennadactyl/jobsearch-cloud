@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { matchLocationTier } from "./geo";
 import { locationRules, parseLocation, parseLocations, tooManyLocations } from "./locations";
@@ -139,5 +141,31 @@ describe("an entry too short to match", () => {
         expect(/^[a-z]{1,3}$/.test(term), `${rule.label}: "${term}"`).toBe(false);
       }
     }
+  });
+});
+
+/**
+ * The locations the nightly runs write, and the tier each must land in
+ * (location-forms.json). The prompt teaches these forms, server/verify-local.mjs
+ * checks it teaches every one, and this checks the page tiers every one, so a
+ * lead can't silently lose its tier between the two.
+ */
+describe("the location forms the runs write", () => {
+  type FormCase = { form: string; ranked: string; written: string; tier: number | null; why?: string };
+  const fixture: { forms: Record<string, string>; cases: FormCase[] } = JSON.parse(
+    readFileSync(join(process.cwd(), "src", "domain", "location-forms.json"), "utf8"),
+  );
+
+  it.each(fixture.cases)("puts $written in tier $tier against $ranked ($form)", (c) => {
+    const rules = locationRules(parseLocations(c.ranked));
+    expect(matchLocationTier(c.written, rules)?.rank ?? null).toBe(c.tier);
+  });
+
+  it("proves every form with at least one match and names only forms it lists", () => {
+    const forms = Object.keys(fixture.forms);
+    for (const form of forms) {
+      expect(fixture.cases.some((c) => c.form === form && c.tier !== null), form).toBe(true);
+    }
+    for (const c of fixture.cases) expect(forms, c.written).toContain(c.form);
   });
 });
