@@ -551,8 +551,20 @@ Do the following, for each account in turn:
    account is empty that is the whole run, and it is not a problem to
    investigate.
 
+   For an account with anything waiting, also read the places it ranked first,
+   for step 3's \`area\`:
+
+   \`\`\`
+   curl -s "$TRACKER_URL/api/config" -H "Authorization: Bearer $TRACKER_TOKEN_1"
+   \`\`\`
+
+   \`settings.priority_locations\` is that list, as the person typed it,
+   comma-separated - "Seattle area, Portland OR, Remote US". Empty means they
+   ranked nothing.
+
    Collect every account's list before going on to step 2, keeping each row's
-   account alongside its \`id\` and \`link\`. Step 2 reads them all together.
+   account alongside its \`id\`, \`link\` and that account's ranked places. Step 2
+   reads them all together.
 
 2. FAN THE READING OUT. Postings are slow to fetch and completely independent
    of each other, so **dispatch one subagent per posting and let them run in
@@ -645,7 +657,7 @@ Do the following, for each account in turn:
    \`\`\`
    curl -s -X POST "$TRACKER_URL/api/applications/autofill" \\
      -H "Authorization: Bearer $TRACKER_TOKEN_1" -H "Content-Type: application/json" \\
-     -d '{"filled":[{"id":123,"company":"...","title":"...","location":"...","team":"...","setup":"...","comp":"..."}],
+     -d '{"filled":[{"id":123,"company":"...","title":"...","location":"...","team":"...","setup":"...","comp":"...","area":"..."}],
           "failed":[{"id":456,"reason":"posting has been taken down"}]}'
    \`\`\`
 
@@ -655,6 +667,14 @@ Do the following, for each account in turn:
    either may be omitted if it's empty. A \`filled\` row may carry a \`"note"\`
    alongside its fields - pass through whatever \`note\` the subagent returned,
    unchanged.
+
+   **Add \`area\` yourself**, not from the subagent: when a row's \`location\`
+   falls in one of that account's ranked places, set \`area\` to that entry,
+   copied as written from its list; otherwise leave \`area\` out. It files the
+   application under the place the person ranked, while \`location\` stays as the
+   posting gave it. The tracker keeps it only when it is one of that account's
+   entries, so another account's place, or a near-miss like "Seattle" for
+   "Seattle area", is simply dropped.
 
    **Anything a subagent established goes in \`filled\`, even one field.** Only a
    subagent that came back with \`failed\` - nothing established at all - goes in
@@ -683,7 +703,9 @@ Do the following, for each account in turn:
    to work out what is already in the row - you were not told, and that is
    deliberate.
 
-   The response is \`{"filled":N,"failed":N,"unmatched":[id,...]}\`. An id in
+   The response is \`{"filled":N,"failed":N,"unmatched":[id,...],"area_cleared":N}\`.
+   \`area_cleared\` counts areas that matched none of that account's ranked places
+   and were dropped; say so in your report when it isn't 0. An id in
    \`unmatched\` means that row was dealt with or deleted between step 1 and
    now - ordinary, and nothing to retry or work around.
 

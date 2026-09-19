@@ -393,6 +393,9 @@ const fillPrompt = await req("GET", "/api/prompt/_applications", { token: A_TOK 
 check("the fill prompt is served as its own reserved key, not as a track",
   fillPrompt.status === 200 && fillPrompt.text.includes("/api/applications/pending"),
   fillPrompt.text.slice(0, 120));
+check("the fill run reads each account's ranked places and files an area from them, copied as written",
+  fillPrompt.text.includes("settings.priority_locations") && fillPrompt.text.includes('"area":"..."') &&
+  fillPrompt.text.includes("copied as written") && fillPrompt.text.includes("area_cleared"));
 
 console.log("\n== dedup endpoint (what every scheduled run fetches) ==");
 const aDedup = await req("GET", "/api/dedup/SWE", { token: A_TOK });
