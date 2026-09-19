@@ -5,8 +5,9 @@
 
 .DESCRIPTION
   Writes the invented data in demo-user.json through the public API only, so the
-  account can only be in a state the API could have produced. It creates no
-  private folder, so setup-scheduler.ps1 never schedules a search for it.
+  account can only be in a state the API could have produced. The account is
+  marked as a demo, and the server refuses to mint a search token for a demo
+  account, so no scheduled search can ever run as it.
 
   Dates are stored as day offsets; re-run with -Force to move them to today.
   Re-seeding an account that holds data needs -Force, which deletes its
@@ -296,7 +297,9 @@ application records. No rows have been changed.$resetWarning
 
 # ------------------------------------------------------------- demo marker --
 
-# The demo mark keeps this account off the company list every account shares.
+# The demo mark keeps this account off the company list every account shares,
+# and the server never mints a demo account a search token, so nothing can run
+# a search as it.
 # It is set only after the example.com check, never on the create-or-reset call
 # above, which can land on a real person named Demo. Resending the password this
 # run signed in with changes no credential and keeps sessions.
@@ -504,7 +507,12 @@ Say "Sign in at the tracker page with that name and password."
 Say "The password is not stored anywhere - note it down now, or re-run this"
 Say "script with -Password to set one of your own."
 Say ""
-Say "No private\$userId\ folder and no scheduled tasks were created, which is"
-Say "what keeps this account demonstration-only: setup-scheduler.ps1 finds"
-Say "people by their tracker.json, so it will never register a search for one"
-Say "that has no folder. Re-run this script with -Force to refresh the dates."
+if ($notOurs.Count -eq 0) {
+    Say "This account is marked as a demo, so the server will never mint it a"
+    Say "search token: no scheduled search can run as it, and it can't write to the"
+    Say "shared company list."
+} else {
+    Say "This account was NOT marked as a demo (see the warning above), so nothing"
+    Say "stops a search token being minted for it."
+}
+Say "Re-run this script with -Force to refresh the dates."
