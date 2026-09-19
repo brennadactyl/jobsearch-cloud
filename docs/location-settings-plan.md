@@ -11,6 +11,9 @@ the track docs (the tier table leaves them). The settings today are in
 [schema.md](schema.md); the account panel is
 [account-settings-plan.md](account-settings-plan.md).
 
+Screens: [Location Settings mockup](https://claude.ai/artifact/Ko7iqbtZFdaghteN8e5nrw),
+approved.
+
 ## Context
 
 Only the preferred places are data today: `priority_locations`, rules the page
@@ -108,7 +111,8 @@ rewrite.
   the read-back the preferred list already has, and the optional note. "Where
   can you work?" as free text goes.
 - **The account panel gains a Locations section** with the same three lists and
-  the note. A change saves through the header's save indicator, takes effect on
+  the note. Changes save together through the
+  section's own Save and Discard, like the resume section above it, and take effect on
   the next run, and the section says so.
 - **Leads** keep their tier badges; acceptable places get their own tier.
 
