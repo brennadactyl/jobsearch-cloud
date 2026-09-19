@@ -494,5 +494,46 @@ INSERT INTO tracks (user_id, key, label, sort_order, role_search_line, resume_li
   db.close();
 }
 
+console.log("\n== 0021 turns ranked-place rules into the list typed ==");
+{
+  const STOP21 = MIGRATIONS.find((f) => f.startsWith("0021_"));
+  // Twelve places, so an ordering by the array index as text ("10" before "2")
+  // would show.
+  const many = Array.from({ length: 12 }, (_, i) => ({ label: `Place ${i + 1}`, anyOf: [`place ${i + 1}`] }));
+  const rules = (list) => JSON.stringify(list).replace(/'/g, "''");
+  const db = migratedThrough(STOP21, `
+INSERT INTO users (id, name) VALUES ('u1', 'One'), ('u2', 'Two'), ('u3', 'Three'), ('u4', 'Four'), ('u5', 'Five');
+INSERT INTO meta (user_id, key, value) VALUES
+  ('u1', 'priority_locations', '${rules([
+    { label: "Seattle", anyOf: ["seattle", "bellevue"] },
+    { label: "Portland, OR", allOf: ["portland", "or"] },
+    { label: "Raleigh NC", anyOf: ["raleigh"] },
+  ])}'),
+  ('u2', 'priority_locations', '[]'),
+  ('u3', 'priority_locations', 'Seattle, Boston'),
+  ('u4', 'priority_locations', '${rules([{ anyOf: ["x"] }, { label: "  " }, { label: " Remote " }])}'),
+  ('u5', 'priority_locations', '${rules(many)}'),
+  ('u1', 'excluded_companies', '["Bad Corp"]'),
+  ('u1', 'display_title', 'One''s search');
+INSERT INTO intake (user_id, answers, status) VALUES ('u1', '{"priority_locations":[{"label":"Seattle"}]}', 'done');
+`);
+  const value = (user, key) => db.prepare("SELECT value FROM meta WHERE user_id = ? AND key = ?").get(user, key)?.value;
+  check("each rule set becomes its labels, in order, joined with a comma",
+    value("u1", "priority_locations") === "Seattle, Portland, OR, Raleigh NC", value("u1", "priority_locations"));
+  check("the order holds past nine places",
+    value("u5", "priority_locations") === many.map((r) => r.label).join(", "), value("u5", "priority_locations"));
+  check("an empty rule set becomes an empty list",
+    value("u2", "priority_locations") === "");
+  check("a value already typed as text is left as it is",
+    value("u3", "priority_locations") === "Seattle, Boston");
+  check("a rule with no label, or a blank one, adds nothing, and a label is trimmed",
+    value("u4", "priority_locations") === "Remote", value("u4", "priority_locations"));
+  check("every other setting is untouched",
+    value("u1", "excluded_companies") === '["Bad Corp"]' && value("u1", "display_title") === "One's search");
+  check("an intake's stored answers keep their rules, as the record of what was sent",
+    db.prepare("SELECT answers FROM intake WHERE user_id = 'u1'").get().answers === '{"priority_locations":[{"label":"Seattle"}]}');
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -28,7 +28,7 @@ import {
   revokeInvite,
   signupWithInvite,
 } from "../onboarding.js";
-import { isDocumentPath, priorityLocationsError } from "../validate.js";
+import { isDocumentPath, locationSettingError } from "../validate.js";
 
 const NOTE_MAX = 200;
 const NAME_MAX = 60;
@@ -37,7 +37,18 @@ const ANSWERS_MAX_BYTES = 256 * 1024;
 const ROLES_MAX = 10;
 // "" is unset; the rest are the pronouns the prompt knows how to write.
 const PRONOUN_ANSWERS = ["", ...Object.keys(PRONOUNS)];
-const ANSWER_STRINGS = ["page_title", "pronouns", "resume_text", "work_scope", "location_limits", "locations_first", "never_work_for", "preferences"];
+const ANSWER_STRINGS = [
+  "page_title", "pronouns", "resume_text", "work_scope", "location_limits", "locations_first",
+  "location_note", "never_work_for", "preferences",
+];
+// The form's location answers, and the setting each becomes, stored as typed
+// (docs/location-settings-plan.md). The answer keys predate the settings' names.
+const LOCATION_ANSWERS = {
+  work_scope: "search_locations",
+  location_limits: "excluded_locations",
+  locations_first: "priority_locations",
+  location_note: "location_note",
+};
 // A track key is a slug of the role name, fixed at creation: renaming a role
 // later changes the label only, so no lead is orphaned
 // (docs/onboarding.md#why-it-is-split-this-way).
@@ -148,8 +159,8 @@ export async function handlePostIntake({ request, db, docs, user }) {
   const settings = {
     display_title: (answers.page_title || "").trim() || `${user.name}'s Job Search`,
     pronouns: answers.pronouns || "",
-    priority_locations: JSON.stringify(
-      Array.isArray(answers.priority_locations) ? answers.priority_locations : []
+    ...Object.fromEntries(
+      Object.entries(LOCATION_ANSWERS).map(([answer, setting]) => [setting, (answers[answer] || "").trim()])
     ),
     excluded_companies: JSON.stringify(namedCompanies(answers.never_work_for)),
   };
@@ -248,9 +259,10 @@ async function answersProblem(answers, docs) {
     if (!(role.titles || "").trim()) return bad("roles", `role ${i + 1} needs the roles to search for`);
   }
 
-  if (answers.priority_locations !== undefined) {
-    const error = priorityLocationsError(answers.priority_locations);
-    if (error) return bad("priority_locations", error);
+  for (const [answer, setting] of Object.entries(LOCATION_ANSWERS)) {
+    if (answers[answer] === undefined) continue;
+    const error = locationSettingError(setting, answers[answer]);
+    if (error) return bad(answer, error.replace(setting, answer));
   }
 
   const files = answers.resume_files === undefined ? [] : answers.resume_files;

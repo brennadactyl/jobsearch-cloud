@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0020_company_aliases.sql` applied in order. This is the
+`0001_schema.sql` through `0021_priority_locations_text.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -373,7 +373,11 @@ Per-user key/value rows. The keys in use:
 - `updated` — the day of the last data change, `YYYY-MM-DD`
 - page display: `display_title`, `overview_label`, `applications_label`,
   `all_leads_label`, `stale_run_hours`
-- `priority_locations` and `excluded_companies` — JSON arrays
+- where the search looks: `search_locations`, `excluded_locations`,
+  `priority_locations` and `location_note` — text, each stored as the person
+  typed it, trimmed at the ends; the three lists are comma-separated, and
+  `priority_locations` is in ranked order
+- `excluded_companies` — a JSON array
 - search prompt prose: `geo_scope_line`, `scope_clause`, `scope_disqualifier`,
   `location_guidance`, `footer_note`, `pronouns`
 
