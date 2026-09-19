@@ -7,7 +7,7 @@
  */
 
 import { json, readJson } from "../http.js";
-import { isoDate } from "../validate.js";
+import { isoDate, storedArea } from "../validate.js";
 
 // Duplicated in client/src/domain/constants.ts's APP_STATUS: client and server
 // share no code.
@@ -112,9 +112,12 @@ export async function handleGetAutofillQueue({ db }) {
 
 /**
  * POST /api/applications/autofill - requires a Bearer token. Body
- * `{ filled: [{id, company, title, location, team, setup, comp, note?}],
- *    failed: [{id, reason}] }` -> `{ filled, failed, unmatched: [id] }`; 400
- * when both lists are empty.
+ * `{ filled: [{id, company, title, location, area, team, setup, comp, note?}],
+ *    failed: [{id, reason}] }` -> `{ filled, failed, unmatched: [id], area_cleared }`;
+ * 400 when both lists are empty.
+ *
+ * `area` is kept only when it is exactly one of the person's ranked entries
+ * (validate.js storedArea), as on a lead; `area_cleared` counts those emptied.
  *
  * One call for the whole night rather than one per row, because a run asked to
  * make thirty calls tends to stop short. Only unread rows move, so an id in
@@ -137,12 +140,16 @@ export async function handleReportAutofill({ request, db }) {
   const unmatched = [];
   let filledCount = 0;
   let failedCount = 0;
+  let areaCleared = 0;
+  const { priority_locations: ranked } = filled.length ? (await db.getTracksAndSettings()).settings : {};
 
   for (const row of filled) {
     if (!row || !row.id) continue;
     // Shown on the row like a failure's reason, so it gets the same cap.
     const note = String((row.note || "")).trim().slice(0, MAX_REASON);
-    if (await db.applyAutofill(row.id, { ...row, note })) filledCount++;
+    const area = storedArea(row.area, ranked);
+    if (!area && typeof row.area === "string" && row.area.trim()) areaCleared++;
+    if (await db.applyAutofill(row.id, { ...row, area, note })) filledCount++;
     else unmatched.push(row.id);
   }
 
@@ -156,7 +163,7 @@ export async function handleReportAutofill({ request, db }) {
   // Only a fill writes application fields. A failure sets just the flag and its
   // note, so it doesn't bump the page's "last updated" banner.
   if (filledCount > 0) await db.touchUpdated();
-  return json({ filled: filledCount, failed: failedCount, unmatched });
+  return json({ filled: filledCount, failed: failedCount, unmatched, area_cleared: areaCleared });
 }
 
 /**

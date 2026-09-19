@@ -3278,5 +3278,75 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     JSON.stringify((await prSettings(PR)).priority_rules) === "[]" && (await prSettings(PR_B)).priority_locations === "Austin");
 }
 
+
+{
+  console.log("\n== a lead carries the ranked place it falls in ==");
+  // Areas (docs/location-settings-plan.md, "Each lead carries its area"): the
+  // ranked list split on commas and trimmed, and an area kept when it names one
+  // entry ignoring case, stored as that entry is spelled - never refused, stored
+  // empty otherwise.
+  const arRun = Date.now();
+  const arUser = async (tag, ranked) => {
+    const name = `Areas ${tag} ${arRun}`;
+    await req("POST", "/api/users", { admin: true, body: { name, password: `areas-${tag}-long-password` } });
+    const token = (await req("POST", "/api/login", { body: { name, password: `areas-${tag}-long-password` } })).json.token;
+    await req("POST", "/api/config", { token, body: { tracks: [{ key: "SWE", label: "SWE" }], priority_locations: ranked } });
+    return token;
+  };
+  // "Portland, OR" is two entries, "Portland" and "OR", by the rule.
+  const AR = await arUser("a", "Seattle area, Portland, OR, Remote US");
+  const AR_B = await arUser("b", "Boston");
+  // Not the bare number: a long number in a path reads as the posting's id (url.js).
+  const arUrl = (n) => `https://example.com/areas/${arRun.toString(36)}/${n}`;
+  const arLead = (n, area) => ({ search: "SWE", company: "Acme", title: `Role ${n}`, location: "Kirkland, WA", url: arUrl(n), ...(area === undefined ? {} : { area }) });
+
+  const arPost = await req("POST", "/api/leads", { token: AR, body: { leads: [
+    arLead("exact", "Seattle area"), arLead("trimmed", " Remote US "), arLead("entry", "OR"),
+    arLead("near", "Seattle"), arLead("case", "seattle area"), arLead("typed-whole", "Portland, OR"),
+    arLead("none"),
+  ] } });
+  const arData = (await req("GET", "/api/data", { token: AR })).json;
+  const areaOf = (n) => arData.leads.find((l) => l.url === arUrl(n))?.area;
+  check("a lead's area is kept when it is one ranked entry, trimmed",
+    arPost.status === 200 && arPost.json?.added === 7 &&
+    areaOf("exact") === "Seattle area" && areaOf("trimmed") === "Remote US" && areaOf("entry") === "OR",
+    JSON.stringify([arPost.json, areaOf("exact"), areaOf("trimmed"), areaOf("entry")]));
+  check("an area in another case is stored as the ranked entry is spelled",
+    areaOf("case") === "Seattle area", areaOf("case"));
+  check("a near-miss, or a whole comma-separated phrase, is stored empty, not refused",
+    areaOf("near") === "" && areaOf("typed-whole") === "" && areaOf("none") === "",
+    JSON.stringify(["near", "typed-whole", "none"].map(areaOf)));
+  check("and the reply counts the areas it emptied, but not a lead that sent none",
+    arPost.json?.area_cleared === 2, JSON.stringify(arPost.json));
+
+  const exactId = arData.leads.find((l) => l.url === arUrl("exact")).id;
+  const applied = await req("POST", `/api/leads/${exactId}/status`, { token: AR, body: { status: "Applied" } });
+  check("an application made from a lead carries its area",
+    applied.json?.application?.area === "Seattle area", JSON.stringify(applied.json?.application));
+
+  const byHand = await req("POST", "/api/update", { token: AR, body: { type: "application", link: arUrl("by-hand"), company: "", title: "" } });
+  const byHandBad = await req("POST", "/api/update", { token: AR, body: { type: "application", link: arUrl("by-hand-bad"), area: "Seattle" } });
+  check("an application added by hand starts with no area, and one sent with a near-miss is stored empty",
+    byHand.json?.application?.area === "" && byHandBad.json?.application?.area === "", JSON.stringify([byHand.json, byHandBad.json]));
+  const arFill = await req("POST", "/api/applications/autofill", { token: AR, body: { filled: [
+    { id: byHand.json.application.id, company: "Acme", title: "Engineer", location: "Remote", area: "remote us" },
+    { id: byHandBad.json.application.id, company: "Acme", title: "Engineer", location: "Austin, TX", area: "Austin" },
+  ] } });
+  const arApps = (await req("GET", "/api/data", { token: AR })).json.applications;
+  check("the overnight fill sets a hand-added application's area, checked the same way",
+    arFill.json?.filled === 2 && arFill.json?.area_cleared === 1 &&
+    arApps.find((a) => a.id === byHand.json.application.id)?.area === "Remote US" &&
+    arApps.find((a) => a.id === byHandBad.json.application.id)?.area === "",
+    JSON.stringify(arFill.json));
+
+  const arOther = await req("POST", "/api/leads", { token: AR_B, body: { leads: [arLead("other", "Seattle area")] } });
+  check("an area is checked against the poster's own list, not anyone else's",
+    arOther.json?.area_cleared === 1 &&
+    (await req("GET", "/api/data", { token: AR_B })).json.leads.find((l) => l.url === arUrl("other"))?.area === "",
+    JSON.stringify(arOther.json));
+  check("a person can't set a lead's area by hand",
+    (await req("POST", "/api/update", { token: AR, body: { type: "lead", id: exactId, area: "Remote US" } })).json?.lead?.area !== "Remote US");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

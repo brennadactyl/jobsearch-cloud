@@ -29,6 +29,7 @@
  * @property {string} company
  * @property {string} title
  * @property {string} location
+ * @property {string} area - the ranked entry this lead falls in, exactly as typed, or '' (migrations/0022)
  * @property {string} url
  * @property {string} verified - YYYY-MM-DD, date last verified live
  * @property {string} fit
@@ -54,6 +55,7 @@
  * @property {string} company
  * @property {string} title
  * @property {string} location - copied from the lead at creation, then editable
+ * @property {string} area - copied from the lead at creation, or set by the fill run; '' for none (migrations/0022)
  * @property {string} dateApplied - YYYY-MM-DD
  * @property {string} status - one of APP_STATUS in routes/applications.js
  * @property {string} notes
@@ -299,7 +301,7 @@ export const DEFAULT_SETTINGS = {
 // setLeadStatusAndMaybeCreateApplication) share this one list, so a new field
 // can't reach only one of them.
 const APPLICATION_COLS = [
-  "leadId", "company", "title", "location", "dateApplied", "status", "notes",
+  "leadId", "company", "title", "location", "area", "dateApplied", "status", "notes",
   ...EXTRA_FIELDS, ...APP_STAGE_DATE_FIELDS, "autofill", "autofill_note",
 ];
 
@@ -307,7 +309,7 @@ const APPLICATION_COLS = [
 // rest (referral, resume, source, notes, stage dates) is the person's own
 // account of their search, which no posting can supply. team/setup/comp are
 // the same posting-stated extras the search captures in prompt.js.
-const AUTOFILL_FILL_FIELDS = ["company", "title", "location", "team", "setup", "comp"];
+const AUTOFILL_FILL_FIELDS = ["company", "title", "location", "area", "team", "setup", "comp"];
 
 // Don't set `autofill` here: whether a row's posting wants reading is derived
 // from the row when a run asks (getAutofillQueue), so nothing that creates an
@@ -1290,8 +1292,8 @@ export class Db {
 
     const stmt = this.d1.prepare(
       `INSERT OR IGNORE INTO leads
-         (user_id, search, found, company, title, location, url, verified, fit, status, notes, ${EXTRA_FIELDS.join(", ")})
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'New', '', ${EXTRA_FIELDS.map(() => "?").join(", ")})`
+         (user_id, search, found, company, title, location, area, url, verified, fit, status, notes, ${EXTRA_FIELDS.join(", ")})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New', '', ${EXTRA_FIELDS.map(() => "?").join(", ")})`
     );
     const batch = fresh.map((lead) =>
       stmt.bind(
@@ -1301,6 +1303,8 @@ export class Db {
         lead.company,
         lead.title,
         lead.location || "",
+        // Checked against the ranked list by the caller (validate.js storedArea).
+        lead.area || "",
         lead.url,
         lead.verified || t,
         lead.fit || "",

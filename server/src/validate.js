@@ -70,6 +70,36 @@ export function priorityRulesError(rules) {
 }
 
 /**
+ * The entries of a ranked list, the one way everything splits it
+ * (docs/location-settings-plan.md, "The three lists"): on commas, each entry
+ * trimmed, empty ones dropped. "Portland, OR" is two entries. scripts/tracker.ps1,
+ * the page and the one-time fill split it the same way, so a value one accepts
+ * the other can't refuse.
+ * @param {unknown} list the stored `priority_locations`
+ * @returns {string[]}
+ */
+export function rankedEntries(list) {
+  return typeof list === "string" ? list.split(",").map((e) => e.trim()).filter(Boolean) : [];
+}
+
+/**
+ * A reported area as it is stored: the ranked entry it names, spelled as the
+ * person typed it, or "" when it names none. It names an entry when, trimmed,
+ * it equals that entry ignoring case - "portland or" is stored as "Portland
+ * OR" - so every lead in one place carries one spelling and the page's tiering
+ * is a plain equality. A near-miss - "Seattle" for "Seattle area" - is kept off
+ * the lead rather than passing for a tier it doesn't name.
+ * @param {unknown} area
+ * @param {unknown} list the stored `priority_locations`
+ * @returns {string}
+ */
+export function storedArea(area, list) {
+  const value = typeof area === "string" ? area.trim().toLowerCase() : "";
+  if (!value) return "";
+  return rankedEntries(list).find((entry) => entry.toLowerCase() === value) ?? "";
+}
+
+/**
  * What is wrong with one location setting as sent, or "" for nothing. The
  * value is judged after trimming, which is how it is stored.
  * @param {string} key one of LOCATION_LIST_KEYS, or "location_note"

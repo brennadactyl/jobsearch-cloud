@@ -54,7 +54,8 @@ rule arrays does - see Existing searches.
   "Greater Seattle area". The page's read-back only shows how the commas split
   each list, and the ranked list's order and tier colour.
 - **One split rule, everywhere:** a list's entries are its text split on commas,
-  each trimmed, empties dropped; an area matches an entry exactly, case included.
+  each trimmed, empties dropped; an area matches an entry ignoring case, and is
+  stored as the ranked entry is spelled ("portland or" is stored as "Portland OR").
   "Portland, OR" is two entries, "Portland" and "OR", and the read-back shows
   it that way. The server, `tracker.ps1`, the page and the one-time fill use this
   rule and no other.
@@ -73,8 +74,9 @@ exactly as typed ("Seattle area"), or empty.
   whether the location fits. The prompt hands it the ranked list and asks for
   one entry or none.
 - **Code checks it.** The tracker helper and the leads route accept an area only
-  when it exactly matches an entry in the person's ranked list, and store it
-  empty otherwise, so a near-miss like "Seattle" can't pass for "Seattle area".
+  when it matches an entry in the person's ranked list, ignoring case, store it
+  as that entry is spelled, and store it empty otherwise, so a near-miss like
+  "Seattle" can't pass for "Seattle area".
 - **The page tiers by the lead's area**, its rank being that entry's position
   in the list. No town matching. A lead with no area has no tier.
 - **Applications** made from a lead carry its area. One added by hand gets an

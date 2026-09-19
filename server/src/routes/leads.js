@@ -11,7 +11,7 @@
 import { DELISTED_REASON } from "../db.js";
 import { excludedCompanyMatcher } from "../exclude.js";
 import { json, readJson } from "../http.js";
-import { isoDate, today, unknownTrackResponse } from "../validate.js";
+import { isoDate, storedArea, today, unknownTrackResponse } from "../validate.js";
 
 // Duplicated in client/src/domain/constants.ts's LEAD_STATUS: client and server
 // share no code. Only handleSetLeadStatus validates against it;
@@ -20,8 +20,12 @@ export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"];
 
 /**
  * POST /api/leads - requires a Bearer token. Body `{ on?, leads: [...] }` ->
- * `{ added, duplicates, excluded }`; 400 for no valid leads, 404 naming any
- * unknown track (nothing inserted).
+ * `{ added, duplicates, excluded, area_cleared }`; 400 for no valid leads, 404
+ * naming any unknown track (nothing inserted).
+ *
+ * A lead's `area` is stored only when it is exactly one of the person's ranked
+ * entries (validate.js storedArea), and empty otherwise; `area_cleared` counts
+ * those emptied.
  *
  * Appends leads whose posting this user doesn't already have, matched by
  * canonical URL (../url.js) as well as the UNIQUE constraint, so the same
@@ -62,14 +66,25 @@ export async function handleAddLeads({ request, db }) {
   const isExcluded = excludedCompanyMatcher(settings.excluded_companies);
   const allowed = valid.filter((lead) => !isExcluded(lead.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) return json({ added: 0, duplicates: 0, excluded });
+  if (allowed.length === 0) return json({ added: 0, duplicates: 0, excluded, area_cleared: 0 });
 
-  const { added, duplicates } = await db.addLeads(allowed, on);
+  // A lead's area is kept only when it is exactly one of the person's ranked
+  // entries; anything else is stored empty, never refused, since losing a lead
+  // over its area is the worse failure (docs/location-settings-plan.md).
+  // `area_cleared` says how many were emptied, so a run hears about a mismatch.
+  let areaCleared = 0;
+  const filed = allowed.map((lead) => {
+    const area = storedArea(lead.area, settings.priority_locations);
+    if (!area && typeof lead.area === "string" && lead.area.trim()) areaCleared++;
+    return { ...lead, area };
+  });
+
+  const { added, duplicates } = await db.addLeads(filed, on);
   if (added > 0) await db.touchUpdated();
 
   // `duplicates` is reported so a run's own report says what it actually added,
   // not how many rows it posted.
-  return json({ added, duplicates, excluded });
+  return json({ added, duplicates, excluded, area_cleared: areaCleared });
 }
 
 /**
@@ -105,6 +120,7 @@ export async function handleSetLeadStatus({ request, db, params }) {
           company: lead.company,
           title: lead.title,
           location: lead.location || "",
+          area: lead.area || "",
           dateApplied: today(),
           status: "Applied",
           notes: lead.notes || "",
