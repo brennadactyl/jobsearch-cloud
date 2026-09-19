@@ -35,6 +35,7 @@ const NO_WALL = { wall: "", wall_first_on: "", wall_last_on: "", wall_dates: 0 }
  * @property {string} wall_last_on
  * @property {number} wall_dates
  * @property {string} retracted_on
+ * @property {string} aliases JSON array of other names for the company (migrations/0020_company_aliases.sql)
  *
  * @typedef {{user_id: string, search: string, company_key: string, last_swept: string, note: string}} SweepRow
  *
@@ -48,15 +49,17 @@ const NO_WALL = { wall: "", wall_first_on: "", wall_last_on: "", wall_dates: 0 }
 
 /**
  * Every company key a request names, for reading their rows in one go.
- * @param {{merges?: Array<{keep: string, absorb: string[], rename?: string}>, renames?: Array<{from: string, to: string}>}} body
+ * @param {{merges?: Array<{keep: string, absorb: string[], rename?: string}>, renames?: Array<{from: string, to: string}>, aliases?: Array<{name: string, company: string}>}} body
  * @returns {string[]}
  */
 export function namedKeys(body) {
   const merges = Array.isArray(body.merges) ? body.merges : [];
   const renames = Array.isArray(body.renames) ? body.renames : [];
+  const aliases = Array.isArray(body.aliases) ? body.aliases : [];
   return [
     ...merges.flatMap((m) => [m?.keep, ...(Array.isArray(m?.absorb) ? m.absorb : []), m?.rename]),
     ...renames.flatMap((r) => [r?.from, r?.to]),
+    ...aliases.flatMap((a) => [a?.name, a?.company]),
   ]
     .filter((n) => typeof n === "string")
     .map(normalize)
@@ -137,18 +140,29 @@ export function mergedSweeps(keptKey, rows, finalKey) {
  * one request, and a new name that is already another company's - that is a
  * merge, and should be asked for as one.
  *
- * @param {Object} body `{ merges?: [{keep, absorb: [...], rename?}], renames?: [{from, to, clear_facts?}] }`
+ * Every name a merge absorbs, and every name a rename replaces, becomes an
+ * alias of the company it now is, so a run that meets the old name later
+ * reports the right company rather than adding the old one back
+ * (migrations/0020_company_aliases.sql). `aliases` adds one on its own, for a
+ * name that was never on the list or left it before aliases were kept; a name
+ * that is on the list is refused, since that is a merge.
+ *
+ * @param {Object} body `{ merges?: [{keep, absorb: [...], rename?}], renames?: [{from, to, clear_facts?}], aliases?: [{name, company}] }`
  * @param {FetchRow[]} fetchRows the rows namedKeys names
  * @param {SweepRow[]} sweepRows every search's records under those keys
- * @returns {{error: string, status: number} | {changes: Change[]}}
+ * @param {FetchRow[]} [aliasRows] every company that has aliases, to keep each name to one company
+ * @returns {{error: string, status: number} | {changes: Change[], aliasOnly: Array<{company_key: string, company: string, aliases: string[]}>, added: Array<{name: string, company: string}>}}
  */
-export function planCleanup(body, fetchRows, sweepRows) {
+export function planCleanup(body, fetchRows, sweepRows, aliasRows = []) {
   const merges = body.merges === undefined ? [] : body.merges;
   const renames = body.renames === undefined ? [] : body.renames;
-  if (!Array.isArray(merges) || !Array.isArray(renames)) {
-    return { status: 400, error: "merges and renames must be lists" };
+  const aliasAsks = body.aliases === undefined ? [] : body.aliases;
+  if (!Array.isArray(merges) || !Array.isArray(renames) || !Array.isArray(aliasAsks)) {
+    return { status: 400, error: "merges, renames and aliases must be lists" };
   }
-  if (merges.length + renames.length === 0) return { status: 400, error: "nothing to do - send merges or renames" };
+  if (merges.length + renames.length + aliasAsks.length === 0) {
+    return { status: 400, error: "nothing to do - send merges, renames or aliases" };
+  }
 
   const rows = new Map(fetchRows.map((r) => [r.company_key, r]));
   const used = new Set();
@@ -226,5 +240,92 @@ export function planCleanup(body, fetchRows, sweepRows) {
         .map((s) => ({ ...s, company_key: target.key })),
     });
   }
-  return { changes };
+
+  // Each changed company's aliases: its own, those of every company merged into
+  // it, and the names those companies and its old self went by. The server
+  // builds the list; a caller only ever names an alias and a company.
+  const finalOf = new Map();
+  for (const c of changes) {
+    for (const k of [c.from_key, ...c.absorbed_keys]) finalOf.set(k, c.row.company_key);
+    const names = c.before.flatMap((r) => [...parseAliases(r.aliases), r.display_name]);
+    c.row.aliases = aliasList(names, c.row.company_key);
+  }
+
+  // Who owns each alias today, so one name never means two companies.
+  const ownerOf = new Map();
+  for (const r of aliasRows) {
+    for (const name of parseAliases(r.aliases)) ownerOf.set(normalize(name), r);
+  }
+  const involved = new Set(finalOf.keys());
+
+  /** @type {Map<string, {row: FetchRow, list: string[]}>} a company no change touches, with its new alias list */
+  const aliasOnly = new Map();
+  const added = [];
+  for (const a of aliasAsks) {
+    const aliasKey = typeof a?.name === "string" ? normalize(a.name) : "";
+    const companyKey = typeof a?.company === "string" ? normalize(a.company) : "";
+    if (!aliasKey || !companyKey) return refuse(400, "an alias needs a name and the company it means");
+    if (rows.has(aliasKey) || finalKeys.has(aliasKey)) {
+      return refuse(409, `"${a.name}" is a company on the list - merge it into "${a.company}" instead of aliasing it`);
+    }
+    const target = rows.get(companyKey);
+    if (!target) return refuse(404, `"${a.company}" is not on the company list`);
+    if (target.retracted_on) return refuse(409, `"${target.display_name}" is retracted - an alias can't point at it`);
+    // A company this request merges away or renames: the alias goes where it went.
+    const finalKey = finalOf.get(companyKey) || companyKey;
+    const owner = ownerOf.get(aliasKey);
+    if (owner && owner.company_key !== finalKey && !involved.has(owner.company_key)) {
+      return refuse(409, `"${a.name}" already means "${owner.display_name}" - one name can mean only one company`);
+    }
+
+    const change = changes.find((c) => c.row.company_key === finalKey);
+    if (change) {
+      change.row.aliases = aliasList([...change.row.aliases, a.name], finalKey);
+    } else {
+      const entry = aliasOnly.get(finalKey) || { row: target, list: parseAliases(target.aliases) };
+      entry.list = aliasList([...entry.list, a.name], finalKey);
+      aliasOnly.set(finalKey, entry);
+    }
+    added.push({ name: a.name.trim(), company: change ? change.row.display_name : target.display_name });
+  }
+
+  return {
+    changes,
+    aliasOnly: [...aliasOnly.values()].map((e) => ({ company_key: e.row.company_key, company: e.row.display_name, aliases: e.list })),
+    added,
+  };
+}
+
+/**
+ * A stored `company_fetch.aliases` value as a list; anything unreadable reads
+ * as none.
+ * @param {string|undefined} text
+ * @returns {string[]}
+ */
+export function parseAliases(text) {
+  try {
+    const list = JSON.parse(text || "[]");
+    return Array.isArray(list) ? list.filter((n) => typeof n === "string" && n.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A company's alias list: each name once however it is spelled (by
+ * normalize()), in the order first seen, and never the company's own name.
+ * @param {string[]} names
+ * @param {string} companyKey
+ * @returns {string[]}
+ */
+function aliasList(names, companyKey) {
+  const seen = new Set([companyKey]);
+  const out = [];
+  for (const name of names) {
+    const key = normalize(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name.trim());
+  }
+  return out;
 }

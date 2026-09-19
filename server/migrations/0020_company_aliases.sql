@@ -1,0 +1,28 @@
+-- company_fetch.aliases: other names that mean this company.
+--
+-- Merging "Marriott" into "Marriott International" removed the row, but not
+-- the name from the world: the first night after, a run met "Marriott" in
+-- discovery and reported it, and the list grew the duplicate back. A merge that
+-- a run can undo by using the short name isn't a merge. So a merged or renamed
+-- name is remembered on the company it became, and a run reporting it gets that
+-- company.
+--
+--   aliases  JSON array of names, as written ('[]' for none). Matched through
+--            normalize(), like company_key, so every spelling of an alias
+--            resolves. JSON rather than a delimited string because company
+--            names contain commas.
+--
+-- On the company's own row rather than in a table beside it: a run's report
+-- already loads the whole list, so resolving a name costs no lookup, and the
+-- aliases move with the company when it is merged or renamed.
+--
+-- Written only by POST /api/companies/cleanup, which appends to the list itself:
+-- a caller names the alias and the company, never the list. It records every
+-- name a merge absorbs or a rename replaces, carries an absorbed company's own
+-- aliases across, and refuses an alias that is already another company's name
+-- or alias - one name, one company.
+--
+-- Nothing is backfilled here: the names merged before this column existed are
+-- added through the same route, so no company name is written into the repo.
+
+ALTER TABLE company_fetch ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]';

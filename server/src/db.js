@@ -676,6 +676,7 @@ export class Db {
       .prepare(
         `SELECT COALESCE(NULLIF(f.display_name, ''), f.company_key) AS company,
                 f.position,
+                f.aliases,
                 CASE WHEN f.retracted_on = '' THEN f.board ELSE '' END AS board,
                 COALESCE(s.last_swept, '') AS last_swept,
                 COALESCE(s.note, '') AS note

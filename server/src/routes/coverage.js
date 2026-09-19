@@ -8,6 +8,7 @@
  * time, read forward from this search's cursor.
  */
 
+import { parseAliases } from "../company-cleanup.js";
 import { normalize } from "../exclude.js";
 import { json, readJson } from "../http.js";
 import { excluderFor, isoDate, today, unknownTrack } from "../validate.js";
@@ -54,8 +55,9 @@ export async function upcomingCompanies(db, key, count) {
 
 /**
  * GET /api/coverage/:key[?all=1] - requires a Bearer token ->
- * `{ companies: [{company, position, last_swept, board, note, known?}], total,
- * batch, cursor }`; 404 for an unknown track.
+ * `{ companies: [{company, position, last_swept, board, note, known?, aliases?}],
+ * total, batch, cursor }`; 404 for an unknown track. `aliases` - the other
+ * names a company goes by - comes only with `?all=1`.
  *
  * The server picks tonight's slice - the next COVERAGE_BATCH along the shared
  * list from this search's cursor - because a cap stated in prose is one a run
@@ -82,9 +84,13 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
     // facts rather than concluding there are none.
     const allIntel = await companyList.getCompanyFetch(eligible.map((c) => c.company));
     return json({
-      companies: eligible.map((c) => {
+      // `aliases` too, the other names each company goes by, so a run that
+      // checks a name against the whole list (scripts/tracker.ps1's `known`)
+      // matches them as the server does.
+      companies: eligible.map(({ aliases, ...c }) => {
         const known = allIntel.get(normalize(c.company));
-        return known ? { ...c, known } : c;
+        const names = parseAliases(aliases);
+        return { ...c, ...(known ? { known } : {}), ...(names.length ? { aliases: names } : {}) };
       }),
       total: eligible.length,
       // The whole table's size, not the nightly slice (that is COVERAGE_BATCH).
@@ -101,7 +107,7 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
   // The cursor is compared against `position`, never used as an array index:
   // once any company is excluded, eligible[i] is no longer position i, and
   // indexing would skip a company silently.
-  const companies = sliceAt(eligible, cursor);
+  const companies = sliceAt(eligible, cursor).map(({ aliases, ...c }) => c);
 
   // What is known about reaching each company, pooled across the deployment
   // (docs/glossary.md#companies-and-the-rotation). Attached here rather than served by a
@@ -129,9 +135,10 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
 /**
  * POST /api/coverage - requires a Bearer token. Body
  * `{ search, on?, start_here?, swept: [{company, board?, endpoint?, url_shape?,
- * dead_signal?, wall?, note?}] }` -> `{ recorded, added, excluded, on, cursor,
- * shared, withheld }`, or `{ recorded: 0, excluded, on }` when every company is
- * excluded; 400 for a missing search, no companies, a wall sent without a
+ * dead_signal?, wall?, note?}] }` -> `{ recorded, added, excluded, aliased, on,
+ * cursor, shared, withheld }`, or `{ recorded: 0, excluded, aliased, on }` when
+ * every company is excluded. `aliased` counts reported names that were another
+ * company's alias and were recorded as that company; 400 for a missing search, no companies, a wall sent without a
  * date, or `start_here` sent with one, 403 for a demo account, 404 for an
  * unknown track.
  *
@@ -163,7 +170,19 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   if (!key) return json({ error: "missing search (track key)" }, 400);
   if (!(await db.trackExists(key))) return unknownTrack(key);
 
-  const valid = sweptCompanies(body.swept);
+  // A name that is another company's alias is that company: a run that meets
+  // "Marriott" in discovery reports Marriott International rather than adding
+  // back a name the list merged away (migrations/0020_company_aliases.sql).
+  // Resolved first, so exclusion, membership and the sweep record all see the
+  // company the name means.
+  const aliasTo = await companyList.aliasMap();
+  let aliased = 0;
+  const valid = sweptCompanies(body.swept).map((i) => {
+    const company = aliasTo.get(normalize(i.company));
+    if (!company) return i;
+    aliased++;
+    return { ...i, company };
+  });
   if (valid.length === 0) return json({ error: "no companies provided" }, 400);
 
   // The run's own date: the worker only knows UTC, and a 01:00 local run is
@@ -192,7 +211,7 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   const isExcluded = await excluderFor(db);
   const allowed = valid.filter((i) => !isExcluded(i.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) return json({ recorded: 0, excluded, on });
+  if (allowed.length === 0) return json({ recorded: 0, excluded, aliased, on });
 
   // A wall is dated evidence: it is served only after two separate dates, and
   // only while the last is fresh (companyList.getCompanyFetch). An undated one is not a
@@ -258,7 +277,7 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
     cursor = await startCursorAtSeeded(db, key, cursor, joining);
   }
 
-  return json({ recorded, added, excluded, on, cursor, shared: shared.written, withheld });
+  return json({ recorded, added, excluded, aliased, on, cursor, shared: shared.written, withheld });
 }
 
 /**

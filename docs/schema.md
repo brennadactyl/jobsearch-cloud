@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0019_run_swept.sql` applied in order. This is the
+`0001_schema.sql` through `0020_company_aliases.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -217,6 +217,7 @@ erDiagram
         TEXT wall_first_on
         TEXT wall_last_on
         INTEGER wall_dates
+        TEXT aliases "JSON list of other names"
     }
     invites {
         INTEGER id PK
@@ -254,8 +255,8 @@ These hold across every table, so the per-table notes below leave them out.
   insert that omits it succeeds with no owner. Always supply it.
 - The only defaults other than `''` and `0` are `leads.status` (`New`),
   `applications.status` (`Applied`), `users.iterations` (`100000`),
-  `intake.status` (`pending`), `intake.answers` (`{}`) and `tracks.documents`
-  (`[]`).
+  `intake.status` (`pending`), `intake.answers` (`{}`), `tracks.documents`
+  (`[]`) and `company_fetch.aliases` (`[]`).
 - `leads.id`, `screened.id`, `applications.id` and `invites.id` are
   `AUTOINCREMENT`, unique across all users.
 - `user_id` has its own index on `sessions`, `leads`, `screened` and
@@ -420,6 +421,12 @@ name as written when the company joined.
 - A wrong row is retracted, not deleted: `retracted_on` and `retracted_note` are
   set, reads return only the retraction, and runs cannot update the row.
   A retracted company stays on the list.
+- `aliases` is a JSON list of other names that mean this company: every name
+  merged into it or replaced by a rename, and any added by hand, through
+  `POST /api/companies/cleanup` only. Matched through `normalize()`, so a run
+  reporting an alias in any spelling is recorded against this company rather
+  than adding the name back. One name means one company: it is never also
+  another company's name or alias.
 
 ### invites
 
