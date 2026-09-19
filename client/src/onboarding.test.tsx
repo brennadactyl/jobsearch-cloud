@@ -150,6 +150,23 @@ describe("the setup form", () => {
     await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
   }
 
+  it("says preferred places are always searched, and sends when they sit outside where you can work", async () => {
+    const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
+    await openSetup();
+    const preferred = screen.getByLabelText("Which locations should come first?");
+    // A fixed line, not a verdict on these answers: it names no place.
+    expect(preferred.closest(".setup-field")).toHaveTextContent(
+      "Places you list here are always searched, even outside where you said you can work.",
+    );
+
+    await fillRequired();
+    await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+    await userEvent.type(preferred, "Portland OR, Raleigh NC");
+    await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit.mock.calls[0][0].priority_locations.map((r) => r.label)).toEqual(["Portland OR", "Raleigh NC"]);
+  });
+
   it("shows instead of an empty tracker, prefilled with the account's name", async () => {
     await openSetup();
     expect(screen.getByLabelText("What should this page be called?")).toHaveValue("Sam's Job Search");

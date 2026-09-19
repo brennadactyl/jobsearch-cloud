@@ -474,6 +474,9 @@ export default function Setup({
               onChange={(e) => set("locations_first", e.target.value)}
             />
             <LocationReadback entries={entries} />
+            {/* Always true, so it names no place: a text match against the area
+                above can't tell whether Seattle is "anywhere in the US". */}
+            <p className="field-hint">Places you list here are always searched, even outside where you said you can work.</p>
           </Field>
 
           <SetupHeading title="What to look for">
