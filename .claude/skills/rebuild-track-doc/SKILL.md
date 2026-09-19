@@ -60,8 +60,8 @@ file.
 - exactly one line starting `## Candidate Profile`, and it is exactly that;
 - no resume filename;
 - no screening wording outside "How to weigh fit";
-- the location tier table matches `priority_locations`, including tiers that
-  share a level.
+- nothing about where the search looks: no location table, no place rules -
+  step 5 of the prompt prints the person's own lists.
 
 ## 5. Read the composed prompt
 
