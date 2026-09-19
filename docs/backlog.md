@@ -15,9 +15,9 @@ Kept by whoever is holding the product manager role.
   tests, rebuilding a search's doc and PowerShell script conventions; fixes to
   `edit-tracker-page`, `job-search-setup`, `add-target-company` and
   `change-search-prompt`; a nightly run report and a backup query script.
-- **[Account settings](account-settings-plan.md), the rest** - the resume section
-  and "My account" are live. Still to build: editing the page title, pronouns,
-  ranked locations, excluded companies and search names, and the setup answers
+- **[Account settings](account-settings-plan.md), the rest** - the resume and
+  locations sections and "My account" are live. Still to build: editing the page
+  title, pronouns, excluded companies and search names, and the setup answers
   the night turns into prose. Needs its own mockup pass first.
 - **An `attempts` column on `intake`** - the retry bound is a three-day rule on
   `sent_at` today, which is the right stop in the wrong unit. Counting nights is
@@ -71,6 +71,8 @@ Kept by whoever is holding the product manager role.
   `prompt.js`.
 - Adding or removing a search from the account panel: a new role means a new
   tab, and removing one has leads and applications hanging off it.
+- The run record counts leads added, screened and swept per day, so two runs
+  of one search on the same day are counted together in the nightly run report.
 
 ## Watching
 

@@ -35,8 +35,11 @@ rule arrays does - see Existing searches.
 | Setting | Asked as | Stored as |
 |---|---|---|
 | `search_locations` | What locations should be searched? | the comma-separated list, e.g. "US, Greater Seattle area, Australia" |
-| `excluded_locations` | Anywhere you can't take a job? | the comma-separated list, e.g. "Portland OR, Texas" |
 | `priority_locations` | Which locations should come first? | the comma-separated list, in order, e.g. "Seattle, Portland OR, Raleigh NC" |
+| `excluded_locations` | Anywhere you can't take a job? | the comma-separated list, e.g. "Portland OR, Texas" |
+
+The setup form and the account panel ask them in this order. The rule-out
+hint says "inside the searched area".
 
 - **The page ranks by `priority_locations` and each lead's area**: a lead's
   tier is its area's place in the list. No rules are stored or built, so there
