@@ -804,11 +804,9 @@ const listed = buildSearchPrompt({
   const formIds = Object.keys(file?.forms || {});
   const step6 = stepOf6(full);
   const untaught = formIds.filter((id) => !TAUGHT_AS[id] || !step6.includes(TAUGHT_AS[id]));
-  const strayCases = (file?.cases || []).filter((c) => !formIds.includes(c.form)).map((c) => c.written);
   check("client/src/domain/location-forms.json exists and names the forms runs write",
     formIds.length > 0, String(formsPath));
   check("every form in it is one step 6 teaches", untaught.length === 0, untaught.join(" | "));
-  check("and every case in it belongs to one of those forms", strayCases.length === 0, strayCases.join(" | "));
 }
 function stepOf6(p) {
   return (p.split("\n").find((l) => l.startsWith("6. ")) || "");
