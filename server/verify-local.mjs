@@ -3370,5 +3370,52 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await req("POST", "/api/update", { token: AR, body: { type: "lead", id: exactId, area: "Remote US" } })).json?.lead?.area !== "Remote US");
 }
 
+
+{
+  console.log("\n== filling areas on rows filed before areas existed ==");
+  // The one-time fill (docs/location-settings-plan.md): an operator stores an
+  // area on an account's existing rows, checked like every other area, only
+  // where a row has none.
+  const flRun = Date.now();
+  const flUser = async (tag, ranked) => {
+    const name = `Fill ${tag} ${flRun}`;
+    await req("POST", "/api/users", { admin: true, body: { name, password: `fill-${tag}-long-password` } });
+    const token = (await req("POST", "/api/login", { body: { name, password: `fill-${tag}-long-password` } })).json.token;
+    await req("POST", "/api/config", { token, body: { tracks: [{ key: "SWE", label: "SWE" }], priority_locations: ranked } });
+    return { name, token };
+  };
+  const FL = await flUser("a", "Seattle area, Remote US"), FL_B = await flUser("b", "Seattle area");
+  const flUrl = (n) => `https://example.com/fill/${flRun.toString(36)}/${n}`;
+  const flLead = (n, area) => ({ search: "SWE", company: "Acme", title: `Role ${n}`, location: "Kirkland, WA", url: flUrl(n), ...(area ? { area } : {}) });
+  await req("POST", "/api/leads", { token: FL.token, body: { leads: [flLead("old"), flLead("filed", "Remote US"), flLead("other")] } });
+  await req("POST", "/api/leads", { token: FL_B.token, body: { leads: [flLead("theirs")] } });
+  const flData = async (who) => (await req("GET", "/api/data", { token: who.token })).json;
+  const idOf = async (who, n) => (await flData(who)).leads.find((l) => l.url === flUrl(n)).id;
+  const [oldId, filedId, otherId, theirsId] = [await idOf(FL, "old"), await idOf(FL, "filed"), await idOf(FL, "other"), await idOf(FL_B, "theirs")];
+  const app = (await req("POST", "/api/update", { token: FL.token, body: { type: "application", link: flUrl("app") } })).json.application;
+  const fill = (body) => req("POST", "/api/areas/fill", { admin: true, body: { user: FL.name, ...body } });
+  const flBody = { leads: [{ id: oldId, area: "seattle area" }, { id: filedId, area: "Seattle area" }, { id: otherId, area: "Seattle" }, { id: theirsId, area: "Seattle area" }],
+    applications: [{ id: app.id, area: "Remote US" }] };
+
+  check("the fill needs the admin token",
+    (await req("POST", "/api/areas/fill", { token: FL.token, body: { user: FL.name, ...flBody } })).status === 401);
+  const flDry = await fill({ ...flBody, dryRun: true });
+  check("a dry run counts what it would set and writes nothing",
+    flDry.status === 200 && flDry.json?.leads?.set === 1 && flDry.json?.applications?.set === 1 && flDry.json?.area_cleared === 1 &&
+    (await flData(FL)).leads.find((l) => l.id === oldId)?.area === "", JSON.stringify(flDry.json));
+  const flDone = await fill(flBody);
+  const after = await flData(FL);
+  check("a row with no area gets it, spelled as the ranked entry",
+    flDone.json?.leads?.set === 1 && after.leads.find((l) => l.id === oldId)?.area === "Seattle area", JSON.stringify(flDone.json));
+  check("a row a run already filed keeps its area",
+    after.leads.find((l) => l.id === filedId)?.area === "Remote US");
+  check("an area that isn't a ranked entry is counted and not written",
+    flDone.json?.area_cleared === 1 && after.leads.find((l) => l.id === otherId)?.area === "");
+  check("an application gets its area too",
+    after.applications.find((a) => a.id === app.id)?.area === "Remote US");
+  check("another account's row, named in this account's fill, is untouched",
+    (await flData(FL_B)).leads.find((l) => l.id === theirsId)?.area === "");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

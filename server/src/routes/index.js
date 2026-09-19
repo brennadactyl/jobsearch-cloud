@@ -27,7 +27,7 @@ import {
   handleLogout,
   handleUpsertUser,
 } from "./accounts.js";
-import { handleCleanUpCompanies, handlePurgeSearch } from "./admin.js";
+import { handleCleanUpCompanies, handleFillAreas, handlePurgeSearch } from "./admin.js";
 import {
   handleDeleteApplication,
   handleGetAutofillQueue,
@@ -111,6 +111,9 @@ export const ADMIN_ROUTES = [
   // Merging duplicate companies and renaming acquired ones, on the list every
   // account shares.
   ["POST", "/api/companies/cleanup", handleCleanUpCompanies],
+  // Giving an account's leads and applications filed before areas existed
+  // their area, once.
+  ["POST", "/api/areas/fill", handleFillAreas],
 ];
 
 /**
