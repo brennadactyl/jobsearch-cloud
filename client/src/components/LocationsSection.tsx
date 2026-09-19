@@ -58,16 +58,6 @@ export default function LocationsSection({
       </PlaceField>
 
       <PlaceField
-        {...field("excluded_locations")}
-        label="Anywhere you can't take a job?"
-        optional
-        placeholder="Portland OR, Texas"
-        hint="Optional, and only a rule-out: somewhere inside the area above that you still couldn't take. It never narrows where the search looks on its own."
-      >
-        <Entries lead="Ruled out:" entries={ruledOut} />
-      </PlaceField>
-
-      <PlaceField
         {...field("priority_locations")}
         label="Which locations should come first?"
         placeholder="Seattle area, Portland OR, Remote US"
@@ -83,6 +73,16 @@ export default function LocationsSection({
             ))}
           </div>
         )}
+      </PlaceField>
+
+      <PlaceField
+        {...field("excluded_locations")}
+        label="Anywhere you can't take a job?"
+        optional
+        placeholder="Portland OR, Texas"
+        hint="Optional, and only a rule-out: somewhere inside the searched area that you still couldn't take. It never narrows where the search looks on its own."
+      >
+        <Entries lead="Ruled out:" entries={ruledOut} />
       </PlaceField>
 
       <PlaceField

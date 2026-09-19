@@ -7,7 +7,7 @@
 import { joinNames } from "./resumes";
 
 /** The settings the Locations section edits, in the order it shows them. */
-export const PLACE_KEYS = ["search_locations", "excluded_locations", "priority_locations", "location_note"] as const;
+export const PLACE_KEYS = ["search_locations", "priority_locations", "excluded_locations", "location_note"] as const;
 export type PlaceKey = (typeof PLACE_KEYS)[number];
 export type Places = Record<PlaceKey, string>;
 

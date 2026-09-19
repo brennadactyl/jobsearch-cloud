@@ -63,6 +63,17 @@ afterEach(() => {
 });
 
 describe("the Locations section", () => {
+  it("asks where to search, then what comes first, then what's ruled out, then the note", async () => {
+    const section = await openPanel();
+    const labels = [...section.querySelectorAll(".loc-field > label")].map((l) => l.firstChild?.textContent);
+    expect(labels).toEqual([
+      "What locations should be searched?",
+      "Which locations should come first?",
+      "Anywhere you can't take a job?",
+      "Anything else about where you'd work?",
+    ]);
+  });
+
   it("shows each list as stored, and how the commas split it", async () => {
     const section = await openPanel({ excluded_locations: "Ogdenville" });
     expect(within(section).getByLabelText(/What locations should be searched/)).toHaveValue("Springfield, Shelbyville, Remote US");
