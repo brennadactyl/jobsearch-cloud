@@ -2168,15 +2168,11 @@ check("a refused setup stores nothing",
 // rather than overnight (docs/instant-setup-plan.md).
 check("setup needs somewhere the person can work",
   (await postIntake(N_TOK, { ...baseAnswers, work_scope: "  " })).json.field === "work_scope");
+// Where location answers disagree the place is included rather than the send
+// refused (docs/location-settings-plan.md).
 const outsideScope = await postIntake(N_TOK, { ...baseAnswers, work_scope: "Berlin only" });
-check("and the places ranked first have to be inside it, with both answers named",
-  outsideScope.status === 400 && outsideScope.json.field === "work_scope" &&
-  outsideScope.json.error.includes("Berlin only") && outsideScope.json.error.includes("Seattle"),
-  JSON.stringify(outsideScope.json));
-// Loose on purpose: one ranked place mentioned anywhere in the scope is enough,
-// because this refusal stops someone mid-form.
-check("one match is enough - a scope naming only some of them passes",
-  (await postIntake(N_TOK, { ...baseAnswers, work_scope: "anywhere around seattle" })).status === 200);
+check("a scope that names none of the places ranked first is accepted, not refused",
+  outsideScope.status === 200 && outsideScope.json?.ok === true, JSON.stringify(outsideScope.json));
 check("a refused setup stores nothing and builds no tracks",
   (await req("GET", "/api/intake", { token: B_TOK })).json.intake === null &&
   (await req("GET", "/api/config", { token: B_TOK })).json.tracks.every((t) => t.key !== "engineering"));
