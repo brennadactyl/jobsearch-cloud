@@ -262,7 +262,7 @@ function geoStep(settings) {
 // Step 9's `area`: which of the places ranked first a lead falls in, since the
 // page tiers by it (docs/location-settings-plan.md, "Each lead carries its
 // area"). The run judges it; tracker.ps1 and the leads route keep it only when
-// it equals an entry exactly, so the wording asks for a copy, never a
+// it equals an entry, ignoring case, so the wording asks for a copy, never a
 // paraphrase. A person with nothing ranked gets no area at all.
 function areaStep(settings, name) {
   const ranked = typeof settings.priority_locations === "string" ? settings.priority_locations.trim() : "";
@@ -271,8 +271,8 @@ function areaStep(settings, name) {
     areaKey: ", area",
     areaRule:
       ` \`area\` is the one place ${name} ranked first that the posting falls in - one entry from "${ranked}", ` +
-      "copied character for character - or leave it out when the posting falls in none of them. The posting's real " +
-      "location stays in `location`; `area` only files it, and anything but an exact entry is dropped.",
+      "copied as written - or leave it out when the posting falls in none of them. The posting's real " +
+      "location stays in `location`; `area` only files it, and anything but one of those entries is dropped.",
   };
 }
 

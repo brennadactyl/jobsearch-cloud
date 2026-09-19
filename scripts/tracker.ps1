@@ -433,14 +433,17 @@ function Invoke-LeadsCommand {
             $fieldValue = Get-TrimmedField $inputRow $fieldName
             if ($fieldValue) { $row[$fieldName] = $fieldValue }
         }
-        # An area is one of the ranked places, character for character, or
-        # nothing: a near-miss like "Seattle" for "Seattle area" would give the
-        # lead no tier while looking filed. The lead itself is still sent.
+        # An area is one of the ranked places or nothing: a near-miss like
+        # "Seattle" for "Seattle area" would give the lead no tier while
+        # looking filed. Case doesn't matter, and what is sent is the entry as
+        # the person typed it, so every lead in one place carries one spelling.
+        # The lead itself is always sent.
         $area = Get-TrimmedField $inputRow "area"
         if ($area) {
             $entries = Get-RankedEntries
-            if ($entries -ccontains $area) {
-                $row["area"] = $area
+            $match = @($entries | Where-Object { $_ -ieq $area }) | Select-Object -First 1
+            if ($match) {
+                $row["area"] = $match
             } else {
                 $script:AreaCleared++
                 $known = if ($entries.Count) { $entries -join " | " } else { "none are set" }
