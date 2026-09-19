@@ -24,7 +24,7 @@ person had ruled out; that class of mistake exists because scope is prose.
 
 ## The three lists
 
-Each is typed as a comma-separated list and stored as one setting - one `meta`
+All three are typed as comma-separated lists and each is stored as one setting - one `meta`
 value per list, holding the list as the person typed it. No migration: `meta`
 is key/value.
 
@@ -32,8 +32,15 @@ is key/value.
 |---|---|---|
 | `search_locations` | What locations should be searched? | the comma-separated list, e.g. "US, Greater Seattle area, Australia" |
 | `excluded_locations` | Anywhere you can't take a job? | the comma-separated list, e.g. "Portland OR, Texas" |
-| `priority_locations` | Which locations should come first? | unchanged: the matching rules the page builds, since the page needs them to rank leads into tiers |
+| `priority_locations` | Which locations should come first? | the comma-separated list, in order, e.g. "Seattle, Portland OR, Raleigh NC" |
 
+- **The page builds the ranking rules when it loads**, from `priority_locations`
+  with the matcher it already has, to sort leads into tiers and colour their
+  badges. Rules are never stored, so there is one copy of each list: the one the
+  person typed.
+- **Existing accounts convert deterministically:** each stored rule set becomes
+  the comma-separated list of its labels, in order. The server, the prompt, the
+  onboarding run and the demo data stop reading or writing rule arrays.
 - **The prompt prints them as stored**, and the nightly search decides whether a
   posting's location fits. No code turns the first two into rules.
 - **Preferred places are always searched,** even if the other two lists leave
