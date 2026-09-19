@@ -22,12 +22,6 @@
     "applications_label": "Applications",
     "stale_run_hours": 8760,
     "priority_locations": "Seattle area, Remote US, Portland, Bay Area",
-    "priority_rules": [
-      { "label": "Seattle area", "anyOf": ["seattle", "bellevue", "redmond", "kirkland"] },
-      { "label": "Remote US", "allOf": ["remote"], "anyOf": ["(us)", "u.s.", "united states", "usa"] },
-      { "label": "Portland", "anyOf": ["portland"] },
-      { "label": "Bay Area", "anyOf": ["san francisco", "oakland", "palo alto", "mountain view"] }
-    ],
     "excluded_companies": ["Umbrella Dynamics"],
     "search_locations": "US",
     "excluded_locations": "",
