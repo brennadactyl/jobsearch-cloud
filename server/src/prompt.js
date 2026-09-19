@@ -42,10 +42,18 @@ function joinAnd(parts) {
 // default is what a prompt read without one shows.
 export const DEFAULT_DOC_BUDGET_BYTES = 1000;
 
-const DEFAULT_LOCATION_GUIDANCE =
-  "Write accurate location strings - the tracker derives priority from them " +
-  "automatically, so precision matters. There is no priority field to set - " +
-  "just get the location text right.";
+// How a lead's `location` is written, the same for every search. The page tiers
+// a lead by matching this text against the places ranked first, and its matcher
+// is tested over exactly these forms (client/src/domain/location-forms.json,
+// which verify-local checks this sentence against), so a lead written any other
+// way can silently lose its tier.
+const LOCATION_FORMS_STEP =
+  "Write each lead's `location` in one of these forms, as the posting gives it, so the " +
+  "page can rank it: \"City, ST\" for a US city (\"Seattle, WA\"); \"City, Country\" " +
+  "anywhere else (\"Toronto, Canada\"); \"Remote (US)\" or \"Remote (<country>)\" for a " +
+  "remote role (\"Remote (Canada)\"); and several locations joined with \"; \" " +
+  "(\"Seattle, WA; Remote (US)\"). Not a bare \"Remote\", and not a bare state or country: " +
+  "neither says enough to rank. There is no priority field to set - the location text is it.";
 
 const DEFAULT_SCREENED_EXAMPLES =
   '"outside scope: London, UK", "404 - closed", "duplicate of req 7829580003", "below target level"';
@@ -237,14 +245,16 @@ function profileRefreshStep(track, doc) {
 }
 
 // Step 7's two categories, built from optional parts so a track with no fit
-// filter or geographic scope leaves no empty clauses.
+// filter leaves no empty clauses. Where a posting may be is step 5's, so both
+// point back at it rather than restating it.
 function findingIs(track, settings) {
-  return joinAnd(["genuinely new", "verified live", settings.scope_clause, track.fit_clause]);
+  const where = hasLocations(settings) ? "somewhere step 5 says qualifies" : "";
+  return joinAnd(["genuinely new", "verified live", where, track.fit_clause]);
 }
 function disqualifiedReasons(track, settings) {
   return [
     "dead-on-arrival",
-    settings.scope_disqualifier,
+    hasLocations(settings) ? "a location step 5 rules out" : "",
     track.fit_disqualifier,
     "wrong level",
     "duplicate of an existing lead",
@@ -253,10 +263,51 @@ function disqualifiedReasons(track, settings) {
     .join(", ");
 }
 
-function geoStep(settings) {
-  return settings.geo_scope_line
-    ? settings.geo_scope_line
-    : "No geographic restriction is configured for this search - don't exclude a posting on location alone.";
+// ---- Where the search looks.
+//
+// Three lists and a note, as the person typed them (docs/location-settings-plan.md).
+// They are printed verbatim and the run interprets them - "WA", "Greater
+// Seattle area" and "Portland, OR" are all places - but how the lists combine
+// is fixed here, the same for every account, so no night's model decides it.
+function locationLists(settings) {
+  const text = (v) => (typeof v === "string" ? v.trim() : "");
+  return {
+    preferred: text(settings.priority_locations),
+    searched: text(settings.search_locations),
+    excluded: text(settings.excluded_locations),
+    note: text(settings.location_note),
+  };
+}
+function hasLocations(settings) {
+  const { preferred, searched, excluded } = locationLists(settings);
+  return Boolean(preferred || searched || excluded);
+}
+function geoStep(settings, name) {
+  const { preferred, searched, excluded, note } = locationLists(settings);
+  if (!preferred && !searched && !excluded) {
+    return "WHERE THIS SEARCH LOOKS: no locations are set for this search - don't exclude a posting on location alone.";
+  }
+  const lines = ["WHERE THIS SEARCH LOOKS. " + name + " listed these places, exactly as typed - read each entry as the place it names:"];
+  if (preferred) lines.push(`   - **Wanted first, in this order, and always searched:** ${preferred}`);
+  if (searched) lines.push(`   - **Also searched:** ${searched}`);
+  if (excluded) lines.push(`   - **Ruled out:** ${excluded}`);
+  if (note) lines.push(`   - **In ${name}'s words:** ${note}`);
+  // With no searched list, the places wanted first are the whole search; with
+  // neither, only the rule-outs narrow it.
+  const lastly = searched
+    ? "otherwise a searched place qualifies; anywhere else is out."
+    : preferred
+      ? "anywhere else is out."
+      : "anywhere else qualifies.";
+  const reachable = searched || preferred ? "a place that qualifies" : "a place not ruled out";
+  lines.push(
+    "",
+    "   Decide each posting's location in this order, and stop at the first that applies: a place wanted first always qualifies, even if another list says otherwise; otherwise a place ruled out is out; " +
+      lastly +
+      " A posting listing several locations qualifies when any one of them does.",
+    `   A remote role qualifies when it is open to someone in ${reachable}, and is out when it is restricted to a region or time zone that doesn't include one. An on-site or hybrid role somewhere that doesn't qualify is out, and never assume ${name} will relocate${note ? ` unless ${name}'s own words above say so` : ""}.`
+  );
+  return lines.join("\n");
 }
 
 // Step 9's `area`: which of the places ranked first a lead falls in, since the
@@ -375,9 +426,6 @@ export function buildSearchPrompt({ user, track, settings, feeds, docBudget = DE
   const searchNote = track.search_note ? ` ${track.search_note}` : "";
   const roleLine = track.role_search_line || "roles matching the resume";
 
-  // Never empty: it is a numbered step, and the tracker derives priority from
-  // location text whether or not priority locations are set.
-  const locationGuidance = settings.location_guidance || DEFAULT_LOCATION_GUIDANCE;
   const screenedExamples = track.screened_examples || DEFAULT_SCREENED_EXAMPLES;
   const report = track.report_line || DEFAULT_REPORT_LINE;
   const footer = settings.footer_note ? ` ${settings.footer_note}` : "";
@@ -391,7 +439,7 @@ export function buildSearchPrompt({ user, track, settings, feeds, docBudget = DE
   const profileRefresh = profileRefreshStep(track, doc);
   const finding = findingIs(track, settings);
   const disqualified = disqualifiedReasons(track, settings);
-  const geo = geoStep(settings);
+  const geo = geoStep(settings, name);
   const dedup = dedupNote(tabs);
   const filing = filingStep(track, tabs, doc);
   const searchValue = searchValueRule(tabs);
@@ -438,7 +486,7 @@ ${profileRefresh}3. Search the step-1c companies' careers sites (web search as b
 
    **And tell a truncated page apart from an empty one.** A fetch that returned a megabyte of navigation and got cut off before the description is a size problem, not a block - the content is there, and the workaround for that domain (a reader-proxy, an ATS JSON endpoint, a different URL format) goes in step 9d as an \`endpoint\` or \`url_shape\`. Recording "truncated" as "blocked" is how a company that is perfectly readable ends up skipped for weeks.
 5. ${geo}
-6. ${locationGuidance}
+6. ${LOCATION_FORMS_STEP}
 ${fitFilterStep}${captureNum}. While the posting is open, also capture - only when it's stated plainly, never inferred or guessed - the team/org named for the role (\`team\`), the stated work arrangement (\`setup\`, e.g. "Remote", "Hybrid - 3 days/week onsite", "Onsite"), and any posted compensation range (\`comp\`, e.g. "$180,000-$230,000/yr"; many US states disclose this by law). Leave any of these as an empty string when the posting doesn't say. These land in the tracker's per-lead "Details" panel alongside referral/resume/next-action fields that are ${name}'s alone to fill in by hand - this search never touches those.
 7. Compare candidate URLs against \`leads[]\` and \`screened[]\` from step 1b (not a doc table). Sort each candidate into: (a) already tracked or already screened - skip it; (b) ${finding} - a finding, goes to step 9; (c) genuinely new but disqualified (${disqualified}) - goes to step 9b instead of being dropped silently.
 ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open every lead step 1b marked \`recheck: true\`, and only those: the tracker picks them, longest-unconfirmed first, so every lead gets its turn without any run re-checking the whole list. If none are marked, there is nothing to re-check tonight. A tracked posting you happen to open for another reason can be reported too. For the postings you re-checked, **never delete or move anything yourself** - report what you saw and let the tracker decide what to do with it. Both reports are a JSON array of the urls you actually opened; send the URL you opened rather than matching it against step 1b's spelling first, because the tracker matches on posting identity, so a \`?gh_jid=\` suffix, a tracking param or a missing slug still finds the right lead.${delistTab}

@@ -751,6 +751,63 @@ const listed = buildSearchPrompt({
     !/area/.test(syncStep({ priority_locations: "" })) && !/area/.test(syncStep({})));
 }
 
+// ---- Where a search looks comes from the three location lists.
+//
+// Printed as typed, with the order they combine in fixed by the prompt - the
+// scope prose they replace is never read, so a stale copy of it can't steer a
+// run.
+{
+  const trackOf = { key: "T", label: "T", full_description: "t", role_search_line: "r" };
+  const compose = (settings) =>
+    buildSearchPrompt({ user: { id: "u", name: "Nobody" }, track: trackOf, settings, feeds: [] });
+  const stepOf5 = (p) => p.slice(p.indexOf("\n5. "), p.indexOf("\n6. "));
+  const full = compose({
+    priority_locations: "Seattle, Portland, OR",
+    search_locations: "US, Greater Toronto area",
+    excluded_locations: "Texas",
+    location_note: "Open to relocating for the right team.",
+  });
+  const five = stepOf5(full);
+  check("step 5 prints each location list exactly as typed",
+    five.includes("always searched:** Seattle, Portland, OR") && five.includes("Also searched:** US, Greater Toronto area") &&
+    five.includes("Ruled out:** Texas") && five.includes("Open to relocating for the right team."));
+  check("and states the fixed order: wanted first, then ruled out, then searched",
+    /wanted first always qualifies.*ruled out is out.*searched place qualifies; anywhere else is out/.test(five));
+  check("and the fixed remote and relocation rules, deferring to the person's own note",
+    five.includes("A remote role qualifies when it is open to someone in a place that qualifies") &&
+    five.includes("unless Nobody's own words above say so"));
+  check("step 7 sends location back to step 5 rather than restating it",
+    full.includes("somewhere step 5 says qualifies") && full.includes("a location step 5 rules out"));
+  const stale = compose({ geo_scope_line: "Only Tacoma.", scope_clause: "in Tacoma", scope_disqualifier: "outside Tacoma", location_guidance: "Old guidance." });
+  check("the old scope prose and location guidance are never read",
+    !/Tacoma|Old guidance/.test(stale) && stale.includes("no locations are set for this search"));
+  check("with no lists, location screens nothing out", !stale.includes("step 5 rules out"));
+  check("with only rule-outs, everywhere else qualifies",
+    stepOf5(compose({ excluded_locations: "Texas" })).includes("anywhere else qualifies"));
+
+  // Every form the page's tier matcher is tested over has to be one the prompt
+  // teaches, or a run writes locations the page can't rank.
+  const { readFileSync } = await import("node:fs");
+  const formsPath = new URL("../client/src/domain/location-forms.json", import.meta.url);
+  let forms = null;
+  try { forms = JSON.parse(readFileSync(formsPath, "utf8")); } catch { forms = null; }
+  const written = [];
+  const walk = (v) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") { if (typeof v.written === "string") written.push(v.written); Object.values(v).forEach(walk); }
+  };
+  walk(forms);
+  const formOf = (w) =>
+    w.includes("; ") ? "; " : /^Remote \(/.test(w) ? "Remote (" : /, [A-Z]{2}$/.test(w) ? "City, ST" : /, [A-Z][a-z]/.test(w) ? "City, Country" : null;
+  const untaught = [...new Set(written)].filter((w) => !formOf(w) || !stepOf6(full).includes(formOf(w)));
+  check("client/src/domain/location-forms.json exists and lists the forms runs write",
+    written.length > 0, String(formsPath));
+  check("every form in it is one step 6 teaches", untaught.length === 0, untaught.join(" | "));
+}
+function stepOf6(p) {
+  return (p.split("\n").find((l) => l.startsWith("6. ")) || "");
+}
+
 check("a company list stored on a track never reaches the prompt",
   !listed.includes("Zyqfold Robotics") && !listed.includes("Quennet Labs") && !listed.includes("drawn from"));
 check("the default doc-update step never asks a run to keep company groups",
