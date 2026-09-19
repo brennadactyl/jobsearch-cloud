@@ -131,10 +131,7 @@ export const trackSchema = z.object({
   // vocabulary.
 });
 
-/**
- * One ordered location-matching rule. `matchLocationTier()` walks these in
- * order and the first match wins, so the index is the rank: 0 is the top tier.
- */
+/** One location rule the setup form builds from a ranked entry it can read. */
 export const priorityLocationSchema = z.object({
   label: str,
   allOf: z.array(z.string()).optional(),
@@ -145,12 +142,9 @@ export const priorityLocationSchema = z.object({
 export const DEFAULT_STALE_RUN_HOURS = 36;
 
 /**
- * The ranked places, as the rules the page sorts leads into tiers by. The
- * server keeps the list as the person typed it, "Seattle, Portland OR", and
- * the page builds the rules from it here, so every reader gets rules; a list
- * that arrives as rules already built is read as it is. An entry the matcher
- * can't read just builds no rule: nothing about a place is refused
- * (docs/location-settings-plan.md).
+ * The ranked places a sent setup carries, as the rules the setup form built
+ * from them. A list that arrives as text is built into rules the same way; an
+ * entry the form can't read builds no rule.
  */
 const rankedPlaces = z
   .union([z.string(), z.array(priorityLocationSchema)])
@@ -169,23 +163,17 @@ export const settingsSchema = z
     applications_label: z.string().default("Applications"),
     all_leads_label: z.string().default("All leads"),
     stale_run_hours: z.number().default(DEFAULT_STALE_RUN_HOURS),
-    priority_locations: z.union([z.string(), z.array(priorityLocationSchema)]).nullish(),
-    /** Rules as stored before the ranked list was text; only their labels are read, when there is no list. */
-    priority_rules: z.array(priorityLocationSchema).nullish().transform((v) => v ?? []),
+    priority_locations: z.string().nullish(),
     excluded_companies: z.array(z.string()).default([]),
   })
-  .transform(({ priority_locations: ranked, priority_rules: stored, ...s }) => ({
+  .transform(({ priority_locations: ranked, ...s }) => ({
     ...s,
     /**
      * "Which locations should come first?" in order, each entry exactly as
      * typed. A lead's or application's `area` names one of these, and its
-     * position here is the row's tier. The list as rules, from a server that
-     * still sends them, gives its labels.
+     * position here is the row's tier.
      */
-    areas:
-      typeof ranked === "string" && ranked.trim()
-        ? areaNames(ranked)
-        : (stored.length ? stored : Array.isArray(ranked) ? ranked : []).map((r) => r.label),
+    areas: areaNames(ranked ?? ""),
   }));
 
 export const userSchema = z.object({

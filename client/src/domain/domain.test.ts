@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_LEADS } from "./constants";
 import { NOW, applications, leads, settings, tracks as trackList } from "./fixture";
 import { daysSince, hostOf, relWhen, safeUrl } from "./format";
-import { matchLocationTier, tierCssClass, tierOf, tierRank } from "./geo";
+import { tierCssClass, tierOf, tierRank } from "./geo";
 import { appComparator, fillState, leadComparator } from "./rows";
 import { runState, runSummary, trackWarn } from "./runs";
 import { buildTabs, buildTracks, pathForTab } from "./tabs";
@@ -73,13 +73,7 @@ describe("tierOf", () => {
   });
 });
 
-describe("matchLocationTier", () => {
-  it("requires every term of allOf and any term of anyOf", () => {
-    const rules = [{ label: "Both", allOf: ["remote", "us"] }];
-    expect(matchLocationTier("Remote - US", rules)?.label).toBe("Both");
-    expect(matchLocationTier("Remote - EU", rules)).toBeNull();
-  });
-
+describe("tier colours and sorting", () => {
   it("caps the colour class at the five the stylesheet defines", () => {
     expect(tierCssClass(0)).toBe("pri0");
     expect(tierCssClass(4)).toBe("pri4");

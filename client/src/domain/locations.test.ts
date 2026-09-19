@@ -1,17 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { matchLocationTier } from "./geo";
 import { locationRules, parseLocation, parseLocations, tooManyLocations } from "./locations";
-
-/** Location strings in the shapes postings write them. A rule is right when it ranks these. */
-const REMOTE_US = [
-  "Remote (U.S.)", "USA - Remote", "Remote-friendly (United States)", "Remote (U.S./Canada)",
-  "US - Remote (hybrid)", "Remote (US/Canada)", "Remote, Colorado, USA", "Denver, CO / remote US", "Remote-US eligible",
-];
-const MULTI_CITY = "Seattle, WA / Denver, CO / Austin, TX";
-
-const tierLabel = (answer: string, location: string) => matchLocationTier(location, locationRules(parseLocations(answer)))?.label ?? null;
 
 describe("parseLocations", () => {
   it("keeps the order typed, and drops empty entries", () => {
@@ -24,15 +12,6 @@ describe("parseLocations", () => {
 });
 
 describe("Remote with a country", () => {
-  it.each(REMOTE_US)("matches %j, as postings write remote in the US", (location) => {
-    expect(tierLabel("Remote US", location)).toBe("Remote US");
-  });
-
-  it("doesn't match an on-site posting that happens to contain the letters us", () => {
-    expect(tierLabel("Remote US", MULTI_CITY)).toBeNull();
-    expect(tierLabel("Remote US", "Austin, TX")).toBeNull();
-  });
-
   it("reads back what it matches", () => {
     expect(parseLocation("Remote US")).toMatchObject({ means: "remote postings in the United States" });
     expect(parseLocation("US Remote")).toMatchObject({ means: "remote postings in the United States" });
@@ -40,58 +19,19 @@ describe("Remote with a country", () => {
 
   it("reads bare Remote as remote anywhere", () => {
     expect(parseLocation("Remote")).toMatchObject({ rule: { allOf: ["remote"] }, means: "remote, anywhere" });
-    expect(tierLabel("Remote", "Remote (North America, incl. U.S.)")).toBe("Remote");
   });
 });
 
 describe("a city with its state", () => {
-  it("matches only that state's city, for a name several places share", () => {
-    for (const location of ["Portland, OR", "Portland, OR (Hybrid)", "Tacoma, WA / Portland, OR / multiple locations", "Portland OR"]) {
-      expect(tierLabel("Portland OR", location), location).toBe("Portland OR");
-    }
-    expect(tierLabel("Portland Oregon", "Portland, Oregon")).toBe("Portland Oregon");
-    expect(tierLabel("Portland OR", "Portland, ME")).toBeNull();
-    // "or" as a word elsewhere in the string doesn't count as Oregon.
-    expect(tierLabel("Portland OR", "Portland, ME (or Boston, MA)")).toBeNull();
-  });
-
-  it("knows Canadian provinces for the names shared across the border", () => {
-    expect(tierLabel("Vancouver BC", "Vancouver, BC, Canada")).toBe("Vancouver BC");
-    expect(tierLabel("Vancouver BC", "Vancouver, WA")).toBeNull();
-  });
-
-  it("matches any other city by name alone, so a posting that omits the state still ranks", () => {
-    expect(tierLabel("Austin TX", "Austin/Denver/Chicago")).toBe("Austin TX");
-    expect(parseLocation("Austin TX")).toMatchObject({ means: "Austin, Texas" });
-  });
-
   it("reads back the city and state in full", () => {
     expect(parseLocation("Portland OR")).toMatchObject({ means: "Portland, Oregon" });
+    expect(parseLocation("Austin TX")).toMatchObject({ means: "Austin, Texas" });
   });
 });
 
 describe("a plain city", () => {
-  it("matches a posting that names it anywhere, including a multi-city posting", () => {
-    expect(tierLabel("Seattle", MULTI_CITY)).toBe("Seattle");
-    expect(tierLabel("Seattle", "Boulder, CO (also Chicago, Seattle, or remote)")).toBe("Seattle");
-  });
-
   it("asks for the state rather than choosing, for a name several places share", () => {
     expect(parseLocation("Portland")).toMatchObject({ problem: expect.stringContaining("Add the state") });
-  });
-
-  it("expands the short forms people type", () => {
-    expect(tierLabel("NYC", "New York, NY")).toBe("NYC");
-    expect(tierLabel("SF", "San Francisco, CA")).toBe("SF");
-  });
-
-  it("ranks a multi-city posting by the best city it mentions anywhere", () => {
-    expect(tierLabel("Seattle, Bellevue", "Boulder, CO (also Bellevue, Seattle)")).toBe("Seattle");
-  });
-
-  it("ranks the first entry a posting matches", () => {
-    expect(tierLabel("Bellevue, Seattle", MULTI_CITY)).toBe("Seattle");
-    expect(tierLabel("Seattle, Remote US", "Seattle, WA (Remote - US)")).toBe("Seattle");
   });
 });
 
@@ -123,7 +63,7 @@ describe("the setup API's limits", () => {
   });
 });
 
-describe("an entry too short to match", () => {
+describe("an entry too short to read", () => {
   it.each(["WA", "US", "CA", "OR", "UK", "Remote CA"])("flags %j rather than guessing", (entry) => {
     expect(parseLocation(entry)).toHaveProperty("problem");
   });
@@ -132,40 +72,5 @@ describe("an entry too short to match", () => {
     const [city, state] = parseLocations("Seattle, WA");
     expect(city).toHaveProperty("rule");
     expect(state).toMatchObject({ problem: expect.stringContaining("like Seattle WA") });
-  });
-
-  it("never writes a term of three letters or fewer without punctuation around it", () => {
-    const answers = ["Seattle, Bellevue, Remote US, Portland OR, NYC, SF, Remote UK, Remote, Canada, Denver CO"];
-    for (const rule of locationRules(parseLocations(answers.join(", ")))) {
-      for (const term of [...(rule.anyOf ?? []), ...(rule.allOf ?? [])]) {
-        expect(/^[a-z]{1,3}$/.test(term), `${rule.label}: "${term}"`).toBe(false);
-      }
-    }
-  });
-});
-
-/**
- * The locations the nightly runs write, and the tier each must land in
- * (location-forms.json). The prompt teaches these forms, server/verify-local.mjs
- * checks it teaches every one, and this checks the page tiers every one, so a
- * lead can't silently lose its tier between the two.
- */
-describe("the location forms the runs write", () => {
-  type FormCase = { form: string; ranked: string; written: string; tier: number | null; why?: string };
-  const fixture: { forms: Record<string, string>; cases: FormCase[] } = JSON.parse(
-    readFileSync(join(process.cwd(), "src", "domain", "location-forms.json"), "utf8"),
-  );
-
-  it.each(fixture.cases)("puts $written in tier $tier against $ranked ($form)", (c) => {
-    const rules = locationRules(parseLocations(c.ranked));
-    expect(matchLocationTier(c.written, rules)?.rank ?? null).toBe(c.tier);
-  });
-
-  it("proves every form with at least one match and names only forms it lists", () => {
-    const forms = Object.keys(fixture.forms);
-    for (const form of forms) {
-      expect(fixture.cases.some((c) => c.form === form && c.tier !== null), form).toBe(true);
-    }
-    for (const c of fixture.cases) expect(forms, c.written).toContain(c.form);
   });
 });
