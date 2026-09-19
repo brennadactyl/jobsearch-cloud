@@ -103,10 +103,8 @@ describe("setupProblems", () => {
     });
   });
 
-  it("holds the send while a location can't be matched, or there are too many", () => {
-    expect(setupProblems({ ...ready, locations_first: "Seattle, WA" }, []).locations).toBeTruthy();
-    const many = Array.from({ length: 21 }, (_, i) => `Place${String.fromCharCode(97 + i)}ton`).join(", ");
-    expect(setupProblems({ ...ready, locations_first: many }, []).locations).toContain("up to 20");
+  it("never holds the send over how a ranked place is written", () => {
+    expect(setupProblems({ ...ready, locations_first: "Seattle, WA, Portland, Greater Seattle area" }, [])).toEqual({});
   });
 });
 

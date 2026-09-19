@@ -9,7 +9,6 @@
 import { useId, useRef, useState, type ReactNode } from "react";
 import { deleteDocument, failureOf, putDocument, submitIntake } from "../api/client";
 import { PRONOUNS, type IntakeAnswers, type RoleAnswer, type TrackerData } from "../api/schema";
-import { locationRules, parseLocations, type LocationEntry } from "../domain/locations";
 import {
   emptyAnswers,
   emptyRole,
@@ -19,7 +18,9 @@ import {
   setupProblems,
   type SetupProblems,
 } from "../domain/onboarding";
+import { listEntries } from "../domain/places";
 import { saved, useSaved } from "../ui/saved";
+import { PlaceEntries, RankedPlaces } from "./location";
 
 /** A file the form turned away. `name` is shown before the reason, or "" when the reason already names it. */
 type Refused = { name: string; reason: string };
@@ -35,8 +36,6 @@ type Attachment =
 /** Where a message sits on the form: a problem slot, or "form" beside the send button. */
 type ProblemSlot = keyof SetupProblems | "form";
 
-const TIER_COLOURS = ["var(--pri-0)", "var(--pri-1)", "var(--pri-2)", "var(--pri-3)", "var(--pri-4)"];
-
 /**
  * The answer a server refusal names (its `field`), mapped to the part of the form
  * that shows the message. A refusal naming anything else, or nothing, shows
@@ -45,8 +44,10 @@ const TIER_COLOURS = ["var(--pri-0)", "var(--pri-1)", "var(--pri-2)", "var(--pri
 const PROBLEM_SLOT_FOR_FIELD: Readonly<Record<string, ProblemSlot>> = {
   roles: "role-0",
   resume: "attach",
-  priority_locations: "locations",
   work_scope: "work_scope",
+  locations_first: "locations_first",
+  location_limits: "location_limits",
+  location_note: "location_note",
 };
 
 function problemSlotFor(field: string | undefined): ProblemSlot {
@@ -93,32 +94,6 @@ function SetupHeading({ title, children }: { title: string; children?: ReactNode
       <h2>{title}</h2>
       {children && <p>{children}</p>}
     </div>
-  );
-}
-
-/** Each entry as it will rank, and what it matches - or why it can't. */
-function LocationReadback({ entries }: { entries: LocationEntry[] }) {
-  const ranked = entries.flatMap((e) => ("rule" in e ? [e] : []));
-  const flagged = entries.flatMap((e) => ("problem" in e ? [e] : []));
-  return (
-    <>
-      {ranked.length > 0 && (
-        <div className="key setup-readback">
-          {ranked.map((e, r) => (
-            <span key={`${r}-${e.text}`}>
-              <i style={{ background: TIER_COLOURS[r] ?? "var(--ink3)" }} />
-              {r + 1}. {e.text}
-              {e.means && ` — ${e.means}`}
-            </span>
-          ))}
-        </div>
-      )}
-      {flagged.map((e, i) => (
-        <p key={`flag-${i}`} className="field-err">
-          {e.problem}
-        </p>
-      ))}
-    </>
   );
 }
 
@@ -263,7 +238,6 @@ export default function Setup({
   const [problems, setProblems] = useState<Partial<Record<ProblemSlot, string>>>({});
   const [sending, setSending] = useState(false);
 
-  const entries = parseLocations(answers.locations_first);
   const set = <K extends keyof IntakeAnswers>(key: K, value: IntakeAnswers[K]) => setAnswers((a) => ({ ...a, [key]: value }));
   const setRole = (i: number, patch: Partial<RoleAnswer>) =>
     setAnswers((a) => ({ ...a, roles: a.roles.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
@@ -329,7 +303,7 @@ export default function Setup({
     setSending(true);
     saved.saving("Sending…");
     try {
-      await submitIntake({ ...answers, resume_files: stored.map((a) => a.path), priority_locations: locationRules(entries) });
+      await submitIntake({ ...answers, resume_files: stored.map((a) => a.path) });
       setRefused([]);
       saved.ok();
       onSent();
@@ -431,7 +405,8 @@ export default function Setup({
           </Field>
 
           <SetupHeading title="Where to search">
-            Three different questions: every area to search, anything ruled out inside it, and what you'd most like.
+            Three different questions: every area to search, what you'd most like, and anything ruled out inside it.
+            Each is a list, separated by commas.
           </SetupHeading>
           <Field
             label={<label htmlFor={`${id}-scope`}>What locations should be searched?</label>}
@@ -441,40 +416,60 @@ export default function Setup({
             // Seattle is "US only", so no note names a place as outside it.
             hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
           >
-            <textarea
+            <input
               id={`${id}-scope`}
-              rows={2}
-              placeholder="US only, Greater Seattle area, Australia"
+              type="text"
+              placeholder="US, Greater Seattle area, Australia"
               aria-invalid={problems.work_scope ? true : undefined}
               value={answers.work_scope}
               onChange={(e) => set("work_scope", e.target.value)}
             />
+            <PlaceEntries lead="Searched:" entries={listEntries(answers.work_scope)} />
           </Field>
           <Field
             label={<label htmlFor={`${id}-first`}>Which locations should come first?</label>}
-            problem={problems.locations}
+            problem={problems.locations_first}
             hint="List places in order — the first is the one you want most. Use a city (add the state if the name is common, like Portland OR), or Remote with a country, like Remote US. Anywhere you don't name still shows up, just lower."
           >
             <input
               id={`${id}-first`}
               type="text"
               placeholder="Seattle, Bellevue, Remote US, Portland OR"
-              aria-invalid={entries.some((e) => "problem" in e) ? true : undefined}
+              aria-invalid={problems.locations_first ? true : undefined}
               value={answers.locations_first}
               onChange={(e) => set("locations_first", e.target.value)}
             />
-            <LocationReadback entries={entries} />
+            <RankedPlaces entries={listEntries(answers.locations_first)} />
           </Field>
           <Field
             label={<label htmlFor={`${id}-limits`}>Anywhere you can't take a job?</label>}
+            optional
+            problem={problems.location_limits}
             hint="Optional, and only a rule-out: somewhere inside the searched area that you still couldn't take. It never narrows where the search looks on its own — leave it empty if nothing is ruled out."
           >
-            <textarea
+            <input
               id={`${id}-limits`}
-              rows={2}
-              placeholder="Nothing that needs me on site in another state."
+              type="text"
+              placeholder="Portland OR, Texas"
+              aria-invalid={problems.location_limits ? true : undefined}
               value={answers.location_limits}
               onChange={(e) => set("location_limits", e.target.value)}
+            />
+            <PlaceEntries lead="Ruled out:" entries={listEntries(answers.location_limits)} />
+          </Field>
+          <Field
+            label={<label htmlFor={`${id}-note`}>Anything else about where you'd work?</label>}
+            optional
+            problem={problems.location_note}
+            hint="Anything a list can't say. The search reads it as context."
+          >
+            <textarea
+              id={`${id}-note`}
+              rows={2}
+              placeholder="Open to relocating for the right team."
+              aria-invalid={problems.location_note ? true : undefined}
+              value={answers.location_note}
+              onChange={(e) => set("location_note", e.target.value)}
             />
           </Field>
 

@@ -154,7 +154,7 @@ describe("the setup form", () => {
     const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
     await openSetup();
     const scope = screen.getByLabelText("What locations should be searched?");
-    expect(scope).toHaveAttribute("placeholder", "US only, Greater Seattle area, Australia");
+    expect(scope).toHaveAttribute("placeholder", "US, Greater Seattle area, Australia");
     // Stated once, on the area field, as a fixed line: it names no place.
     expect(scope.closest(".setup-field")).toHaveTextContent("The places you rank below are always searched too.");
     expect(screen.getAllByText(/always searched/)).toHaveLength(1);
@@ -165,7 +165,7 @@ describe("the setup form", () => {
     await userEvent.type(preferred, "Portland OR, Raleigh NC");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
     await waitFor(() => expect(submit).toHaveBeenCalled());
-    expect(submit.mock.calls[0][0].priority_locations.map((r) => r.label)).toEqual(["Portland OR", "Raleigh NC"]);
+    expect(submit.mock.calls[0][0].locations_first).toBe("Portland OR, Raleigh NC");
   });
 
   it("shows instead of an empty tracker, prefilled with the account's name", async () => {
@@ -327,14 +327,17 @@ describe("the setup form", () => {
     expect(screen.getByText("Fill in at least one role — both what to call it and what to look for.")).toBeInTheDocument();
   });
 
-  it("reads locations back as what each matches, and flags one it can't match", async () => {
+  it("reads each list back as the commas split it, and flags nothing", async () => {
     await openSetup();
+    await userEvent.type(screen.getByLabelText("What locations should be searched?"), "US, Australia");
     await userEvent.type(screen.getByLabelText("Which locations should come first?"), "Seattle, WA, Remote US");
-    const readback = document.querySelector(".setup-readback") as HTMLElement;
-    expect(readback).toHaveTextContent("1. Seattle");
-    expect(readback).toHaveTextContent("2. Remote US — remote postings in the United States");
-    expect(readback).not.toHaveTextContent("WA");
-    expect(screen.getByText(/“WA” is too short to match reliably/)).toHaveClass("field-err");
+    await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Texas");
+
+    expect(screen.getByText("Searched:").parentElement).toHaveTextContent("Searched:USAustralia");
+    const ranked = document.querySelector(".loc-ranked") as HTMLElement;
+    expect([...ranked.children].map((s) => s.textContent)).toEqual(["1. Seattle", "2. WA", "3. Remote US"]);
+    expect(screen.getByText("Ruled out:").parentElement).toHaveTextContent("Ruled out:Texas");
+    expect(document.querySelector(".field-err")).toBeNull();
   });
 
   it("adds and removes role blocks, and the first has no Remove", async () => {
@@ -346,7 +349,7 @@ describe("the setup form", () => {
     expect(screen.queryByText("Role 2")).toBeNull();
   });
 
-  it("uploads files under a safe name, then sends the answers with the computed location rules", async () => {
+  it("uploads files under a safe name, then sends the answers with each location list as typed", async () => {
     await openSetup();
     const put = vi.spyOn(client, "putDocument").mockImplementation(async (path) => ({ path }));
     const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
@@ -358,6 +361,7 @@ describe("the setup form", () => {
     await userEvent.click(screen.getByRole("button", { name: "she/her" }));
     await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["hi"], "Sam's Resume (final).txt", { type: "text/plain" }));
     await userEvent.type(screen.getByLabelText("Which locations should come first?"), "Seattle, Remote US");
+    await userEvent.type(screen.getByLabelText("Anything else about where you'd work?"), "Open to relocating");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
     await waitFor(() => expect(submit).toHaveBeenCalled());
@@ -366,7 +370,9 @@ describe("the setup form", () => {
     expect(sent.pronouns).toBe("she/her");
     expect(sent.work_scope).toBe("Anywhere in the US, remote or around Denver");
     expect(sent.resume_files).toEqual(["resumes/Sam-s Resume -final.txt"]);
-    expect(sent.priority_locations.map((r) => r.label)).toEqual(["Seattle", "Remote US"]);
+    expect(sent.locations_first).toBe("Seattle, Remote US");
+    expect(sent.location_note).toBe("Open to relocating");
+    expect(sent).not.toHaveProperty("priority_locations");
     expect(sent.roles[0]).toMatchObject({ name: "Engineering", titles: "Staff backend engineer" });
 
     // The send built the tracks, so the page re-reads and the tracker takes over.
@@ -420,6 +426,19 @@ describe("the setup form", () => {
 
     const message = await screen.findByText("say where you can work - the search needs somewhere to look");
     expect(message).toHaveClass("field-err");
+  });
+
+  it("puts a refusal about a location list beside that list", async () => {
+    await openSetup();
+    vi.spyOn(client, "submitIntake").mockRejectedValue(
+      refusal(400, "locations_first can list at most 50 places", { field: "locations_first" }),
+    );
+    await fillRequired();
+    await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+    await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+
+    const message = await screen.findByText("locations_first can list at most 50 places");
+    expect(message.closest(".setup-field")).toContainElement(screen.getByLabelText("Which locations should come first?"));
   });
 
   it("says a second send was refused, in the server's words", async () => {

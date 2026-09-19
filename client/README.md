@@ -51,7 +51,7 @@ one their scheduled searches use. A token revoked anywhere else brings the
 sign-in back on the next request.
 
 Each person sees only their own tracks, leads, applications, page title and
-location rules.
+places.
 
 ## Joining from an invite
 
@@ -105,7 +105,7 @@ Cloudflare's own environment (Workers Builds).
    (see [`../server/README.md`](../server/README.md#accounts)) - it's
    remembered in this browser for next time.
 6. **Expect an empty page here.** A new database has no tracks, title or
-   location rules, so you'll see only the Overview and Applications tabs until
+   places, so you'll see only the Overview and Applications tabs until
    the [job-search-setup](../.claude/skills/job-search-setup/) skill posts your
    config to `/api/config` (see the root [README](../README.md)'s setup step
    5). Track tabs then appear, reading "No run recorded yet" until their first
