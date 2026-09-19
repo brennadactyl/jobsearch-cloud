@@ -314,7 +314,10 @@ foreach ($lead in $data.leads) {
         found    = DaysAgo $lead.foundDaysAgo
         verified = DaysAgo $lead.verifiedDaysAgo
     }
-    foreach ($f in @("team", "setup", "comp")) {
+    # `area` is the ranked place the lead falls in, written down in the data file
+    # rather than worked out from the location, and the page tiers by it. The
+    # server keeps it only if it is one of settings.priority_locations' entries.
+    foreach ($f in @("area", "team", "setup", "comp")) {
         if ($lead.PSObject.Properties[$f]) { $row[$f] = $lead.$f }
     }
     $leadPayload += $row
@@ -407,11 +410,15 @@ foreach ($spec in $data.applications) {
             continue
         }
     } else {
-        $created = Invoke-Api -Method POST -Path "/api/update" -Token $token -What "Adding the $($spec.company) application" -Body @{
+        # An application made from a lead copies the lead's area. One added by
+        # hand can only be given its area here, when the row is created.
+        $createBody = @{
             type    = "application"
             company = $spec.company
             title   = $spec.title
         }
+        if ($spec.PSObject.Properties["area"]) { $createBody["area"] = $spec.area }
+        $created = Invoke-Api -Method POST -Path "/api/update" -Token $token -What "Adding the $($spec.company) application" -Body $createBody
         $appId = $created.application.id
     }
 
