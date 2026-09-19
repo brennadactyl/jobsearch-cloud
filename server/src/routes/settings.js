@@ -96,7 +96,9 @@ export async function handlePostSettings({ request, db, docs }) {
 
     const changed = JSON.stringify(documents) !== JSON.stringify(current);
     if (changed) changes.push({ key, documents, was: current.find((p) => p.startsWith("resumes/")) || "" });
-    reply[key] = { documents, profile_pending: changed || !!track.profile_stale_since };
+    // A search not yet written up gets its profile from the current resume when
+    // it is, so it has nothing pending (db.setSearchResumes).
+    reply[key] = { documents, profile_pending: !!track.role_search_line && (changed || !!track.profile_stale_since) };
   }
 
   await db.setSearchResumes(changes, new Date().toISOString());

@@ -2780,8 +2780,8 @@ for (const [path, raw, type] of [
   ["reference/notes.txt", "reference notes", "text/plain"],
 ]) await putDoc(R, path, raw, type);
 await putDoc(R, "resumes/AI_Roles.docx", plainDocx(), DOCX_TYPE);
-await req("POST", "/api/writeup", { token: R.token, body: { search: "SWE", documents: ["resumes/Engineering.pdf", "reference/notes.txt"] } });
-await req("POST", "/api/writeup", { token: R.token, body: { search: "CPM", documents: ["resumes/Engineering.pdf"] } });
+await req("POST", "/api/writeup", { token: R.token, body: { search: "SWE", role_search_line: "engineering roles", documents: ["resumes/Engineering.pdf", "reference/notes.txt"] } });
+await req("POST", "/api/writeup", { token: R.token, body: { search: "CPM", role_search_line: "program roles", documents: ["resumes/Engineering.pdf"] } });
 
 const listing = async (who) => (await req("GET", "/api/documents", { token: who.token })).json?.documents || [];
 const entry = async (who, path) => (await listing(who)).find((d) => d.path === path);
@@ -3093,6 +3093,48 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await alSweep("2026-09-14", `Alias Fresh ${alRun}`)).json?.added === 1);
   check("the nightly slice doesn't carry aliases, only the full list does",
     ((await req("GET", "/api/coverage/SWE", { token: AL })).json?.companies || []).every((c) => c.aliases === undefined));
+}
+
+
+{
+  console.log("\n== a search not yet written up has no profile to go stale ==");
+  // A new signup's search gets its resume before the overnight write-up has
+  // run. Its write-up builds the profile from that resume, so a stale mark set
+  // before then would send its first night down the profile-refresh path for
+  // nothing (migrations/0018_profile_stale.sql).
+  const nwRun = Date.now();
+  const nwName = `Not written ${nwRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name: nwName, password: "not-written-long-password" } });
+  const NW = (await req("POST", "/api/login", { body: { name: nwName, password: "not-written-long-password" } })).json.token;
+  await req("POST", "/api/config", { token: NW, body: { tracks: [
+    { key: "NEW", label: "New search" },
+    { key: "OLD", label: "Written up" },
+  ] } });
+  // OLD has been written up; NEW is waiting for its first overnight run.
+  await req("POST", "/api/writeup", { token: NW, body: { search: "OLD", role_search_line: "roles" } });
+  for (const name of ["First.txt", "Second.txt"]) {
+    await req("PUT", `/api/documents/resumes/${name}`, { token: NW, raw: `resume ${name} ${"word ".repeat(60)}`, type: "text/plain" });
+  }
+  const nwStale = async (key) => (await req("GET", `/api/documents?search=${key}`, { token: NW })).json?.profile_stale;
+
+  const nwFirst = await req("POST", "/api/settings", { token: NW, body: { resumes: { NEW: "resumes/First.txt", OLD: "resumes/First.txt" } } });
+  check("choosing a resume for a search not yet written up sets its documents, but marks nothing and reports nothing pending",
+    nwFirst.status === 200 && JSON.stringify(nwFirst.json?.resumes?.NEW?.documents) === JSON.stringify(["resumes/First.txt"]) &&
+    nwFirst.json?.resumes?.NEW?.profile_pending === false && (await nwStale("NEW")) === null,
+    JSON.stringify([nwFirst.json?.resumes?.NEW, await nwStale("NEW")]));
+  check("while a written-up search choosing a resume is marked as before",
+    nwFirst.json?.resumes?.OLD?.profile_pending === true && !!(await nwStale("OLD"))?.since,
+    JSON.stringify([nwFirst.json?.resumes?.OLD, await nwStale("OLD")]));
+
+  await req("PUT", "/api/documents/resumes/First.txt", { token: NW, raw: `changed ${"word ".repeat(70)}`, type: "text/plain" });
+  check("replacing the resume's contents doesn't mark a search not yet written up either",
+    (await nwStale("NEW")) === null);
+
+  // Once written up, the same search is marked like any other.
+  await req("POST", "/api/writeup", { token: NW, body: { search: "NEW", role_search_line: "roles" } });
+  await req("POST", "/api/settings", { token: NW, body: { resumes: { NEW: "resumes/Second.txt" } } });
+  check("after its write-up, a search's resume change marks it stale",
+    (await nwStale("NEW"))?.was === "resumes/First.txt", JSON.stringify(await nwStale("NEW")));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
