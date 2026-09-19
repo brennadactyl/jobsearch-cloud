@@ -81,8 +81,10 @@ cleared and the tier tables removed from the docs.
 
 ## Order of work
 
-1. **Mockup** of the setup form's location questions and the panel's Locations
-   section, for approval before anything is built.
+1. **Mockup** of the account panel's Locations section, for approval before
+   anything is built. The setup form keeps its live questions and wording; only
+   its two free-text location answers become place lists with the same read-back
+   the ranked list already has, so it needs no new design.
 2. **Settings** (Backend Buddy): the two new settings, their validation,
    verify-local.
 3. **Prompt** (Prompt Bro): the location step from settings, the doc tier
