@@ -9,7 +9,7 @@
 import { json, readJson } from "../http.js";
 import { LOCATION_SETTING_KEYS, parseDocumentList } from "../db.js";
 import { fileName, isChoosableResume, listedPathFor, resumeParts, samePairName, withResume } from "../resumes.js";
-import { locationSettingError, unreadableDocumentsError } from "../validate.js";
+import { locationSettingError, nowhereToSearchError, unreadableDocumentsError } from "../validate.js";
 
 const ACCEPTED = ["resumes", ...LOCATION_SETTING_KEYS];
 
@@ -27,7 +27,10 @@ function refuse(status, search, error) {
  *
  * The location lists and note are stored as typed, trimmed at the ends, and
  * take effect on each search's next run (docs/location-settings-plan.md). Each
- * must be text within its cap, or the request is a 400 naming it.
+ * must be text within its cap, or the request is a 400 naming it. A write that
+ * would leave both the searched and the ranked list empty is a 400 naming
+ * `search_locations`; an empty searched list alone means "only the ranked
+ * places".
  *
  * Points each named search at a resume. Send only the searches that changed;
  * naming the resume a search already reads changes nothing.
@@ -64,6 +67,17 @@ export async function handlePostSettings({ request, db, docs }) {
     const problem = locationSettingError(key, body[key]);
     if (problem) return json({ error: problem, field: key }, 400);
     locations[key] = body[key].trim();
+  }
+  // Judged on what the write leaves, so clearing the searched list is accepted
+  // while a ranked place is stored, and a save of other settings is never held
+  // up by the lists.
+  if ("search_locations" in locations || "priority_locations" in locations) {
+    const { settings } = await db.getTracksAndSettings();
+    const problem = nowhereToSearchError(
+      locations.search_locations ?? settings.search_locations,
+      locations.priority_locations ?? settings.priority_locations
+    );
+    if (problem) return json({ error: problem, field: "search_locations" }, 400);
   }
 
   const resumes = body.resumes;

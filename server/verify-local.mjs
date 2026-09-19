@@ -2253,8 +2253,8 @@ check("a refused setup stores nothing",
 
 // The scope check runs on the send, while the person is still on the form,
 // rather than overnight (docs/instant-setup-plan.md).
-check("setup needs somewhere the person can work",
-  (await postIntake(N_TOK, { ...baseAnswers, work_scope: "  " })).json.field === "work_scope");
+check("setup needs somewhere to look: a place to search or a place ranked first",
+  (await postIntake(N_TOK, { ...baseAnswers, work_scope: "  ", locations_first: " , " })).json.field === "work_scope");
 // Where location answers disagree the place is included rather than the send
 // refused (docs/location-settings-plan.md).
 const outsideScope = await postIntake(N_TOK, { ...baseAnswers, work_scope: "Berlin only" });
@@ -2263,6 +2263,17 @@ check("a scope that names none of the places ranked first is accepted, not refus
 check("a refused setup stores nothing and builds no tracks",
   (await req("GET", "/api/intake", { token: B_TOK })).json.intake === null &&
   (await req("GET", "/api/config", { token: B_TOK })).json.tracks.every((t) => t.key !== "engineering"));
+
+// An empty place to search, with places ranked first, means "only the ranked
+// places" (docs/location-settings-plan.md, "Where they are written").
+const rankedInvite = await invAdmin("POST", "/api/invites", { note: `ranked only ${invRun}` });
+const rankedSignup = await req("POST", "/api/signup", {
+  body: { code: rankedInvite.json.code, name: `Ranked only ${invRun}`, password: "ranked-only-long-password" } });
+const rankedOnly = await postIntake(rankedSignup.json.token, { ...baseAnswers, work_scope: " " });
+const rankedOnlySettings = (await req("GET", "/api/config", { token: rankedSignup.json.token })).json?.settings;
+check("setup with places ranked first may leave the place to search empty",
+  rankedOnly.status === 200 && rankedOnlySettings?.search_locations === "" &&
+  rankedOnlySettings?.priority_locations === "Seattle, Portland, OR, Remote", JSON.stringify(rankedOnly.json));
 
 // The account above sent successfully, so the rest of the send's effects are
 // checked on a second one - the send is write-once.
@@ -3288,6 +3299,26 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     lcHalf.status === 400 && (await lcSettings(LC)).excluded_locations === "Portland, OR");
   check("a list 4000 characters long fits",
     (await req("POST", "/api/settings", { token: LC_B, body: { search_locations: "x".repeat(4000) } })).status === 200);
+
+  // An empty searched list means "only the ranked places", so only both empty
+  // is refused, judged on what the save leaves.
+  const lcOnlyRanked = await req("POST", "/api/settings", { token: LC, body: { search_locations: "" } });
+  check("the searched list can be cleared while a place is ranked",
+    lcOnlyRanked.status === 200 && (await lcSettings(LC)).search_locations === "", JSON.stringify(lcOnlyRanked.json));
+  const lcNowhere = await req("POST", "/api/settings", { token: LC, body: { priority_locations: " , " } });
+  check("but not the ranked list too - a list of bare commas is empty - naming the searched list",
+    lcNowhere.status === 400 && lcNowhere.json?.field === "search_locations" &&
+    (await lcSettings(LC)).priority_locations === "Seattle, Portland OR, Raleigh NC", JSON.stringify(lcNowhere.json));
+  check("nor both in one save",
+    (await req("POST", "/api/settings", { token: LC, body: { search_locations: "", priority_locations: "" } })).status === 400);
+  check("the ranked list can be cleared while a place is searched",
+    (await req("POST", "/api/settings", { token: LC, body: { search_locations: "US", priority_locations: "" } })).status === 200 &&
+    (await lcSettings(LC)).search_locations === "US" && (await lcSettings(LC)).priority_locations === "");
+  const LC_C = await lcUser("c");
+  check("a save that leaves both lists alone isn't held up by them",
+    (await req("POST", "/api/settings", { token: LC_C, body: { location_note: "anywhere with a good team" } })).status === 200);
+  await req("POST", "/api/settings", { token: LC, body: {
+    search_locations: "US, Greater Seattle area , Australia", priority_locations: "Seattle, Portland OR, Raleigh NC" } });
 
   const lcConfig = await req("POST", "/api/config", { token: LC, body: { priority_locations: " Boston " } });
   check("an operator can set them through the config too",
