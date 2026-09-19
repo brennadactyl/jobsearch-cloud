@@ -25,8 +25,9 @@ person had ruled out; that class of mistake exists because scope is prose.
 ## The three lists
 
 All three are typed as comma-separated lists and each is stored as one setting - one `meta`
-value per list, holding the list as the person typed it. No migration: `meta`
-is key/value.
+value per list, holding the list as the person typed it. The two new keys need
+no migration (`meta` is key/value); converting the stored `priority_locations`
+rule arrays does - see Existing searches.
 
 | Setting | Asked as | Stored as |
 |---|---|---|
@@ -48,14 +49,14 @@ is key/value.
 - **Entries are split on commas and trimmed** when saved, so the stored value
   is tidy and the read-back matches it. An entry of three letters or fewer that
   isn't a known country or state code is flagged, as the ranked list does.
-- **An optional note** keeps what a list can't say - "open to relocating for
+- **An optional note, `location_note`,** keeps what a list can't say - "open to relocating for
   the right team" - and reaches the prompt as context.
 
 ## One matcher
 
 The rules are built by one module in the page, used to turn typed places into
-rules, read them back, and rank leads into tiers. The server only validates
-the rules' shape.
+rules, read them back, and rank leads into tiers. The server stores and validates
+text only.
 
 ## Rules the prompt states for every search
 
@@ -77,6 +78,16 @@ them:
 - **General rules every search shares** - hybrid or on-site in a place not
   searched is out, and no relocation is assumed - are stated here once. The
   person's note carries only what is personal to them.
+
+## Where they are written
+
+- **The account panel** through `POST /api/settings`, **setup** through the
+  intake, and **an operator** through `POST /api/config`. `POST /api/writeup`
+  never writes them: the overnight run doesn't own them.
+- **Limits:** each list at most 50 entries of up to 80 characters, the note at
+  most 1,000 characters, since the prompt carries them verbatim. The short-token
+  warning is the page's alone, so the list of known state and country codes has
+  one copy.
 
 ## The prompt reads the database
 
@@ -100,6 +111,11 @@ rewrite.
 
 ## Existing searches
 
+**The ranked places convert by migration:** one pass turning each stored rule
+array into its labels in order, verified against a copy of real data first.
+The other two lists come from drafts the operator approves, written through the
+API.
+
 Each draft also lists anything in that account's current prose that neither its
 lists nor the fixed rules cover, so nothing is dropped silently.
 
@@ -109,6 +125,12 @@ draft of its three lists is made from its current prose and shown to the
 account's operator before it is written - it's a person's search geography, and
 a wrong conversion would silently narrow or widen it. Then the prose fields are
 cleared and the tier tables removed from the docs.
+
+## Releasing
+
+The server starts serving `priority_locations` as a string, which the live page
+can't read. So the server and the page deploy in one sitting, server a few
+minutes ahead, with no invite sent in between.
 
 ## Order of work
 
