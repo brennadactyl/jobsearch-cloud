@@ -377,6 +377,9 @@ Per-user key/value rows. The keys in use:
   `priority_locations` and `location_note` — text, each stored as the person
   typed it, trimmed at the ends; the three lists are comma-separated, and
   `priority_locations` is in ranked order
+- `priority_rules` — a JSON array of ranking rules kept for an account whose
+  tiers its labels alone don't rebuild; the page ranks by it until the person
+  saves a different `priority_locations`, which drops it
 - `excluded_companies` — a JSON array
 - search prompt prose: `geo_scope_line`, `scope_clause`, `scope_disqualifier`,
   `location_guidance`, `footer_note`, `pronouns`
