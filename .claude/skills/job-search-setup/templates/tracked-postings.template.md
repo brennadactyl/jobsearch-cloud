@@ -56,7 +56,7 @@ in step 9d, where every search reads them.
 
 ## Scope rules (apply on every run)
 
-Where this search may look is step 5 of the daily prompt, from the places this person listed in their settings, and how a lead's `location` is written so the page can rank it is step 6. Neither is restated here, so they can't disagree.
+Where this search may look is step 5 of the daily prompt, from the places this person listed in their settings. How a lead's `location` is written is step 6, and which of the ranked places it falls in is its `area` in step 9. None of it is restated here, so they can't disagree.
 
 Out-of-scope candidates get recorded via `./tracker screened` (step 6b above), not a list here.
 
