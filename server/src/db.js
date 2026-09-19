@@ -1737,6 +1737,48 @@ export class Db {
     return this.getApplication(id);
   }
 
+  /**
+   * Store areas on this user's leads and applications that have none yet
+   * (routes/admin.js handleFillAreas). A row that already has an area keeps it,
+   * since a run filed it knowing the posting; so does a row that isn't this
+   * user's, which matches nothing. One batch, so a fill lands whole.
+   *
+   * @param {Array<{id: number, area: string}>} leads areas already checked against the ranked list
+   * @param {Array<{id: number, area: string}>} applications the same, for applications
+   * @param {boolean} dryRun count what would be set, write nothing
+   * @returns {Promise<{leads: {set: number, skipped: number}, applications: {set: number, skipped: number}}>}
+   */
+  async fillAreas(leads, applications, dryRun) {
+    const count = async (table, rows) => {
+      if (!rows.length) return 0;
+      let n = 0;
+      for (let i = 0; i < rows.length; i += ID_CHUNK) {
+        const ids = rows.slice(i, i + ID_CHUNK).map((r) => r.id);
+        const row = await this.d1
+          .prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ? AND area = '' AND id IN (${ids.map(() => "?").join(",")})`)
+          .bind(this.userId, ...ids)
+          .first();
+        n += row?.n || 0;
+      }
+      return n;
+    };
+    if (dryRun) {
+      const [l, a] = [await count("leads", leads), await count("applications", applications)];
+      return { leads: { set: l, skipped: leads.length - l }, applications: { set: a, skipped: applications.length - a } };
+    }
+    const update = (table) =>
+      this.d1.prepare(`UPDATE ${table} SET area = ? WHERE id = ? AND user_id = ? AND area = ''`);
+    const statements = [
+      ...leads.map((r) => update("leads").bind(r.area, r.id, this.userId)),
+      ...applications.map((r) => update("applications").bind(r.area, r.id, this.userId)),
+    ];
+    if (!statements.length) return { leads: { set: 0, skipped: 0 }, applications: { set: 0, skipped: 0 } };
+    const results = await this.d1.batch(statements);
+    const set = (from, to) => results.slice(from, to).reduce((n, r) => n + (r.meta.changes || 0), 0);
+    const l = set(0, leads.length), a = set(leads.length, statements.length);
+    return { leads: { set: l, skipped: leads.length - l }, applications: { set: a, skipped: applications.length - a } };
+  }
+
   // ------------------------------------------------------- composite --
 
   /**
