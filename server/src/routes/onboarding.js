@@ -196,15 +196,13 @@ function tracksFromRoles(roles) {
 }
 
 /**
- * Whether the places someone ranked first are anywhere they said they can work.
+ * Whether someone said where to search (`work_scope`), checked while they are
+ * still on the form (docs/onboarding.md#why-it-is-split-this-way).
  *
- * Checked here rather than left to the overnight run, because the person is
- * still on the form and can fix it (docs/onboarding.md#why-it-is-split-this-way). Both answers
- * are free text against computed rules, so the test is deliberately loose: a
- * location counts as inside the scope when the scope mentions its label or one
- * of the terms the page derived from it, and the refusal only fires when not
- * one of them is mentioned. A scope the run has to interpret costs far less
- * than a refusal that stops someone who answered sensibly.
+ * It isn't compared with the places they ranked first. Where location answers
+ * disagree the place is included rather than the send refused
+ * (docs/location-settings-plan.md), so a scope that names none of them is
+ * nothing to stop someone for.
  *
  * @param {Record<string, unknown>} answers
  * @returns {{error: string, field: string}|null}
@@ -212,26 +210,9 @@ function tracksFromRoles(roles) {
 function scopeProblem(answers) {
   const scope = typeof answers.work_scope === "string" ? answers.work_scope.trim() : "";
   if (!scope) {
-    return { error: "say where you can work - the search needs somewhere to look", field: "work_scope" };
+    return { error: "say where to search - the search needs somewhere to look", field: "work_scope" };
   }
-  const rules = Array.isArray(answers.priority_locations) ? answers.priority_locations : [];
-  if (rules.length === 0) return null;
-
-  const haystack = scope.toLowerCase();
-  const terms = (rule) => [rule.label, ...(rule.allOf || []), ...(rule.anyOf || [])];
-  const inside = rules.filter((rule) =>
-    terms(rule).some((t) => typeof t === "string" && t.trim() && haystack.includes(t.trim().toLowerCase()))
-  );
-  if (inside.length > 0) return null;
-
-  const named = rules.map((r) => r.label).filter(Boolean).join(", ");
-  return {
-    error:
-      `you can work in "${scope}", but the places you'd like first are ${named} - ` +
-      "none of them is somewhere you said you can work, so nothing would be searched first. " +
-      "Widen where you can work, or rank places inside it",
-    field: "work_scope",
-  };
+  return null;
 }
 
 /**

@@ -72,11 +72,13 @@ answers 409 for such a track, and `setup-scheduler.ps1` registers no task for
 it until a run has written it up.
 
 **The scope check runs at send, not overnight.** `scopeProblem` refuses a send
-whose preferred locations are nowhere inside "where can you work", because the
-person is still on the form and can fix it. The test is loose - a location
-counts when the scope mentions its label or any term derived from it - since a
-scope the run has to interpret costs less than refusing someone who answered
-sensibly.
+with no answer to "where can you work", because the person is still on the form
+and can fix it. That is the only refusal: the places ranked first and that
+answer aren't compared. The ranked places order the leads on the page, and what
+a run searches comes from the scope prose the overnight write-up writes.
+[location-settings-plan.md](location-settings-plan.md) plans how location
+answers will drive the search, with a place included rather than excluded
+where the answers disagree.
 
 **Done and failed are read from the tracker, not from the model.** A person is
 `done` when the tracker has their written-up tracks and docs and the machine
