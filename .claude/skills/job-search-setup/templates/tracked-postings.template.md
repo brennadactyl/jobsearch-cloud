@@ -56,14 +56,7 @@ in step 9d, where every search reads them.
 
 ## Scope rules (apply on every run)
 
-Where this search may look is step 5 of the daily prompt, from this search's settings. It isn't restated here, so the two can't disagree.
-
-**Location strings drive priority - write them precisely.** The tracker classifies each row automatically from its `location` text (see `priority_locations` in the tracker's `/api/config` - this table must stay consistent with whatever was configured there); there is no priority field to set. Always include city and state (or region) where known, and use an explicit remote phrasing when a role is remote.
-
-| Tier | Matches | Shown as |
-|---|---|---|
-{{LOCATION_TIER_ROWS}}
-| Standard | any other{{SCOPE_ADJECTIVE}} location | no stripe |
+Where this search may look is step 5 of the daily prompt, from the places this person listed in their settings, and how a lead's `location` is written so the page can rank it is step 6. Neither is restated here, so they can't disagree.
 
 Out-of-scope candidates get recorded via `./tracker screened` (step 6b above), not a list here.
 

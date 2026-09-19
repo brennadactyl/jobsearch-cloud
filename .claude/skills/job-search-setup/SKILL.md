@@ -179,16 +179,15 @@ For each track, draft from the resume where you can, then confirm:
 
 Once per person:
 
-- **Geographic scope** - the hard filter on what's in scope ("US only", "no
-  restriction"). It becomes `geo_scope_line`, a full paragraph with worked
-  examples of what's excluded. Leave it empty for no restriction.
-- **Priority locations** - places in order of preference, the most wanted
-  first, that sort ahead of everywhere else within that scope ("Seattle,
-  Bellevue, remote in the US, Portland OR"). Any number works; the page gives
-  the first five their own colour and ranks the rest without one. They become
-  `priority_locations` (step 6) *and* every track doc's tier table (step 4);
-  keep the two in the same order, or runs write location text the page can't
-  rank.
+- **Where they'd work** - three lists and an optional note, each stored as
+  they type it (`docs/location-settings-plan.md`): `search_locations` (where
+  to search: "US, Greater Seattle area"), `priority_locations` (the places
+  wanted first, most wanted first: "Seattle, Portland OR"), and
+  `excluded_locations` (anywhere they can't take a job: "Texas"), plus
+  `location_note` for what a list can't say ("open to relocating for the right
+  team"). The prompt prints them as typed and states the fixed rules for how
+  they combine; a place wanted first is always searched. Leave all three empty
+  for no restriction. Nothing about location goes in a track's prose or doc.
 - **Display title** for the page ("Jordan's Job Search").
 - **Pronouns** - the `pronouns` setting the prompt uses when it writes about
   them. Ask; never infer from a name or resume. Empty keeps the prompt generic.
@@ -222,7 +221,8 @@ disagree, and nothing says which one a run follows. So each thing has one home:
 
 | What | Where |
 |---|---|
-| What screens a posting out - scope, fit caveats, a pay floor, a pivot's screening step | the config only: `geo_scope_line`, `scope_clause`, `scope_disqualifier`, `fit_clause`, `fit_disqualifier`, `fit_filter_step` |
+| What screens a posting out - fit caveats, a pay floor, a pivot's screening step | the track config only: `fit_clause`, `fit_disqualifier`, `fit_filter_step` |
+| Where the search looks | the person's settings only: `search_locations`, `priority_locations`, `excluded_locations`, `location_note` |
 | What the resume says - level, roles, skills, the case for a stretch, the gaps | the doc's `## Candidate Profile`, and nothing else there. A resume change rewrites this whole section, so anything else in it is lost |
 | What the person wants - kinds of employer, preferences, why a role appeals | the doc's `## What this search is looking for`. A resume change leaves it alone |
 | How to reach a company - a board, an endpoint, a wall | the shared company list, never the doc (`../add-target-company/SKILL.md`) |
@@ -242,11 +242,10 @@ reaches the live doc):
 | `{{SIBLING_DOCS_NOTE}}` | A sentence pointing at this person's other track docs and saying not to merge them, or empty for their first track. A `fed_by` tab has no doc of its own. |
 | `{{TRACK_KEY}}` | The track key. It appears in the API paths the doc quotes. |
 | `{{ROLE_SEARCH_LINE}}` | The same text as the track's `role_search_line`. |
-| `{{SCOPE_ADJECTIVE}}` | Fills "any other{{SCOPE_ADJECTIVE}} location" - `" US"` for a US-only search (note the leading space), empty with no scope. |
 | `{{CANDIDATE_PROFILE_PARAGRAPH}}` | The profile paragraph from step 2, as agreed. |
 | `{{BEST_FIT_SENTENCE}}` | The best-fit sentence from step 2. |
 | `{{LOOKING_FOR_PARAGRAPH}}` | What they want from this search that isn't on the resume: the kinds of employer they favour (guidance for discovery, never a list to sweep) and any preference to weigh. Empty-handed, write that they named none. |
-| `{{LOCATION_TIER_ROWS}}` | One table row per priority tier, in the same order as `priority_locations`: `\| Top \| Seattle, Bellevue - or remote in scope \| "Seattle area" tag, sorted first \|`. |
+
 
 **If this search also fills a `fed_by` tab**, the fed tab shares this doc. Add
 to it which tabs the search fills, that a posting tracked under either key isn't
@@ -296,16 +295,13 @@ finished sentence the search should read:
   one CLI. Empty for a `fed_by` tab.
 - `fed_by` - only for a second tab on a sibling's search (step 3).
 
-Once per person, the settings: `geo_scope_line`, `scope_clause`,
-`scope_disqualifier`, `location_guidance`, `footer_note`, `pronouns` - also
-verbatim prose. Write `geo_scope_line` and `location_guidance` as paragraphs
-with worked examples ("a role only in London or Bangalore is excluded";
-`"Remote (U.S.)"` vs `"USA - Remote"`): the examples are what make them filter.
+Once per person, the settings: the three location lists and `location_note`
+(step 3), `footer_note` and `pronouns`. The lists are stored exactly as typed.
 
 ### 5. Confirm with the installer
 
 Show the doc and the config (a summary if long) before step 6 - a wrong role
-line or tier is cheaper to fix now than once runs use it.
+line or place is cheaper to fix now than once runs use it.
 
 After step 6, fetch the composed prompt and show that too:
 
@@ -315,7 +311,7 @@ curl -s "$TRACKER_URL/api/prompt/<key>" -H "Authorization: Bearer $TOKEN"
 
 It is the exact text the search runs each morning. Read each step to its end -
 qualifying clauses come last - for step 2 naming no resume, a fit
-filter harsher than meant, or a geo scope that says nothing.
+filter harsher than meant, or a step 5 that lists places they didn't mean.
 
 ### 6. Push config to the tracker API
 
@@ -336,27 +332,15 @@ POST the whole list back. Settings you leave out keep their stored values:
 ```bash
 curl -s -X POST "$TRACKER_URL/api/config" -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"tracks":[...the merged list...],"display_title":"...","priority_locations":[...]}'
+  -d '{"tracks":[...the merged list...],"display_title":"...","search_locations":"...","priority_locations":"..."}'
 ```
 
 In the same call, as this run sets them:
 
-- `priority_locations` - an ordered list of `{label, anyOf: [substrings],
-  allOf?: [substrings]}`, one rule per place, most wanted first. The page tries
-  rules in order against the lowercased location, and the first whose `anyOf`
-  (any one substring) and `allOf` (every substring) match wins; its position
-  is the rank. A `tier` field is accepted and ignored.
-
-  Write the substrings the way postings spell locations, because a run copies
-  the posting's own location text. Postings write remote-in-the-US as
-  "Remote (U.S.)", "USA - Remote" or "Remote-Friendly, United States", so a rule
-  for it is `allOf: ["remote"]` with `anyOf: ["u.s.", "usa", "united states"]`,
-  while the literal "remote us" matches almost none of them. **Never use a
-  bare substring of three letters or fewer** ("us", "ca", "or", "wa"): "us"
-  matches inside "Austin" and "ca" inside "Chicago". A city is `anyOf: [its name]`.
-  A city whose name is shared (Portland, Vancouver, Cambridge) puts the name in
-  `allOf` and its state or province spellings in `anyOf`:
-  `allOf: ["portland"]`, `anyOf: ["oregon", ", or"]`.
+- `search_locations`, `priority_locations`, `excluded_locations`,
+  `location_note` - each one string, as they typed it (step 3). The page builds
+  its tier colours from `priority_locations` itself; there are no rules to
+  write.
 - `excluded_companies` - companies this person won't work for: names, or a
   phrase like "any other company X owns". The prompt turns it into one
   never-search sentence.
@@ -450,10 +434,7 @@ The answers map onto the config like this:
 
 | Answer | Becomes |
 |---|---|
-| `page_title`, `pronouns`, `priority_locations` | `display_title`, `settings.pronouns`, `priority_locations` - already written when the form was sent, not by you |
-| `work_scope` ("What locations should be searched?") | `geo_scope_line` (a paragraph with worked examples) and `scope_clause` - the only answer that sets where a search may look |
-| `location_limits` ("Anywhere you can't take a job?") | `scope_disqualifier` only. An exclusion never becomes the scope: a search scoped to the one place someone ruled out screens out everything it finds and reports a quiet night |
-| the two together | checked by the script before anything is posted: the scope prose must name a place from `work_scope`, `scope_disqualifier` must name a place from `location_limits`, and `scope_clause` must not name a place that appears only in `location_limits` (except a ranked place, which the script writes into every scope field as always in scope). Any miss fails the setup. The server doesn't refuse a send whose ranked places lie outside `work_scope` |
+| `page_title`, `pronouns`, and the location lists and note | `display_title`, `settings.pronouns`, `search_locations`, `priority_locations`, `excluded_locations`, `location_note` - already written when the form was sent, not by you. Where a search looks is never yours to write: no location goes in the track prose or the doc |
 | each role's `name` | the track `label`, and a slug `key` |
 | each role's `titles` | `role_search_line` and `full_description` |
 | each role's `company_kinds` | the track doc's `## What this search is looking for`, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
