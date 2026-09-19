@@ -35,8 +35,11 @@ the server - and live in the account's settings:
 | `acceptable_locations` | Where else would you take a job? | unranked; one tier below the last preferred place |
 | `excluded_locations` | Anywhere you can't take a job? | unranked; a rule-out inside the other two |
 
-- **The scope is computed, never written:** preferred plus acceptable, minus
-  excluded.
+- **The scope is computed, never written:** the preferred places, plus the
+  acceptable places minus the excluded ones. **When answers conflict, including
+  wins:** a preferred place is always in scope, even if an exclusion or a narrower
+  answer would rule it out, because naming a place as a favourite is the
+  stronger statement. The conflict is shown to the person, not refused.
 - **The matcher knows broad places too:** a country ("US"), a state ("Colorado"),
   "Remote" with a country, and a city with its state when the name is shared. It
   never reduces an entry to a bare token of three letters or fewer.
