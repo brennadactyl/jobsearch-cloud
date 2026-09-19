@@ -158,15 +158,25 @@ const rankedPlaces = z
  * freshly created database has posted no config and must still render a usable
  * page - the same reason the server defaults them.
  */
-export const settingsSchema = z.object({
-  display_title: z.string().default("Job Search Tracker"),
-  overview_label: z.string().default("Overview"),
-  applications_label: z.string().default("Applications"),
-  all_leads_label: z.string().default("All leads"),
-  stale_run_hours: z.number().default(DEFAULT_STALE_RUN_HOURS),
-  priority_locations: rankedPlaces,
-  excluded_companies: z.array(z.string()).default([]),
-});
+export const settingsSchema = z
+  .object({
+    display_title: z.string().default("Job Search Tracker"),
+    overview_label: z.string().default("Overview"),
+    applications_label: z.string().default("Applications"),
+    all_leads_label: z.string().default("All leads"),
+    stale_run_hours: z.number().default(DEFAULT_STALE_RUN_HOURS),
+    priority_locations: rankedPlaces,
+    /**
+     * Tier rules kept as they were stored before ranked places became a typed
+     * list. A rule's terms can say more than its label ("Seattle area" also
+     * matching Bellevue and Redmond), and a label alone can't rebuild them, so
+     * while an account has these they decide its tiers. Editing the ranked list
+     * clears them on the server, and from then on the typed list rules.
+     */
+    priority_rules: z.array(priorityLocationSchema).nullish().transform((v) => v ?? []),
+    excluded_companies: z.array(z.string()).default([]),
+  })
+  .transform((s) => (s.priority_rules.length ? { ...s, priority_locations: s.priority_rules } : s));
 
 export const userSchema = z.object({
   id: z.string(),
