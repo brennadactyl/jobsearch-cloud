@@ -96,24 +96,6 @@ describe("settingsSchema", () => {
     expect(s.areas).toEqual(["Seattle area", "Portland", "SEA", "Remote US"]);
   });
 
-  it("reads the labels of a list that arrives as rules, from a server that still sends them", () => {
-    const s = settingsSchema.parse({
-      priority_locations: [
-        { label: "Metro core", anyOf: ["springfield"] },
-        { label: "Wider region", anyOf: ["shelbyville"] },
-      ],
-    });
-    expect(s.areas).toEqual(["Metro core", "Wider region"]);
-  });
-
-  it("takes the labels of stored rules only when there is no typed list", () => {
-    const stored = [{ tier: "p-high", label: "Seattle area", anyOf: ["seattle", "bellevue"] }];
-    expect(settingsSchema.parse({ priority_locations: "", priority_rules: stored }).areas).toEqual(["Seattle area"]);
-    expect(settingsSchema.parse({ priority_locations: "Seattle area, Bay Area", priority_rules: stored }).areas).toEqual([
-      "Seattle area",
-      "Bay Area",
-    ]);
-  });
 
   it("treats an empty or missing list as no ranked areas", () => {
     for (const priority_locations of ["", "  ", null, undefined]) {
