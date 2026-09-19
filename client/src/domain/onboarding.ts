@@ -100,7 +100,7 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
   // scope would fall back to whatever else mentions a place - an exclusion
   // among them - and the search would look in the one place ruled out.
   if (!answers.work_scope.trim()) {
-    found.work_scope = "Say where you can work — it's what the search searches.";
+    found.work_scope = "Say what locations should be searched — the search needs somewhere to look.";
   }
   const entries = parseLocations(answers.locations_first);
   const tooMany = tooManyLocations(entries);
