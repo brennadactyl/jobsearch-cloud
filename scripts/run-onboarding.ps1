@@ -418,6 +418,31 @@ function Test-MentionsAny([string]$haystack, [string[]]$words) {
     return $false
 }
 
+# "A", "A or B", "A, B or C".
+function Join-Or([string[]]$items) {
+    if ($items.Count -le 1) { return ($items -join "") }
+    return (($items[0..($items.Count - 2)]) -join ", ") + " or " + $items[-1]
+}
+
+# The places someone ranked first are in scope whatever else their answers say,
+# so this run - not the model - writes them into all three scope fields. A
+# model reading two answers that disagree can drop a place; appending it here
+# can't. `where they can work` may already name one: saying it twice costs a
+# few words, leaving it out costs every posting there.
+function Add-PreferredPlaces($settings, [string[]]$places) {
+    $out = @{}
+    foreach ($field in $MODEL_SETTING_FIELDS) { $out[$field] = ([string]$settings.$field).Trim() }
+    if ($places.Count -eq 0) { return $out }
+    $list = Join-Or $places
+    $out.geo_scope_line = ("$($out.geo_scope_line) Also in scope, whatever the rest of this says: " +
+        "any posting in $list - on-site, hybrid or remote - since these are the places they asked to see first.").Trim()
+    $out.scope_clause = if ($out.scope_clause) { "$($out.scope_clause), or in $list" } else { "in $list" }
+    if ($out.scope_disqualifier) {
+        $out.scope_disqualifier = "$($out.scope_disqualifier) - except a posting in $list, which is always in scope"
+    }
+    return $out
+}
+
 # ---- Build each person. ----------------------------------------------------
 $built = @()
 $exitCode = 0
@@ -484,8 +509,15 @@ foreach ($item in $queue) {
         # (docs/onboarding.md#why-it-is-split-this-way). The keys are the account's, never the
         # model's to invent: a key this run made up would leave the tab the
         # person is looking at empty forever.
-        $liveTracks = @((Api GET "/api/config" $personToken $null).tracks |
+        $personConfig = Api GET "/api/config" $personToken $null
+        $liveTracks = @($personConfig.tracks |
             Where-Object { -not $_.fed_by } | Sort-Object sort_order)
+        # The places they ranked first on the form. When their answers about
+        # where they can work disagree, the place is included rather than
+        # excluded: someone who ranks Portland first wants Portland searched,
+        # whatever else they wrote. See Add-PreferredPlaces.
+        $preferred = @($personConfig.settings.priority_locations | Where-Object { $_ -and $_.label } |
+            ForEach-Object { ([string]$_.label).Trim() } | Where-Object { $_ })
         if ($liveTracks.Count -eq 0) {
             Stop-Person "their account has no tracks to write up" $null
         }
@@ -662,6 +694,12 @@ Rules for this run:
   and never let an exclusion narrow the scope to itself - a search scoped to
   the one state they can't work in screens out everything it finds, all night,
   and reports a quiet night.
+- **The places they ranked first are always in scope.** When their answers
+  disagree about a place, include it rather than exclude it. A place in
+  `priority_locations` is searched even if "Where can you work?" leaves it out
+  or "Anywhere you can't take a job?" names it - so never write one into
+  scope_disqualifier. This script adds every ranked place to the scope fields
+  itself after you write them; write the rest as if it will.
 - No search keeps a company list. The kinds of employer they like go in the
   track doc's `## What this search is looking for`, as guidance for discovery; a company they
   named goes in named_companies, which the script puts on the shared list
@@ -757,7 +795,11 @@ Rules for this run:
         # scope prose is checked against the answer it was supposed to come
         # from, before any of it is posted.
         $scopeWords = Get-PlaceWords $scopeAnswer
-        $limitWords = Get-PlaceWords $limitsAnswer
+        # A place they ranked first is never an exclusion, even when their
+        # "can't take a job" answer names it, so it neither has to reach the
+        # disqualifier nor counts as one inverted into the scope.
+        $preferredWords = Get-PlaceWords ($preferred -join " ")
+        $limitWords = @(Get-PlaceWords $limitsAnswer | Where-Object { $preferredWords -notcontains $_ })
         $scopeProse = "$([string]$draft.settings.geo_scope_line) $([string]$draft.settings.scope_clause)"
         if ($scopeWords.Count -gt 0 -and -not (Test-MentionsAny $scopeProse $scopeWords)) {
             Stop-Person "the scope came back naming none of the places in their work_scope answer" $null
@@ -831,8 +873,8 @@ Rules for this run:
         # Their scope wording travels with the first write-up call: it is
         # per-account rather than per-track, and sending it beside a track's
         # prose keeps a search from being half described if a later call fails.
-        $scopeBody = @{}
-        foreach ($field in $MODEL_SETTING_FIELDS) { $scopeBody[$field] = [string]$draft.settings.$field }
+        $scopeBody = Add-PreferredPlaces $draft.settings $preferred
+        if ($preferred.Count -gt 0) { Log "      scope includes their ranked places: $($preferred -join ', ')" }
 
         $first = $true
         foreach ($t in $tracks) {
