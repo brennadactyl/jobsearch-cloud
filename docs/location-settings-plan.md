@@ -53,19 +53,32 @@ rule arrays does - see Existing searches.
   the ends, and the prompt interprets it - including "Portland, OR", "WA" or
   "Greater Seattle area". The page's read-back only shows how the commas split
   each list, and the ranked list's order and tier colour.
-- **Tier colours stay best-effort.** The page matches ranked places against
-  each lead's location as it does today, loosely and with no refusals; an entry
-  it can't read gives no colour rather than a warning.
+- **Tier colours come from each lead's area** (below), not from matching text.
 - **An optional note, `location_note`,** keeps what a list can't say - "open to relocating for
   the right team" - and reaches the prompt as context.
 
-## A ranked place can name its towns
+## Each lead carries its area
 
-A ranked entry may list, in brackets, the places it stands for: `Seattle area
-(Seattle, Bellevue, Redmond, Kirkland), Portland OR, Remote US`. It is one tier
-and one colour, matching any of the bracketed places. Commas inside brackets
-list a tier's places; commas outside separate tiers. The prompt prints the
-entry as typed, and the page's read-back shows the tier with its places.
+The person types areas - "Seattle area, Portland OR, Raleigh NC, Remote US" - and
+the nightly search decides which one a posting belongs to. A lead keeps its real
+location ("Kirkland, WA") and gains an **area**: the ranked entry it falls in,
+exactly as typed ("Seattle area"), or empty.
+
+- **The search picks it** when it files the lead, since it already judges
+  whether the location fits. The prompt hands it the ranked list and asks for
+  one entry or none.
+- **Code checks it.** The tracker helper and the leads route accept an area only
+  when it exactly matches an entry in the person's ranked list, and store it
+  empty otherwise, so a near-miss like "Seattle" can't pass for "Seattle area".
+- **The page tiers by the lead's area**, its rank being that entry's position
+  in the list. No town matching. A lead with no area has no tier.
+- **Applications** made from a lead carry its area. One added by hand gets an
+  area from the overnight fill run, checked the same way, or none.
+- **Renaming or removing a ranked entry** leaves the leads filed under the old
+  name without a tier until a run re-files them; the page shows those as
+  untiered, not wrongly coloured.
+- A new field a run reports crosses three layers in one change: the column and
+  route, `tracker.ps1`'s forwarding, and the prompt step.
 
 ## Restoring the tiers the migration lost
 
@@ -75,12 +88,12 @@ their tier colour. Two steps put it right:
 
 1. **Now:** each affected account's original rules are restored from the
    pre-migration backup as `priority_rules`, and the page tiers by those when
-   present. Saving the ranked places in My account clears them.
-2. **Then:** each account's `priority_rules` are rewritten as a typed list
-   using brackets - a label that rebuilds the same matches stays bare, and one
-   that doesn't gets its terms in brackets. A probe with the page's own matcher
-   confirms every lead location lands in the same tier before and after; only
-   then is `priority_rules` cleared, account by account.
+   present.
+2. **Then:** once leads carry areas, a one-time fill gives every existing lead
+   and application its area by running the page's matcher with those restored
+   rules, checked so every location lands in the same tier before and after.
+   Then `priority_rules` is cleared, account by account, and the page tiers
+   only by area.
 
 ## One matcher
 
