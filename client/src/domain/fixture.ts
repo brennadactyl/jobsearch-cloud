@@ -52,6 +52,7 @@ export const settings: Settings = {
     { label: "Metro core", anyOf: ["springfield", "remote"] },
     { label: "Wider region", anyOf: ["shelbyville"] },
   ],
+  priority_rules: [],
   excluded_companies: [],
 };
 

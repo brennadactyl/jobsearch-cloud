@@ -5,6 +5,7 @@
  * cannot make sense of.
  */
 import { describe, expect, it } from "vitest";
+import { matchLocationTier } from "../domain/geo";
 import { dataSchema, loginSchema, settingsSchema } from "./schema";
 
 /** The minimum a freshly created database returns: no config posted, nothing found yet. */
@@ -117,6 +118,33 @@ describe("settingsSchema", () => {
   it("treats an empty or missing list as no ranked places", () => {
     for (const priority_locations of ["", "  ", null, undefined]) {
       expect(settingsSchema.parse({ priority_locations }).priority_locations).toEqual([]);
+    }
+  });
+
+  it("tiers by the stored rules while an account has them, so a migrated list keeps every term it had", () => {
+    // The demo's rules before its list became text: "Seattle area" meant four cities.
+    const stored = [
+      { label: "Seattle area", anyOf: ["seattle", "bellevue", "redmond", "kirkland"] },
+      { label: "Portland", anyOf: ["portland"] },
+    ];
+    const s = settingsSchema.parse({ priority_locations: "Seattle area, Portland", priority_rules: stored });
+    expect(s.priority_locations).toEqual(stored);
+    expect(matchLocationTier("Bellevue, WA", s.priority_locations)?.label).toBe("Seattle area");
+    expect(matchLocationTier("Portland, OR", s.priority_locations)?.rank).toBe(1);
+  });
+
+  it("reads stored rules that carry fields the page doesn't use, as hand-set rules do", () => {
+    const s = settingsSchema.parse({
+      priority_locations: "Seattle area",
+      priority_rules: [{ tier: "p-high", label: "Seattle area", anyOf: ["seattle", "bellevue"] }],
+    });
+    expect(matchLocationTier("Bellevue, WA", s.priority_locations)?.label).toBe("Seattle area");
+  });
+
+  it("builds from the typed list when there are no stored rules", () => {
+    for (const priority_rules of [[], null, undefined]) {
+      const s = settingsSchema.parse({ priority_locations: "Seattle, Remote US", priority_rules });
+      expect(s.priority_locations.map((r) => r.label)).toEqual(["Seattle", "Remote US"]);
     }
   });
 
