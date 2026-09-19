@@ -3305,70 +3305,22 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
 
 
 {
-  console.log("\n== a migrated account's ranking rules, until the person types their own ==");
-  // The stand-in rules (docs/location-settings-plan.md): an operator restores
-  // the rules an account had, and the first different ranked list the person
-  // saves drops them.
+  console.log("\n== ranking reads only the person's list ==");
+  // Tiers come from priority_locations and each row's area; no rules setting
+  // sits beside the list (docs/location-settings-plan.md).
   const prRun = Date.now();
-  const prUser = async (tag) => {
-    const name = `Rules ${tag} ${prRun}`;
-    await req("POST", "/api/users", { admin: true, body: { name, password: `rules-${tag}-long-password` } });
-    const token = (await req("POST", "/api/login", { body: { name, password: `rules-${tag}-long-password` } })).json.token;
-    await req("POST", "/api/config", { token, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
-    return token;
-  };
-  const PR = await prUser("a"), PR_B = await prUser("b");
-  const prSettings = async (token) => (await req("GET", "/api/config", { token })).json?.settings || {};
-  const kept = [
-    { label: "Seattle area", anyOf: ["seattle", "bellevue", "redmond", "kirkland"] },
-    { label: "Remote US", allOf: ["remote"] },
-  ];
-
-  check("an account with no stand-in rules reads them as an empty list",
-    JSON.stringify((await prSettings(PR)).priority_rules) === "[]");
-  const prRestore = await req("POST", "/api/config", { token: PR, body: {
-    priority_locations: "Seattle area, Remote US", priority_rules: kept } });
-  const restored = await prSettings(PR);
-  check("an operator restores an account's rules alongside its list",
-    prRestore.status === 200 && JSON.stringify(restored.priority_rules) === JSON.stringify(kept) &&
-    restored.priority_locations === "Seattle area, Remote US", JSON.stringify(restored.priority_rules));
-  check("and /api/data serves them to the page",
-    JSON.stringify((await req("GET", "/api/data", { token: PR })).json?.settings?.priority_rules) === JSON.stringify(kept));
-
-  // Rules set up by hand carry more than the page reads - a `tier`, long term
-  // lists - and are restored exactly as stored.
-  const handSet = [{ tier: "high", label: "Seattle area", anyOf: Array.from({ length: 30 }, (_, i) => `town ${i}`) }];
-  check("rules as they were set up by hand are accepted as stored, extra fields included",
-    (await req("POST", "/api/config", { token: PR_B, body: { priority_rules: handSet } })).status === 200 &&
-    JSON.stringify((await prSettings(PR_B)).priority_rules) === JSON.stringify(handSet));
-  for (const [why, rules] of [
-    ["something other than a list", "Seattle"],
-    ["a rule without a label", [{ anyOf: ["seattle"] }]],
-    ["terms that aren't text", [{ label: "Seattle", anyOf: [42] }]],
-    ["more than fifty rules", Array.from({ length: 51 }, (_, i) => ({ label: `L${i}`, anyOf: ["x"] }))],
-  ]) {
-    const res = await req("POST", "/api/config", { token: PR, body: { priority_rules: rules } });
-    check(`stand-in rules are refused: ${why}`, res.status === 400 && res.json?.field === "priority_rules", JSON.stringify(res.json));
-  }
-  check("the person's own route can't write them",
-    (await req("POST", "/api/settings", { token: PR, body: { priority_rules: kept } })).json?.field === "priority_rules");
-
-  await req("POST", "/api/settings", { token: PR, body: { priority_locations: " Seattle area, Remote US ", location_note: "a note" } });
-  check("saving the same ranked list again keeps them - a save of another field isn't an edit of the list",
-    JSON.stringify((await prSettings(PR)).priority_rules) === JSON.stringify(kept));
-
-  await req("POST", "/api/settings", { token: PR, body: { priority_locations: "Seattle, Bellevue, Remote US" } });
-  const edited = await prSettings(PR);
-  check("the first different list the person saves drops them, so their list rules",
-    JSON.stringify(edited.priority_rules) === "[]" && edited.priority_locations === "Seattle, Bellevue, Remote US",
-    JSON.stringify(edited.priority_rules));
-
-  await req("POST", "/api/config", { token: PR_B, body: { priority_locations: "Boston", priority_rules: [{ label: "Boston", anyOf: ["boston"] }] } });
-  await req("POST", "/api/config", { token: PR_B, body: { priority_locations: "Austin" } });
-  check("an operator's different list drops them too, unless it sets them",
-    JSON.stringify((await prSettings(PR_B)).priority_rules) === "[]");
-  check("another account's rules are its own",
-    JSON.stringify((await prSettings(PR)).priority_rules) === "[]" && (await prSettings(PR_B)).priority_locations === "Austin");
+  const name = `Rules ${prRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: "rules-a-long-password" } });
+  const PR = (await req("POST", "/api/login", { body: { name, password: "rules-a-long-password" } })).json.token;
+  await req("POST", "/api/config", { token: PR, body: { tracks: [{ key: "SWE", label: "SWE" }], priority_locations: "Seattle area",
+    priority_rules: [{ label: "Seattle area", anyOf: ["seattle"] }] } });
+  const settings = (await req("GET", "/api/config", { token: PR })).json?.settings || {};
+  check("config serves no ranking rules, and a sent rules list isn't stored",
+    !("priority_rules" in settings) && settings.priority_locations === "Seattle area", JSON.stringify(Object.keys(settings)));
+  check("the person's own route refuses them",
+    (await req("POST", "/api/settings", { token: PR, body: { priority_rules: [] } })).json?.field === "priority_rules");
+  check("the area fill route is gone",
+    (await req("POST", "/api/areas/fill", { token: PR, body: { user: name, leads: [] } })).status === 404);
 }
 
 
@@ -3439,53 +3391,6 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     JSON.stringify(arOther.json));
   check("a person can't set a lead's area by hand",
     (await req("POST", "/api/update", { token: AR, body: { type: "lead", id: exactId, area: "Remote US" } })).json?.lead?.area !== "Remote US");
-}
-
-
-{
-  console.log("\n== filling areas on rows filed before areas existed ==");
-  // The one-time fill (docs/location-settings-plan.md): an operator stores an
-  // area on an account's existing rows, checked like every other area, only
-  // where a row has none.
-  const flRun = Date.now();
-  const flUser = async (tag, ranked) => {
-    const name = `Fill ${tag} ${flRun}`;
-    await req("POST", "/api/users", { admin: true, body: { name, password: `fill-${tag}-long-password` } });
-    const token = (await req("POST", "/api/login", { body: { name, password: `fill-${tag}-long-password` } })).json.token;
-    await req("POST", "/api/config", { token, body: { tracks: [{ key: "SWE", label: "SWE" }], priority_locations: ranked } });
-    return { name, token };
-  };
-  const FL = await flUser("a", "Seattle area, Remote US"), FL_B = await flUser("b", "Seattle area");
-  const flUrl = (n) => `https://example.com/fill/${flRun.toString(36)}/${n}`;
-  const flLead = (n, area) => ({ search: "SWE", company: "Acme", title: `Role ${n}`, location: "Kirkland, WA", url: flUrl(n), ...(area ? { area } : {}) });
-  await req("POST", "/api/leads", { token: FL.token, body: { leads: [flLead("old"), flLead("filed", "Remote US"), flLead("other")] } });
-  await req("POST", "/api/leads", { token: FL_B.token, body: { leads: [flLead("theirs")] } });
-  const flData = async (who) => (await req("GET", "/api/data", { token: who.token })).json;
-  const idOf = async (who, n) => (await flData(who)).leads.find((l) => l.url === flUrl(n)).id;
-  const [oldId, filedId, otherId, theirsId] = [await idOf(FL, "old"), await idOf(FL, "filed"), await idOf(FL, "other"), await idOf(FL_B, "theirs")];
-  const app = (await req("POST", "/api/update", { token: FL.token, body: { type: "application", link: flUrl("app") } })).json.application;
-  const fill = (body) => req("POST", "/api/areas/fill", { admin: true, body: { user: FL.name, ...body } });
-  const flBody = { leads: [{ id: oldId, area: "seattle area" }, { id: filedId, area: "Seattle area" }, { id: otherId, area: "Seattle" }, { id: theirsId, area: "Seattle area" }],
-    applications: [{ id: app.id, area: "Remote US" }] };
-
-  check("the fill needs the admin token",
-    (await req("POST", "/api/areas/fill", { token: FL.token, body: { user: FL.name, ...flBody } })).status === 401);
-  const flDry = await fill({ ...flBody, dryRun: true });
-  check("a dry run counts what it would set and writes nothing",
-    flDry.status === 200 && flDry.json?.leads?.set === 1 && flDry.json?.applications?.set === 1 && flDry.json?.area_cleared === 1 &&
-    (await flData(FL)).leads.find((l) => l.id === oldId)?.area === "", JSON.stringify(flDry.json));
-  const flDone = await fill(flBody);
-  const after = await flData(FL);
-  check("a row with no area gets it, spelled as the ranked entry",
-    flDone.json?.leads?.set === 1 && after.leads.find((l) => l.id === oldId)?.area === "Seattle area", JSON.stringify(flDone.json));
-  check("a row a run already filed keeps its area",
-    after.leads.find((l) => l.id === filedId)?.area === "Remote US");
-  check("an area that isn't a ranked entry is counted and not written",
-    flDone.json?.area_cleared === 1 && after.leads.find((l) => l.id === otherId)?.area === "");
-  check("an application gets its area too",
-    after.applications.find((a) => a.id === app.id)?.area === "Remote US");
-  check("another account's row, named in this account's fill, is untouched",
-    (await flData(FL_B)).leads.find((l) => l.id === theirsId)?.area === "");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

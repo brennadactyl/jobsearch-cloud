@@ -12,7 +12,6 @@ import { getUserByName } from "../auth.js";
 import { CompanyList } from "../companies.js";
 import { Db } from "../db.js";
 import { json, readJson } from "../http.js";
-import { storedArea } from "../validate.js";
 
 /**
  * POST /api/purge - requires the ADMIN_TOKEN secret as Bearer. Body
@@ -121,51 +120,4 @@ export async function handleCleanUpCompanies({ request, env }) {
     // list each one now has.
     aliases: result.aliasOnly.map((a) => ({ company: a.company, aliases: a.aliases })),
   });
-}
-
-/**
- * POST /api/areas/fill - requires the ADMIN_TOKEN secret as Bearer. Body
- * `{ user, leads?: [{id, area}], applications?: [{id, area}], dryRun? }` ->
- * `{ dryRun, leads: {set, skipped}, applications: {set, skipped}, area_cleared }`;
- * 400 without a user, 404 for an unknown one.
- *
- * The one-time fill that gives an account's existing leads and applications
- * their area (docs/location-settings-plan.md, "Restoring the tiers the
- * migration lost"). The areas are worked out beforehand with the page's own
- * matcher; this only stores them, through the same check every other path
- * makes (validate.js storedArea), so an area that isn't a ranked entry is
- * counted in `area_cleared` and not written.
- *
- * Admin-only because a person never sets an area by hand: a run files it, and
- * this puts right rows filed before areas existed. It fills only a row whose
- * area is still empty, so an area a run has since filed is kept, and counts it
- * in `skipped`. `dryRun` reports the same counts and writes nothing.
- */
-export async function handleFillAreas({ request, env }) {
-  const body = await readJson(request);
-  if (body instanceof Response) return body;
-
-  const name = typeof body.user === "string" ? body.user.trim() : "";
-  if (!name) return json({ error: "user is required" }, 400);
-  const user = await getUserByName(env.DB, name);
-  if (!user) return json({ error: `no user named "${name}"` }, 404);
-
-  const db = new Db(env.DB, user.id);
-  const ranked = (await db.getTracksAndSettings()).settings.priority_locations;
-  let areaCleared = 0;
-  const checked = (rows) =>
-    (Array.isArray(rows) ? rows : [])
-      .filter((r) => r && Number.isInteger(Number(r.id)))
-      .map((r) => {
-        const area = storedArea(r.area, ranked);
-        if (!area && typeof r.area === "string" && r.area.trim()) areaCleared++;
-        return { id: Number(r.id), area };
-      })
-      .filter((r) => r.area);
-
-  const leads = checked(body.leads);
-  const applications = checked(body.applications);
-  const dryRun = body.dryRun === true;
-  const result = await db.fillAreas(leads, applications, dryRun);
-  return json({ dryRun, ...result, area_cleared: areaCleared });
 }

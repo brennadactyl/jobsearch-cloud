@@ -151,7 +151,6 @@
  * @property {string} excluded_locations - where the person can't take a job, as typed
  * @property {string} priority_locations - the places to rank first, in order, as typed
  * @property {string} location_note - what the three lists can't say
- * @property {Array<Object>} priority_rules - a migrated account's ranking rules, kept until the person's own list replaces them; [] otherwise
  * @property {string[]} excluded_companies
  * @property {string} footer_note
  * @property {string} pronouns
@@ -262,7 +261,6 @@ export const DEFAULT_SETTINGS = {
   excluded_locations: "",
   priority_locations: "",
   location_note: "",
-  priority_rules: [],
   // A list rather than a sentence in a track's prose, so "is X excluded?" is a
   // lookup and adding a company is an append.
   excluded_companies: [],
@@ -757,7 +755,7 @@ export class Db {
     const trackCols = ["key", ...TRACK_DISPLAY_FIELDS, ...TRACK_CONFIG_FIELDS]
       .map((f) => `t.${f}`)
       .join(", ");
-    const settingKeys = ["excluded_companies", "priority_rules", ...SETTING_KEYS, ...LOCATION_SETTING_KEYS, ...PROMPT_SETTING_KEYS];
+    const settingKeys = ["excluded_companies", ...SETTING_KEYS, ...LOCATION_SETTING_KEYS, ...PROMPT_SETTING_KEYS];
     const [tracksRes, settingsRows] = await Promise.all([
       this.d1
         .prepare(
@@ -783,11 +781,11 @@ export class Db {
 
     const settings = { ...DEFAULT_SETTINGS };
     for (const row of settingsRows.results) {
-      if (row.key === "excluded_companies" || row.key === "priority_rules") {
+      if (row.key === "excluded_companies") {
         try {
-          settings[row.key] = JSON.parse(row.value);
+          settings.excluded_companies = JSON.parse(row.value);
         } catch {
-          settings[row.key] = [];
+          settings.excluded_companies = [];
         }
       } else if (row.key === "stale_run_hours") {
         const n = Number(row.value);
@@ -992,23 +990,9 @@ export class Db {
     if (patch.stale_run_hours != null) {
       await this.setSetting("stale_run_hours", String(patch.stale_run_hours));
     }
-    // The stand-in ranking rules (docs/location-settings-plan.md) keep a
-    // migrated account's tiers only while its ranked list is the one they were
-    // kept for. A different list replaces them, so they can never contradict
-    // what the person typed; the same list sent again leaves them. A write that
-    // sets both, as an operator restoring an account does, is taken as given.
-    let rules = Array.isArray(patch.priority_rules) ? patch.priority_rules : null;
-    if (!rules && typeof patch.priority_locations === "string") {
-      const stored = await this.d1
-        .prepare("SELECT value FROM meta WHERE user_id = ? AND key = 'priority_locations'")
-        .bind(this.userId)
-        .first();
-      if ((stored?.value ?? "") !== patch.priority_locations.trim()) rules = [];
-    }
     for (const key of LOCATION_SETTING_KEYS) {
       if (typeof patch[key] === "string") await this.setSetting(key, patch[key].trim());
     }
-    if (rules) await this.setSetting("priority_rules", JSON.stringify(rules));
     // An empty array is a real instruction ("exclude no one"), so any array is written.
     if (Array.isArray(patch.excluded_companies)) {
       await this.setSetting(
@@ -1696,48 +1680,6 @@ export class Db {
       .run();
     if (result.meta.changes === 0) return null;
     return this.getApplication(id);
-  }
-
-  /**
-   * Store areas on this user's leads and applications that have none yet
-   * (routes/admin.js handleFillAreas). A row that already has an area keeps it,
-   * since a run filed it knowing the posting; so does a row that isn't this
-   * user's, which matches nothing. One batch, so a fill lands whole.
-   *
-   * @param {Array<{id: number, area: string}>} leads areas already checked against the ranked list
-   * @param {Array<{id: number, area: string}>} applications the same, for applications
-   * @param {boolean} dryRun count what would be set, write nothing
-   * @returns {Promise<{leads: {set: number, skipped: number}, applications: {set: number, skipped: number}}>}
-   */
-  async fillAreas(leads, applications, dryRun) {
-    const count = async (table, rows) => {
-      if (!rows.length) return 0;
-      let n = 0;
-      for (let i = 0; i < rows.length; i += ID_CHUNK) {
-        const ids = rows.slice(i, i + ID_CHUNK).map((r) => r.id);
-        const row = await this.d1
-          .prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ? AND area = '' AND id IN (${ids.map(() => "?").join(",")})`)
-          .bind(this.userId, ...ids)
-          .first();
-        n += row?.n || 0;
-      }
-      return n;
-    };
-    if (dryRun) {
-      const [l, a] = [await count("leads", leads), await count("applications", applications)];
-      return { leads: { set: l, skipped: leads.length - l }, applications: { set: a, skipped: applications.length - a } };
-    }
-    const update = (table) =>
-      this.d1.prepare(`UPDATE ${table} SET area = ? WHERE id = ? AND user_id = ? AND area = ''`);
-    const statements = [
-      ...leads.map((r) => update("leads").bind(r.area, r.id, this.userId)),
-      ...applications.map((r) => update("applications").bind(r.area, r.id, this.userId)),
-    ];
-    if (!statements.length) return { leads: { set: 0, skipped: 0 }, applications: { set: 0, skipped: 0 } };
-    const results = await this.d1.batch(statements);
-    const set = (from, to) => results.slice(from, to).reduce((n, r) => n + (r.meta.changes || 0), 0);
-    const l = set(0, leads.length), a = set(leads.length, statements.length);
-    return { leads: { set: l, skipped: leads.length - l }, applications: { set: a, skipped: applications.length - a } };
   }
 
   // ------------------------------------------------------- composite --

@@ -38,10 +38,9 @@ rule arrays does - see Existing searches.
 | `excluded_locations` | Anywhere you can't take a job? | the comma-separated list, e.g. "Portland OR, Texas" |
 | `priority_locations` | Which locations should come first? | the comma-separated list, in order, e.g. "Seattle, Portland OR, Raleigh NC" |
 
-- **The page builds the ranking rules when it loads**, from `priority_locations`
-  with the matcher it already has, to sort leads into tiers and colour their
-  badges. Rules are never stored, so there is one copy of each list: the one the
-  person typed.
+- **The page ranks by `priority_locations` and each lead's area**: a lead's
+  tier is its area's place in the list. No rules are stored or built, so there
+  is one copy of each list: the one the person typed.
 - **Existing accounts convert deterministically:** each stored rule set becomes
   the comma-separated list of its labels, in order. The server, the prompt, the
   onboarding run and the demo data stop reading or writing rule arrays.
@@ -57,7 +56,7 @@ rule arrays does - see Existing searches.
   each trimmed, empties dropped; an area matches an entry ignoring case, and is
   stored as the ranked entry is spelled ("portland or" is stored as "Portland OR").
   "Portland, OR" is two entries, "Portland" and "OR", and the read-back shows
-  it that way. The server, `tracker.ps1`, the page and the one-time fill use this
+  it that way. The server, `tracker.ps1` and the page use this
   rule and no other.
 - **Tier colours come from each lead's area** (below), not from matching text.
 - **An optional note, `location_note`,** keeps what a list can't say - "open to relocating for
@@ -87,29 +86,13 @@ exactly as typed ("Seattle area"), or empty.
 - A new field a run reports crosses three layers in one change: the column and
   route, `tracker.ps1`'s forwarding, and the prompt step.
 
-## Restoring the tiers the migration lost
+## Existing rows
 
-Accounts whose ranked places were set up by hand stored hand-picked terms under
-each label, and converting to labels lost them, so most of their leads lost
-their tier colour. Two steps put it right:
-
-1. **Now:** each affected account's original rules are restored from the
-   pre-migration backup as `priority_rules`, and the page tiers by those when
-   present.
-2. **Then:** once leads carry areas, a one-time fill gives every existing lead
-   and application its area by running the page's matcher with those restored
-   rules, checked so every location lands in the same tier before and after.
-   Then `priority_rules` is cleared, account by account, and the page tiers
-   only by area.
-
-## The matcher retires
-
-Once the page tiers by area and `priority_rules` is cleared, no code matches
-location text to a tier. The matcher (`matchLocationTier` in
-`client/src/domain/geo.ts`), its test, the rule-array reading and the area-fill
-route are deleted then, together. `location-forms.json` stays, reduced to the
-forms `verify-local` checks the prompt teaches; its tier expectations go with
-the matcher. The server stores and validates text only.
+Leads and applications filed before areas existed were given theirs once, from
+the tiers each account showed at the time, checked so every row kept its tier.
+No code matches location text to a tier: the page tiers by area alone, and the
+server stores and validates text only. `location-forms.json` holds the forms
+`verify-local` checks the prompt teaches.
 
 ## Rules the prompt states for every search
 
@@ -185,30 +168,6 @@ draft of its three lists is made from its current prose and shown to the
 account's operator before it is written - it's a person's search geography, and
 a wrong conversion would silently narrow or widen it. Then the prose fields are
 cleared and the tier tables removed from the docs.
-
-### The stand-in rules
-
-A label alone doesn't rebuild the rule it named. An account whose rules were
-set by hand or by the setup skill matched more than its labels - "Seattle area"
-stood for Seattle, Bellevue, Redmond and Kirkland - so after the migration most
-of its leads lost their tier. Those accounts keep their old rules, as they were,
-in one more setting:
-
-- **`priority_rules`**, the account's old `[{label, allOf?, anyOf?}]` array, or
-  `[]`. The page ranks by it while it is set, and builds from
-  `priority_locations` when it is empty. It is restored from the backup taken
-  before the migration, and only for accounts whose tiers the migration changed.
-- **Only an operator writes it,** through `POST /api/config`, checked for the
-  rules' shape. `POST /api/settings` refuses it.
-- **The person's own list replaces it.** The first time `priority_locations`
-  is saved with a different value, `priority_rules` is dropped in the same
-  write, so a stand-in can never contradict a list the person typed. Saving the
-  same list again, as a save of another field does, keeps it. An operator write
-  of a different `priority_locations` drops it too, unless it also sets
-  `priority_rules`.
-- **What the person loses on that first edit** is whatever their labels didn't
-  say: "Seattle area" then matches only its own words unless they list Bellevue
-  and Redmond themselves. The page says so beside the list.
 
 ## Releasing
 
