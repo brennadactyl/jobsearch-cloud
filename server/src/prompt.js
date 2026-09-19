@@ -259,6 +259,23 @@ function geoStep(settings) {
     : "No geographic restriction is configured for this search - don't exclude a posting on location alone.";
 }
 
+// Step 9's `area`: which of the places ranked first a lead falls in, since the
+// page tiers by it (docs/location-settings-plan.md, "Each lead carries its
+// area"). The run judges it; tracker.ps1 and the leads route keep it only when
+// it equals an entry exactly, so the wording asks for a copy, never a
+// paraphrase. A person with nothing ranked gets no area at all.
+function areaStep(settings, name) {
+  const ranked = typeof settings.priority_locations === "string" ? settings.priority_locations.trim() : "";
+  if (!ranked) return { areaKey: "", areaRule: "" };
+  return {
+    areaKey: ", area",
+    areaRule:
+      ` \`area\` is the one place ${name} ranked first that the posting falls in - one entry from "${ranked}", ` +
+      "copied character for character - or leave it out when the posting falls in none of them. The posting's real " +
+      "location stays in `location`; `area` only files it, and anything but an exact entry is dropped.",
+  };
+}
+
 // ---- Multi-tab fragments: empty for a single-tab run unless noted.
 
 function alsoFillsHeader({ fed, multi, allKeys }) {
@@ -380,6 +397,7 @@ export function buildSearchPrompt({ user, track, settings, feeds, docBudget = DE
   const searchValue = searchValueRule(tabs);
   const delistTab = delistTabNote(tabs, name);
   const runFanout = runFanoutNote(tabs);
+  const { areaKey, areaRule } = areaStep(settings, name);
 
   // Step 3b sends discoveries to 9d because a company written into the doc
   // never reaches the rotation, and a search left with only its original
@@ -436,10 +454,10 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
 8b. ${docUpdate}
 9. SYNC NEW POSTINGS TO THE LIVE TRACKER WEBPAGE. Write today's new verified
    postings to \`leads.json\` - a JSON array of
-   \`{company, title, location, url, fit, team, setup, comp}\` - then run
+   \`{company, title, location, url, fit, team, setup, comp${areaKey}}\` - then run
    \`./tracker leads leads.json\`. \`team\`, \`setup\` and \`comp\` are the
    step-${captureNum} fields; leave a key out entirely for anything the posting
-   didn't state. Every row's \`"search"\` ${searchValue}${leadsNote}.
+   didn't state.${areaRule} Every row's \`"search"\` ${searchValue}${leadsNote}.
 9b. RECORD SCREENED-OUT CANDIDATES so tomorrow's run doesn't re-verify them.
    Write the disqualified-but-new candidates from step 7 to \`screened.json\` -
    \`{url, company, title, location, reason}\` - then run

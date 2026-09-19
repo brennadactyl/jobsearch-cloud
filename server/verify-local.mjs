@@ -729,6 +729,25 @@ const listed = buildSearchPrompt({
     docStep.includes("correct a line in place") && docStep.includes("dated note"));
 }
 
+// ---- A lead's area: one of the places ranked first, copied exactly.
+{
+  const syncStep = (settings) => {
+    const p = buildSearchPrompt({
+      user: { id: "u", name: "Nobody" },
+      track: { key: "T", label: "T", full_description: "t", role_search_line: "r" },
+      settings,
+      feeds: [],
+    });
+    return p.slice(p.indexOf("9. SYNC"), p.indexOf("\n9b."));
+  };
+  const withRanked = syncStep({ priority_locations: "Seattle area, Portland OR, Remote US" });
+  check("step 9 asks for an area copied exactly from the ranked list, as typed",
+    withRanked.includes("comp, area}") && withRanked.includes('one entry from "Seattle area, Portland OR, Remote US"') &&
+    withRanked.includes("copied character for character") && withRanked.includes("leave it out when the posting falls in none"));
+  check("a person with nothing ranked is asked for no area",
+    !/area/.test(syncStep({ priority_locations: "" })) && !/area/.test(syncStep({})));
+}
+
 check("a company list stored on a track never reaches the prompt",
   !listed.includes("Zyqfold Robotics") && !listed.includes("Quennet Labs") && !listed.includes("drawn from"));
 check("the default doc-update step never asks a run to keep company groups",

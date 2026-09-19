@@ -23,6 +23,8 @@ leads-missing|ok|leads missing.json
 leads-bad|ok|leads bad.json
 leads-nofile|ok|leads
 leads-scalar|ok|leads scalar.json
+leads-area|ok|leads leads-area.json
+leads-area-noranked|noranked|leads leads-area.json
 screened|ok|screened screened.json
 screened-empty|ok|screened empty.json
 verified|ok|verified urls.json
