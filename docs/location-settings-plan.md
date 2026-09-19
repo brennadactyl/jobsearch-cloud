@@ -107,14 +107,14 @@ rewrite.
 
 ## What the person sees
 
-- **The setup form** asks the three lists in the order of the table, each with
-  the read-back the preferred list already has, and the optional note. "Where
-  can you work?" as free text goes.
+- **The setup form** keeps its live questions and wording. Its two free-text
+  location answers become comma-separated lists with the read-back the ranked
+  list already has, and it gains the optional note.
 - **The account panel gains a Locations section** with the same three lists and
   the note. Changes save together through the
   section's own Save and Discard, like the resume section above it, and take effect on
   the next run, and the section says so.
-- **Leads** keep their tier badges; acceptable places get their own tier.
+- **Leads** keep their tier badges, from the ranked places as today.
 
 ## Existing searches
 
