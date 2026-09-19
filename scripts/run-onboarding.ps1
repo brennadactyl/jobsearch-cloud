@@ -694,9 +694,10 @@ looking at empty while reading as a success:
 $($roleLines -join "`n")
 
 Rules for this run:
-- **Two different answers, two different fields.** `work_scope` ("Where can you
-  work?") is the ONLY thing that sets the scope: it becomes geo_scope_line and
-  scope_clause, and they say where the search may look. `location_limits`
+- **Two different answers, two different fields.** `work_scope` ("What
+  locations should be searched?") is what you write the scope from: it becomes
+  geo_scope_line and scope_clause, and they say where the search may look (the
+  ranked places below are added to it). `location_limits`
   ("Anywhere you can't take a job?") is an exclusion and becomes
   scope_disqualifier alone. Never scope a search to a place someone ruled out,
   and never let an exclusion narrow the scope to itself - a search scoped to
@@ -704,7 +705,7 @@ Rules for this run:
   and reports a quiet night.
 - **The places they ranked first are always in scope.** When their answers
   disagree about a place, include it rather than exclude it. A place in
-  `priority_locations` is searched even if "Where can you work?" leaves it out
+  `priority_locations` is searched even if "What locations should be searched?" leaves it out
   or "Anywhere you can't take a job?" names it - so never write one into
   scope_disqualifier. This script adds every ranked place to the scope fields
   itself after you write them; write the rest as if it will.
