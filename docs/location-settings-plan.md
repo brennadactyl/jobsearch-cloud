@@ -130,10 +130,8 @@ them:
   list only when the ranked list has an entry; the page reads it back as "Only
   the ranked places". The server refuses both empty, and the page says so
   before sending.
-- **Limits:** each list at most 50 entries of up to 80 characters, the note at
-  most 1,000 characters, since the prompt carries them verbatim. The short-token
-  warning is the page's alone, so the list of known state and country codes has
-  one copy.
+- **Limits:** each list at most 4,000 characters and the note at most 1,000
+  (`server/src/validate.js`), since the prompt carries them verbatim.
 
 ## The prompt reads the database
 
