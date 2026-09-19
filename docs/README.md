@@ -28,6 +28,7 @@ reference docs above are the authority.
 - [`react-adoption-plan.md`](react-adoption-plan.md) — the tracker page rebuilt in React, beside the one that ships
 - [`rotation-always-on-plan.md`](rotation-always-on-plan.md) — every search rotates through its companies
 - [`one-company-list-plan.md`](one-company-list-plan.md) — one global company list that every search indexes into
+- [`location-settings-plan.md`](location-settings-plan.md) — preferred, acceptable and ruled-out places are settings; the prompt reads them and code checks leads against them
 - [`pause-search-plan.md`](pause-search-plan.md) — a search can be paused: it stops running and keeps everything it found
 - [`team-setup-plan.md`](team-setup-plan.md) — the team’s roles and rules live in the repo, and one skill brings the teammates up on any PC
 - [`word-resumes-plan.md`](word-resumes-plan.md) — a .docx resume is read by extracting its text on upload
