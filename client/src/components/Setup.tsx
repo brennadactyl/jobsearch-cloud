@@ -451,18 +451,6 @@ export default function Setup({
             />
           </Field>
           <Field
-            label={<label htmlFor={`${id}-limits`}>Anywhere you can't take a job?</label>}
-            hint="Optional, and only a rule-out: somewhere inside the area above that you still couldn't take. It never narrows where the search looks on its own — leave it empty if nothing is ruled out."
-          >
-            <textarea
-              id={`${id}-limits`}
-              rows={2}
-              placeholder="Nothing that needs me on site in another state."
-              value={answers.location_limits}
-              onChange={(e) => set("location_limits", e.target.value)}
-            />
-          </Field>
-          <Field
             label={<label htmlFor={`${id}-first`}>Which locations should come first?</label>}
             problem={problems.locations}
             hint="List places in order — the first is the one you want most. Use a city (add the state if the name is common, like Portland OR), or Remote with a country, like Remote US. Anywhere you don't name still shows up, just lower."
@@ -476,6 +464,18 @@ export default function Setup({
               onChange={(e) => set("locations_first", e.target.value)}
             />
             <LocationReadback entries={entries} />
+          </Field>
+          <Field
+            label={<label htmlFor={`${id}-limits`}>Anywhere you can't take a job?</label>}
+            hint="Optional, and only a rule-out: somewhere inside the searched area that you still couldn't take. It never narrows where the search looks on its own — leave it empty if nothing is ruled out."
+          >
+            <textarea
+              id={`${id}-limits`}
+              rows={2}
+              placeholder="Nothing that needs me on site in another state."
+              value={answers.location_limits}
+              onChange={(e) => set("location_limits", e.target.value)}
+            />
           </Field>
 
           <SetupHeading title="What to look for">

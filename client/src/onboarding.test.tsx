@@ -294,6 +294,18 @@ describe("the setup form", () => {
     });
   });
 
+  it("asks where to search, then what comes first, then what's ruled out, as the account panel does", async () => {
+    await openSetup();
+    const order = [
+      "What locations should be searched?",
+      "Which locations should come first?",
+      "Anywhere you can't take a job?",
+    ].map((label) => screen.getByLabelText(label));
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
   it("asks where the person can work before it will send", async () => {
     const submit = vi.spyOn(client, "submitIntake");
     await openSetup();
