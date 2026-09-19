@@ -21,11 +21,12 @@
     "overview_label": "Overview",
     "applications_label": "Applications",
     "stale_run_hours": 8760,
-    "priority_locations": [
-      { "tier": "p-high", "label": "Seattle area", "anyOf": ["seattle", "bellevue", "redmond", "kirkland"] },
-      { "tier": "p-high", "label": "Remote US", "allOf": ["remote"], "anyOf": ["(us)", "u.s.", "united states", "usa"] },
-      { "tier": "p-med", "label": "Portland", "anyOf": ["portland"] },
-      { "tier": "p-med", "label": "Bay Area", "anyOf": ["san francisco", "oakland", "palo alto", "mountain view"] }
+    "priority_locations": "Seattle area, Remote US, Portland, Bay Area",
+    "priority_rules": [
+      { "label": "Seattle area", "anyOf": ["seattle", "bellevue", "redmond", "kirkland"] },
+      { "label": "Remote US", "allOf": ["remote"], "anyOf": ["(us)", "u.s.", "united states", "usa"] },
+      { "label": "Portland", "anyOf": ["portland"] },
+      { "label": "Bay Area", "anyOf": ["san francisco", "oakland", "palo alto", "mountain view"] }
     ],
     "excluded_companies": ["Umbrella Dynamics"],
     "geo_scope_line": "United States only. A role that lists only non-US locations is out of scope no matter how well it fits - a posting that is only London, Berlin, Toronto or Bangalore is excluded, and so is one whose remote line reads 'remote (EMEA)' or 'remote (Canada)'. A posting that lists a US city alongside others is in scope.",
