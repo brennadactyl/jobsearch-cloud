@@ -29,10 +29,9 @@
       { "label": "Bay Area", "anyOf": ["san francisco", "oakland", "palo alto", "mountain view"] }
     ],
     "excluded_companies": ["Umbrella Dynamics"],
-    "geo_scope_line": "United States only. A role that lists only non-US locations is out of scope no matter how well it fits - a posting that is only London, Berlin, Toronto or Bangalore is excluded, and so is one whose remote line reads 'remote (EMEA)' or 'remote (Canada)'. A posting that lists a US city alongside others is in scope.",
-    "scope_clause": "based in the United States",
-    "scope_disqualifier": "outside the United States",
-    "location_guidance": "Write accurate location strings - the tracker derives priority from them automatically, so precision matters. Write remote roles as 'Remote (US)' rather than 'USA - Remote' or a bare 'Remote', and write a metro as 'City, ST' ('Bellevue, WA', not 'Greater Seattle Area'). There is no priority field to set; just get the location text right.",
+    "search_locations": "US",
+    "excluded_locations": "",
+    "location_note": "",
     "footer_note": "This is the tracker's demonstration account. Every posting in it is invented.",
     "pronouns": "they/them"
   },
