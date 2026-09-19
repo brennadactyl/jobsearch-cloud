@@ -11,7 +11,7 @@
  */
 
 import { json, readJson } from "../http.js";
-import { isoDate, unknownTrack } from "../validate.js";
+import { isoDate, storedArea, unknownTrack } from "../validate.js";
 import { removeDelistedLead } from "./delisting.js";
 
 /**
@@ -73,7 +73,10 @@ export async function handleUpdate({ request, db }) {
       await db.touchUpdated();
       return json({ ok: true, application: app });
     } else {
-      const app = await db.insertApplication(body);
+      // An area on a new row is kept only if it is one of the person's ranked
+      // entries, as everywhere else (validate.js storedArea).
+      const area = body.area === undefined ? "" : storedArea(body.area, (await db.getTracksAndSettings()).settings.priority_locations);
+      const app = await db.insertApplication({ ...body, area });
       await db.touchUpdated();
       return json({ ok: true, application: app });
     }

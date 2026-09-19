@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0021_priority_locations_text.sql` applied in order. This is the
+`0001_schema.sql` through `0022_lead_area.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -146,6 +146,7 @@ erDiagram
         TEXT resume
         TEXT referral
         TEXT comp
+        TEXT area
     }
     screened {
         INTEGER id PK
@@ -188,6 +189,7 @@ erDiagram
         TEXT location
         TEXT autofill
         TEXT autofill_note
+        TEXT area
     }
     meta {
         TEXT user_id PK, FK
@@ -331,6 +333,10 @@ One row per posting a search found and verified live. Unique on
 `(user_id, search, url)`; adding leads dedups on that with `INSERT OR IGNORE`.
 
 - `found` and `verified` are `YYYY-MM-DD`: first found, and last confirmed live.
+- `area` is the entry of the person's ranked `priority_locations` the posting
+  falls in, spelled as they typed it, or `''`. The page tiers leads by it.
+  Only a ranked entry is stored, matched ignoring case; anything else is stored
+  `''` (`storedArea` in `server/src/validate.js`).
 - `status` is one of `LEAD_STATUS` in `server/src/routes/leads.js`.
 - `team` through `comp` are the freeform fields shared with `applications`
   (`EXTRA_FIELDS` in `server/src/db.js`).
@@ -361,7 +367,9 @@ hand.
 - `team` through `comp` are the same freeform fields as on `leads`.
 - `dateRecruiterScreen` through `dateWithdrawn` record when the application
   first reached each stage; `dateApplied` covers `Applied`.
-- `location` is copied from the lead when the application is created.
+- `location` and `area` are copied from the lead when the application is
+  created. One added by hand gets its `area` from the nightly fill, checked the
+  same way as a lead's.
 - `autofill` is `''` (not read yet), `filled` or `failed`, with the reason for a
   failure in `autofill_note`. The nightly fill reads rows with a `link`,
   `autofill = ''`, and a blank `company`, `title` or `location`.
