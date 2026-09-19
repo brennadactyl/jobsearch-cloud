@@ -138,6 +138,14 @@ A `pending` intake with reason `edit` is a rewrite, not a build:
   section only.
 - Tokens, folders and scheduled tasks are already in place, so it skips them.
 
+## Saving
+
+The account page has **one Save and Discard for the whole page**, in a footer
+that counts what is unsaved across every section - "3 unsaved changes". Save
+commits all of it, Discard reverts all of it, and leaving with anything unsaved
+asks first. Changing the password stays its own action, since it needs the
+current password and can sign other devices out.
+
 ## What the person sees
 
 - **The header button reads "My account"**, replacing "Signed in as <name>". The

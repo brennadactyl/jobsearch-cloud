@@ -116,8 +116,8 @@ rewrite.
   and it gains the optional note. It no longer holds the send over a ranked
   entry it can't match ("too short", "several places are called Portland").
 - **The account panel gains a Locations section** with the same three lists and
-  the note. Changes save together through the
-  section's own Save and Discard, like the resume section above it, and take effect on
+  the note. Changes save through the account
+  page's one Save and Discard, shared with every other section, and take effect on
   the next run, and the section says so.
 - **Leads** keep their tier badges, from the ranked places as today.
 
