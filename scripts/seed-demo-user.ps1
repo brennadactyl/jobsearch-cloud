@@ -17,12 +17,19 @@
 
 .PARAMETER AdminToken
   The deployment's ADMIN_TOKEN worker secret, which creates accounts (see
-  server/README.md). Defaults to the TRACKER_ADMIN_TOKEN environment variable.
-  Not a session token; no search or browser holds it.
+  server/README.md). Defaults to the TRACKER_ADMIN_TOKEN environment variable,
+  then to admin_token in <DataDir>\deployment.json. Not a session token; no
+  search or browser holds it.
 
 .PARAMETER TrackerUrl
   The API worker's base URL, e.g. https://job-search-tracker.<subdomain>.workers.dev.
-  Defaults to the TRACKER_URL environment variable.
+  Defaults to the TRACKER_URL environment variable, then to url in
+  <DataDir>\deployment.json.
+
+.PARAMETER DataDir
+  The private data folder whose deployment.json fills in whichever of the two
+  above is still missing (see private.example/README.md). Defaults to
+  JOB_SEARCH_DATA_DIR, then <repo>\private.
 
 .PARAMETER Password
   The demo account's password, 12+ characters. Omitted, one is generated and
@@ -38,6 +45,9 @@
   check above.
 
 .EXAMPLE
+  .\seed-demo-user.ps1 -Force
+
+.EXAMPLE
   .\seed-demo-user.ps1 -AdminToken $env:TRACKER_ADMIN_TOKEN
 
 .EXAMPLE
@@ -51,6 +61,8 @@ param(
     [string]$Password,
 
     [string]$DataFile,
+
+    [string]$DataDir,
 
     [switch]$Force
 )
@@ -72,14 +84,31 @@ if (-not $DataFile) {
 
 # --------------------------------------------------------------- preflight --
 
+# The operator's machine already records the deployment in deployment.json, as
+# new-invite.ps1 reads it, so the URL and token come from there unless passed
+# in. Only a value still missing is read, and the token is never printed.
+if (-not $TrackerUrl -or -not $AdminToken) {
+    if (-not $DataDir) {
+        $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
+                   elseif ($scriptDir) { Join-Path $scriptDir "..\private" }
+                   else { "" }
+    }
+    $deploymentFile = if ($DataDir) { Join-Path $DataDir "deployment.json" } else { "" }
+    if ($deploymentFile -and (Test-Path $deploymentFile)) {
+        $deployment = Get-Content -Raw -Path $deploymentFile | ConvertFrom-Json
+        if (-not $TrackerUrl) { $TrackerUrl = $deployment.url }
+        if (-not $AdminToken) { $AdminToken = $deployment.admin_token }
+    }
+}
+
 if (-not $TrackerUrl) {
-    Write-Error "No tracker URL. Pass -TrackerUrl, or set the TRACKER_URL environment variable."
+    Write-Error "No tracker URL. Pass -TrackerUrl, set TRACKER_URL, or put url in <DataDir>\deployment.json (see private.example/README.md)."
     exit 1
 }
 $TrackerUrl = $TrackerUrl.TrimEnd("/")
 
 if (-not $AdminToken) {
-    Write-Error "No admin token. Pass -AdminToken, or set TRACKER_ADMIN_TOKEN.`nIt's the ADMIN_TOKEN worker secret from the API deployment - see server/README.md. Creating an account is the one thing a session token cannot do."
+    Write-Error "No admin token. Pass -AdminToken, set TRACKER_ADMIN_TOKEN, or put admin_token in <DataDir>\deployment.json.`nIt's the ADMIN_TOKEN worker secret from the API deployment - see server/README.md. Creating an account is the one thing a session token cannot do."
     exit 1
 }
 
