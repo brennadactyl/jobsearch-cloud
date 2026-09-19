@@ -365,16 +365,29 @@ function Invoke-KnownCommand {
     $norm = { param($companyName) (([string]$companyName).ToLowerInvariant() -creplace "[^a-z0-9]+", " ").Trim() }
     $want = & $norm $PositionalArg
     if (-not $want) { Fail "'$PositionalArg' has no letters or digits to match on" }
+    # Every name a company answers to, each paired with the name it is kept
+    # under: its own, and any alias a merge or rename left it (the server maps a
+    # reported alias to the kept company the same way, so "Marriott" is
+    # "Marriott International" to both).
+    $names = $null
     if (Test-Path $KnownCache) {
-        $names = @((Get-Content -Raw -Encoding UTF8 $KnownCache | ConvertFrom-Json).companies)
-    } else {
-        $fullList = Invoke-Tracker "GET" "/api/coverage/${Search}?all=1" $null
-        $names = @($fullList.companies | Where-Object { $_ } | ForEach-Object { [string]$_.company })
-        # Under a property, not as a bare array: piped through ConvertTo-Json, a
-        # one-name list is written as a string and an empty one as nothing.
-        Write-Json "known-list.json" @{ companies = $names }
+        $names = (Get-Content -Raw -Encoding UTF8 $KnownCache | ConvertFrom-Json).names
     }
-    $hit = @($names | Where-Object { $_ -and ((& $norm $_) -eq $want) }) | Select-Object -First 1
+    # A cache without `names` predates aliases; read the list again.
+    if ($null -eq $names) {
+        $fullList = Invoke-Tracker "GET" "/api/coverage/${Search}?all=1" $null
+        $names = @(foreach ($listed in @($fullList.companies | Where-Object { $_ })) {
+            $kept = [string]$listed.company
+            [pscustomobject]@{ name = $kept; company = $kept }
+            foreach ($alias in @($listed.aliases | Where-Object { $_ })) {
+                [pscustomobject]@{ name = [string]$alias; company = $kept }
+            }
+        })
+        # Under a property, not as a bare array: piped through ConvertTo-Json, a
+        # one-name list is written as a single object and an empty one as nothing.
+        Write-Json "known-list.json" @{ names = $names }
+    }
+    $hit = @($names | Where-Object { $_ -and ((& $norm $_.name) -eq $want) } | ForEach-Object { $_.company }) | Select-Object -First 1
     if ($hit) {
         Write-TrackerLine "known: $PositionalArg is on the list as '$hit' - skip it, its turn comes in the rotation"
     } else {
