@@ -49,9 +49,13 @@ rule arrays does - see Existing searches.
   posting's location fits. No code turns the first two into rules.
 - **Preferred places are always searched,** even if the other two lists leave
   them out. The prompt says so, naming each preferred place.
-- **Entries are split on commas and trimmed** when saved, so the stored value
-  is tidy and the read-back matches it. An entry of three letters or fewer that
-  isn't a known country or state code is flagged, as the ranked list does.
+- **Nothing is flagged or refused.** Each list is stored as typed, trimmed at
+  the ends, and the prompt interprets it - including "Portland, OR", "WA" or
+  "Greater Seattle area". The page's read-back only shows how the commas split
+  each list, and the ranked list's order and tier colour.
+- **Tier colours stay best-effort.** The page matches ranked places against
+  each lead's location as it does today, loosely and with no refusals; an entry
+  it can't read gives no colour rather than a warning.
 - **An optional note, `location_note`,** keeps what a list can't say - "open to relocating for
   the right team" - and reaches the prompt as context.
 
@@ -108,8 +112,9 @@ rewrite.
 ## What the person sees
 
 - **The setup form** keeps its live questions and wording. Its two free-text
-  location answers become comma-separated lists with the read-back the ranked
-  list already has, and it gains the optional note.
+  location answers become comma-separated lists with the same plain read-back,
+  and it gains the optional note. It no longer holds the send over a ranked
+  entry it can't match ("too short", "several places are called Portland").
 - **The account panel gains a Locations section** with the same three lists and
   the note. Changes save together through the
   section's own Save and Discard, like the resume section above it, and take effect on
