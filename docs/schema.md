@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0023_retire_scope_prose.sql` applied in order. This is the
+`0001_schema.sql` through `0024_retire_priority_rules.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -385,9 +385,6 @@ Per-user key/value rows. The keys in use:
   `priority_locations` and `location_note` — text, each stored as the person
   typed it, trimmed at the ends; the three lists are comma-separated, and
   `priority_locations` is in ranked order
-- `priority_rules` — a JSON array of ranking rules kept for an account whose
-  tiers its labels alone don't rebuild; the page ranks by it until the person
-  saves a different `priority_locations`, which drops it
 - `excluded_companies` — a JSON array
 - search prompt prose: `footer_note`, `pronouns`
 
