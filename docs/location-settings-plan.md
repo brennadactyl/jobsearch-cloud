@@ -102,11 +102,14 @@ their tier colour. Two steps put it right:
    Then `priority_rules` is cleared, account by account, and the page tiers
    only by area.
 
-## One matcher
+## The matcher retires
 
-The rules are built by one module in the page, used to turn typed places into
-rules, read them back, and rank leads into tiers. The server stores and validates
-text only.
+Once the page tiers by area and `priority_rules` is cleared, no code matches
+location text to a tier. The matcher (`matchLocationTier` in
+`client/src/domain/geo.ts`), its test, the rule-array reading and the area-fill
+route are deleted then, together. `location-forms.json` stays, reduced to the
+forms `verify-local` checks the prompt teaches; its tier expectations go with
+the matcher. The server stores and validates text only.
 
 ## Rules the prompt states for every search
 
@@ -117,10 +120,8 @@ them:
   Country" elsewhere, as the posting gives it; "Remote (US)" or "Remote
   (<country>)" for a remote role; several locations joined with "; ". The forms
   live in one file, `client/src/domain/location-forms.json`, owned by Client
-  Comrade: each form, its expected tier, and must-not-match cases ("Portland,
-  ME" against "Portland OR"). The page's matcher test runs over it, and
-  `verify-local` reads it by path and fails if the prompt doesn't teach every
-  form in it. So a lead never silently loses its tier. `location_guidance`
+  Comrade. `verify-local` reads it by path and fails if the prompt doesn't
+  teach every form in it. `location_guidance`
   is retired with the scope prose.
 - **Remote:** a remote role is in scope when it is open to someone in a searched
   place; one restricted to a region or time zone outside the searched places is
