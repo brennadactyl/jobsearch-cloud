@@ -308,7 +308,9 @@ search of its own.
   contents. `resume_was` is the file the profile was written from, kept
   through later changes. Both go back to `''` when the next run has rewritten
   the profile and echoes the mark it read (`POST /api/writeup`,
-  `profile_refreshed`). Only a track that runs its own search is marked.
+  `profile_refreshed`). Only a track that runs its own search is marked, and
+  only once it has been written up (`role_search_line` set): before that there
+  is no profile to be stale.
 
 ### search_runs
 

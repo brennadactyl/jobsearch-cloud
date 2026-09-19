@@ -180,6 +180,13 @@ export const APP_STAGE_DATE_FIELDS = [
 // same text in SQL, and existing rows would be silently reclassified.
 export const DELISTED_REASON = "posting taken down";
 
+// A search whose overnight write-up has run, as SQL on `tracks`. Only such a
+// search has a candidate profile, so only it can have one go stale
+// (migrations/0018_profile_stale.sql): a search still waiting for its write-up
+// gets its profile from whichever resume is current when that runs. The same
+// test GET /api/prompt makes before serving a search.
+const WRITTEN_UP = "role_search_line <> ''";
+
 // Every track column except `key`, split by audience: the client reads the
 // first list to draw tabs, and only prompt.js reads the second. POST
 // /api/config writes both.
@@ -561,7 +568,7 @@ export class Db {
   async getResumeState() {
     const rows = await this.d1
       .prepare(
-        `SELECT key, label, fed_by, doc_file, documents, profile_stale_since, resume_was
+        `SELECT key, label, fed_by, doc_file, documents, profile_stale_since, resume_was, role_search_line
            FROM tracks WHERE user_id = ? ORDER BY sort_order, key`
       )
       .bind(this.userId)
@@ -574,6 +581,8 @@ export class Db {
    * replaced in place: the list still names the same file, and its contents
    * changed underneath the profile. `resume_was` is that same path, since the
    * old contents have no path of their own.
+   * Only a search that has been written up is marked: see WRITTEN_UP.
+   *
    * @param {string[]} keys searches that run
    * @param {string} path the replaced resume, as their lists name it
    * @param {string} now ISO 8601 instant
@@ -586,7 +595,7 @@ export class Db {
           .prepare(
             `UPDATE tracks SET profile_stale_since = ?,
                     resume_was = CASE WHEN profile_stale_since = '' THEN ? ELSE resume_was END
-              WHERE user_id = ? AND key = ?`
+              WHERE user_id = ? AND key = ? AND ${WRITTEN_UP}`
           )
           .bind(now, path, this.userId, key)
       )
@@ -605,6 +614,9 @@ export class Db {
    * profile was written from. The mark's time moves on every change, which is
    * what stops a run that started before this change from clearing it.
    *
+   * A search not yet written up takes the new list but no mark (WRITTEN_UP):
+   * it has no profile to be stale.
+   *
    * @param {Array<{key: string, documents: string[], was: string}>} changes
    * @param {string} now ISO 8601 instant
    */
@@ -614,8 +626,9 @@ export class Db {
       changes.map((c) =>
         this.d1
           .prepare(
-            `UPDATE tracks SET documents = ?, profile_stale_since = ?,
-                    resume_was = CASE WHEN profile_stale_since = '' THEN ? ELSE resume_was END
+            `UPDATE tracks SET documents = ?,
+                    profile_stale_since = CASE WHEN ${WRITTEN_UP} THEN ? ELSE profile_stale_since END,
+                    resume_was = CASE WHEN ${WRITTEN_UP} AND profile_stale_since = '' THEN ? ELSE resume_was END
               WHERE user_id = ? AND key = ?`
           )
           .bind(JSON.stringify(c.documents), now, c.was, this.userId, c.key)

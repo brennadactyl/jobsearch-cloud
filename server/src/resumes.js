@@ -28,6 +28,7 @@ import { READABLE_DOCUMENT_EXTENSIONS } from "./validate.js";
  * @property {string} documents - stored JSON
  * @property {string} profile_stale_since
  * @property {string} resume_was
+ * @property {string} role_search_line - '' until the search is written up
  */
 
 /**
