@@ -24,26 +24,25 @@ person had ruled out; that class of mistake exists because scope is prose.
 
 ## The three lists
 
-All three use the format `priority_locations` already has - `{label, allOf?,
-anyOf?}` rules, computed by the page's matcher from a typed list and validated by
-the server - and live in the account's settings:
+Each is typed as a comma-separated list and stored as one setting - one `meta`
+value per list, holding the list as the person typed it. No migration: `meta`
+is key/value.
 
-| Setting | Asked as | Order |
+| Setting | Asked as | Stored as |
 |---|---|---|
-| `priority_locations` | Which places would you most like? | ranked; the index is the tier |
-| `acceptable_locations` | Where else would you take a job? | unranked; one tier below the last preferred place |
-| `excluded_locations` | Anywhere you can't take a job? | unranked; a rule-out inside the other two |
+| `search_locations` | What locations should be searched? | the comma-separated list, e.g. "US, Greater Seattle area, Australia" |
+| `excluded_locations` | Anywhere you can't take a job? | the comma-separated list, e.g. "Portland OR, Texas" |
+| `priority_locations` | Which locations should come first? | unchanged: the matching rules the page builds, since the page needs them to rank leads into tiers |
 
-- **The scope is computed, never written:** the preferred places, plus the
-  acceptable places minus the excluded ones. **When answers conflict, including
-  wins:** a preferred place is always in scope, even if an exclusion or a narrower
-  answer would rule it out, because naming a place as a favourite is the
-  stronger statement. The conflict is shown to the person, not refused.
-- **The matcher knows broad places too:** a country ("US"), a state ("Colorado"),
-  "Remote" with a country, and a city with its state when the name is shared. It
-  never reduces an entry to a bare token of three letters or fewer.
-- **An optional note** keeps what a list can't say - "open to relocating for the
-  right team" - and reaches the prompt as context, never as scope.
+- **The prompt prints them as stored**, and the nightly search decides whether a
+  posting's location fits. No code turns the first two into rules.
+- **Preferred places are always searched,** even if the other two lists leave
+  them out. The prompt says so, naming each preferred place.
+- **Entries are split on commas and trimmed** when saved, so the stored value
+  is tidy and the read-back matches it. An entry of three letters or fewer that
+  isn't a known country or state code is flagged, as the ranked list does.
+- **An optional note** keeps what a list can't say - "open to relocating for
+  the right team" - and reaches the prompt as context.
 
 ## One matcher
 
