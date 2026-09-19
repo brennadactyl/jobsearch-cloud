@@ -11,7 +11,7 @@
  * `server/src/routes/data.js` for the envelope.
  */
 import { z } from "zod";
-import { locationRules, parseLocations } from "../domain/locations";
+import { areaNames, locationRules, parseLocations } from "../domain/locations";
 
 /** Text columns are `NOT NULL DEFAULT ''` throughout, so "" is the empty case, not null. */
 const str = z.string();
@@ -37,6 +37,8 @@ export const leadSchema = z.object({
   status: text,
   notes: text,
   delistedOn: text,
+  /** The ranked place the nightly search placed this lead in, "" for none: its tier. */
+  area: text,
   // The freeform block shared with applications (EXTRA_FIELDS in db.js).
   team: text,
   setup: text,
@@ -81,6 +83,8 @@ export const applicationSchema = z.object({
   // "" = not yet read, "failed" = read and established nothing.
   autofill: text,
   autofill_note: text,
+  /** The ranked place this application is in, copied from its lead or set by the overnight fill; "" for none. */
+  area: text,
 });
 
 export const screenedSchema = z.object({
@@ -165,18 +169,24 @@ export const settingsSchema = z
     applications_label: z.string().default("Applications"),
     all_leads_label: z.string().default("All leads"),
     stale_run_hours: z.number().default(DEFAULT_STALE_RUN_HOURS),
-    priority_locations: rankedPlaces,
-    /**
-     * Tier rules kept as they were stored before ranked places became a typed
-     * list. A rule's terms can say more than its label ("Seattle area" also
-     * matching Bellevue and Redmond), and a label alone can't rebuild them, so
-     * while an account has these they decide its tiers. Editing the ranked list
-     * clears them on the server, and from then on the typed list rules.
-     */
+    priority_locations: z.union([z.string(), z.array(priorityLocationSchema)]).nullish(),
+    /** Rules as stored before the ranked list was text; only their labels are read, when there is no list. */
     priority_rules: z.array(priorityLocationSchema).nullish().transform((v) => v ?? []),
     excluded_companies: z.array(z.string()).default([]),
   })
-  .transform((s) => (s.priority_rules.length ? { ...s, priority_locations: s.priority_rules } : s));
+  .transform(({ priority_locations: ranked, priority_rules: stored, ...s }) => ({
+    ...s,
+    /**
+     * "Which locations should come first?" in order, each entry exactly as
+     * typed. A lead's or application's `area` names one of these, and its
+     * position here is the row's tier. The list as rules, from a server that
+     * still sends them, gives its labels.
+     */
+    areas:
+      typeof ranked === "string" && ranked.trim()
+        ? areaNames(ranked)
+        : (stored.length ? stored : Array.isArray(ranked) ? ranked : []).map((r) => r.label),
+  }));
 
 export const userSchema = z.object({
   id: z.string(),

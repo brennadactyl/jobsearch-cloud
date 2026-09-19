@@ -5,7 +5,6 @@
  * cannot make sense of.
  */
 import { describe, expect, it } from "vitest";
-import { matchLocationTier } from "../domain/geo";
 import { dataSchema, loginSchema, settingsSchema } from "./schema";
 
 /** The minimum a freshly created database returns: no config posted, nothing found yet. */
@@ -27,7 +26,7 @@ describe("dataSchema", () => {
     expect(data.settings.display_title).toBe("Job Search Tracker");
     expect(data.settings.all_leads_label).toBe("All leads");
     expect(data.settings.stale_run_hours).toBe(36);
-    expect(data.settings.priority_locations).toEqual([]);
+    expect(data.settings.areas).toEqual([]);
   });
 
   it("ignores fields the server has that this client does not render", () => {
@@ -90,67 +89,48 @@ describe("dataSchema", () => {
 });
 
 describe("settingsSchema", () => {
-  it("keeps ordered priority locations, which is what makes index mean rank", () => {
+  it("reads the ranked areas from the list as typed, in order, each entry as written", () => {
+    const s = settingsSchema.parse({ priority_locations: "Seattle area, Portland, SEA ,, Remote US" });
+    // Every entry keeps its place, whether or not a matcher could read it,
+    // so the ranks after it don't shift.
+    expect(s.areas).toEqual(["Seattle area", "Portland", "SEA", "Remote US"]);
+  });
+
+  it("reads the labels of a list that arrives as rules, from a server that still sends them", () => {
     const s = settingsSchema.parse({
       priority_locations: [
         { label: "Metro core", anyOf: ["springfield"] },
         { label: "Wider region", anyOf: ["shelbyville"] },
       ],
     });
-    expect(s.priority_locations.map((r) => r.label)).toEqual(["Metro core", "Wider region"]);
+    expect(s.areas).toEqual(["Metro core", "Wider region"]);
   });
 
-  it("builds the same tier rules from the list as typed as the server sends it built", () => {
-    const typed = "Seattle, Portland OR, Remote US";
-    const fromList = settingsSchema.parse({ priority_locations: typed }).priority_locations;
-    expect(fromList.map((r) => r.label)).toEqual(["Seattle", "Portland OR", "Remote US"]);
-    // Rules sent already built are read as they are, so either shape tiers leads alike.
-    expect(settingsSchema.parse({ priority_locations: fromList }).priority_locations).toEqual(fromList);
+  it("takes the labels of stored rules only when there is no typed list", () => {
+    const stored = [{ tier: "p-high", label: "Seattle area", anyOf: ["seattle", "bellevue"] }];
+    expect(settingsSchema.parse({ priority_locations: "", priority_rules: stored }).areas).toEqual(["Seattle area"]);
+    expect(settingsSchema.parse({ priority_locations: "Seattle area, Bay Area", priority_rules: stored }).areas).toEqual([
+      "Seattle area",
+      "Bay Area",
+    ]);
   });
 
-  it("reads a list with an entry the matcher can't place, and builds no rule for that entry, rather than failing the page", () => {
-    const s = settingsSchema.parse({ priority_locations: "Seattle, SEA, Portland" });
-    // "SEA" is too short to match and a bare "Portland" names several places:
-    // they tier nothing, and the page still loads.
-    expect(s.priority_locations.map((r) => r.label)).toEqual(["Seattle"]);
-  });
-
-  it("treats an empty or missing list as no ranked places", () => {
+  it("treats an empty or missing list as no ranked areas", () => {
     for (const priority_locations of ["", "  ", null, undefined]) {
-      expect(settingsSchema.parse({ priority_locations }).priority_locations).toEqual([]);
+      expect(settingsSchema.parse({ priority_locations }).areas).toEqual([]);
     }
   });
 
-  it("tiers by the stored rules while an account has them, so a migrated list keeps every term it had", () => {
-    // The demo's rules before its list became text: "Seattle area" meant four cities.
-    const stored = [
-      { label: "Seattle area", anyOf: ["seattle", "bellevue", "redmond", "kirkland"] },
-      { label: "Portland", anyOf: ["portland"] },
-    ];
-    const s = settingsSchema.parse({ priority_locations: "Seattle area, Portland", priority_rules: stored });
-    expect(s.priority_locations).toEqual(stored);
-    expect(matchLocationTier("Bellevue, WA", s.priority_locations)?.label).toBe("Seattle area");
-    expect(matchLocationTier("Portland, OR", s.priority_locations)?.rank).toBe(1);
-  });
-
-  it("reads stored rules that carry fields the page doesn't use, as hand-set rules do", () => {
-    const s = settingsSchema.parse({
-      priority_locations: "Seattle area",
-      priority_rules: [{ tier: "p-high", label: "Seattle area", anyOf: ["seattle", "bellevue"] }],
+  it("loads a whole /api/data payload, with each lead's and application's area", () => {
+    const data = dataSchema.parse({
+      ...emptyPayload,
+      settings: { priority_locations: "Seattle, Remote US" },
+      leads: [{ id: 1, search: "alpha", location: "Bellevue, WA", area: "Seattle" }],
+      applications: [{ id: 2, location: "Austin, TX" }],
     });
-    expect(matchLocationTier("Bellevue, WA", s.priority_locations)?.label).toBe("Seattle area");
-  });
-
-  it("builds from the typed list when there are no stored rules", () => {
-    for (const priority_rules of [[], null, undefined]) {
-      const s = settingsSchema.parse({ priority_locations: "Seattle, Remote US", priority_rules });
-      expect(s.priority_locations.map((r) => r.label)).toEqual(["Seattle", "Remote US"]);
-    }
-  });
-
-  it("loads a whole /api/data payload whose ranked places arrive as a typed list", () => {
-    const data = dataSchema.parse({ ...emptyPayload, settings: { priority_locations: "Seattle, Remote US" } });
-    expect(data.settings.priority_locations).toHaveLength(2);
+    expect(data.settings.areas).toEqual(["Seattle", "Remote US"]);
+    expect(data.leads[0].area).toBe("Seattle");
+    expect(data.applications[0].area).toBe("");
   });
 });
 

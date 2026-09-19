@@ -1,9 +1,9 @@
 /** A lead's place among the account's preferred locations, and the key that numbers them. */
 import type { Settings } from "../api/schema";
-import { matchLocationTier } from "../domain/geo";
+import { tierOf } from "../domain/geo";
 
-export function GeoBadge({ location, settings }: { location: string; settings: Settings }) {
-  const g = matchLocationTier(location, settings.priority_locations);
+export function GeoBadge({ row, settings }: { row: { area: string }; settings: Settings }) {
+  const g = tierOf(row, settings);
   if (!g) return null;
   return <span className={`geo ${g.cssClass}`}>{g.label}</span>;
 }
@@ -12,10 +12,10 @@ export function GeoBadge({ location, settings }: { location: string; settings: S
 export function GeoKey({ settings }: { settings: Settings }) {
   return (
     <>
-      {settings.priority_locations.map((r, i) => (
-        <span key={r.label}>
+      {settings.areas.map((area, i) => (
+        <span key={area}>
           <i style={{ background: i < 5 ? `var(--pri-${i})` : "var(--ink3)" }} />
-          {i + 1}. {r.label}
+          {i + 1}. {area}
         </span>
       ))}
     </>

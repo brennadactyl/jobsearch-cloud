@@ -21,11 +21,15 @@ export function daysAgo(days: number): string {
   return new Date(NOW - days * 86_400_000).toISOString().slice(0, 10);
 }
 
+/** The area a nightly search places each fixture location in; anywhere else has none. */
+const AREA_OF: Record<string, string> = { Springfield: "Metro core", Remote: "Metro core", Shelbyville: "Wider region" };
+
 function lead(over: Partial<Lead> & Pick<Lead, "id">): Lead {
   return {
     search: "alpha", found: daysAgo(1), company: "", title: "", location: "",
     url: "", verified: "", fit: "", status: "New", notes: "", delistedOn: "",
     team: "", setup: "", source: "", link: "", resume: "", referral: "", comp: "",
+    area: AREA_OF[over.location ?? ""] ?? "",
     ...over,
   };
 }
@@ -38,6 +42,7 @@ function app(over: Partial<Application> & Pick<Application, "id">): Application 
     dateRecruiterScreen: "", dateTechScreen: "", dateOnsite: "",
     dateOffer: "", dateRejected: "", dateWithdrawn: "",
     autofill: "", autofill_note: "",
+    area: AREA_OF[over.location ?? ""] ?? "",
     ...over,
   };
 }
@@ -48,11 +53,7 @@ export const settings: Settings = {
   applications_label: "Applications",
   all_leads_label: "All leads",
   stale_run_hours: 36,
-  priority_locations: [
-    { label: "Metro core", anyOf: ["springfield", "remote"] },
-    { label: "Wider region", anyOf: ["shelbyville"] },
-  ],
-  priority_rules: [],
+  areas: ["Metro core", "Wider region"],
   excluded_companies: [],
 };
 

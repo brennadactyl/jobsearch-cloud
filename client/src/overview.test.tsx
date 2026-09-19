@@ -68,7 +68,7 @@ describe("each chart's table view", () => {
 
   it("By location shows each bar's segments as a row", async () => {
     await renderOverview();
-    const tiers = data.settings.priority_locations.map((r) => r.label).concat("Other");
+    const tiers = data.settings.areas.concat("Other");
     const chart = tiers.map((t) => screen.getByRole("group", { name: t }).querySelector(".hbar")!);
     const segments = chart.map((bar) => [...bar.querySelectorAll(".hseg")].reduce((s, el) => s + Number(el.getAttribute("data-n")), 0));
     const block = screen.getByRole("heading", { name: /^By location/ }).closest(".ch-block") as HTMLElement;
@@ -201,7 +201,7 @@ describe("by location", () => {
         track: group.querySelector(".tier-track")!,
       };
     });
-  const labels = () => data.settings.priority_locations.map((r) => r.label).concat("Other");
+  const labels = () => data.settings.areas.concat("Other");
 
   it("gives every bar the full length, split within its own tier, with the tier's total beside it", async () => {
     await renderOverview();
@@ -230,9 +230,10 @@ describe("by location", () => {
   });
 
   it("shows an empty track and a 0 for a tier with nothing in it", async () => {
-    const nowhere = { label: "Nowhere yet", anyOf: ["no posting says this"] };
-    await renderOverview({ ...data, settings: { ...data.settings, priority_locations: [...data.settings.priority_locations, nowhere] } });
-    const [row] = tierRows([nowhere.label]);
+    // Ranked, but no row has been placed in it yet.
+    const nowhere = "Nowhere yet";
+    await renderOverview({ ...data, settings: { ...data.settings, areas: [...data.settings.areas, nowhere] } });
+    const [row] = tierRows([nowhere]);
     expect(row.total).toBe(0);
     expect(row.segments).toEqual([]);
     expect(row.track).toBeEmptyDOMElement();

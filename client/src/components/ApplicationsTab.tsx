@@ -6,7 +6,7 @@ import { LABELS } from "../domain/constants";
 import { appRows, drillKeeps } from "../domain/drills";
 import { applicationColumns } from "../domain/export";
 import { daysSince, hostOf, safeUrl } from "../domain/format";
-import { matchLocationTier } from "../domain/geo";
+import { tierOf } from "../domain/geo";
 import { appComparator, fillState, type FillState } from "../domain/rows";
 import { buildTracks, pathWithoutDrill } from "../domain/tabs";
 import { revealSelectedRow } from "../ui/hooks";
@@ -162,7 +162,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
       <div className="md">
         <div className="md-list" ref={revealSelectedRow} data-wheel-target>
           {rows.map((a) => {
-            const g = matchLocationTier(a.location, settings.priority_locations);
+            const g = tierOf(a, settings);
             const d = daysSince(a.dateApplied);
             const label = a.company || hostOf(a.link) || "Untitled";
             return (
@@ -181,7 +181,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
                 </div>
                 <div className="md-row-loc">
                   <span className="md-row-place">{a.location}</span>
-                  <GeoBadge location={a.location} settings={settings} />
+                  <GeoBadge row={a} settings={settings} />
                   {a.status === "To Apply" ? (
                     <span className="md-row-found">Not applied yet</span>
                   ) : (
@@ -316,7 +316,7 @@ function AppsGrid({
                 )}
                 {!shut &&
                   grp.rows.map((a) => {
-                    const g = matchLocationTier(a.location, settings.priority_locations);
+                    const g = tierOf(a, settings);
                     const open = !!prefs.expanded[a.id];
                     const d = daysSince(a.dateApplied);
                     const link = safeUrl(a.link);
@@ -437,7 +437,7 @@ function AppDetail({
 }) {
   const { settings } = data;
   const d = daysSince(app.dateApplied);
-  const g = matchLocationTier(app.location, settings.priority_locations);
+  const g = tierOf(app, settings);
   const track = appTrackLabel(app, data);
   const safe = safeUrl(app.link);
 

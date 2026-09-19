@@ -7,7 +7,7 @@
  */
 import type { Application, Lead, Settings, Track } from "../api/schema";
 import { APP_ROLE_FIELDS, LABELS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "./constants";
-import { matchLocationTier } from "./geo";
+import { tierOf } from "./geo";
 
 export interface Column<T> {
   header: string;
@@ -18,8 +18,8 @@ function field<T>(name: string, header: string): Column<T> {
   return { header, value: (row) => String((row as unknown as Record<string, unknown>)[name] ?? "") };
 }
 
-function tier(location: string, settings: Settings): string {
-  return matchLocationTier(location, settings.priority_locations)?.label ?? "";
+function tier(row: { area: string }, settings: Settings): string {
+  return tierOf(row, settings)?.label ?? "";
 }
 
 /**
@@ -32,7 +32,7 @@ export function leadColumns(tracks: Record<string, Track>, settings: Settings): 
     field("company", LABELS.company),
     field("title", LABELS.role),
     field("location", LABELS.location),
-    { header: LABELS.locationTier, value: (l) => tier(l.location, settings) },
+    { header: LABELS.locationTier, value: (l) => tier(l, settings) },
     field("status", LABELS.status),
     field("found", LABELS.found),
     field("verified", LABELS.verified),
@@ -48,7 +48,7 @@ export function applicationColumns(settings: Settings): Column<Application>[] {
     field("company", LABELS.company),
     field("title", LABELS.role),
     field("location", LABELS.location),
-    { header: LABELS.locationTier, value: (a) => tier(a.location, settings) },
+    { header: LABELS.locationTier, value: (a) => tier(a, settings) },
     field("status", LABELS.status),
     ...STAGE_HISTORY_FIELDS.map(([name, label]) => field<Application>(name, label)),
     ...APP_ROLE_FIELDS.map(([name, label]) => field<Application>(name, label)),

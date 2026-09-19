@@ -189,11 +189,11 @@ export interface TierBar {
   segments: Segment[];
 }
 
-/** One bar per priority_locations rule plus Other. Empty when no rules are configured. */
+/** One bar per ranked area plus Other. Empty when no places are ranked. */
 export function tierBars(data: TrackerData): TierBar[] {
-  const rules = data.settings.priority_locations;
-  if (!rules.length) return [];
-  const tiers = [...rules.map((r, i) => ({ key: String(i), label: r.label })), { key: "other", label: "Other" }];
+  const areas = data.settings.areas;
+  if (!areas.length) return [];
+  const tiers = [...areas.map((label, i) => ({ key: String(i), label })), { key: "other", label: "Other" }];
   return tiers.map((t) => ({
     ...t,
     segments: [
