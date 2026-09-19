@@ -1,0 +1,26 @@
+{
+  "about": "How the nightly runs write a lead's location, and the tier the page must give each one. `forms` names each form the prompt teaches; every case says which form it writes. `ranked` is a person's 'Which locations should come first?' list as typed; `tier` is the 0-based rank the written location must land in, or null for a location that must match nothing. The page's matcher test runs every case (locations.test.ts); server/verify-local.mjs reads this file by path and checks the prompt teaches every form in `forms`.",
+  "forms": {
+    "us-city": "City, ST - a US city with its two-letter state",
+    "city-country": "City, Country - a city outside the US with its country",
+    "remote-us": "Remote (US)",
+    "remote-country": "Remote (<country>) - remote, open to one country",
+    "joined": "several locations joined with \"; \""
+  },
+  "cases": [
+    { "form": "us-city", "ranked": "Seattle, Portland OR, Remote US", "written": "Seattle, WA", "tier": 0 },
+    { "form": "us-city", "ranked": "Seattle, Portland OR, Remote US", "written": "Portland, OR", "tier": 1 },
+    { "form": "us-city", "ranked": "Austin TX, Denver", "written": "Denver, CO", "tier": 1 },
+    { "form": "us-city", "ranked": "Seattle, Portland OR, Remote US", "written": "Portland, ME", "tier": null, "why": "a shared city name matches only with its own state" },
+    { "form": "us-city", "ranked": "Seattle, Remote US", "written": "Raleigh, NC", "tier": null, "why": "a place nobody ranked has no tier" },
+    { "form": "city-country", "ranked": "Seattle, Toronto ON", "written": "Toronto, Canada", "tier": 1 },
+    { "form": "city-country", "ranked": "Seattle, London", "written": "London, United Kingdom", "tier": 1 },
+    { "form": "remote-us", "ranked": "Seattle, Remote US", "written": "Remote (US)", "tier": 1 },
+    { "form": "remote-us", "ranked": "Seattle, Remote US", "written": "Remote (Canada)", "tier": null, "why": "remote in another country is not Remote US" },
+    { "form": "remote-country", "ranked": "Seattle, Remote Canada", "written": "Remote (Canada)", "tier": 1 },
+    { "form": "remote-country", "ranked": "Seattle, Remote Canada", "written": "Remote (US)", "tier": null, "why": "remote in another country is not Remote Canada" },
+    { "form": "joined", "ranked": "Seattle, Remote US", "written": "Austin, TX; Remote (US)", "tier": 1, "why": "one of several locations is enough" },
+    { "form": "joined", "ranked": "Seattle, Remote US", "written": "Remote (US); Seattle, WA", "tier": 0, "why": "several locations take the best tier among them" },
+    { "form": "joined", "ranked": "Seattle, Remote US", "written": "Austin, TX; Remote (Canada)", "tier": null }
+  ]
+}
