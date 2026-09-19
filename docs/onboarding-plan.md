@@ -45,7 +45,7 @@ setup form instead of an empty tracker:
 | Page title | text, prefilled "<name>'s Job Search" |
 | Pronouns (optional) | she/her · he/him · they/them; unset means they/them |
 | Resume | attach files, paste text, or both |
-| Where can you work? | free text, required, e.g. "anywhere in the US, remote or in the Denver area". This is the only answer that sets the search's scope |
+| What locations should be searched? | free text, required, e.g. "US only, Greater Seattle area, Australia". This is the only answer that sets the search's scope |
 | Anywhere you can't take a job? | free text, optional. A rule-out, never a scope |
 | Which locations should come first? | comma-separated, in order of preference, e.g. "Seattle, Bellevue, Remote US, Portland OR"; read back as what each entry matches, and an entry too short to match reliably is flagged (2g, 2h) |
 | Per role: Call it | text |
@@ -129,7 +129,7 @@ The admin routes are one list, checked once by the router.
 | `pronouns` | `""`, `she/her`, `he/him` or `they/them` |
 | `resume_text` | pasted resume text |
 | `resume_files` | document paths under `resumes/` |
-| `work_scope` | "Where can you work?" |
+| `work_scope` | "What locations should be searched?" |
 | `location_limits` | "Anywhere you can't take a job?" |
 | `locations_first` | the ranked places, as typed |
 | `priority_locations` | `[{label, allOf?, anyOf?}]`, computed by the page |
@@ -189,7 +189,7 @@ components.
   - the zero-tracks routing
 
 **Scope comes from one answer, and a contradiction stops the build.** Only
-"Where can you work?" sets the scope. Before posting anything, the onboarding
+"What locations should be searched?" sets the scope. Before posting anything, the onboarding
 run checks that at least one preferred location falls inside that scope, and
 that the scope answer is not empty. If neither holds it marks the intake failed,
 naming the two answers, rather than building a search that can only screen
@@ -219,7 +219,7 @@ needs judgement.
 | Page title | `display_title` |
 | Pronouns | `settings.pronouns` |
 | Resume | the readable attachment in `resumes/` (a PDF is read as it is) or the pasted text, named in each track's `resume_line` |
-| Where can you work? | `geo_scope_line` (a full numbered step with examples) and `scope_clause`: where the search may look |
+| What locations should be searched? | `geo_scope_line` (a full numbered step with examples) and `scope_clause`: where the search may look |
 | Anywhere you can't take a job? | `scope_disqualifier` only. An exclusion never becomes the scope |
 | Locations first | `priority_locations`, as the rules the page computed, unchanged |
 | Call it | track `label`, and a slug `key` unique in the account |

@@ -44,7 +44,7 @@ the panel promises after each save.
 
 | Field | Feeds |
 |---|---|
-| Where can you work? | the scope wording |
+| What locations should be searched? | the scope wording |
 | Anywhere you can't take a job? | the disqualifier |
 | Per search: what roles? | the role line and description |
 | Per search: kinds of companies | the candidate profile |

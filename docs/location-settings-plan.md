@@ -16,7 +16,7 @@ the track docs (the tier table leaves them). The settings today are in
 
 Only the preferred places are data today: `priority_locations`, rules the page
 computes from a typed list. Everywhere else a person could work is prose - the
-setup form's "Where can you work?" answer, turned overnight into
+setup form's "What locations should be searched?" answer, turned overnight into
 `geo_scope_line`, `scope_clause` and `scope_disqualifier`, which the prompt
 reads and the model interprets each night. Each track doc also restates the
 preferred tiers as a table, a copy that can drift from the settings. An
