@@ -416,6 +416,37 @@ function Get-RankedEntries {
     return , $script:RankedEntries
 }
 
+# Whether a lead's link plainly goes nowhere: the posting answers 404 or 410,
+# or the site redirects it to its own error page (Workable sends an unknown
+# code to /oops). A run can copy a job id wrongly out of a board's JSON after
+# verifying the real posting, and the lead then links to nothing; this opens
+# the link that will actually be saved. Returns why it's gone, or "" - and ""
+# for anything unclear too (a timeout, a 403, a site that refuses scripts),
+# because refusing a live lead on a fetch hiccup would lose it for good.
+#
+# curl.exe (in System32 on Windows 10 and 11) rather than .NET's web client,
+# which drops the connection on the 404s GitHub and Lever send and reports
+# them as "connection closed" rather than the status. Without curl.exe the
+# check says nothing, and every lead is sent as before.
+$DeadPagePaths = @("oops", "404", "not-found", "notfound", "page-not-found", "job-not-found")
+$Curl = Join-Path $env:SystemRoot "System32\curl.exe"
+function Get-DeadLinkReason([string]$link) {
+    if (-not (Test-Path $Curl)) { return "" }
+    try {
+        $out = & $Curl -s -o NUL -L --max-redirs 8 -m 10 -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) job-search-tracker" `
+            -w "%{http_code} %{url_effective}" $link 2>$null
+    } catch { return "" }
+    if ($LASTEXITCODE -ne 0 -or -not $out) { return "" }
+    $status, $landed = ([string]$out).Split(" ", 2)
+    if ($status -eq "404" -or $status -eq "410") { return "it answers $status" }
+    try { $path = ([Uri]$landed).AbsolutePath } catch { return "" }
+    $last = ($path.Trim("/") -split "/")[-1].ToLowerInvariant()
+    if ($landed -ne $link -and $DeadPagePaths -contains $last) {
+        return "it redirects to the site's error page ($landed)"
+    }
+    return ""
+}
+
 $script:AreaCleared = 0
 function Invoke-LeadsCommand {
     $rows = Read-Rows $PositionalArg "leads"
@@ -426,6 +457,8 @@ function Invoke-LeadsCommand {
         $title = Get-TrimmedField $inputRow "title"
         if (-not $url) { Refuse "a lead with no url" "there is nothing to track or dedup on"; continue }
         if (-not $company -or -not $title) { Refuse "$url" "a lead needs both a company and a title"; continue }
+        $dead = Get-DeadLinkReason $url
+        if ($dead) { Refuse "$url" "the link goes nowhere - $dead. Open the posting again and send the url its page is actually at"; continue }
         $row = @{ search = $Search; company = $company; title = $title; url = $url }
         $rowSearch = Get-TrimmedField $inputRow "search"
         if ($rowSearch) { $row["search"] = $rowSearch }
