@@ -200,7 +200,8 @@ describe("choosing a resume for a search", () => {
         "Saved. Waiting for tonight's run: until then Eng - AI still searches with Brenna_Engineering.pdf. Tonight it reads Brenna_AI_Roles.docx and rewrites its profile from it before searching.",
       ),
     ).toBeInTheDocument();
-    expect(rowOf("Brenna_Engineering.pdf")).toHaveTextContent("(Eng - AI until tonight)");
+    // Still read by Eng - Gaming, so still used; Eng - AI has moved off it.
+    expect(rowOf("Brenna_Engineering.pdf")).toHaveTextContent("Used byEng - Gaming(replaced for Eng - AI)");
     expect(rowOf("Brenna_AI_Roles.docx")).toHaveTextContent("(from tonight)");
     expect(screen.queryByText(/unsaved change/)).toBeNull();
   });
@@ -223,7 +224,12 @@ describe("choosing a resume for a search", () => {
     expect(rowOf("Brenna_Engineering.pdf")).toHaveTextContent("can't be removed");
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(rowOf("Brenna_Engineering.pdf")).toHaveTextContent("until tonight"));
+    await waitFor(() =>
+      expect(rowOf("Brenna_Engineering.pdf")).toHaveTextContent(
+        "Replaced for Eng - Gaming and Eng - AI. No search needs it, so you can remove it.",
+      ),
+    );
+    expect(rowOf("Brenna_Engineering.pdf")).not.toHaveTextContent("Used by");
     expect(rowOf("Brenna_Engineering.pdf")).not.toHaveTextContent("can't be removed");
 
     await userEvent.click(within(rowOf("Brenna_Engineering.pdf")).getByRole("button", { name: "Remove Brenna_Engineering.pdf" }));
