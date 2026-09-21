@@ -38,12 +38,12 @@ export const LOCATION_LIST_MAX_CHARS = 4000;
 export const LOCATION_NOTE_MAX_CHARS = 1000;
 
 /**
- * The entries of a ranked list, the one way everything splits it
+ * The entries of a location list, the one way everything splits it
  * (docs/location-settings-plan.md, "The three lists"): on commas, each entry
  * trimmed, empty ones dropped. "Portland, OR" is two entries. scripts/tracker.ps1
  * and the page split it the same way, so a value one accepts the other can't
  * refuse.
- * @param {unknown} list the stored `priority_locations`
+ * @param {unknown} list a stored location list, such as `priority_locations`
  * @returns {string[]}
  */
 export function rankedEntries(list) {
@@ -65,6 +65,20 @@ export function storedArea(area, list) {
   const value = typeof area === "string" ? area.trim().toLowerCase() : "";
   if (!value) return "";
   return rankedEntries(list).find((entry) => entry.toLowerCase() === value) ?? "";
+}
+
+/**
+ * The refusal for a search with nowhere to look, or "". An empty searched list
+ * means "only the ranked places" (docs/location-settings-plan.md, "Where they
+ * are written"), so only both lists empty is refused. Entries are counted by
+ * the one split rule, so a list of bare commas is empty.
+ * @param {unknown} searched the `search_locations` the write leaves
+ * @param {unknown} ranked the `priority_locations` the write leaves
+ * @returns {string}
+ */
+export function nowhereToSearchError(searched, ranked) {
+  if (rankedEntries(searched).length || rankedEntries(ranked).length) return "";
+  return "say where to search, or rank at least one place first - the search needs somewhere to look";
 }
 
 /**

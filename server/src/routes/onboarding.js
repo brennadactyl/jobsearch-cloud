@@ -28,7 +28,7 @@ import {
   revokeInvite,
   signupWithInvite,
 } from "../onboarding.js";
-import { isDocumentPath, locationSettingError } from "../validate.js";
+import { isDocumentPath, locationSettingError, nowhereToSearchError } from "../validate.js";
 
 const NOTE_MAX = 200;
 const NAME_MAX = 60;
@@ -133,10 +133,10 @@ export async function handleGetIntake({ db }) {
  *
  * The answers are stored whole, as sent, because the run reads every field and
  * the form may add more. Only what the run cannot work without is checked:
- * at least one role with a name and titles, a resume it can find, and location
- * rules of the shape /api/config will be given. A resume counts when there is
- * pasted text, or when a named file under resumes/ exists now - the page uploads
- * files before it sends the answers.
+ * at least one role with a name and titles, a resume it can find, location
+ * answers as text within their caps, and somewhere to look. A resume counts
+ * when there is pasted text, or when a named file under resumes/ exists now -
+ * the page uploads files before it sends the answers.
  */
 export async function handlePostIntake({ request, db, docs, user }) {
   if (user.demo) return json({ error: "a demo account cannot send setup" }, 403);
@@ -207,23 +207,20 @@ function tracksFromRoles(roles) {
 }
 
 /**
- * Whether someone said where to search (`work_scope`), checked while they are
- * still on the form (docs/onboarding.md#why-it-is-split-this-way).
+ * Whether someone gave the search somewhere to look, checked while they are
+ * still on the form (docs/onboarding.md#why-it-is-split-this-way): a place to
+ * search (`work_scope`) or a place ranked first (`locations_first`). An empty
+ * `work_scope` then means "only the ranked places".
  *
- * It isn't compared with the places they ranked first. Where location answers
- * disagree the place is included rather than the send refused
- * (docs/location-settings-plan.md), so a scope that names none of them is
- * nothing to stop someone for.
+ * The two aren't compared. Where location answers disagree the place is
+ * included rather than the send refused (docs/location-settings-plan.md).
  *
  * @param {Record<string, unknown>} answers
  * @returns {{error: string, field: string}|null}
  */
 function scopeProblem(answers) {
-  const scope = typeof answers.work_scope === "string" ? answers.work_scope.trim() : "";
-  if (!scope) {
-    return { error: "say where to search - the search needs somewhere to look", field: "work_scope" };
-  }
-  return null;
+  const error = nowhereToSearchError(answers.work_scope, answers.locations_first);
+  return error ? { error, field: "work_scope" } : null;
 }
 
 /**
