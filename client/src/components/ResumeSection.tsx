@@ -292,7 +292,9 @@ function ResumeRow({
   onCancel: () => void;
 }) {
   const name = fileNameOf(row.path);
-  const tabs = [...new Set(row.used_by.flatMap((u) => u.tabs))];
+  // A search switched away from this file doesn't read it any more, so it
+  // isn't "used": it only still shapes that search's profile until tonight.
+  const tabs = [...new Set(row.used_by.filter((u) => u.state !== "until_next_run").flatMap((u) => u.tabs))];
   const until = row.used_by.filter((u) => u.state === "until_next_run").map((u) => labelOf(u.search));
   const from = row.used_by.some((u) => u.state === "from_next_run");
   const tone = removing ? " alert" : added ? " new" : "";
@@ -316,9 +318,11 @@ function ResumeRow({
                   {labelOf(k)}
                 </span>
               ))}
-              {until.length > 0 && <span className="resume-quiet">({joinNames(until)} until tonight)</span>}
+              {until.length > 0 && <span className="resume-quiet">(replaced for {joinNames(until)})</span>}
               {from && <span className="resume-quiet">(from tonight)</span>}
             </div>
+          ) : until.length > 0 ? (
+            <div className="resume-unused">Replaced for {joinNames(until)}. No search needs it, so you can remove it.</div>
           ) : (
             <div className="resume-unused">Not used by any search</div>
           )}
