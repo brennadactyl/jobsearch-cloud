@@ -424,7 +424,12 @@ export default function Setup({
               value={answers.work_scope}
               onChange={(e) => set("work_scope", e.target.value)}
             />
-            <PlaceEntries lead="Searched:" entries={listEntries(answers.work_scope)} />
+            {/* Empty doesn't mean anywhere: the search looks only where the ranked list says. */}
+            <PlaceEntries
+              lead="Searched:"
+              entries={listEntries(answers.work_scope)}
+              empty={listEntries(answers.locations_first).length ? "Only the ranked places" : undefined}
+            />
           </Field>
           <Field
             label={<label htmlFor={`${id}-first`}>Which locations should come first?</label>}

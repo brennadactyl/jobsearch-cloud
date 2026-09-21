@@ -5,6 +5,7 @@
  */
 import { DEFAULT_STALE_RUN_HOURS, type IntakeAnswers, type InviteReason, type RoleAnswer } from "../api/schema";
 import { HOUR_MS } from "./format";
+import { nowhereToSearch } from "./places";
 
 export const MAX_NAME = 60;
 /** The documents route refuses anything larger. */
@@ -97,12 +98,9 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
       found.attach = "We can't read that file overnight. Attach a PDF, Word (.docx), .txt or .md file, or paste the text too.";
     }
   }
-  // The run builds the search's scope from this answer alone. Left empty, the
-  // scope would fall back to whatever else mentions a place - an exclusion
-  // among them - and the search would look in the one place ruled out.
-  if (!answers.work_scope.trim()) {
-    found.work_scope = "Say what locations should be searched — the search needs somewhere to look.";
-  }
+  // The ruled-out list never says where to look, so it can't stand in for these two.
+  const nowhere = nowhereToSearch(answers.work_scope, answers.locations_first);
+  if (nowhere) found.work_scope = nowhere;
   const usable = answers.roles.some((r) => r.name.trim() && r.titles.trim());
   if (!usable) {
     const i = Math.max(0, answers.roles.findIndex((r) => !r.name.trim() || !r.titles.trim()));

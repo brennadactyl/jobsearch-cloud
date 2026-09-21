@@ -69,12 +69,15 @@ describe("setupProblems", () => {
     expect(setupProblems(ready, [])).toEqual({});
   });
 
-  it("holds out for where the person can work, which is the only answer that scopes the search", () => {
-    expect(setupProblems({ ...ready, work_scope: "  " }, []).work_scope).toBe(
-      "Say what locations should be searched — the search needs somewhere to look.",
+  it("holds out for somewhere to search: the searched list, or the ranked places alone", () => {
+    const nowhere = { ...ready, work_scope: "  ", locations_first: " , " };
+    expect(setupProblems(nowhere, []).work_scope).toBe(
+      "Say what locations should be searched, or rank some places first — the search needs somewhere to look.",
     );
-    // An exclusion is not a scope: on its own it still can't send.
-    expect(setupProblems({ ...ready, work_scope: "", location_limits: "Nowhere in Texas" }, [])).toHaveProperty("work_scope");
+    // An exclusion is not somewhere to look: on its own it still can't send.
+    expect(setupProblems({ ...nowhere, location_limits: "Nowhere in Texas" }, [])).toHaveProperty("work_scope");
+    // Ranked places are always searched, so they're enough on their own.
+    expect(setupProblems({ ...ready, work_scope: "", locations_first: "Seattle" }, [])).toEqual({});
   });
 
   it("sends a PDF on its own, since the run reads it", () => {

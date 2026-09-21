@@ -316,8 +316,25 @@ describe("the setup form", () => {
     await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Nowhere in Texas");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
-    expect(screen.getByText("Say what locations should be searched — the search needs somewhere to look.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Say what locations should be searched, or rank some places first — the search needs somewhere to look."),
+    ).toBeInTheDocument();
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("sends with only ranked places, reading the empty searched list back as those", async () => {
+    const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
+    await openSetup();
+    await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
+    await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
+    await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+    expect(screen.queryByText("Searched:")).toBeNull();
+    await userEvent.type(screen.getByLabelText("Which locations should come first?"), "Seattle, Remote US");
+    expect(screen.getByText("Searched:").parentElement).toHaveTextContent("Searched:Only the ranked places");
+
+    await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit.mock.calls[0][0]).toMatchObject({ work_scope: "", locations_first: "Seattle, Remote US" });
   });
 
   it("asks for a role beside the role block", async () => {
