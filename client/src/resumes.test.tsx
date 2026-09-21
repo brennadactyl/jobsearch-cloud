@@ -205,6 +205,31 @@ describe("choosing a resume for a search", () => {
     expect(screen.queryByText(/unsaved change/)).toBeNull();
   });
 
+  it("drops a refusal to remove a file once a save points its searches elsewhere, and lets it go", async () => {
+    documents = [doc(ENG, { used_by: reads("gaming", "ai") }), doc(AI, { uploaded: "2026-09-12T17:00:00.000Z", words: 612 })];
+    vi.spyOn(client, "saveSettings").mockImplementation(async () => {
+      const until = (s: string) => ({ search: s, tabs: [s], state: "until_next_run" as const });
+      const from = (s: string) => ({ search: s, tabs: [s], state: "from_next_run" as const });
+      documents = [
+        doc(ENG, { used_by: [until("gaming"), until("ai")] }),
+        doc(AI, { uploaded: "2026-09-12T17:00:00.000Z", words: 612, used_by: [from("gaming"), from("ai")] }),
+      ];
+      return { resumes: {}, locations: {} };
+    });
+    await openResumes();
+    await userEvent.selectOptions(picker("Eng - Gaming"), AI);
+    await userEvent.selectOptions(picker("Eng - AI"), AI);
+    await userEvent.click(within(rowOf("Brenna_Engineering.pdf")).getByRole("button", { name: "Remove Brenna_Engineering.pdf" }));
+    expect(rowOf("Brenna_Engineering.pdf")).toHaveTextContent("can't be removed");
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(rowOf("Brenna_Engineering.pdf")).toHaveTextContent("until tonight"));
+    expect(rowOf("Brenna_Engineering.pdf")).not.toHaveTextContent("can't be removed");
+
+    await userEvent.click(within(rowOf("Brenna_Engineering.pdf")).getByRole("button", { name: "Remove Brenna_Engineering.pdf" }));
+    expect(rowOf("Brenna_Engineering.pdf")).toHaveTextContent("Remove Brenna_Engineering.pdf? It's deleted for good.");
+  });
+
   it("keeps the choices and shows the refusal when a save is refused", async () => {
     vi.spyOn(client, "saveSettings").mockRejectedValue(Object.assign(new Error("Eng - AI can't read that file"), { status: 422 }));
     await openResumes();

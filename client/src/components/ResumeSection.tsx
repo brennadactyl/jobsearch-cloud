@@ -53,7 +53,9 @@ export default function ResumeSection({
   const [uploading, setUploading] = useState("");
   const [attachMsg, setAttachMsg] = useState<Msg>(null);
   const [pasting, setPasting] = useState(false);
-  const [removing, setRemoving] = useState<{ path: string; refusal: string } | null>(null);
+  // A refusal is "readers" when the page worked it out from who reads the
+  // file, and "server" when the delete itself was refused.
+  const [removing, setRemoving] = useState<{ path: string; refusal: string; why: "readers" | "server" } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const unsavedSentence = unsavedSummary(picks, rows, labelOf, Object.keys(added).length);
@@ -108,7 +110,19 @@ export default function ResumeSection({
 
   function askToRemove(row: StoredResume) {
     setAttachMsg(null);
-    setRemoving({ path: row.path, refusal: removeRefusal(row, labelOf) });
+    setRemoving({ path: row.path, refusal: removeRefusal(row, labelOf), why: "readers" });
+  }
+
+  /**
+   * What a row shows about removing it. A refusal over the searches that read
+   * the file is checked against the list as it is now, so it lapses once a
+   * save points those searches elsewhere.
+   */
+  function removingFor(row: StoredResume): { refusal: string } | null {
+    if (removing?.path !== row.path) return null;
+    if (removing.why === "server" || !removing.refusal) return removing;
+    const refusal = removeRefusal(row, labelOf);
+    return refusal ? { refusal } : null;
   }
 
   async function remove(path: string) {
@@ -119,7 +133,7 @@ export default function ResumeSection({
       await refresh();
     } catch (err) {
       const reason = reasonOf(err);
-      if (reason) setRemoving({ path, refusal: reason });
+      if (reason) setRemoving({ path, refusal: reason, why: "server" });
     }
   }
 
@@ -141,7 +155,7 @@ export default function ResumeSection({
             row={row}
             added={added[row.path] ?? null}
             labelOf={labelOf}
-            removing={removing?.path === row.path ? removing : null}
+            removing={removingFor(row)}
             onRemove={() => askToRemove(row)}
             onConfirm={() => void remove(row.path)}
             onCancel={() => setRemoving(null)}
