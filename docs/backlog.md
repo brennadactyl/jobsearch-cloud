@@ -25,6 +25,11 @@ anything that writes data carries its own risk: prose in a search's config and
 rows the runs write get far less review than code, and a wrong one is already
 copied everywhere by the time it's noticed.
 
+A wrong line in a doc or a skill spreads the same way, by being copied into a
+track doc or another skill and then followed, so a fix looks for the copies and
+counts them. What a doc claims is settled against the code, not against another
+doc, and a finding says whether anything was built on the wrong line.
+
 ## Next
 
 - **Team skills and tools** - approved from every role's workflow review. In
