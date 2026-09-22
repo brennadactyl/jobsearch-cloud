@@ -52,12 +52,13 @@ doc, and a finding says whether anything was built on the wrong line.
   It covers every search, and it hides that company's existing leads too. The
   person is told what it did and can undo it, and removing the chip in the
   panel is the other way back.
-- **Edit what a search looks for, from the account panel** - the role line, the
-  kinds of companies, what rules a job out, the pay floor. `POST /api/config`
-  already takes those fields with a session token, so nothing is regenerated and
-  no run is involved. This is the useful half of the answers edit the account
-  panel dropped, at a fraction of its cost. Client Comrade and Backend Buddy,
-  with Prompt Bro on what each field does to a night.
+- **Edit what a search looks for, from the account panel** - the role line, what
+  rules a job out, the pay floor. Being planned by Client Comrade, Backend Buddy
+  and Prompt Bro. It writes through `POST /api/settings` beside `label`, not
+  `POST /api/config`, whose `tracks` array replaces the whole list and would drop
+  the person's other searches. Nothing is regenerated and no run is involved.
+  This is the useful half of the answers edit the account panel dropped, at a
+  fraction of its cost.
 - **Split a track doc into what is composed and what is accumulated.** One file
   holds both the parts generated from config and what the runs earn over weeks -
   companies tried, delisting guards, notes on a careers site - and its only
