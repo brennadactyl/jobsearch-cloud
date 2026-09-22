@@ -153,8 +153,8 @@ rewrite.
   the note. Changes save through the account
   page's one Save and Discard, shared with every other section, and take effect on
   the next run, and the section says so.
-- **An empty searched list reads "Only the ranked places"** in the panel and the
-  in setup, so it isn't taken for "anywhere".
+- **An empty searched list reads "Only the ranked places"** in the panel and in
+  setup, so it isn't taken for "anywhere".
 - **Leads** keep their tier badges, from the ranked places as today.
 
 ## Existing searches
