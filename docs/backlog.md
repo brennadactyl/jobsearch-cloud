@@ -101,3 +101,7 @@ copied everywhere by the time it's noticed.
   week before.
 - **Whether an empty first morning is normal.** The page now says it is. The one
   run that produced it had an inverted scope, so it is not yet evidence.
+- **The shape of a `prompt.js` step.** Each fragment is a named function now, so
+  the next step gets written by copying one: a wrong shape spreads on the next
+  change rather than sitting still. Product Partner and Prompt Bro read one
+  together before the next step is added.
