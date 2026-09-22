@@ -50,6 +50,8 @@ async function openResumes() {
   await screen.findByRole("heading", { name: "Fixture Search" });
   await userEvent.click(screen.getByRole("button", { name: "My account" }));
   const panel = screen.getByRole("dialog", { name: "My account" });
+  // The panel opens on General; each section is chosen from its sidebar.
+  await userEvent.click(within(panel).getByRole("button", { name: "Resumes" }));
   await within(panel).findByText("Brenna_Engineering.pdf", NAME);
   return panel;
 }
@@ -267,7 +269,9 @@ describe("leaving with an unsaved choice", () => {
     await userEvent.click(screen.getByRole("button", { name: "Discard change" }));
     expect(screen.queryByRole("dialog")).toBeNull();
 
+    // Reopened, it is back on General with nothing unsaved anywhere.
     await userEvent.click(screen.getByRole("button", { name: "My account" }));
+    await userEvent.click(screen.getByRole("button", { name: "Resumes" }));
     await screen.findByText("Brenna_Engineering.pdf", NAME);
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).toBeNull();

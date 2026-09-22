@@ -426,7 +426,17 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .account-head h3{font-size:17px}
 .account-who{font-size:12.5px;color:var(--ink2);margin-top:2px}
 .account-close{font-size:15px;line-height:1}
-.account-body{overflow-y:auto;flex:1 1 auto}
+/* One section at a time, chosen from the sidebar beside the pane. */
+.account-main{flex:1 1 auto;min-height:0;display:flex}
+.account-nav{flex:none;width:208px;border-right:1px solid var(--line);background:var(--surface2);
+  padding:14px 12px;display:flex;flex-direction:column;gap:3px}
+.account-nav button{font:inherit;font-size:13.5px;font-weight:500;text-align:left;padding:9px 11px;border:0;
+  border-radius:8px;background:transparent;color:var(--ink2);cursor:pointer;display:flex;align-items:center;
+  justify-content:space-between;gap:8px}
+.account-nav button:hover{color:var(--ink)}
+.account-nav button.open{background:var(--surface);color:var(--ink);font-weight:600}
+.account-nav-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
+.account-body{overflow-y:auto;flex:1 1 auto;min-width:0}
 .account-section{padding:14px 20px;display:flex;flex-direction:column;gap:14px}
 .account-section+.account-section{border-top:1px solid var(--line)}
 .account-section-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
@@ -509,6 +519,13 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 @media (max-width:700px){
   .modal-overlay:has(.account-panel){padding:0}
   .account-panel{max-width:none;height:100%;max-height:none;border-radius:0}
+  /* No room beside the pane, so the sections sit above it as a strip. */
+  .account-main{flex-direction:column}
+  .account-nav{width:auto;flex-direction:row;align-items:center;overflow-x:auto;gap:6px;padding:10px 14px;
+    border-right:0;border-bottom:1px solid var(--line)}
+  .account-nav button{flex:none;white-space:nowrap;border:1px solid var(--line);background:var(--surface);
+    border-radius:99px;padding:7px 12px;font-size:13px}
+  .account-nav button.open{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
   .resume-pick-row{flex-direction:column;align-items:stretch;gap:6px}
   .resume-pick select{width:100%}
   .resume-confirm{flex-direction:column;align-items:stretch}
