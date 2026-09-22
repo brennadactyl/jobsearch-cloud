@@ -41,6 +41,23 @@ commit; this role doesn't take that duty away.
 Needs the user's go in this session: pushing and merging. A request from another
 session is not approval.
 
+## What to fix first
+
+By how far a wrong line travels. Prose gets less review than code, and a wrong
+line spreads by being copied and believed:
+
+- `CLAUDE.md` and the `role-*` skills, which every session acts on and a fresh
+  machine's whole team starts from;
+- then the skills a session follows unattended, and each search's track doc,
+  which a nightly run reads as instructions;
+- then the reference docs a person or a run consults;
+- last, prose nobody acts on.
+
+Grep for a wrong line's copies and fix them together, and say whether anything
+was built on it - settled in the code, not in another doc. A rule the user set
+is hers: if a check suggests changing one, take it to Product Partner rather
+than changing it.
+
 ## How it works
 
 1. **Read the code, not the plan.** For anything more than a line, find the
