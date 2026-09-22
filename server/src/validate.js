@@ -119,6 +119,31 @@ export function nameError(field, value, max) {
   return "";
 }
 
+// What a search looks for, in the person's own words, as the account panel
+// edits them (docs/account-settings-plan.md). The prompt carries each one every
+// night, so the caps are what a person writes rather than what a column holds:
+// a line for the roles, a paragraph for each rule.
+export const ROLE_LINE_MAX_CHARS = 300;
+export const FIT_PROSE_MAX_CHARS = 2000;
+
+/**
+ * What is wrong with one of a search's prose fields, or "". "" is a real value
+ * and clears the field - a rule someone no longer wants is one they can delete.
+ * `role_search_line` is the exception and is checked with nameError instead:
+ * empty is how the database says a search has never been written up
+ * (db.js WRITTEN_UP), so clearing it would tell the overnight run this search
+ * still has to be built.
+ * @param {string} field the key to name in the refusal
+ * @param {unknown} value
+ * @param {number} max
+ * @returns {string}
+ */
+export function searchProseError(field, value, max) {
+  if (typeof value !== "string") return `${field} must be text`;
+  if (value.trim().length > max) return `${field} is longer than ${max} characters`;
+  return "";
+}
+
 /**
  * What is wrong with a `pronouns` setting, or "". "" is unset; the rest are the
  * pronouns the prompt knows how to write, which the caller passes rather than

@@ -223,6 +223,13 @@ export function parseDocumentList(text) {
  * settings - and nothing is in both lists. `fed_by` is in neither: pairing tabs
  * is the tracker's own configuration, through POST /api/config.
  */
+// What the account panel writes on a search: its tab name, and the three
+// fields that say what it looks for, in the person's own words
+// (docs/account-settings-plan.md). The rest of TRACK_CONFIG_FIELDS is
+// machinery the run follows or is owned elsewhere - the tab structure, the
+// resume chooser, the scheduler.
+export const PANEL_TRACK_FIELDS = ["label", "role_search_line", "fit_clause", "fit_disqualifier"];
+
 export const WRITEUP_FIELDS = [
   "role_search_line", "full_description", "resume_line", "search_note",
   "fit_clause", "fit_disqualifier", "fit_filter_step", "leads_note",
@@ -832,18 +839,31 @@ export class Db {
   }
 
   /**
-   * Renames this user's search tabs, and nothing else about them
-   * (routes/settings.js). replaceTracks is how the track list itself changes;
-   * this is the account panel's narrower write, so a rename can never drop a
-   * track, reorder tabs or touch a search's config. One batch, so a save of
-   * several names lands whole.
-   * @param {Record<string, string>} labels track key to its new label, trimmed
+   * Writes what the account panel owns on this user's searches - their names
+   * and what each looks for - and nothing else about them (routes/settings.js).
+   * replaceTracks is how the track list itself changes; this is the narrower
+   * write, so a panel save can never drop a track, reorder tabs or touch the
+   * rest of a search's config. One batch, so a save of several searches lands
+   * whole.
+   *
+   * The fields are whitelisted here as well as in the route, since this is the
+   * layer that builds the statement: a key that isn't one of them can't reach
+   * the UPDATE whatever a caller sends.
+   * @param {Record<string, Record<string, string>>} bySearch track key to the
+   *   fields to write on it, each already checked and trimmed
    */
-  async setTrackLabels(labels) {
-    const entries = Object.entries(labels);
-    if (!entries.length) return;
-    const stmt = this.d1.prepare("UPDATE tracks SET label = ? WHERE user_id = ? AND key = ?");
-    await this.d1.batch(entries.map(([key, label]) => stmt.bind(label, this.userId, key)));
+  async setTrackFields(bySearch) {
+    const statements = [];
+    for (const [key, fields] of Object.entries(bySearch)) {
+      const cols = Object.keys(fields).filter((f) => PANEL_TRACK_FIELDS.includes(f));
+      if (!cols.length) continue;
+      statements.push(
+        this.d1
+          .prepare(`UPDATE tracks SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE user_id = ? AND key = ?`)
+          .bind(...cols.map((c) => fields[c]), this.userId, key)
+      );
+    }
+    if (statements.length) await this.d1.batch(statements);
   }
 
   /**

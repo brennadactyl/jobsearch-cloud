@@ -3395,10 +3395,55 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     apHalf.status === 400 && (await apConfig(AP)).settings?.display_title === "Ada's search");
   check("the overnight run still can't write what the panel owns",
     (await req("POST", "/api/writeup", { token: AP, body: { search: "SWE", display_title: "Theirs" } })).json?.field === "display_title");
+  // What each search looks for, in the person's own words, beside its name
+  // (docs/account-settings-plan.md). Nothing is composed and nothing is
+  // regenerated: the words are stored and the prompt reads them next run.
+  const apFields = await apSave(AP, { searches: { SWE: {
+    role_search_line: "  staff engineering roles  ", fit_clause: "at a company shipping games",
+    fit_disqualifier: "anything on-call every week" } } });
+  const apTrack = (config, key) => config.tracks?.find((t) => t.key === key);
+  check("a search's roles line and both rules save together, trimmed",
+    apFields.status === 200 && apTrack(await apConfig(AP), "SWE")?.role_search_line === "staff engineering roles" &&
+    apTrack(await apConfig(AP), "SWE")?.fit_clause === "at a company shipping games" &&
+    apTrack(await apConfig(AP), "SWE")?.fit_disqualifier === "anything on-call every week", JSON.stringify(apFields.json));
+  check("the reply carries all four fields for every search, so one save refreshes the panel",
+    apFields.json?.searches?.SWE?.fit_clause === "at a company shipping games" &&
+    apFields.json?.searches?.SWE?.label === "Eng - Gaming" &&
+    apFields.json?.searches?.CPM?.role_search_line === "" && "fit_disqualifier" in (apFields.json?.searches?.CPM || {}),
+    JSON.stringify(apFields.json?.searches));
+  check("a rule can be cleared, since a rule someone no longer wants is one they can delete",
+    (await apSave(AP, { searches: { SWE: { fit_disqualifier: "" } } })).status === 200 &&
+    apTrack(await apConfig(AP), "SWE")?.fit_disqualifier === "" &&
+    apTrack(await apConfig(AP), "SWE")?.fit_clause === "at a company shipping games");
+  const apNoRoles = await apSave(AP, { searches: { SWE: { role_search_line: "  " } } });
+  check("the roles line can't be cleared - empty is how a search says it was never written up",
+    apNoRoles.status === 400 && apNoRoles.json?.field === "role_search_line" &&
+    apTrack(await apConfig(AP), "SWE")?.role_search_line === "staff engineering roles", JSON.stringify(apNoRoles.json));
+  const apMachinery = await apSave(AP, { searches: { SWE: { doc_summary: "mine now" } } });
+  check("a search field the panel doesn't own is refused by name",
+    apMachinery.status === 400 && apMachinery.json?.field === "doc_summary" && apMachinery.json?.search === "SWE",
+    JSON.stringify(apMachinery.json));
+  check("a rules field over 2000 characters is refused, and a roles line over 300",
+    (await apSave(AP, { searches: { SWE: { fit_clause: "x".repeat(2001) } } })).json?.field === "fit_clause" &&
+    (await apSave(AP, { searches: { SWE: { role_search_line: "x".repeat(301) } } })).json?.field === "role_search_line");
+  const apFieldsHalf = await apSave(AP, { display_title: "Still not stored", searches: {
+    SWE: { fit_clause: "kept" }, CPM: { role_search_line: "" } } });
+  check("one bad search leaves every other search and setting alone",
+    apFieldsHalf.status === 400 && apTrack(await apConfig(AP), "SWE")?.fit_clause === "at a company shipping games" &&
+    (await apConfig(AP)).settings?.display_title === "Ada's search");
+  check("writing a search's words leaves its config, its tabs and its documents alone",
+    apTrack(await apConfig(AP), "SWE")?.sort_order === 0 && (await apConfig(AP)).tracks?.length === 2 &&
+    JSON.stringify(apTrack(await apConfig(AP), "SWE")?.documents) === JSON.stringify([]));
+  check("the overnight run still writes the same fields through its own door",
+    (await req("POST", "/api/writeup", { token: AP, body: { search: "SWE", fit_clause: "the run's words" } })).status === 200 &&
+    apTrack(await apConfig(AP), "SWE")?.fit_clause === "the run's words");
+
   const apOther = await apConfig(AP_B);
-  check("another account's title, tab names and companies are its own",
+  check("another account's title, tab names, words and companies are its own",
     apOther.settings?.display_title !== "Ada's search" &&
     apOther.tracks?.find((t) => t.key === "SWE")?.label === "Engineering" &&
+    apOther.tracks?.find((t) => t.key === "SWE")?.role_search_line === "engineering roles" &&
+    apOther.tracks?.find((t) => t.key === "SWE")?.fit_clause === "" &&
     JSON.stringify(apOther.settings?.excluded_companies) === "[]" && apOther.settings?.pronouns !== "she/her",
     JSON.stringify([apOther.settings?.display_title, apOther.settings?.pronouns]));
 }
