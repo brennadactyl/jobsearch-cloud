@@ -33,7 +33,6 @@ export function isoDate(value) {
 // the page builds its ranking from `priority_locations` itself - so the only
 // checks are that each is text and fits. The caps keep a list to what a person
 // types, since the prompt carries every one of them every night.
-export const LOCATION_LIST_KEYS = ["search_locations", "excluded_locations", "priority_locations"];
 export const LOCATION_LIST_MAX_CHARS = 4000;
 export const LOCATION_NOTE_MAX_CHARS = 1000;
 
@@ -84,7 +83,8 @@ export function nowhereToSearchError(searched, ranked) {
 /**
  * What is wrong with one location setting as sent, or "" for nothing. The
  * value is judged after trimming, which is how it is stored.
- * @param {string} key one of LOCATION_LIST_KEYS, or "location_note"
+ * @param {string} key `search_locations`, `excluded_locations`,
+ *   `priority_locations` or `location_note` (db.js LOCATION_SETTING_KEYS)
  * @param {unknown} value
  * @returns {string}
  */
