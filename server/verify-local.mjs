@@ -786,7 +786,7 @@ const listed = buildSearchPrompt({
     stepOf5(compose({ excluded_locations: "Texas" })).includes("anywhere else qualifies"));
 
   // Every form the file names has to be one the prompt teaches, or a run writes
-  // a lead's location in a form nothing on the page expects.
+  // a lead's location in a form the tracker's rows don't read alike.
   const { readFileSync } = await import("node:fs");
   const formsPath = new URL("../client/src/domain/location-forms.json", import.meta.url);
   let file = null;
