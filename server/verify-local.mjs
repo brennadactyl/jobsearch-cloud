@@ -791,19 +791,17 @@ const listed = buildSearchPrompt({
   const formsPath = new URL("../client/src/domain/location-forms.json", import.meta.url);
   let file = null;
   try { file = JSON.parse(readFileSync(formsPath, "utf8")); } catch { file = null; }
-  // Each form the file names, and the words step 6 teaches it with. A form
-  // the file adds that isn't here fails, until the prompt teaches it too.
-  const TAUGHT_AS = {
-    "us-city": '"City, ST"',
-    "city-country": '"City, Country"',
-    "remote-us": '"Remote (US)"',
-    "remote-country": '"Remote (<country>)"',
-    "remote-us-states": '"Remote (US - CA/TX/WA)"',
-    joined: 'joined with "; "',
-  };
-  const formIds = Object.keys(file?.forms || {});
+  // The file carries each form's `taughtAs`, the words step 6 teaches it with,
+  // so one form is stated in one place. A form missing its `taughtAs` fails
+  // here rather than passing unchecked.
+  const forms = file?.forms || {};
+  const formIds = Object.keys(forms);
   const step6 = stepOf6(full);
-  const untaught = formIds.filter((id) => !TAUGHT_AS[id] || !step6.includes(TAUGHT_AS[id]));
+  const untaught = formIds
+    .filter((id) => !forms[id]?.taughtAs || !step6.includes(forms[id].taughtAs))
+    .map((id) => `${id}: step 6 does not contain ${forms[id]?.taughtAs ?? "a taughtAs"}`);
+  // Kept separate: an unreadable or missing file names no forms, and one check
+  // would pass on nothing.
   check("client/src/domain/location-forms.json exists and names the forms runs write",
     formIds.length > 0, String(formsPath));
   check("every form in it is one step 6 teaches", untaught.length === 0, untaught.join(" | "));
