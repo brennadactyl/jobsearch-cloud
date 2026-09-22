@@ -72,11 +72,13 @@ carry out that hollow search and report success. So `GET /api/prompt/<key>`
 answers 409 for such a track, and `setup-scheduler.ps1` registers no task for
 it until a run has written it up.
 
-**The scope check runs at send, not overnight.** `scopeProblem` refuses a send
-with no answer to "What locations should be searched?", because the person is
-still on the form and can fix it. That is the only refusal: the location
-answers are never compared with each other, because the prompt settles every
-disagreement by a fixed rule (below).
+**The location check runs at send, not overnight.** `scopeProblem` refuses a
+send that leaves the search nowhere to look - neither a searched place nor a
+ranked one (`nowhereToSearchError`) - because the person is still on the form
+and can fix it. An empty searched list on its own is fine: it means "only the
+ranked places". That is the only refusal; the location answers are never
+compared with each other, because the prompt settles every disagreement by a
+fixed rule (below).
 
 **Done and failed are read from the tracker, not from the model.** A person is
 `done` when the tracker has their written-up tracks and docs and the machine
