@@ -27,15 +27,15 @@ person had ruled out; that class of mistake exists because scope is prose.
 
 ## The three lists
 
-All three are typed as comma-separated lists and each is stored as one setting - one `meta`
-value per list, holding the list as the person typed it. The two new keys need
+Each list is edited a place at a time and stored as one setting - one `meta`
+value per list, holding the places joined by commas. The two new keys need
 no migration (`meta` is key/value); converting the stored `priority_locations`
 rule arrays does - see Existing searches.
 
 | Setting | Asked as | Stored as |
 |---|---|---|
 | `search_locations` | What locations should be searched? | the comma-separated list, e.g. "US, Greater Seattle area, Australia" |
-| `priority_locations` | Which locations should come first? | the comma-separated list, in order, e.g. "Seattle, Portland OR, Raleigh NC" |
+| `priority_locations` | What locations should the search prioritize? | the comma-separated list, in order, e.g. "Seattle, Portland OR, Raleigh NC" |
 | `excluded_locations` | Anywhere you can't take a job? | the comma-separated list, e.g. "Portland OR, Texas" |
 
 The setup form and the account panel ask them in this order. The rule-out
@@ -53,14 +53,13 @@ hint says "inside the searched area".
   them out. The prompt says so, naming each preferred place.
 - **Nothing is flagged or refused.** Each list is stored as typed, trimmed at
   the ends, and the prompt interprets it - including "Portland, OR", "WA" or
-  "Greater Seattle area". The page's read-back only shows how the commas split
-  each list, and the ranked list's order and tier colour.
+  "Greater Seattle area". The page shows each place as its own chip, and the
+  ranked list's order and tier colour.
 - **One split rule, everywhere:** a list's entries are its text split on commas,
   each trimmed, empties dropped; an area matches an entry ignoring case, and is
   stored as the ranked entry is spelled ("portland or" is stored as "Portland OR").
-  "Portland, OR" is two entries, "Portland" and "OR", and the read-back shows
-  it that way. The server, `tracker.ps1` and the page use this
-  rule and no other.
+  A place typed with a comma becomes two chips. The server, `tracker.ps1` and
+  the page use this rule and no other.
 - **Tier colours come from each lead's area** (below), not from matching text.
 - **An optional note, `location_note`,** keeps what a list can't say - "open to relocating for
   the right team" - and reaches the prompt as context.
@@ -145,16 +144,17 @@ rewrite.
 
 ## What the person sees
 
-- **The setup form** keeps its live questions and wording. Its two free-text
-  location answers become comma-separated lists with the same plain read-back,
-  and it gains the optional note. It no longer holds the send over a ranked
-  entry it can't match ("too short", "several places are called Portland").
+- **A place at a time.** Both surfaces edit a list as chips: a place is added
+  with Enter and dropped with its ×, and the ranked list is reordered with
+  arrows. Setup gains the optional note, and no longer holds the send over a
+  ranked entry it can't match ("too short", "several places are called
+  Portland").
 - **The account panel gains a Locations section** with the same three lists and
   the note. Changes save through the account
   page's one Save and Discard, shared with every other section, and take effect on
   the next run, and the section says so.
 - **An empty searched list reads "Only the ranked places"** in the panel and the
-  setup read-back, so it isn't taken for "anywhere".
+  in setup, so it isn't taken for "anywhere".
 - **Leads** keep their tier badges, from the ranked places as today.
 
 ## Existing searches
