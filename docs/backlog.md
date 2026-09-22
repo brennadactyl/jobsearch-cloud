@@ -5,6 +5,26 @@ item leaves this list when it gets a plan of its own or ships.
 
 Kept by whoever is holding the product manager role.
 
+## How debt is ranked
+
+Three questions, after
+[Riot's taxonomy](https://www.riotgames.com/en/news/taxonomy-tech-debt):
+
+- **Impact** - what it costs the person searching, and what it costs whoever
+  changes the code next.
+- **Fix cost** - the work, plus the risk of the change itself. A shape we'd
+  never choose again can still be serving its users.
+- **Contagion** - whether it spreads: copied into the next search's config,
+  taught to the next night's prompt, or baked into an interface others build on.
+  Contagion outranks impact when they disagree, because a spreading shape gets
+  more expensive every week and a contained one doesn't.
+
+Contained debt is left alone until something else makes it worth touching.
+Debt in a foundation is replaced beside the old thing rather than in place, and
+anything that writes data carries its own risk: prose in a search's config and
+rows the runs write get far less review than code, and a wrong one is already
+copied everywhere by the time it's noticed.
+
 ## Next
 
 - **Team skills and tools** - approved from every role's workflow review. In
