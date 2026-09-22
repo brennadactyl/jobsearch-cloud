@@ -44,7 +44,8 @@ async function openPanel(settings: Partial<Settings> = {}) {
   await screen.findByRole("heading", { name: "Fixture Search" });
   await userEvent.click(screen.getByRole("button", { name: "My account" }));
   const panel = screen.getByRole("dialog", { name: "My account" });
-  await within(panel).findByText("Engineering.pdf", { selector: ".resume-name" });
+  // The panel opens on General; each section is chosen from its sidebar.
+  await userEvent.click(within(panel).getByRole("button", { name: "Locations" }));
   return within(panel).getByRole("region", { name: "Locations" });
 }
 
@@ -55,6 +56,18 @@ const chipsOf = (field: HTMLElement) =>
   [...field.querySelectorAll(".place-chip-text")].map((c) => c.textContent);
 const fieldOf = (section: HTMLElement, label: RegExp) =>
   within(section).getByLabelText(label).closest(".loc-field") as HTMLElement;
+/** The Locations section as it stands now: switching sections replaces the node. */
+const locations = () => screen.getByRole("region", { name: "Locations" });
+/** Opens Locations again after another section has been on screen. */
+async function backToLocations() {
+  await userEvent.click(screen.getByRole("button", { name: "Locations" }));
+  return locations();
+}
+/** Changes the resume one section over, which the panel's one Save carries too. */
+async function pickResume() {
+  await userEvent.click(screen.getByRole("button", { name: "Resumes" }));
+  await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Resume for Eng - AI" }), AI);
+}
 
 beforeEach(() => {
   localStorage.clear();
@@ -150,18 +163,19 @@ describe("one Save and Discard for the whole panel", () => {
     });
     const section = await openPanel();
     const field = fieldOf(section, /What locations should the search prioritize/);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Resume for Eng - AI" }), AI);
     await userEvent.click(within(field).getByRole("button", { name: "Move Wider region up" }));
+    await pickResume();
 
-    expect(within(section).getByText(/Changed/)).toBeInTheDocument();
-    expect(screen.getByText("2 unsaved changes")).toBeInTheDocument();
+    expect(screen.getByText("2 unsaved changes across 2 sections")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(save).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith({ resumes: { ai: AI }, priority_locations: "Wider region, Metro core" });
-    expect(await within(section).findByText("Saved. Your next run uses these places.")).toBeInTheDocument();
-    expect(chipsOf(field)).toEqual(["Wider region", "Metro core"]);
     expect(screen.queryByText(/unsaved change/)).toBeNull();
+
+    const saved = await backToLocations();
+    expect(within(saved).getByText("Saved. Your next run uses these places.")).toBeInTheDocument();
+    expect(chipsOf(fieldOf(saved, /What locations should the search prioritize/))).toEqual(["Wider region", "Metro core"]);
   });
 
   it("doesn't count a place typed but never added, since it wouldn't be saved either", async () => {
@@ -184,15 +198,18 @@ describe("one Save and Discard for the whole panel", () => {
     expect(screen.getByText("1 unsaved change")).toBeInTheDocument();
   });
 
-  it("Discard puts every section back", async () => {
-    const section = await openPanel();
-    const field = fieldOf(section, /What locations should the search prioritize/);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Resume for Eng - AI" }), AI);
+  it("Discard puts every section back, the one on screen and the one that isn't", async () => {
+    await openPanel();
     await userEvent.type(ranked(), "Ogdenville{Enter}");
-    await userEvent.click(screen.getByRole("button", { name: "Discard" }));
+    await pickResume();
+    expect(screen.getByRole("button", { name: /Locations/ })).toContainElement(
+      screen.getAllByRole("img", { name: "Unsaved changes" })[0],
+    );
 
-    expect(chipsOf(field)).toEqual(["Metro core", "Wider region"]);
+    await userEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(screen.getByRole("combobox", { name: "Resume for Eng - AI" })).toHaveValue(ENG);
+    const back = await backToLocations();
+    expect(chipsOf(fieldOf(back, /What locations should the search prioritize/))).toEqual(["Metro core", "Wider region"]);
     expect(screen.queryByText(/unsaved change/)).toBeNull();
   });
 

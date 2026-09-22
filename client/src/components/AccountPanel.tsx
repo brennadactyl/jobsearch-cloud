@@ -35,12 +35,25 @@ export default function AccountPanel({ open, ...props }: Props) {
 /** A refused save: the server's sentence, and the place setting it names, if any. */
 type SaveError = { message: string; field: PlaceKey | null };
 
+/**
+ * One section of the panel at a time, chosen from the sidebar, so nothing
+ * scrolls past what it isn't about. Searches joins these once the server can
+ * write them (docs/account-settings-plan.md).
+ */
+const SECTIONS = [
+  { key: "general", label: "General" },
+  { key: "locations", label: "Locations" },
+  { key: "resumes", label: "Resumes" },
+] as const;
+type SectionKey = (typeof SECTIONS)[number]["key"];
+
 const isPlaceKey = (field: string | undefined): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
 
 function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">) {
   const qc = useQueryClient();
   const stored = Object.fromEntries(PLACE_KEYS.map((k) => [k, settings[k]])) as Places;
 
+  const [open, setOpen] = useState<SectionKey>("general");
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Partial<Places>>({});
   const [resumeSentence, setResumeSentence] = useState("");
@@ -50,8 +63,17 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
   const [asking, setAsking] = useState(false);
 
   const places = changedPlaces(stored, draft);
-  const count = Object.keys(picks).length + Object.keys(places).length;
-  const sentence = [resumeSentence, unsavedPlacesSentence(places)].filter(Boolean).join(" ");
+  const resumeCount = Object.keys(picks).length;
+  const count = resumeCount + Object.keys(places).length;
+  // Which sections hold something unsaved, so the sidebar can say so: an edit
+  // in a section you aren't looking at must not be invisible.
+  const unsaved = new Set<SectionKey>([
+    ...(resumeCount ? (["resumes"] as const) : []),
+    ...(Object.keys(places).length ? (["locations"] as const) : []),
+  ]);
+  // The resume section's sentence is its own only while its choices stand; it
+  // isn't mounted to withdraw the sentence when they're discarded.
+  const sentence = [resumeCount ? resumeSentence : "", unsavedPlacesSentence(places)].filter(Boolean).join(" ");
 
   // Every way out comes through here, so unsaved choices are never lost without asking.
   const leave = () => {
@@ -135,33 +157,41 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
             ✕
           </button>
         </div>
-        <div className="account-body" data-wheel-target>
-          <PasswordSection />
-          <ResumeSection
-            tracks={tracks}
-            picks={picks}
-            setPicks={(next) => {
-              setSaveError(null);
-              setPicks(next);
-            }}
-            onUnsaved={setResumeSentence}
-          />
-          <LocationsSection
-            values={{ ...stored, ...draft }}
-            changed={new Set(Object.keys(places) as PlaceKey[])}
-            problem={saveError?.field ? { field: saveError.field, message: saveError.message } : null}
-            saved={placesSaved}
-            onChange={(key, value) => {
-              setDraft((d) => ({ ...d, [key]: value }));
-              setPlacesSaved(false);
-              if (saveError?.field === key) setSaveError(null);
-            }}
-          />
+        <div className="account-main">
+          <SectionNav sections={SECTIONS} open={open} unsaved={unsaved} onOpen={setOpen} />
+          <div className="account-body" data-wheel-target>
+          {open === "general" && <PasswordSection />}
+          {open === "resumes" && (
+            <ResumeSection
+              tracks={tracks}
+              picks={picks}
+              setPicks={(next) => {
+                setSaveError(null);
+                setPicks(next);
+              }}
+              onUnsaved={setResumeSentence}
+            />
+          )}
+          {open === "locations" && (
+            <LocationsSection
+              values={{ ...stored, ...draft }}
+              changed={new Set(Object.keys(places) as PlaceKey[])}
+              problem={saveError?.field ? { field: saveError.field, message: saveError.message } : null}
+              saved={placesSaved}
+              onChange={(key, value) => {
+                setDraft((d) => ({ ...d, [key]: value }));
+                setPlacesSaved(false);
+                if (saveError?.field === key) setSaveError(null);
+              }}
+            />
+          )}
+          </div>
         </div>
         {count > 0 && (
           <div className="account-foot">
             <span>
               {count === 1 ? "1 unsaved change" : `${count} unsaved changes`}
+              {unsaved.size > 1 && ` across ${unsaved.size} sections`}
               {saveError && !saveError.field && (
                 <span className="resume-bad" role="alert">
                   {saveError.message}
@@ -196,6 +226,40 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The sidebar of sections - a strip above the pane at phone width, where there
+ * is no room beside it. A section holding unsaved changes is marked, so the
+ * footer's count is never about something out of sight.
+ */
+function SectionNav({
+  sections,
+  open,
+  unsaved,
+  onOpen,
+}: {
+  sections: readonly { key: SectionKey; label: string }[];
+  open: SectionKey;
+  unsaved: ReadonlySet<SectionKey>;
+  onOpen: (key: SectionKey) => void;
+}) {
+  return (
+    <nav className="account-nav" aria-label="Account sections">
+      {sections.map((s) => (
+        <button
+          key={s.key}
+          type="button"
+          className={s.key === open ? "open" : undefined}
+          aria-current={s.key === open ? "page" : undefined}
+          onClick={() => onOpen(s.key)}
+        >
+          {s.label}
+          {unsaved.has(s.key) && <span className="account-nav-dot" aria-label="Unsaved changes" role="img" />}
+        </button>
+      ))}
+    </nav>
   );
 }
 
