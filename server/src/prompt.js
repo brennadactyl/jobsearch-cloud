@@ -42,11 +42,11 @@ function joinAnd(parts) {
 // default is what a prompt read without one shows.
 export const DEFAULT_DOC_BUDGET_BYTES = 1000;
 
-// How a lead's `location` is written, the same for every search, so the page can
-// read it and the one-time area fill can match it. The forms are the ones in
-// client/src/domain/location-forms.json, which verify-local checks this
-// sentence against. Which ranked place a lead belongs to is its `area` (step
-// 9), not something to encode in this text.
+// How a lead's `location` is written, the same for every search, so every row
+// says where a role is the same way. Nothing reads a place out of this text:
+// which ranked place a lead falls in is its `area` (step 9), and the page tiers
+// by that. The forms are the ones in client/src/domain/location-forms.json,
+// which verify-local checks this sentence against.
 const LOCATION_FORMS_STEP =
   "Write each lead's `location` in one of these forms, as the posting gives it: " +
   "\"City, ST\" for a US city (\"Seattle, WA\"); \"City, Country\" anywhere else " +
