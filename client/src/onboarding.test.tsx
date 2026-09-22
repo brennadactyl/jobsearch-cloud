@@ -145,7 +145,7 @@ describe("the setup form", () => {
 
   /** The two answers a form can't send without: where work is possible, and one role. */
   async function fillRequired() {
-    await userEvent.type(screen.getByLabelText("What locations should be searched?"), "Anywhere in the US, remote or around Denver");
+    await userEvent.type(screen.getByLabelText("What locations should be searched?"), "Anywhere in the US, remote or around Denver{Enter}");
     await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
     await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
   }
@@ -154,14 +154,16 @@ describe("the setup form", () => {
     const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
     await openSetup();
     const scope = screen.getByLabelText("What locations should be searched?");
-    expect(scope).toHaveAttribute("placeholder", "US, Greater Seattle area, Australia");
+    expect(scope).toHaveAttribute("placeholder", "Add a place, then press Enter");
     // Stated once, on the area field, as a fixed line: it names no place.
     expect(scope.closest(".setup-field")).toHaveTextContent("The places you rank below are always searched too.");
     expect(screen.getAllByText(/always searched/)).toHaveLength(1);
-    const preferred = screen.getByLabelText("Which locations should come first?");
+    const preferred = screen.getByLabelText("What locations should the search prioritize?");
 
     await fillRequired();
     await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
+    // Typed and left in the box: sending takes it anyway, rather than dropping
+    // a place the person clearly meant.
     await userEvent.type(preferred, "Portland OR, Raleigh NC");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
     await waitFor(() => expect(submit).toHaveBeenCalled());
@@ -298,7 +300,7 @@ describe("the setup form", () => {
     await openSetup();
     const order = [
       "What locations should be searched?",
-      "Which locations should come first?",
+      "What locations should the search prioritize?",
       "Anywhere you can't take a job?",
     ].map((label) => screen.getByLabelText(label));
     for (let i = 1; i < order.length; i++) {
@@ -313,7 +315,7 @@ describe("the setup form", () => {
     await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
     // An exclusion answered on its own is what scoped a search to the one place
     // its person had ruled out.
-    await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Nowhere in Texas");
+    await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Nowhere in Texas{Enter}");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
     expect(
@@ -328,9 +330,9 @@ describe("the setup form", () => {
     await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
     await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
     await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
-    expect(screen.queryByText("Searched:")).toBeNull();
-    await userEvent.type(screen.getByLabelText("Which locations should come first?"), "Seattle, Remote US");
-    expect(screen.getByText("Searched:").parentElement).toHaveTextContent("Searched:Only the ranked places");
+    expect(screen.queryByText("Only the ranked places")).toBeNull();
+    await userEvent.type(screen.getByLabelText("What locations should the search prioritize?"), "Seattle, Remote US{Enter}");
+    expect(screen.getByText("Only the ranked places")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
     await waitFor(() => expect(submit).toHaveBeenCalled());
@@ -344,16 +346,21 @@ describe("the setup form", () => {
     expect(screen.getByText("Fill in at least one role — both what to call it and what to look for.")).toBeInTheDocument();
   });
 
-  it("reads each list back as the commas split it, and flags nothing", async () => {
+  it("makes a chip of each place, splitting what's pasted, and flags nothing", async () => {
     await openSetup();
-    await userEvent.type(screen.getByLabelText("What locations should be searched?"), "US, Australia");
-    await userEvent.type(screen.getByLabelText("Which locations should come first?"), "Seattle, WA, Remote US");
-    await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Texas");
+    await userEvent.type(screen.getByLabelText("What locations should be searched?"), "US, Australia{Enter}");
+    await userEvent.type(screen.getByLabelText("What locations should the search prioritize?"), "Seattle, WA, Remote US{Enter}");
+    await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Texas{Enter}");
 
-    expect(screen.getByText("Searched:").parentElement).toHaveTextContent("Searched:USAustralia");
-    const ranked = document.querySelector(".loc-ranked") as HTMLElement;
-    expect([...ranked.children].map((s) => s.textContent)).toEqual(["1. Seattle", "2. WA", "3. Remote US"]);
-    expect(screen.getByText("Ruled out:").parentElement).toHaveTextContent("Ruled out:Texas");
+    const chipsOf = (label: string) =>
+      [...(screen.getByLabelText(label).closest(".setup-field") as HTMLElement).querySelectorAll(".place-chip-text")].map(
+        (c) => c.textContent,
+      );
+    expect(chipsOf("What locations should be searched?")).toEqual(["US", "Australia"]);
+    // "Seattle, WA" is two places, as it is everywhere else: the search reads
+    // each entry on its own.
+    expect(chipsOf("What locations should the search prioritize?")).toEqual(["Seattle", "WA", "Remote US"]);
+    expect(chipsOf("Anywhere you can't take a job?")).toEqual(["Texas"]);
     expect(document.querySelector(".field-err")).toBeNull();
   });
 
@@ -377,7 +384,7 @@ describe("the setup form", () => {
     await fillRequired();
     await userEvent.click(screen.getByRole("button", { name: "she/her" }));
     await userEvent.upload(screen.getByLabelText("Attach resume files"), new File(["hi"], "Sam's Resume (final).txt", { type: "text/plain" }));
-    await userEvent.type(screen.getByLabelText("Which locations should come first?"), "Seattle, Remote US");
+    await userEvent.type(screen.getByLabelText("What locations should the search prioritize?"), "Seattle, Remote US{Enter}");
     await userEvent.type(screen.getByLabelText("Anything else about where you'd work?"), "Open to relocating");
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
@@ -455,7 +462,7 @@ describe("the setup form", () => {
     await userEvent.click(screen.getByRole("button", { name: "Start my search" }));
 
     const message = await screen.findByText("locations_first can list at most 50 places");
-    expect(message.closest(".setup-field")).toContainElement(screen.getByLabelText("Which locations should come first?"));
+    expect(message.closest(".setup-field")).toContainElement(screen.getByLabelText("What locations should the search prioritize?"));
   });
 
   it("says a second send was refused, in the server's words", async () => {

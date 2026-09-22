@@ -483,11 +483,24 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .loc-optional{font-weight:400;color:var(--ink3)}
 .account-section .loc-hint{margin:0;font-size:12.5px;color:var(--ink3)}
 .account-section .loc-err{margin:0;font-size:12.5px;color:var(--crit)}
-.loc-entries{display:flex;flex-wrap:wrap;align-items:center;gap:5px;font-size:12.5px;color:var(--ink3)}
-.loc-entry{padding:1px 8px;border-radius:99px;background:var(--surface2);color:var(--ink2);white-space:nowrap}
-.loc-empty{color:var(--ink2);font-style:italic}
-.loc-ranked{gap:4px 14px;padding:0;color:var(--ink2)}
-.loc-ranked i{width:8px;height:8px;vertical-align:0}
+/* A place list edited as chips: one per entry, with an × and, when ranked, its place and arrows. */
+.place-chips{display:flex;flex-direction:column;gap:7px}
+.place-chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.place-chip-row.ranked{flex-direction:column;align-items:flex-start}
+.place-chip{display:inline-flex;align-items:center;gap:7px;padding:4px 5px 4px 10px;border-radius:99px;
+  background:var(--surface2);color:var(--ink);font-size:13px}
+.place-chip i{display:inline-block;width:8px;height:8px;border-radius:2px}
+.place-chip-rank{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--ink3)}
+.place-chip-text{white-space:nowrap}
+.place-chip-move{display:inline-flex;gap:2px}
+.place-chip-move button{font:inherit;font-size:11px;line-height:1;padding:3px 6px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink2);border-radius:6px;cursor:pointer}
+.place-chip-move button:disabled{color:var(--ink3);cursor:default}
+.place-chip-x{font:inherit;font-size:11px;line-height:1;padding:4px;border:0;border-radius:50%;
+  background:transparent;color:var(--ink3);cursor:pointer}
+.place-chip-x:hover{background:var(--surface);color:var(--ink)}
+.place-chips-empty{font-size:12.5px;color:var(--ink2);font-style:italic}
+.place-chips input.invalid{border-color:var(--crit)}
 .loc-saved{font-size:13px;color:var(--good)}
 /* The panel's one Save and Discard, below every section: it counts what's unsaved in all of them. */
 .account-foot{flex:none;padding:12px 20px;border-top:1px solid var(--line);background:var(--surface2);display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--ink2)}

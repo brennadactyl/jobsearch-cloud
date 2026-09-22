@@ -2,14 +2,11 @@
  * The account panel's Locations section: the three place lists and the note
  * that say where this account's searches look (docs/location-settings-plan.md).
  *
- * Each is kept as typed and the nightly search interprets it, so nothing here
- * is flagged or refused. The read-backs only show how the commas split each
- * list, and the ranked list's order and tier colours. Edits wait for the
- * panel's Save.
+ * Each place is kept as typed and the nightly search interprets it, so nothing
+ * here is flagged or refused. Edits wait for the panel's Save.
  */
-import type { ReactNode } from "react";
-import { listEntries, PLACE_QUESTIONS, type PlaceKey, type Places } from "../domain/places";
-import { PlaceEntries, RankedPlaces } from "./location";
+import { PLACE_QUESTIONS, type PlaceKey, type Places } from "../domain/places";
+import PlaceChips from "./PlaceChips";
 
 export default function LocationsSection({
   values,
@@ -36,9 +33,6 @@ export default function LocationsSection({
     problem: problem?.field === key ? problem.message : "",
     onChange: (value: string) => onChange(key, value),
   });
-  const searched = listEntries(values.search_locations);
-  const ruledOut = listEntries(values.excluded_locations);
-  const ranked = listEntries(values.priority_locations);
 
   return (
     <section className="account-section" aria-labelledby="locTitle">
@@ -49,29 +43,25 @@ export default function LocationsSection({
 
       <PlaceField
         {...field("search_locations")}
-        placeholder="US, Greater Seattle area, Australia"
+        placeholder="Add a place, then press Enter"
         hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
-      >
-        {/* Empty doesn't mean anywhere: the search looks only where the ranked list says. */}
-        <PlaceEntries lead="Searched:" entries={searched} empty={ranked.length ? "Only the ranked places" : undefined} />
-      </PlaceField>
+        // Empty doesn't mean anywhere: the search looks only where the ranked list says.
+        empty="Only the ranked places"
+      />
 
       <PlaceField
         {...field("priority_locations")}
-        placeholder="Seattle area, Portland OR, Remote US"
-        hint="In order — the first is the one you want most. Anywhere you don't name still shows up, just lower."
-      >
-        <RankedPlaces entries={ranked} />
-      </PlaceField>
+        placeholder="Add a place, then press Enter"
+        ranked
+        hint="In order — the first is the one you want most. The arrows move a place up or down. Anywhere you don't name still shows up, just lower."
+      />
 
       <PlaceField
         {...field("excluded_locations")}
         optional
-        placeholder="Portland OR, Texas"
+        placeholder="Add a place, then press Enter"
         hint="Optional, and only a rule-out: somewhere inside the searched area that you still couldn't take. It never narrows where the search looks on its own."
-      >
-        <PlaceEntries lead="Ruled out:" entries={ruledOut} />
-      </PlaceField>
+      />
 
       <PlaceField
         {...field("location_note")}
@@ -95,34 +85,29 @@ function PlaceField({
   label,
   optional = false,
   multiline = false,
+  ranked = false,
+  empty = "",
   placeholder,
   hint,
   value,
   changed,
   problem,
   onChange,
-  children,
 }: {
   id: string;
   label: string;
   optional?: boolean;
+  /** The note, which is prose rather than a list. */
   multiline?: boolean;
+  ranked?: boolean;
+  empty?: string;
   placeholder: string;
   hint: string;
   value: string;
   changed: boolean;
   problem: string;
   onChange: (value: string) => void;
-  children?: ReactNode;
 }) {
-  const props = {
-    id,
-    placeholder,
-    value,
-    className: changed ? "changed" : undefined,
-    "aria-invalid": problem ? true : undefined,
-    onChange: (e: { target: { value: string } }) => onChange(e.target.value),
-  };
   return (
     <div className="loc-field">
       <label htmlFor={id}>
@@ -130,8 +115,27 @@ function PlaceField({
         {optional && <span className="loc-optional"> (optional)</span>}
         {changed && <span className="resume-changed"> Changed</span>}
       </label>
-      {multiline ? <textarea rows={2} {...props} /> : <input type="text" {...props} />}
-      {children}
+      {multiline ? (
+        <textarea
+          id={id}
+          rows={2}
+          placeholder={placeholder}
+          value={value}
+          className={changed ? "changed" : undefined}
+          aria-invalid={problem ? true : undefined}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : (
+        <PlaceChips
+          id={id}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          ranked={ranked}
+          invalid={!!problem}
+          empty={empty}
+        />
+      )}
       {problem && (
         <p className="loc-err" role="alert">
           {problem}

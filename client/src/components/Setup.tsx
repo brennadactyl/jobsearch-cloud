@@ -20,7 +20,7 @@ import {
 } from "../domain/onboarding";
 import { listEntries, PLACE_QUESTIONS } from "../domain/places";
 import { saved, useSaved } from "../ui/saved";
-import { PlaceEntries, RankedPlaces } from "./location";
+import PlaceChips from "./PlaceChips";
 
 /** A file the form turned away. `name` is shown before the reason, or "" when the reason already names it. */
 type Refused = { name: string; reason: string };
@@ -414,7 +414,7 @@ export default function Setup({
           */}
           <SetupHeading title="Where to search">
             Three different questions: every area to search, what you'd most like, and anything ruled out inside it.
-            Each is a list, separated by commas.
+            Add places one at a time.
           </SetupHeading>
           <Field
             label={<label htmlFor={`${id}-scope`}>{PLACE_QUESTIONS.search_locations}</label>}
@@ -424,35 +424,29 @@ export default function Setup({
             // Seattle is "US only", so no note names a place as outside it.
             hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
           >
-            <input
+            <PlaceChips
               id={`${id}-scope`}
-              type="text"
-              placeholder="US, Greater Seattle area, Australia"
-              aria-invalid={problems.work_scope ? true : undefined}
+              placeholder="Add a place, then press Enter"
+              invalid={!!problems.work_scope}
               value={answers.work_scope}
-              onChange={(e) => set("work_scope", e.target.value)}
-            />
-            {/* Empty doesn't mean anywhere: the search looks only where the ranked list says. */}
-            <PlaceEntries
-              lead="Searched:"
-              entries={listEntries(answers.work_scope)}
-              empty={listEntries(answers.locations_first).length ? "Only the ranked places" : undefined}
+              onChange={(value) => set("work_scope", value)}
+              // Empty doesn't mean anywhere: the search looks only where the ranked list says.
+              empty={listEntries(answers.locations_first).length ? "Only the ranked places" : ""}
             />
           </Field>
           <Field
             label={<label htmlFor={`${id}-first`}>{PLACE_QUESTIONS.priority_locations}</label>}
             problem={problems.locations_first}
-            hint="List places in order — the first is the one you want most. Use a city (add the state if the name is common, like Portland OR), or Remote with a country, like Remote US. Anywhere you don't name still shows up, just lower."
+            hint="In order — the first is the one you want most, and the arrows move a place up or down. Use a city (add the state if the name is common, like Portland OR), or Remote with a country, like Remote US. Anywhere you don't name still shows up, just lower."
           >
-            <input
+            <PlaceChips
               id={`${id}-first`}
-              type="text"
-              placeholder="Seattle, Bellevue, Remote US, Portland OR"
-              aria-invalid={problems.locations_first ? true : undefined}
+              placeholder="Add a place, then press Enter"
+              ranked
+              invalid={!!problems.locations_first}
               value={answers.locations_first}
-              onChange={(e) => set("locations_first", e.target.value)}
+              onChange={(value) => set("locations_first", value)}
             />
-            <RankedPlaces entries={listEntries(answers.locations_first)} />
           </Field>
           <Field
             label={<label htmlFor={`${id}-limits`}>{PLACE_QUESTIONS.excluded_locations}</label>}
@@ -460,15 +454,13 @@ export default function Setup({
             problem={problems.location_limits}
             hint="Optional, and only a rule-out: somewhere inside the searched area that you still couldn't take. It never narrows where the search looks on its own — leave it empty if nothing is ruled out."
           >
-            <input
+            <PlaceChips
               id={`${id}-limits`}
-              type="text"
-              placeholder="Portland OR, Texas"
-              aria-invalid={problems.location_limits ? true : undefined}
+              placeholder="Add a place, then press Enter"
+              invalid={!!problems.location_limits}
               value={answers.location_limits}
-              onChange={(e) => set("location_limits", e.target.value)}
+              onChange={(value) => set("location_limits", value)}
             />
-            <PlaceEntries lead="Ruled out:" entries={listEntries(answers.location_limits)} />
           </Field>
           <Field
             label={<label htmlFor={`${id}-note`}>{PLACE_QUESTIONS.location_note}</label>}
