@@ -15,14 +15,17 @@ import { MIN_PASSWORD } from "../domain/account";
 import {
   blankName,
   changedGeneral,
-  changedLabels,
+  changedSearches,
   GENERAL_KEYS,
   unsavedAccountSentence,
   type General,
   type GeneralKey,
+  type SearchDraft,
+  type SearchFields,
 } from "../domain/panel";
 import {
   changedPlaces,
+  listEntries,
   nowhereToSearch,
   PLACE_KEYS,
   unsavedPlacesSentence,
@@ -58,6 +61,10 @@ const SECTIONS = [
 ] as const;
 type SectionKey = (typeof SECTIONS)[number]["key"];
 
+/** One change per field, so the footer counts a renamed search and its new rule as two. */
+const countFields = (searches: Readonly<Record<string, Partial<SearchFields>>>) =>
+  Object.values(searches).reduce((n, fields) => n + Object.keys(fields).length, 0);
+
 const isPlaceKey = (field: string | null): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
 const isGeneralKey = (field: string | null): field is GeneralKey => GENERAL_KEYS.some((k) => k === field);
 
@@ -75,7 +82,7 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Partial<Places>>({});
   const [general, setGeneral] = useState<Partial<General>>({});
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [searchDraft, setSearchDraft] = useState<SearchDraft>({});
   const [resumeSentence, setResumeSentence] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
@@ -84,21 +91,21 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
 
   const places = changedPlaces(stored, draft);
   const edits = changedGeneral(storedGeneral, general);
-  const labels = changedLabels(tracks, names);
+  const searches = changedSearches(tracks, searchDraft);
   const resumeCount = Object.keys(picks).length;
   const count =
-    resumeCount + Object.keys(places).length + Object.keys(edits).length + Object.keys(labels).length;
+    resumeCount + Object.keys(places).length + Object.keys(edits).length + countFields(searches);
   // Which sections hold something unsaved, so the sidebar can say so: an edit
   // in a section you aren't looking at must not be invisible.
   const unsaved = new Set<SectionKey>([
     ...(Object.keys(edits).length ? (["general"] as const) : []),
     ...(Object.keys(places).length ? (["locations"] as const) : []),
     ...(resumeCount ? (["resumes"] as const) : []),
-    ...(Object.keys(labels).length ? (["searches"] as const) : []),
+    ...(Object.keys(searches).length ? (["searches"] as const) : []),
   ]);
   // The resume section's sentence is its own only while its choices stand; it
   // isn't mounted to withdraw the sentence when they're discarded.
-  const sentence = [resumeCount ? resumeSentence : "", unsavedPlacesSentence(places), unsavedAccountSentence(edits, labels)]
+  const sentence = [resumeCount ? resumeSentence : "", unsavedPlacesSentence(places), unsavedAccountSentence(edits, searches)]
     .filter(Boolean)
     .join(" ");
 
@@ -131,7 +138,7 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
     setPicks({});
     setDraft({});
     setGeneral({});
-    setNames({});
+    setSearchDraft({});
     setSaveError(null);
   }
 
@@ -141,12 +148,12 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
       ? nowhereToSearch(draft.search_locations ?? stored.search_locations, draft.priority_locations ?? stored.priority_locations)
       : "";
     if (nowhere) return setSaveError({ message: nowhere, field: "search_locations", search: null });
-    const blank = blankName(edits, labels);
+    const blank = blankName(edits, searches);
     if (blank === "display_title") {
       return setSaveError({ message: "Give the page a name.", field: "display_title", search: null });
     }
     if (blank === "label") {
-      const key = Object.keys(labels).find((k) => !labels[k].label) ?? null;
+      const key = Object.keys(searches).find((k) => searches[k].label === "") ?? null;
       return setSaveError({ message: "Give the search a name.", field: "label", search: key });
     }
 
@@ -158,7 +165,7 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
         ...(Object.keys(picks).length ? { resumes: picks } : {}),
         ...places,
         ...edits,
-        ...(Object.keys(labels).length ? { searches: labels } : {}),
+        ...(Object.keys(searches).length ? { searches } : {}),
       });
       // The page's copy takes what the server stored, so every section and the
       // page around it show it without waiting for a refetch. The reply carries
@@ -168,7 +175,7 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
           ? {
               ...d,
               settings: settingsSchema.parse({ ...d.settings, ...reply.locations, ...reply.settings }),
-              tracks: d.tracks.map((t) => (reply.searches[t.key] ? { ...t, label: reply.searches[t.key].label } : t)),
+              tracks: d.tracks.map((t) => (reply.searches[t.key] ? { ...t, ...reply.searches[t.key] } : t)),
             }
           : d,
       );
@@ -177,7 +184,7 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
       setPicks({});
       setDraft({});
       setGeneral({});
-      setNames({});
+      setSearchDraft({});
       saved.ok();
     } catch (err) {
       // A 401 has already forgotten the session and shown the gate.
@@ -231,11 +238,17 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
           {open === "searches" && (
             <SearchesSection
               tracks={tracks}
-              names={names}
-              changed={new Set(Object.keys(labels))}
-              problem={saveError?.search ? { search: saveError.search, message: saveError.message } : null}
-              onRename={(key, label) => {
-                setNames((n) => ({ ...n, [key]: label }));
+              draft={searchDraft}
+              changed={searches}
+              problem={
+                saveError?.search
+                  ? { search: saveError.search, field: saveError.field ?? "label", message: saveError.message }
+                  : null
+              }
+              // A place said here as well as in Locations is two copies of one rule.
+              places={[...settings.areas, ...listEntries(settings.search_locations), ...listEntries(settings.excluded_locations)]}
+              onChange={(key, field, value) => {
+                setSearchDraft((d) => ({ ...d, [key]: { ...d[key], [field]: value } }));
                 if (saveError?.search === key) setSaveError(null);
               }}
             />

@@ -5,6 +5,7 @@
  * because the token it carries is the one being discarded.
  */
 import { z } from "zod";
+import type { SearchFields } from "../domain/panel";
 import type { Places } from "../domain/places";
 import {
   intakeResponseSchema,
@@ -263,8 +264,8 @@ export type SettingsChanges = {
   display_title?: string;
   pronouns?: string;
   excluded_companies?: string[];
-  /** Each renamed search, by its key. */
-  searches?: Record<string, { label: string }>;
+  /** Each changed search, by its key: only the fields that changed. */
+  searches?: Record<string, Partial<SearchFields>>;
 } & Partial<Places>;
 
 /**
@@ -290,8 +291,18 @@ export function saveSettings(changes: SettingsChanges) {
       })
       .partial()
       .default({}),
-    /** Every search, not only the renamed ones, so the panel can refresh its names. */
-    searches: z.record(z.string(), z.object({ label: z.string().default("") })).default({}),
+    /** Every search, not only the changed ones, so the panel can refresh from the reply. */
+    searches: z
+      .record(
+        z.string(),
+        z.object({
+          label: z.string().default(""),
+          role_search_line: z.string().optional(),
+          fit_clause: z.string().optional(),
+          fit_disqualifier: z.string().optional(),
+        }),
+      )
+      .default({}),
   });
   return request("/api/settings", reply, {
     method: "POST",

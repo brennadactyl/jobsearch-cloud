@@ -3,7 +3,7 @@
  * keep an unsaved change in another section from going unseen.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -94,8 +94,9 @@ describe("the account panel's sections", () => {
     await userEvent.type(screen.getByLabelText(/Companies you'd never work for/), "Initech{Enter}");
 
     await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-    await userEvent.clear(screen.getByLabelText("Alpha roles"));
-    await userEvent.type(screen.getByLabelText("Alpha roles"), "Eng - Platform");
+    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    await userEvent.clear(within(alpha).getByLabelText("What this search is called"));
+    await userEvent.type(within(alpha).getByLabelText("What this search is called"), "Eng - Platform");
     expect(screen.getByText("4 unsaved changes across 2 sections")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -132,13 +133,69 @@ describe("the account panel's sections", () => {
     );
     const panel = await openPanel();
     await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-    await userEvent.type(screen.getByLabelText("Beta roles"), " and more");
+    const beta = screen.getByRole("group", { name: "Beta roles" });
+    const name = within(beta).getByLabelText("What this search is called");
+    await userEvent.type(name, " and more");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const alert = await within(panel).findByRole("alert");
     expect(alert).toHaveTextContent("a search's name can be at most 60 characters");
-    expect(alert.closest(".loc-field")).toContainElement(screen.getByLabelText("Beta roles"));
-    expect(screen.getByLabelText("Beta roles")).toHaveValue("Beta roles and more");
+    expect(alert.closest(".loc-field")).toContainElement(name);
+    expect(name).toHaveValue("Beta roles and more");
+  });
+
+  it("saves what a search looks for, counting each field it changed", async () => {
+    const save = vi.spyOn(client, "saveSettings").mockResolvedValue(
+      reply({
+        searches: {
+          alpha: {
+            label: "Alpha roles",
+            role_search_line: "Staff platform engineer roles",
+            fit_clause: "which names alpha work in the posting itself",
+            fit_disqualifier: "the role is contract-only",
+          },
+        },
+      }),
+    );
+    const panel = await openPanel();
+    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
+    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    const roles = within(alpha).getByLabelText("What roles should this search look for?");
+    await userEvent.clear(roles);
+    await userEvent.type(roles, "Staff platform engineer roles");
+
+    expect(screen.getByText("1 unsaved change")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(save).toHaveBeenCalledWith({ searches: { alpha: { role_search_line: "Staff platform engineer roles" } } });
+    await waitFor(() => expect(screen.queryByText(/unsaved change/)).toBeNull());
+    expect(within(screen.getByRole("group", { name: "Alpha roles" })).getByLabelText("What roles should this search look for?")).toHaveValue(
+      "Staff platform engineer roles",
+    );
+  });
+
+  it("says what a way of writing will cost, without refusing it", async () => {
+    const panel = await openPanel();
+    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
+
+    // A search with nothing written reads as the wide fallback.
+    const beta = screen.getByRole("group", { name: "Beta roles" });
+    expect(within(beta).getByText(/roles matching the resume/)).toBeInTheDocument();
+
+    const keep = within(beta).getByLabelText("What makes a posting worth keeping?");
+    await userEvent.type(keep, "prefer companies with a strong design culture");
+    expect(within(beta).getByText(/reads as a preference/)).toBeInTheDocument();
+
+    await userEvent.clear(keep);
+    await userEvent.type(keep, "look for Staff roles at AI labs");
+    expect(within(beta).getByText(/reads as a search/)).toBeInTheDocument();
+
+    // A place already in Locations, said a second time here.
+    const out = within(beta).getByLabelText("What rules a posting out?");
+    await userEvent.type(out, "anything outside Metro core");
+    expect(within(beta).getByText(/already in your locations/)).toBeInTheDocument();
+
+    // None of it blocks a save.
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
   it("keeps the password out of the one Save, since it needs the current one", async () => {

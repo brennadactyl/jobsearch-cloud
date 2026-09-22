@@ -39,33 +39,86 @@ export function changedGeneral(stored: General, draft: Partial<General>): Partia
   return changed;
 }
 
-/** The searches whose name differs from the stored one, as the save route takes them. */
-export function changedLabels(
-  tracks: readonly Track[],
-  draft: Readonly<Record<string, string>>,
-): Record<string, { label: string }> {
-  const changed: Record<string, { label: string }> = {};
+/** What the Searches section edits about one search. */
+export const SEARCH_KEYS = ["label", "role_search_line", "fit_clause", "fit_disqualifier"] as const;
+export type SearchKey = (typeof SEARCH_KEYS)[number];
+export type SearchFields = Record<SearchKey, string>;
+/** The edits in hand, by search key: only the fields someone has touched. */
+export type SearchDraft = Readonly<Record<string, Partial<SearchFields>>>;
+
+/** The fields of each search that differ from what's stored, as the save route takes them. */
+export function changedSearches(tracks: readonly Track[], draft: SearchDraft): Record<string, Partial<SearchFields>> {
+  const changed: Record<string, Partial<SearchFields>> = {};
   for (const track of tracks) {
-    const name = draft[track.key];
-    if (name !== undefined && name.trim() !== track.label.trim()) changed[track.key] = { label: name.trim() };
+    const edits = draft[track.key];
+    if (!edits) continue;
+    const fields: Partial<SearchFields> = {};
+    for (const key of SEARCH_KEYS) {
+      const value = edits[key];
+      if (value !== undefined && value.trim() !== track[key].trim()) fields[key] = value.trim();
+    }
+    if (Object.keys(fields).length) changed[track.key] = fields;
   }
   return changed;
 }
 
 /** Why a save would be refused before it is sent, or "": the server refuses these too. */
-export function blankName(general: Partial<General>, labels: Record<string, { label: string }>): GeneralKey | "label" | "" {
+export function blankName(
+  general: Partial<General>,
+  searches: Record<string, Partial<SearchFields>>,
+): GeneralKey | "label" | "" {
   if (general.display_title !== undefined && !general.display_title) return "display_title";
-  return Object.values(labels).some((s) => !s.label) ? "label" : "";
+  return Object.values(searches).some((s) => s.label !== undefined && !s.label) ? "label" : "";
 }
 
 /** What leaving now would lose from General and Searches, or "" when nothing would. */
 export function unsavedAccountSentence(
   general: Partial<General>,
-  labels: Record<string, { label: string }>,
+  searches: Record<string, Partial<SearchFields>>,
 ): string {
   const named = GENERAL_KEYS.filter((k) => k in general).map((k) => CALLED[k]);
-  const renamed = Object.keys(labels).length;
-  if (renamed) named.push(renamed === 1 ? "a search's name" : `${renamed} searches' names`);
+  const count = Object.keys(searches).length;
+  if (count) named.push(count === 1 ? "what a search looks for" : `what ${count} searches look for`);
   if (!named.length) return "";
   return `You changed ${joinNames(named)} but didn't save, so they stay as they are.`;
+}
+
+/**
+ * What a search's own words will cost it, said beside the field and never
+ * blocking a save. Each is a way of writing that a night reads differently
+ * from how a person meant it (docs/search-fields-plan.md).
+ */
+export function searchWarnings(fields: SearchFields, places: readonly string[]): Partial<Record<SearchKey, string>> {
+  const warnings: Partial<Record<SearchKey, string>> = {};
+
+  if (!fields.role_search_line.trim()) {
+    warnings.role_search_line = "With this empty, the search looks for “roles matching the resume”, which is wider than it sounds.";
+  }
+
+  // A test a posting either passes or fails, written as a preference, screens
+  // out almost everything and reports a quiet night.
+  for (const key of ["fit_clause", "fit_disqualifier"] as const) {
+    if (/\b(prefer(?:ably|red)?|ideally|nice to have|bonus|would like|strong(?:ly)? prefer)\b/i.test(fields[key])) {
+      warnings[key] = "This reads as a preference. Each one has to be something a posting either is or isn't, or it screens out almost everything.";
+    }
+  }
+
+  if (/^\s*(look|search)\s+for\b|^\s*find\b/i.test(fields.fit_clause)) {
+    warnings.fit_clause =
+      "This reads as a search. It's a test applied to a posting already found — what to look for goes in the roles above.";
+  }
+
+  // The location lists are where a place is said; a second copy drifts.
+  for (const key of ["fit_clause", "fit_disqualifier"] as const) {
+    const named = places.find((place) => place && new RegExp(`\\b${escapeForRegExp(place)}\\b`, "i").test(fields[key]));
+    if (named && !warnings[key]) {
+      warnings[key] = `“${named}” is already in your locations. Saying it here too means two copies of one rule, which drift apart.`;
+    }
+  }
+
+  return warnings;
+}
+
+function escapeForRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
