@@ -151,12 +151,17 @@ this work rather than something assumed.
 Until a search is converted, the panel showing a search's own clause and the
 composed one together is what makes the duplicate visible.
 
-## If this should be smaller
+## In two parts
 
-The pay floor is the only part that needs a column, a migration and a prompt
-change. Dropping it leaves the other three questions, which need nothing new
-stored. What it doesn't leave is a page-composed sentence: a rule frozen into
-each row at save time is worse than a field not built yet.
+**The three fields ship first.** `role_search_line`, `fit_clause` and
+`fit_disqualifier` exist, are already composed into the run every night, and
+need no column, no migration and no change to `prompt.js`. The work is the
+settings route accepting them and the panel asking for them.
+
+**The pay floor follows on its own**, since it alone needs the two columns,
+their migration, the composed clauses and their checks. What it never becomes
+is a page-composed sentence: a rule frozen into each row at save time is worse
+than a field not built yet.
 
 ## Not in this change
 
