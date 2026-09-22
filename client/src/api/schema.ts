@@ -134,6 +134,9 @@ export const trackSchema = z.object({
 /** The server's default too (DEFAULT_SETTINGS in server/src/db.js); used wherever a stored value is missing or zero. */
 export const DEFAULT_STALE_RUN_HOURS = 36;
 
+/** The three the nightly prompt knows (PRONOUNS in server/src/prompt.js); "" is unset, which it reads as they/them. */
+export const PRONOUNS = ["she/her", "he/him", "they/them"] as const;
+
 const placeText = z
   .string()
   .nullish()
@@ -156,6 +159,8 @@ export const settingsSchema = z
     excluded_locations: placeText,
     priority_locations: placeText,
     location_note: placeText,
+    /** How a run writes about this person; "" is unset, which it reads as they/them. */
+    pronouns: z.enum(["", ...PRONOUNS]).catch("").default(""),
     excluded_companies: z.array(z.string()).default([]),
   })
   .transform((s) => ({
@@ -195,9 +200,6 @@ export const inviteCheckSchema = z.discriminatedUnion("valid", [
   z.object({ valid: z.literal(true), expires_at: text }),
   z.object({ valid: z.literal(false), reason: z.enum(INVITE_REASONS) }),
 ]);
-
-/** The three the nightly prompt knows (PRONOUNS in server/src/prompt.js); "" is unset, which it reads as they/them. */
-export const PRONOUNS = ["she/her", "he/him", "they/them"] as const;
 
 /**
  * The setup form's answers, stored by POST /api/intake exactly as sent and read

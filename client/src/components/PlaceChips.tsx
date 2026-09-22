@@ -1,11 +1,11 @@
 /**
- * A place list edited as chips: one chip per entry, an × to drop one, and a box
- * that adds one (docs/location-settings-plan.md).
+ * A list edited as chips: one chip per entry, an × to drop one, and a box that
+ * adds one. The places use it (docs/location-settings-plan.md), and so do the
+ * companies a person rules out.
  *
- * The setting is still the comma-separated line the person's searches read, so
- * a chip is only how it's edited: entries in, entries out, joined back with
- * commas. A ranked list keeps its order, so its chips carry their rank and tier
- * colour and move with the arrows beside them.
+ * A chip is only how a list is edited; what's stored is unchanged. A ranked
+ * list keeps its order, so its chips carry their rank and tier colour and move
+ * with the arrows beside them.
  */
 import { useState, type KeyboardEvent } from "react";
 import { tierColour } from "../domain/geo";
@@ -13,7 +13,7 @@ import { listEntries } from "../domain/places";
 
 export default function PlaceChips({
   id,
-  value,
+  entries,
   onChange,
   placeholder,
   ranked = false,
@@ -21,9 +21,8 @@ export default function PlaceChips({
   empty = "",
 }: {
   id: string;
-  /** The setting as stored: one comma-separated line. */
-  value: string;
-  onChange: (value: string) => void;
+  entries: readonly string[];
+  onChange: (entries: string[]) => void;
   placeholder: string;
   /** A ranked list is ordered, so each chip shows its place and can be moved. */
   ranked?: boolean;
@@ -31,10 +30,9 @@ export default function PlaceChips({
   /** What an empty list means, said in place of the chips. */
   empty?: string;
 }) {
-  const entries = listEntries(value);
   const [draft, setDraft] = useState("");
 
-  const set = (next: readonly string[]) => onChange(next.join(", "));
+  const set = (next: readonly string[]) => onChange([...next]);
   // Typing or pasting several at once splits the same way the setting does, so
   // "Seattle, Portland OR" can't become one entry no search would match.
   const add = () => {

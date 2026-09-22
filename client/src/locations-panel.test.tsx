@@ -84,7 +84,7 @@ afterEach(() => {
 describe("the Locations section", () => {
   it("asks where to search, then what comes first, then what's ruled out, then the note", async () => {
     const section = await openPanel();
-    const labels = [...section.querySelectorAll(".loc-field > label")].map((l) => l.firstChild?.textContent);
+    const labels = [...section.querySelectorAll(".loc-field label")].map((l) => l.textContent);
     expect(labels).toEqual([
       "What locations should be searched?",
       "What locations should the search prioritize?",
@@ -160,6 +160,8 @@ describe("one Save and Discard for the whole panel", () => {
     const save = vi.spyOn(client, "saveSettings").mockResolvedValue({
       resumes: {},
       locations: { priority_locations: "Wider region, Metro core" },
+      settings: {},
+      searches: {},
     });
     const section = await openPanel();
     const field = fieldOf(section, /What locations should the search prioritize/);

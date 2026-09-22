@@ -190,7 +190,7 @@ describe("choosing a resume for a search", () => {
         doc(ENG, { used_by: [...reads("gaming"), { search: "ai", tabs: ["ai"], state: "until_next_run" }] }),
         doc(AI, { uploaded: "2026-09-12T17:00:00.000Z", words: 612, used_by: [{ search: "ai", tabs: ["ai"], state: "from_next_run" }] }),
       ];
-      return { resumes: {}, locations: {} };
+      return { resumes: {}, locations: {}, settings: {}, searches: {} };
     });
     await openResumes();
     await userEvent.selectOptions(picker("Eng - AI"), AI);
@@ -217,7 +217,7 @@ describe("choosing a resume for a search", () => {
         doc(ENG, { used_by: [until("gaming"), until("ai")] }),
         doc(AI, { uploaded: "2026-09-12T17:00:00.000Z", words: 612, used_by: [from("gaming"), from("ai")] }),
       ];
-      return { resumes: {}, locations: {} };
+      return { resumes: {}, locations: {}, settings: {}, searches: {} };
     });
     await openResumes();
     await userEvent.selectOptions(picker("Eng - Gaming"), AI);
