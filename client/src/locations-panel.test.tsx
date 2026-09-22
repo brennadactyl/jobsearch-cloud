@@ -48,7 +48,13 @@ async function openPanel(settings: Partial<Settings> = {}) {
   return within(panel).getByRole("region", { name: "Locations" });
 }
 
-const ranked = () => screen.getByLabelText(/Which locations should come first/);
+/** The box that adds a place to the ranked list. */
+const ranked = () => screen.getByLabelText(/What locations should the search prioritize/);
+/** Every chip of one list, in order, as a person reads them. */
+const chipsOf = (field: HTMLElement) =>
+  [...field.querySelectorAll(".place-chip-text")].map((c) => c.textContent);
+const fieldOf = (section: HTMLElement, label: RegExp) =>
+  within(section).getByLabelText(label).closest(".loc-field") as HTMLElement;
 
 beforeEach(() => {
   localStorage.clear();
@@ -68,46 +74,71 @@ describe("the Locations section", () => {
     const labels = [...section.querySelectorAll(".loc-field > label")].map((l) => l.firstChild?.textContent);
     expect(labels).toEqual([
       "What locations should be searched?",
-      "Which locations should come first?",
+      "What locations should the search prioritize?",
       "Anywhere you can't take a job?",
       "Anything else about where you'd work?",
     ]);
   });
 
-  it("shows each list as stored, and how the commas split it", async () => {
+  it("shows each list as stored, one chip per place", async () => {
     const section = await openPanel({ excluded_locations: "Ogdenville" });
-    expect(within(section).getByLabelText(/What locations should be searched/)).toHaveValue("Springfield, Shelbyville, Remote US");
-    expect(within(section).getByText("Searched:").parentElement).toHaveTextContent("Searched:SpringfieldShelbyvilleRemote US");
-    expect(within(section).getByText("Ruled out:").parentElement).toHaveTextContent("Ruled out:Ogdenville");
-    expect(within(section).getByText("1. Metro core")).toBeInTheDocument();
-    expect(within(section).getByText("2. Wider region")).toBeInTheDocument();
+    expect(chipsOf(fieldOf(section, /What locations should be searched/))).toEqual([
+      "Springfield",
+      "Shelbyville",
+      "Remote US",
+    ]);
+    expect(chipsOf(fieldOf(section, /What locations should the search prioritize/))).toEqual(["Metro core", "Wider region"]);
+    expect(chipsOf(fieldOf(section, /Anywhere you can't take a job/))).toEqual(["Ogdenville"]);
     expect(screen.queryByText(/unsaved change/)).toBeNull();
   });
 
   it("reads an empty searched list as only the ranked places, not anywhere", async () => {
     const section = await openPanel({ search_locations: "" });
-    expect(within(section).getByText("Searched:").parentElement).toHaveTextContent("Searched:Only the ranked places");
+    expect(within(section).getByText("Only the ranked places")).toBeInTheDocument();
+  });
+
+  it("adds a place on Enter, and drops one with its ×", async () => {
+    const section = await openPanel();
+    const field = fieldOf(section, /What locations should the search prioritize/);
+
+    await userEvent.type(ranked(), "Ogdenville{Enter}");
+    expect(chipsOf(field)).toEqual(["Metro core", "Wider region", "Ogdenville"]);
+    expect(ranked()).toHaveValue("");
+    expect(screen.getByText("1 unsaved change")).toBeInTheDocument();
+
+    await userEvent.click(within(field).getByRole("button", { name: "Remove Wider region" }));
+    expect(chipsOf(field)).toEqual(["Metro core", "Ogdenville"]);
+  });
+
+  it("moves a ranked place with its arrows, which is what its tier follows", async () => {
+    const section = await openPanel();
+    const field = fieldOf(section, /What locations should the search prioritize/);
+    await userEvent.click(within(field).getByRole("button", { name: "Move Wider region up" }));
+    expect(chipsOf(field)).toEqual(["Wider region", "Metro core"]);
+    expect(within(field).getByRole("button", { name: "Move Wider region up" })).toBeDisabled();
+  });
+
+  it("takes a pasted comma list as one place each, and flags nothing", async () => {
+    const section = await openPanel();
+    const field = fieldOf(section, /What locations should the search prioritize/);
+    await userEvent.type(field.querySelector("input") as HTMLInputElement, "WA, Portland, OR{Enter}");
+    expect(within(section).queryByRole("alert")).toBeNull();
+    expect(chipsOf(field)).toEqual(["Metro core", "Wider region", "WA", "Portland", "OR"]);
   });
 
   it("won't save both lists empty, and says so beside the searched list without sending", async () => {
     const save = vi.spyOn(client, "saveSettings");
     const section = await openPanel({ search_locations: "" });
-    await userEvent.clear(ranked());
-    expect(within(section).queryByText("Searched:")).toBeNull();
+    const field = fieldOf(section, /What locations should the search prioritize/);
+    for (const place of ["Metro core", "Wider region"]) {
+      await userEvent.click(within(field).getByRole("button", { name: `Remove ${place}` }));
+    }
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const alert = within(section).getByRole("alert");
     expect(alert).toHaveTextContent("Say what locations should be searched, or rank some places first");
     expect(alert.closest(".loc-field")).toContainElement(within(section).getByLabelText(/What locations should be searched/));
     expect(save).not.toHaveBeenCalled();
-  });
-
-  it("flags nothing a person types", async () => {
-    const section = await openPanel();
-    await userEvent.clear(ranked());
-    await userEvent.type(ranked(), "WA, Portland, Portland, OR");
-    expect(within(section).queryByRole("alert")).toBeNull();
-    expect(within(section).getByText("4. OR")).toBeInTheDocument();
   });
 });
 
@@ -118,9 +149,9 @@ describe("one Save and Discard for the whole panel", () => {
       locations: { priority_locations: "Wider region, Metro core" },
     });
     const section = await openPanel();
+    const field = fieldOf(section, /What locations should the search prioritize/);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Resume for Eng - AI" }), AI);
-    await userEvent.clear(ranked());
-    await userEvent.type(ranked(), "Wider region, Metro core");
+    await userEvent.click(within(field).getByRole("button", { name: "Move Wider region up" }));
 
     expect(within(section).getByText(/Changed/)).toBeInTheDocument();
     expect(screen.getByText("2 unsaved changes")).toBeInTheDocument();
@@ -129,12 +160,11 @@ describe("one Save and Discard for the whole panel", () => {
     expect(save).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith({ resumes: { ai: AI }, priority_locations: "Wider region, Metro core" });
     expect(await within(section).findByText("Saved. Your next run uses these places.")).toBeInTheDocument();
-    expect(ranked()).toHaveValue("Wider region, Metro core");
-    expect(within(section).getByText("1. Wider region")).toBeInTheDocument();
+    expect(chipsOf(field)).toEqual(["Wider region", "Metro core"]);
     expect(screen.queryByText(/unsaved change/)).toBeNull();
   });
 
-  it("doesn't count an edit that only adds spaces at the ends, since it saves the same", async () => {
+  it("doesn't count a place typed but never added, since it wouldn't be saved either", async () => {
     await openPanel();
     await userEvent.type(ranked(), "  ");
     expect(screen.queryByText(/unsaved change/)).toBeNull();
@@ -145,28 +175,30 @@ describe("one Save and Discard for the whole panel", () => {
       Object.assign(new Error("priority_locations can list at most 50 places"), { status: 400, field: "priority_locations" }),
     );
     const section = await openPanel();
-    await userEvent.type(ranked(), ", Ogdenville");
+    const field = fieldOf(section, /What locations should the search prioritize/);
+    await userEvent.type(ranked(), "Ogdenville{Enter}");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await within(section).findByRole("alert")).toHaveTextContent("priority_locations can list at most 50 places");
-    expect(ranked()).toHaveValue("Metro core, Wider region, Ogdenville");
+    expect(chipsOf(field)).toEqual(["Metro core", "Wider region", "Ogdenville"]);
     expect(screen.getByText("1 unsaved change")).toBeInTheDocument();
   });
 
   it("Discard puts every section back", async () => {
-    await openPanel();
+    const section = await openPanel();
+    const field = fieldOf(section, /What locations should the search prioritize/);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Resume for Eng - AI" }), AI);
-    await userEvent.type(ranked(), ", Ogdenville");
+    await userEvent.type(ranked(), "Ogdenville{Enter}");
     await userEvent.click(screen.getByRole("button", { name: "Discard" }));
 
-    expect(ranked()).toHaveValue("Metro core, Wider region");
+    expect(chipsOf(field)).toEqual(["Metro core", "Wider region"]);
     expect(screen.getByRole("combobox", { name: "Resume for Eng - AI" })).toHaveValue(ENG);
     expect(screen.queryByText(/unsaved change/)).toBeNull();
   });
 
   it("asks before closing on a changed list, saying what would be lost", async () => {
     await openPanel();
-    await userEvent.type(ranked(), ", Ogdenville");
+    await userEvent.type(ranked(), "Ogdenville{Enter}");
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     const ask = screen.getByRole("alertdialog", { name: "Leave without saving?" });
     expect(ask).toHaveTextContent("You changed the places ranked first but didn't save, so your searches keep the ones they use now.");

@@ -19,7 +19,7 @@ export type Places = Record<PlaceKey, string>;
  */
 export const PLACE_QUESTIONS: Readonly<Record<PlaceKey, string>> = {
   search_locations: "What locations should be searched?",
-  priority_locations: "Which locations should come first?",
+  priority_locations: "What locations should the search prioritize?",
   excluded_locations: "Anywhere you can't take a job?",
   location_note: "Anything else about where you'd work?",
 };
