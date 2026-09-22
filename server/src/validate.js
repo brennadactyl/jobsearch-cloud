@@ -95,6 +95,68 @@ export function locationSettingError(key, value) {
   return "";
 }
 
+// What the account panel names: the page's own title and each search's tab
+// label (docs/account-settings-plan.md). Both are shown, not read, so the caps
+// are what a heading can hold rather than anything the prompt depends on. An
+// empty one is refused rather than stored, since a page with no title and a tab
+// with no name are nothing a person means to ask for.
+export const DISPLAY_TITLE_MAX_CHARS = 120;
+export const TRACK_LABEL_MAX_CHARS = 60;
+
+/**
+ * What is wrong with a name someone typed for a page or a tab, or "". Judged
+ * after trimming, which is how it is stored.
+ * @param {string} field the key to name in the refusal
+ * @param {unknown} value
+ * @param {number} max
+ * @returns {string}
+ */
+export function nameError(field, value, max) {
+  if (typeof value !== "string") return `${field} must be text`;
+  const name = value.trim();
+  if (!name) return `${field} can't be empty`;
+  if (name.length > max) return `${field} is longer than ${max} characters`;
+  return "";
+}
+
+/**
+ * What is wrong with a `pronouns` setting, or "". "" is unset; the rest are the
+ * pronouns the prompt knows how to write, which the caller passes rather than
+ * this importing prompt.js, since prompt.js reads this file.
+ * @param {unknown} value
+ * @param {string[]} known the keys of prompt.js's PRONOUNS
+ * @returns {string}
+ */
+export function pronounsError(value, known) {
+  if (typeof value !== "string" || (value !== "" && !known.includes(value))) {
+    return `pronouns must be ${known.join(", ")} or empty`;
+  }
+  return "";
+}
+
+// A cap on what a person can type, not on what the feature supports: every
+// lead is matched against this list on every run (exclude.js).
+export const EXCLUDED_COMPANIES_MAX = 500;
+const COMPANY_NAME_MAX_CHARS = 200;
+
+/**
+ * What is wrong with a list of companies to exclude, or "". An empty list is a
+ * real instruction ("exclude no one"), so it passes; blank entries are dropped
+ * on the way in (db.setSettings) rather than refused, since a trailing chip is
+ * a typing artefact, not a mistake worth stopping a save for.
+ * @param {unknown} list
+ * @returns {string}
+ */
+export function excludedCompaniesError(list) {
+  if (!Array.isArray(list)) return "excluded_companies must be a list";
+  if (list.length > EXCLUDED_COMPANIES_MAX) return `at most ${EXCLUDED_COMPANIES_MAX} companies`;
+  if (list.some((c) => typeof c !== "string")) return "each excluded company must be text";
+  if (list.some((c) => c.length > COMPANY_NAME_MAX_CHARS)) {
+    return `an excluded company is longer than ${COMPANY_NAME_MAX_CHARS} characters`;
+  }
+  return "";
+}
+
 // The refusal for a track key that isn't one of the caller's configured tracks.
 // Worded identically on every route because it always means the same thing:
 // the caller's idea of this search and the tracker's have drifted apart.

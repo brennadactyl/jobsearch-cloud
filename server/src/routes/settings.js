@@ -8,10 +8,25 @@
 
 import { json, readJson } from "../http.js";
 import { LOCATION_SETTING_KEYS, parseDocumentList } from "../db.js";
+import { PRONOUNS } from "../prompt.js";
 import { fileName, isChoosableResume, listedPathFor, resumeParts, samePairName, withResume } from "../resumes.js";
-import { locationSettingError, nowhereToSearchError, unreadableDocumentsError } from "../validate.js";
+import {
+  DISPLAY_TITLE_MAX_CHARS,
+  excludedCompaniesError,
+  locationSettingError,
+  nameError,
+  nowhereToSearchError,
+  pronounsError,
+  TRACK_LABEL_MAX_CHARS,
+  unreadableDocumentsError,
+} from "../validate.js";
 
-const ACCEPTED = ["resumes", ...LOCATION_SETTING_KEYS];
+// The settings the panel writes as values, beside the location keys: what the
+// page is called, how the prompt refers to the person, and who never to bring
+// them. Each takes effect on the next read, so the panel promises nothing about
+// tonight (docs/account-settings-plan.md).
+const PANEL_SETTING_KEYS = ["display_title", "pronouns", "excluded_companies"];
+const ACCEPTED = ["resumes", "searches", ...LOCATION_SETTING_KEYS, ...PANEL_SETTING_KEYS];
 
 // Every refusal about a chosen resume says which search it is about, so the
 // page can show it beside that search's picker.
@@ -22,8 +37,23 @@ function refuse(status, search, error) {
 /**
  * POST /api/settings - requires a Bearer token. Body `{ resumes?: { <search>:
  * <path> }, search_locations?, excluded_locations?, priority_locations?,
- * location_note? }` -> `{ resumes: { <search>: { documents, profile_pending } },
- * locations: { <key>: <stored value> } }`.
+ * location_note?, display_title?, pronouns?, excluded_companies?, searches?:
+ * { <key>: { label } } }` -> `{ resumes: { <search>: { documents,
+ * profile_pending } }, locations: { <key>: <stored value> }, settings:
+ * { display_title, pronouns, excluded_companies }, searches: { <key>:
+ * { label } } }`.
+ *
+ * The account panel's one Save, so a request may carry a resume choice, a place
+ * edit, a page title and a tab rename together, and everything it can write
+ * takes effect on the next read - the panel promises nothing about tonight
+ * (docs/account-settings-plan.md). `settings` and `searches` in the reply are
+ * read back after the write, not echoed from the request.
+ *
+ * `display_title` and each `label` are text, trimmed, refused empty; `pronouns`
+ * is one the prompt knows or empty; `excluded_companies` is a list, and an
+ * empty one means "exclude no one". `searches` renames tabs and can do nothing
+ * else: a track's config, its place in the tab order and the track list itself
+ * are `POST /api/config`'s, so a rename can't drop a search.
  *
  * The location lists and note are stored as typed, trimmed at the ends, and
  * take effect on each search's next run (docs/location-settings-plan.md). Each
@@ -80,20 +110,50 @@ export async function handlePostSettings({ request, db, docs }) {
     if (problem) return json({ error: problem, field: "search_locations" }, 400);
   }
 
-  const resumes = body.resumes;
-  if (resumes === undefined) {
-    await db.setSettings(locations);
-    return json({ resumes: {}, locations });
-  }
-  if (!resumes || typeof resumes !== "object" || Array.isArray(resumes)) {
-    return json({ error: "resumes must be an object of search key to resume path", field: "resumes" }, 400);
+  const values = {};
+  for (const key of PANEL_SETTING_KEYS) {
+    if (body[key] === undefined) continue;
+    const problem =
+      key === "display_title"
+        ? nameError(key, body[key], DISPLAY_TITLE_MAX_CHARS)
+        : key === "pronouns"
+          ? pronounsError(body[key], Object.keys(PRONOUNS))
+          : excludedCompaniesError(body[key]);
+    if (problem) return json({ error: problem, field: key }, 400);
+    values[key] = typeof body[key] === "string" ? body[key].trim() : body[key];
   }
 
+  const resumes = body.resumes;
+  const searches = body.searches;
+  if (searches !== undefined && (!searches || typeof searches !== "object" || Array.isArray(searches))) {
+    return json({ error: "searches must be an object of search key to { label }", field: "searches" }, 400);
+  }
+  if (resumes !== undefined && (!resumes || typeof resumes !== "object" || Array.isArray(resumes))) {
+    return json({ error: "resumes must be an object of search key to resume path", field: "resumes" }, 400);
+  }
+  // One read for both, since each names searches that have to exist.
+  const rows = resumes === undefined && searches === undefined ? [] : await db.getResumeState();
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+
+  const labels = {};
+  for (const [key, sent] of Object.entries(searches || {})) {
+    if (!byKey.has(key)) return json({ error: `unknown search "${key}"`, search: key, field: "label" }, 404);
+    const problem =
+      !sent || typeof sent !== "object" || Array.isArray(sent)
+        ? `the entry for ${key} must be { label }`
+        : nameError("label", sent.label, TRACK_LABEL_MAX_CHARS);
+    if (problem) return json({ error: problem, search: key, field: "label" }, 400);
+    labels[key] = sent.label.trim();
+  }
+
+  if (resumes === undefined) {
+    await db.setSettings({ ...locations, ...values });
+    await db.setTrackLabels(labels);
+    return json({ resumes: {}, locations, ...(await panelState(db)) });
+  }
   if (!docs?.bucket) {
     return json({ error: "documents are not configured on this deployment - the DOCS R2 bucket is not bound (see server/wrangler.toml)" }, 503);
   }
-  const rows = await db.getResumeState();
-  const byKey = new Map(rows.map((r) => [r.key, r]));
   const stored = (await docs.list()).map((d) => d.path);
 
   const changes = [];
@@ -135,6 +195,25 @@ export async function handlePostSettings({ request, db, docs }) {
   }
 
   await db.setSearchResumes(changes, new Date().toISOString());
-  await db.setSettings(locations);
-  return json({ resumes: reply, locations });
+  await db.setSettings({ ...locations, ...values });
+  await db.setTrackLabels(labels);
+  return json({ resumes: reply, locations, ...(await panelState(db)) });
+}
+
+/**
+ * The panel's values as they now stand, read back rather than echoed from the
+ * request, so a save that stored a trimmed or de-duplicated value shows what a
+ * reload would.
+ * @param {import("../db.js").Db} db
+ */
+async function panelState(db) {
+  const { tracks, settings } = await db.getTracksAndSettings();
+  return {
+    settings: {
+      display_title: settings.display_title,
+      pronouns: settings.pronouns,
+      excluded_companies: settings.excluded_companies,
+    },
+    searches: Object.fromEntries(tracks.map((t) => [t.key, { label: t.label }])),
+  };
 }

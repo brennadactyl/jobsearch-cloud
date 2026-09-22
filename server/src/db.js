@@ -832,6 +832,21 @@ export class Db {
   }
 
   /**
+   * Renames this user's search tabs, and nothing else about them
+   * (routes/settings.js). replaceTracks is how the track list itself changes;
+   * this is the account panel's narrower write, so a rename can never drop a
+   * track, reorder tabs or touch a search's config. One batch, so a save of
+   * several names lands whole.
+   * @param {Record<string, string>} labels track key to its new label, trimmed
+   */
+  async setTrackLabels(labels) {
+    const entries = Object.entries(labels);
+    if (!entries.length) return;
+    const stmt = this.d1.prepare("UPDATE tracks SET label = ? WHERE user_id = ? AND key = ?");
+    await this.d1.batch(entries.map(([key, label]) => stmt.bind(label, this.userId, key)));
+  }
+
+  /**
    * How many rows a retired search still has, per table. Read-only, and the
    * thing a purge should be able to show someone before it runs.
    * @param {string} key

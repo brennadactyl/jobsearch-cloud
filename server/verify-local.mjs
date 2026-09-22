@@ -3334,6 +3334,77 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
 
 
 {
+  console.log("\n== the account panel's one Save ==");
+  // What the panel writes as values (docs/account-settings-plan.md): the page
+  // title, pronouns, the companies never to bring, each search's name, and the
+  // places and resume it already wrote - in one request, all or nothing.
+  const apRun = Date.now();
+  const apUser = async (tag) => {
+    const name = `Panel ${tag} ${apRun}`;
+    await req("POST", "/api/users", { admin: true, body: { name, password: `panel-${tag}-long-password` } });
+    const token = (await req("POST", "/api/login", { body: { name, password: `panel-${tag}-long-password` } })).json.token;
+    await req("POST", "/api/config", { token, body: { tracks: [
+      { key: "SWE", label: "Engineering", sort_order: 0, role_search_line: "engineering roles" },
+      { key: "CPM", label: "Program", sort_order: 1 }] } });
+    return token;
+  };
+  const AP = await apUser("a"), AP_B = await apUser("b");
+  const apConfig = async (token) => (await req("GET", "/api/config", { token })).json || {};
+  const apSave = (token, body) => req("POST", "/api/settings", { token, body });
+
+  const saved = await apSave(AP, {
+    display_title: "  Ada's search  ", pronouns: "she/her", excluded_companies: ["Bad Corp", "Worse Inc"],
+    searches: { SWE: { label: "Eng - Gaming" } }, priority_locations: "Seattle",
+  });
+  const afterSave = await apConfig(AP);
+  check("one save carries a title, pronouns, companies, a tab name and a place",
+    saved.status === 200 && afterSave.settings?.display_title === "Ada's search" &&
+    afterSave.settings?.pronouns === "she/her" &&
+    JSON.stringify(afterSave.settings?.excluded_companies) === JSON.stringify(["Bad Corp", "Worse Inc"]) &&
+    afterSave.tracks?.find((t) => t.key === "SWE")?.label === "Eng - Gaming" &&
+    afterSave.settings?.priority_locations === "Seattle", JSON.stringify(saved.json));
+  check("and says what it stored, read back rather than echoed",
+    saved.json?.settings?.display_title === "Ada's search" &&
+    saved.json?.searches?.SWE?.label === "Eng - Gaming" && saved.json?.searches?.CPM?.label === "Program",
+    JSON.stringify(saved.json?.searches));
+  check("a rename leaves the track list, its order and its config alone",
+    afterSave.tracks?.length === 2 && afterSave.tracks?.[0]?.key === "SWE" &&
+    afterSave.tracks?.[0]?.role_search_line === "engineering roles" && afterSave.tracks?.[1]?.key === "CPM");
+  check("an empty list of companies is a real instruction",
+    (await apSave(AP, { excluded_companies: [] })).status === 200 &&
+    JSON.stringify((await apConfig(AP)).settings?.excluded_companies) === "[]");
+
+  for (const [why, body, field] of [
+    ["a title that is only spaces", { display_title: "   " }, "display_title"],
+    ["a title over 120 characters", { display_title: "x".repeat(121) }, "display_title"],
+    ["pronouns the prompt doesn't know", { pronouns: "xe/xem" }, "pronouns"],
+    ["companies sent as text", { excluded_companies: "Bad Corp" }, "excluded_companies"],
+    ["a tab name that is only spaces", { searches: { SWE: { label: " " } } }, "label"],
+    ["a tab name over 60 characters", { searches: { SWE: { label: "x".repeat(61) } } }, "label"],
+    ["a search entry that isn't { label }", { searches: { SWE: "Eng" } }, "label"],
+    ["a setting the page doesn't own", { footer_note: "hi" }, "footer_note"],
+  ]) {
+    const res = await apSave(AP, body);
+    check(`the panel refuses ${why}, naming it`, res.status === 400 && res.json?.field === field, JSON.stringify(res.json));
+  }
+  const apUnknown = await apSave(AP, { searches: { NOPE: { label: "Nope" } } });
+  check("renaming a search this account doesn't have is a 404 naming it",
+    apUnknown.status === 404 && apUnknown.json?.search === "NOPE", JSON.stringify(apUnknown.json));
+  const apHalf = await apSave(AP, { display_title: "Not stored", searches: { SWE: { label: "" } } });
+  check("a refused save writes none of it",
+    apHalf.status === 400 && (await apConfig(AP)).settings?.display_title === "Ada's search");
+  check("the overnight run still can't write what the panel owns",
+    (await req("POST", "/api/writeup", { token: AP, body: { search: "SWE", display_title: "Theirs" } })).json?.field === "display_title");
+  const apOther = await apConfig(AP_B);
+  check("another account's title, tab names and companies are its own",
+    apOther.settings?.display_title !== "Ada's search" &&
+    apOther.tracks?.find((t) => t.key === "SWE")?.label === "Engineering" &&
+    JSON.stringify(apOther.settings?.excluded_companies) === "[]" && apOther.settings?.pronouns !== "she/her",
+    JSON.stringify([apOther.settings?.display_title, apOther.settings?.pronouns]));
+}
+
+
+{
   console.log("\n== ranking reads only the person's list ==");
   // Tiers come from priority_locations and each row's area; no rules setting
   // sits beside the list (docs/location-settings-plan.md).
