@@ -423,7 +423,7 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 /* The account panel: who is signed in, then one section per thing to change. */
 /* A fixed frame the sections swap inside: sized by its content, the panel
    would jump on every click of the sidebar. */
-.account-panel{padding:0;width:100%;max-width:760px;height:min(720px,calc(100vh - 40px));
+.account-panel{padding:0;width:100%;max-width:968px;height:min(720px,calc(100vh - 40px));
   display:flex;flex-direction:column;overflow:hidden}
 .account-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
 .account-head h3{font-size:17px}
