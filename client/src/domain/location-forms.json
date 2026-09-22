@@ -1,5 +1,5 @@
 {
-  "about": "How the nightly runs write a lead's location. `forms` names each form the prompt teaches; server/verify-local.mjs reads this file by path and checks the prompt teaches every one.",
+  "about": "How the nightly runs write a lead's location. `forms` names each form the prompt teaches. It lives here because the forms are the page's to decide, but the page reads no code from it: server/verify-local.mjs is its only reader, by path, and it checks that the prompt teaches every form named here.",
   "forms": {
     "us-city": "City, ST - a US city with its two-letter state",
     "city-country": "City, Country - a city outside the US with its country",
