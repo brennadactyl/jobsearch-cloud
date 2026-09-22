@@ -28,15 +28,13 @@ import {
   revokeInvite,
   signupWithInvite,
 } from "../onboarding.js";
-import { isDocumentPath, locationSettingError, nowhereToSearchError } from "../validate.js";
+import { isDocumentPath, locationSettingError, nowhereToSearchError, pronounsError } from "../validate.js";
 
 const NOTE_MAX = 200;
 const NAME_MAX = 60;
 const STATUS_NOTE_MAX = 500;
 const ANSWERS_MAX_BYTES = 256 * 1024;
 const ROLES_MAX = 10;
-// "" is unset; the rest are the pronouns the prompt knows how to write.
-const PRONOUN_ANSWERS = ["", ...Object.keys(PRONOUNS)];
 const ANSWER_STRINGS = [
   "page_title", "pronouns", "resume_text", "work_scope", "location_limits", "locations_first",
   "location_note", "never_work_for", "preferences",
@@ -240,8 +238,9 @@ async function answersProblem(answers, docs) {
       return bad(key === "resume_text" ? "resume" : "answers", `${key} must be text`);
     }
   }
-  if (answers.pronouns !== undefined && !PRONOUN_ANSWERS.includes(answers.pronouns)) {
-    return bad("answers", `pronouns must be ${Object.keys(PRONOUNS).join(", ")} or empty`);
+  if (answers.pronouns !== undefined) {
+    const problem = pronounsError(answers.pronouns, Object.keys(PRONOUNS));
+    if (problem) return bad("answers", problem);
   }
 
   const roles = answers.roles;
