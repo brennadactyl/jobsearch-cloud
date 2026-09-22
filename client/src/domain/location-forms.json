@@ -1,11 +1,29 @@
 {
-  "about": "How the nightly runs write a lead's location. `forms` names each form the prompt teaches. It lives here because the forms are the page's to decide, but the page reads no code from it: server/verify-local.mjs is its only reader, by path, and it checks that the prompt teaches every form named here.",
+  "about": "How the nightly runs write a lead's location. Each form says what it is (`describes`) and the exact words the prompt teaches it with (`taughtAs`). It lives here because the forms are the page's to decide, but the page reads no code from it: server/verify-local.mjs is its only reader, by path, and it checks that step 6 of the composed prompt contains every form's `taughtAs`.",
   "forms": {
-    "us-city": "City, ST - a US city with its two-letter state",
-    "city-country": "City, Country - a city outside the US with its country",
-    "remote-us": "Remote (US)",
-    "remote-country": "Remote (<country>) - remote, open to one country",
-    "remote-us-states": "Remote (US - CA/TX/WA) - remote, open only in the US states it names",
-    "joined": "several locations joined with \"; \""
+    "us-city": {
+      "describes": "City, ST - a US city with its two-letter state",
+      "taughtAs": "\"City, ST\""
+    },
+    "city-country": {
+      "describes": "City, Country - a city outside the US with its country",
+      "taughtAs": "\"City, Country\""
+    },
+    "remote-us": {
+      "describes": "Remote (US)",
+      "taughtAs": "\"Remote (US)\""
+    },
+    "remote-country": {
+      "describes": "Remote (<country>) - remote, open to one country",
+      "taughtAs": "\"Remote (<country>)\""
+    },
+    "remote-us-states": {
+      "describes": "Remote (US - CA/TX/WA) - remote, open only in the US states it names",
+      "taughtAs": "\"Remote (US - CA/TX/WA)\""
+    },
+    "joined": {
+      "describes": "several locations joined with \"; \"",
+      "taughtAs": "joined with \"; \""
+    }
   }
 }
