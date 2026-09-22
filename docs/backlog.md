@@ -52,9 +52,9 @@ doc, and a finding says whether anything was built on the wrong line.
   It covers every search, and it hides that company's existing leads too. The
   person is told what it did and can undo it, and removing the chip in the
   panel is the other way back.
-- **Edit what a search looks for, from the account panel** - the role line, what
-  rules a job out, the pay floor. Being planned by Client Comrade, Backend Buddy
-  and Prompt Bro. It writes through `POST /api/settings` beside `label`, not
+- **[Edit what a search looks for](search-fields-plan.md), from the account
+  panel** - the role line, what keeps a posting, what rules one out, the pay
+  floor. Planned, unbuilt. It writes through `POST /api/settings` beside `label`, not
   `POST /api/config`, whose `tracks` array replaces the whole list and would drop
   the person's other searches. Nothing is regenerated and no run is involved.
   This is the useful half of the answers edit the account panel dropped, at a

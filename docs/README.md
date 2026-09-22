@@ -34,6 +34,7 @@ reference docs above are the authority.
 - [`word-resumes-plan.md`](word-resumes-plan.md) — a .docx resume is read by extracting its text on upload
 - [`token-split-plan.md`](token-split-plan.md) — a machine’s token can report findings, not act as the person
 - [`account-settings-plan.md`](account-settings-plan.md) — a person edits their own search where the password dialog already is
+- [`search-fields-plan.md`](search-fields-plan.md) — a person edits what each of their searches looks for, and its pay floor
 - [`instant-setup-plan.md`](instant-setup-plan.md) — the tracker exists the moment setup is sent; the night writes only the prose
 - [`overview-collapsible-plan.md`](overview-collapsible-plan.md) — Momentum moves to the bottom; every Overview section and chart folds, remembered per browser
 - [`hide-not-a-fit-plan.md`](hide-not-a-fit-plan.md) — leads tabs open on New and Reviewing; Not a fit is one chip away
