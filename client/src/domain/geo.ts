@@ -6,8 +6,21 @@
  */
 import type { Settings } from "../api/schema";
 
-/** How many tiers the stylesheet colours: `.pri0` to `.pri4` in tracker.css. */
-export const TIER_CLASS_COUNT = 5;
+/**
+ * The colour of each tier, top tier first, as the stylesheet's own variables.
+ * This list is how many tiers the page colours: `--pri-0` to `--pri-4` and the
+ * `.pri0` to `.pri4` rules in tracker.css hold the same number, so a tier added
+ * here is added there too.
+ */
+export const TIER_COLOURS = ["var(--pri-0)", "var(--pri-1)", "var(--pri-2)", "var(--pri-3)", "var(--pri-4)"];
+
+/** What a rank past the coloured tiers is drawn in. */
+export const UNTIERED_COLOUR = "var(--ink3)";
+
+/** The colour for a rank, or the untiered grey past the coloured tiers. */
+export function tierColour(rank: number): string {
+  return TIER_COLOURS[rank] ?? UNTIERED_COLOUR;
+}
 
 /** Where a posting's location falls in the configured tiers. */
 export interface LocationTier {
@@ -19,7 +32,7 @@ export interface LocationTier {
 }
 
 export function tierCssClass(rank: number): string {
-  return rank < TIER_CLASS_COUNT ? `pri${rank}` : "";
+  return rank < TIER_COLOURS.length ? `pri${rank}` : "";
 }
 
 /** What tiering a row needs from settings. */
