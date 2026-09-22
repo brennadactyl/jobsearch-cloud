@@ -5,7 +5,7 @@
  * Each place is kept as typed and the nightly search interprets it, so nothing
  * here is flagged or refused. Edits wait for the panel's Save.
  */
-import { PLACE_QUESTIONS, type PlaceKey, type Places } from "../domain/places";
+import { listEntries, PLACE_QUESTIONS, type PlaceKey, type Places } from "../domain/places";
 import PlaceChips from "./PlaceChips";
 
 export default function LocationsSection({
@@ -110,11 +110,13 @@ function PlaceField({
 }) {
   return (
     <div className="loc-field">
-      <label htmlFor={id}>
-        {label}
-        {optional && <span className="loc-optional"> (optional)</span>}
-        {changed && <span className="resume-changed"> Changed</span>}
-      </label>
+      {/* The tags sit outside the label: a label whose text changes as you type
+          is a different label to anything reading the page. */}
+      <div className="loc-label">
+        <label htmlFor={id}>{label}</label>
+        {optional && <span className="loc-optional">(optional)</span>}
+        {changed && <span className="resume-changed">Changed</span>}
+      </div>
       {multiline ? (
         <textarea
           id={id}
@@ -128,8 +130,8 @@ function PlaceField({
       ) : (
         <PlaceChips
           id={id}
-          value={value}
-          onChange={onChange}
+          entries={listEntries(value)}
+          onChange={(entries) => onChange(entries.join(", "))}
           placeholder={placeholder}
           ranked={ranked}
           invalid={!!problem}

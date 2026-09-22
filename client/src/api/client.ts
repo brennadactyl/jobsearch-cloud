@@ -118,7 +118,7 @@ type RequestOptions = {
  * names the form field it's about, `reason` why an invite can't be used. Still
  * a plain Error, so callers that only read the message are unchanged.
  */
-export type RequestFailure = Error & { status: number; field?: string; reason?: string };
+export type RequestFailure = Error & { status: number; field?: string; reason?: string; search?: string };
 
 export function failureOf(err: unknown): RequestFailure | null {
   return err instanceof Error && typeof (err as RequestFailure).status === "number" ? (err as RequestFailure) : null;
@@ -162,6 +162,8 @@ async function request<T>(
       status: res.status,
       field: typeof said.field === "string" ? said.field : undefined,
       reason: typeof said.reason === "string" ? said.reason : undefined,
+      // Which search a refusal about one is about, so it shows beside it.
+      search: typeof said.search === "string" ? said.search : undefined,
     });
   }
 
@@ -256,19 +258,40 @@ export async function listDocuments(): Promise<StoredResume[]> {
 }
 
 /** What the account panel's Save sends: only what changed. */
-export type SettingsChanges = { resumes?: Record<string, string> } & Partial<Places>;
+export type SettingsChanges = {
+  resumes?: Record<string, string>;
+  display_title?: string;
+  pronouns?: string;
+  excluded_companies?: string[];
+  /** Each renamed search, by its key. */
+  searches?: Record<string, { label: string }>;
+} & Partial<Places>;
 
 /**
  * Saves the account panel's changes, all at once or not at all: the resume each
- * named search reads, and any place setting. Each search takes them on its
- * next run. A refusal's message names the search it's about; one about a place
- * setting also names that setting as its `field`.
+ * named search reads, the places, what the page is called, how a run writes
+ * about this person, the companies ruled out, and each search's name. A search
+ * takes a resume or place change on its next run; the rest is true at once.
+ *
+ * A refusal's message names the search it's about; one about a setting also
+ * names it as its `field`.
  */
 export function saveSettings(changes: SettingsChanges) {
   const reply = z.object({
     resumes: z.record(z.string(), z.unknown()),
     /** Each place setting sent, as the server stored it. */
     locations: z.record(z.string(), z.string()).default({}),
+    /** Read back after the write, whether or not this request changed them. */
+    settings: z
+      .object({
+        display_title: z.string().default(""),
+        pronouns: z.string().default(""),
+        excluded_companies: z.array(z.string()).default([]),
+      })
+      .partial()
+      .default({}),
+    /** Every search, not only the renamed ones, so the panel can refresh its names. */
+    searches: z.record(z.string(), z.object({ label: z.string().default("") })).default({}),
   });
   return request("/api/settings", reply, {
     method: "POST",

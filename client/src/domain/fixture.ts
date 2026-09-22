@@ -58,6 +58,7 @@ export const settings: Settings = {
   priority_locations: "Metro core, Wider region",
   location_note: "",
   areas: ["Metro core", "Wider region"],
+  pronouns: "she/her",
   excluded_companies: [],
 };
 

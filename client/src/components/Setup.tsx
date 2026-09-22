@@ -428,8 +428,8 @@ export default function Setup({
               id={`${id}-scope`}
               placeholder="Add a place, then press Enter"
               invalid={!!problems.work_scope}
-              value={answers.work_scope}
-              onChange={(value) => set("work_scope", value)}
+              entries={listEntries(answers.work_scope)}
+              onChange={(entries) => set("work_scope", entries.join(", "))}
               // Empty doesn't mean anywhere: the search looks only where the ranked list says.
               empty={listEntries(answers.locations_first).length ? "Only the ranked places" : ""}
             />
@@ -444,8 +444,8 @@ export default function Setup({
               placeholder="Add a place, then press Enter"
               ranked
               invalid={!!problems.locations_first}
-              value={answers.locations_first}
-              onChange={(value) => set("locations_first", value)}
+              entries={listEntries(answers.locations_first)}
+              onChange={(entries) => set("locations_first", entries.join(", "))}
             />
           </Field>
           <Field
@@ -458,8 +458,8 @@ export default function Setup({
               id={`${id}-limits`}
               placeholder="Add a place, then press Enter"
               invalid={!!problems.location_limits}
-              value={answers.location_limits}
-              onChange={(value) => set("location_limits", value)}
+              entries={listEntries(answers.location_limits)}
+              onChange={(entries) => set("location_limits", entries.join(", "))}
             />
           </Field>
           <Field

@@ -13,6 +13,15 @@ import { DATA_KEY, DOCUMENTS_KEY } from "../api/mutations";
 import { settingsSchema, type Settings, type TrackerData, type Track } from "../api/schema";
 import { MIN_PASSWORD } from "../domain/account";
 import {
+  blankName,
+  changedGeneral,
+  changedLabels,
+  GENERAL_KEYS,
+  unsavedAccountSentence,
+  type General,
+  type GeneralKey,
+} from "../domain/panel";
+import {
   changedPlaces,
   nowhereToSearch,
   PLACE_KEYS,
@@ -21,8 +30,10 @@ import {
   type Places,
 } from "../domain/places";
 import { saved } from "../ui/saved";
+import GeneralSection from "./GeneralSection";
 import LocationsSection from "./LocationsSection";
 import ResumeSection from "./ResumeSection";
+import SearchesSection from "./SearchesSection";
 
 type Props = { open: boolean; name: string; tracks: readonly Track[]; settings: Settings; onClose: () => void };
 
@@ -32,30 +43,39 @@ export default function AccountPanel({ open, ...props }: Props) {
   return <AccountDialog {...props} />;
 }
 
-/** A refused save: the server's sentence, and the place setting it names, if any. */
-type SaveError = { message: string; field: PlaceKey | null };
+/** A refused save: the server's sentence, the setting it names, and the search when it is about one. */
+type SaveError = { message: string; field: string | null; search: string | null };
 
 /**
  * One section of the panel at a time, chosen from the sidebar, so nothing
- * scrolls past what it isn't about. Searches joins these once the server can
- * write them (docs/account-settings-plan.md).
+ * scrolls past what it isn't about (docs/account-settings-plan.md).
  */
 const SECTIONS = [
   { key: "general", label: "General" },
   { key: "locations", label: "Locations" },
   { key: "resumes", label: "Resumes" },
+  { key: "searches", label: "Searches" },
 ] as const;
 type SectionKey = (typeof SECTIONS)[number]["key"];
 
-const isPlaceKey = (field: string | undefined): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
+const isPlaceKey = (field: string | null): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
+const isGeneralKey = (field: string | null): field is GeneralKey => GENERAL_KEYS.some((k) => k === field);
 
 function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">) {
   const qc = useQueryClient();
   const stored = Object.fromEntries(PLACE_KEYS.map((k) => [k, settings[k]])) as Places;
 
+  const storedGeneral: General = {
+    display_title: settings.display_title,
+    pronouns: settings.pronouns,
+    excluded_companies: settings.excluded_companies,
+  };
+
   const [open, setOpen] = useState<SectionKey>("general");
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Partial<Places>>({});
+  const [general, setGeneral] = useState<Partial<General>>({});
+  const [names, setNames] = useState<Record<string, string>>({});
   const [resumeSentence, setResumeSentence] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
@@ -63,17 +83,24 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
   const [asking, setAsking] = useState(false);
 
   const places = changedPlaces(stored, draft);
+  const edits = changedGeneral(storedGeneral, general);
+  const labels = changedLabels(tracks, names);
   const resumeCount = Object.keys(picks).length;
-  const count = resumeCount + Object.keys(places).length;
+  const count =
+    resumeCount + Object.keys(places).length + Object.keys(edits).length + Object.keys(labels).length;
   // Which sections hold something unsaved, so the sidebar can say so: an edit
   // in a section you aren't looking at must not be invisible.
   const unsaved = new Set<SectionKey>([
-    ...(resumeCount ? (["resumes"] as const) : []),
+    ...(Object.keys(edits).length ? (["general"] as const) : []),
     ...(Object.keys(places).length ? (["locations"] as const) : []),
+    ...(resumeCount ? (["resumes"] as const) : []),
+    ...(Object.keys(labels).length ? (["searches"] as const) : []),
   ]);
   // The resume section's sentence is its own only while its choices stand; it
   // isn't mounted to withdraw the sentence when they're discarded.
-  const sentence = [resumeCount ? resumeSentence : "", unsavedPlacesSentence(places)].filter(Boolean).join(" ");
+  const sentence = [resumeCount ? resumeSentence : "", unsavedPlacesSentence(places), unsavedAccountSentence(edits, labels)]
+    .filter(Boolean)
+    .join(" ");
 
   // Every way out comes through here, so unsaved choices are never lost without asking.
   const leave = () => {
@@ -103,28 +130,54 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
   function discard() {
     setPicks({});
     setDraft({});
+    setGeneral({});
+    setNames({});
     setSaveError(null);
   }
 
   async function save() {
+    // Both refusals the server would give, said before anything is sent.
     const nowhere = Object.keys(places).length
       ? nowhereToSearch(draft.search_locations ?? stored.search_locations, draft.priority_locations ?? stored.priority_locations)
       : "";
-    if (nowhere) return setSaveError({ message: nowhere, field: "search_locations" });
+    if (nowhere) return setSaveError({ message: nowhere, field: "search_locations", search: null });
+    const blank = blankName(edits, labels);
+    if (blank === "display_title") {
+      return setSaveError({ message: "Give the page a name.", field: "display_title", search: null });
+    }
+    if (blank === "label") {
+      const key = Object.keys(labels).find((k) => !labels[k].label) ?? null;
+      return setSaveError({ message: "Give the search a name.", field: "label", search: key });
+    }
+
     setSaving(true);
     setSaveError(null);
     saved.saving();
     try {
-      const reply = await saveSettings({ ...(Object.keys(picks).length ? { resumes: picks } : {}), ...places });
-      // The page's copy of the settings takes what the server stored, so the
-      // fields and the ranked key show it without waiting for a refetch.
+      const reply = await saveSettings({
+        ...(Object.keys(picks).length ? { resumes: picks } : {}),
+        ...places,
+        ...edits,
+        ...(Object.keys(labels).length ? { searches: labels } : {}),
+      });
+      // The page's copy takes what the server stored, so every section and the
+      // page around it show it without waiting for a refetch. The reply carries
+      // every search, not only the renamed ones.
       qc.setQueryData<TrackerData>(DATA_KEY, (d) =>
-        d ? { ...d, settings: settingsSchema.parse({ ...d.settings, ...reply.locations }) } : d,
+        d
+          ? {
+              ...d,
+              settings: settingsSchema.parse({ ...d.settings, ...reply.locations, ...reply.settings }),
+              tracks: d.tracks.map((t) => (reply.searches[t.key] ? { ...t, label: reply.searches[t.key].label } : t)),
+            }
+          : d,
       );
       await qc.invalidateQueries({ queryKey: DOCUMENTS_KEY });
       setPlacesSaved(Object.keys(places).length > 0);
       setPicks({});
       setDraft({});
+      setGeneral({});
+      setNames({});
       saved.ok();
     } catch (err) {
       // A 401 has already forgotten the session and shown the gate.
@@ -132,7 +185,9 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
       const failure = failureOf(err);
       setSaveError({
         message: failure?.message ?? (err instanceof Error ? err.message : String(err)),
-        field: isPlaceKey(failure?.field) ? failure.field : null,
+        field: failure?.field ?? null,
+        // A refusal about one search names it, so it can be shown beside that name.
+        search: typeof failure?.search === "string" ? failure.search : null,
       });
       saved.failed();
     } finally {
@@ -160,7 +215,31 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
         <div className="account-main">
           <SectionNav sections={SECTIONS} open={open} unsaved={unsaved} onOpen={setOpen} />
           <div className="account-body" data-wheel-target>
-          {open === "general" && <PasswordSection />}
+          {open === "general" && (
+            <GeneralSection
+              values={{ ...storedGeneral, ...general }}
+              changed={new Set(Object.keys(edits) as GeneralKey[])}
+              problem={isGeneralKey(saveError?.field ?? null) ? { field: saveError!.field as GeneralKey, message: saveError!.message } : null}
+              onChange={(key, value) => {
+                setGeneral((g) => ({ ...g, [key]: value }));
+                if (saveError?.field === key) setSaveError(null);
+              }}
+            >
+              <PasswordSection />
+            </GeneralSection>
+          )}
+          {open === "searches" && (
+            <SearchesSection
+              tracks={tracks}
+              names={names}
+              changed={new Set(Object.keys(labels))}
+              problem={saveError?.search ? { search: saveError.search, message: saveError.message } : null}
+              onRename={(key, label) => {
+                setNames((n) => ({ ...n, [key]: label }));
+                if (saveError?.search === key) setSaveError(null);
+              }}
+            />
+          )}
           {open === "resumes" && (
             <ResumeSection
               tracks={tracks}
@@ -176,7 +255,7 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
             <LocationsSection
               values={{ ...stored, ...draft }}
               changed={new Set(Object.keys(places) as PlaceKey[])}
-              problem={saveError?.field ? { field: saveError.field, message: saveError.message } : null}
+              problem={isPlaceKey(saveError?.field ?? null) ? { field: saveError!.field as PlaceKey, message: saveError!.message } : null}
               saved={placesSaved}
               onChange={(key, value) => {
                 setDraft((d) => ({ ...d, [key]: value }));
