@@ -44,6 +44,13 @@ doc, and a finding says whether anything was built on the wrong line.
   locations sections and "My account" are live. Still to build: editing the page
   title, pronouns, excluded companies and search names, and the setup answers
   the night turns into prose. Needs its own mockup pass first.
+- **"Don't show me this company again", from a lead.** Ruling a company out
+  means typing its name in settings today, at the moment the person is looking
+  straight at it on a job. One action on the row adds it to
+  `excluded_companies`, which the server matcher and the prompt already read, so
+  no run brings it back. What the action does to leads already found from that
+  company, and whether it covers one search or all of them, is the design
+  question; the person should be told what it did and be able to undo it.
 - **An `attempts` column on `intake`** - the retry bound is a three-day rule on
   `sent_at` today, which is the right stop in the wrong unit. Counting nights is
   one column and one increment, and needs its own migration.
