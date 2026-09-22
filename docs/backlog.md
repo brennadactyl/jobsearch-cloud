@@ -46,20 +46,48 @@ doc, and a finding says whether anything was built on the wrong line.
   the night turns into prose. Needs its own mockup pass first.
 - **"Don't show me this company again", from a lead.** Ruling a company out
   means typing its name in settings today, at the moment the person is looking
-  straight at it on a job. One action on the row adds it to
-  `excluded_companies`, which the server matcher and the prompt already read, so
-  no run brings it back. What the action does to leads already found from that
-  company, and whether it covers one search or all of them, is the design
-  question; the person should be told what it did and be able to undo it.
+  straight at it on a job. One action on the row adds the company to
+  `excluded_companies` - the same list the account panel shows as chips, which
+  the server matcher and the prompt already read - so no run brings it back.
+  It covers every search, and it hides that company's existing leads too. The
+  person is told what it did and can undo it, and removing the chip in the
+  panel is the other way back.
+- **Edit what a search looks for, from the account panel** - the role line, the
+  kinds of companies, what rules a job out, the pay floor. `POST /api/config`
+  already takes those fields with a session token, so nothing is regenerated and
+  no run is involved. This is the useful half of the answers edit the account
+  panel dropped, at a fraction of its cost. Client Comrade and Backend Buddy,
+  with Prompt Bro on what each field does to a night.
+- **Split a track doc into what is composed and what is accumulated.** One file
+  holds both the parts generated from config and what the runs earn over weeks -
+  companies tried, delisting guards, notes on a careers site - and its only
+  writer replaces the whole file, so regenerating the first half destroys the
+  second. That is why an answers edit can't be offered on a built account, and
+  why a delayed setup retry overwrites a track it already built. The fix is the
+  shape `GET /api/prompt/<key>` already has: compose the generated parts at read
+  time from config, and store only what the runs accumulate, written through
+  routes that add facts. Part of the work is deciding what stops being
+  duplicated, since the shared company list and `company_sweeps` already hold
+  much of it. It retires most of what `rebuild-track-doc` exists for. Prompt Bro
+  owns the prose, Backend Buddy the storage and routes; every existing track
+  migrates one account at a time, each with a night watched after it.
+- **Recover a setup that failed.** A failed setup is retried for three nights
+  from the send, so fixing the resume on the fourth day fixes nothing. A narrow
+  "try tonight" action that re-stamps the retry window and changes no answers is
+  enough; the run then takes its usual unbuilt-account path. Until something
+  ships, a failure note tells the person to ask whoever invited them.
+- **A delayed setup retry overwrites a track it already built.** When a first
+  setup writes up one track and then the night fails, the retry rebuilds every
+  track it finds and replaces the built one's doc. It costs one night's notes
+  today, and more the longer the retry is delayed. The fix is local to
+  `run-onboarding.ps1`: decide per track whether it is unbuilt (no
+  `role_search_line`, no doc) and give a built one prose only, leaving its doc,
+  `documents`, `schedule_time` and `label` alone. No server change. Moot if the
+  doc split above ships first.
 - **An `attempts` column on `intake`** - the retry bound is a three-day rule on
   `sent_at` today, which is the right stop in the wrong unit. Counting nights is
   one column and one increment, and needs its own migration.
 
-- **Recover a failed setup.** A setup that fails on its own answers - a resume
-  that turns out unreadable - has no way forward today: the form is one-shot, so
-  the person cannot do what the failure note asks. [Account
-  settings](account-settings-plan.md) is the fix; until it ships the notes say
-  to ask whoever invited them.
 - **Split `db.js`, moving the shared company list into its own module**, ahead of
   any work that touches the company list or coverage. At ~1,850 lines it is the
   file every server feature edits, and it mixes per-person data with the one
