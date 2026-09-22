@@ -20,15 +20,14 @@ One block per search, under the name it already edits.
 | What roles should this search look for? | `role_search_line` | Names the roles both searching steps look for, at the known companies and in the discovery sweep. Empty falls back to "roles matching the resume" - a real search, but a vague one. |
 | What makes a posting worth keeping? | `fit_clause` | Joins what a finding must be, beside "genuinely new", "verified live" and the location rule. A test applied to a posting already found, not a search. |
 | What rules a posting out? | `fit_disqualifier` | Joins the reasons a posting is screened out, beside dead-on-arrival, wrong level and duplicate. What it matches is recorded as screened with a reason, so a wrong edit shows on the Screened tab the next morning. |
-| The lowest pay worth showing | `pay_floor` | An amount. The prompt composes a clause into each side of step 7 from it: a posting is a find when the top of its stated range reaches the floor or it states no range, and is disqualified when the top is below it. |
+| The lowest pay worth showing | `pay_floor`, `pay_floor_unit` | The amount as typed, and a year or an hour. The prompt composes a clause into each side of step 7 around it: a posting is a find when the top of its stated range reaches the floor or it states no range, and is disqualified when the top is below it. |
 
-**The pay floor is a number, and the rule lives in the prompt.** A floor stated
-loosely is decided differently on different nights, and a floor written into
-prose at save time freezes that day's rule in every row: a later refinement
-would reach new saves only, and every search set up before it would keep the
-old sentence with nothing failing. So the page stores what the person said -
-the amount, in one canonical form - and `prompt.js` composes the wording every
-run, the way the location step is composed from the lists.
+**The amount is the person's, and the rule around it lives in the prompt.** A
+floor written into prose at save time freezes that day's rule in every row: a
+later refinement would reach new saves only, and every search set up before it
+would keep the old sentence with nothing failing. So the page stores what the
+person wrote - the amount and its unit - and `prompt.js` composes the wording
+around it every run, the way the location step is composed from the lists.
 
 **It joins step 7's two lists, not a step of its own.** Step 7 is where a
 posting is sorted into a find or a disqualification, and it carries its own
@@ -38,16 +37,16 @@ disqualifies is recorded with a reason, so a floor there reads on the Screened
 tab as "range tops out below the floor", while a rule in its own step is
 recorded only if its prose remembers to say so.
 
-**What is stored.** `pay_floor`, the amount in digits, `''` when unset; and
-`pay_floor_unit`, `year` or `hour`, `year` by default - two values rather than
-free text, so the prompt composes from a known set. **Currency is assumed to be
-USD**, since every account is US today; a column nobody sets is worse than this
-sentence, and one is added when someone needs it.
+**What is stored.** `pay_floor`, the amount **as typed**, trimmed at the ends,
+`''` when unset; and `pay_floor_unit`, `year` or `hour` from a select, `''`
+when no floor is set. The same rule as the location lists: what the person
+wrote is what is stored and what the prompt carries. Nothing parses a number
+out of it, nothing rewrites it, and the page shows back what was typed rather
+than a version of it. The server checks the amount is text within a short cap
+and that the unit is one of the two, refusing anything else by name.
 
-The page takes what a person types - "180k", "180,000", "$180,000" - and stores
-the digits, then shows the amount back as it will be read: "$180,000 a year".
-A panel that stores something a person doesn't recognise is where the first bug
-report comes from.
+**No currency of its own.** Someone who writes "£140,000" has already said
+which currency; a column for it would be a second copy of that.
 
 That costs the two columns and their migration, the clauses' wording in
 `prompt.js`, and `verify-local` checks for the two composed shapes and for a
