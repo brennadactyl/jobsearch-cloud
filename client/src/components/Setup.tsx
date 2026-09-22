@@ -18,7 +18,7 @@ import {
   setupProblems,
   type SetupProblems,
 } from "../domain/onboarding";
-import { listEntries } from "../domain/places";
+import { listEntries, PLACE_QUESTIONS } from "../domain/places";
 import { saved, useSaved } from "../ui/saved";
 import { PlaceEntries, RankedPlaces } from "./location";
 
@@ -404,12 +404,20 @@ export default function Setup({
             />
           </Field>
 
+          {/*
+            The same four questions the account panel asks, so a reword reaches
+            both: PLACE_QUESTIONS in domain/places.ts. A setup answer keeps its
+            own name until the server files it (work_scope is search_locations,
+            locations_first is priority_locations, location_limits is
+            excluded_locations). The hints below are this screen's own - someone
+            filling this in has never seen their list tiered.
+          */}
           <SetupHeading title="Where to search">
             Three different questions: every area to search, what you'd most like, and anything ruled out inside it.
             Each is a list, separated by commas.
           </SetupHeading>
           <Field
-            label={<label htmlFor={`${id}-scope`}>What locations should be searched?</label>}
+            label={<label htmlFor={`${id}-scope`}>{PLACE_QUESTIONS.search_locations}</label>}
             problem={problems.work_scope}
             // The one place the page states that preferred places are always
             // searched: a text match against this answer can't tell whether
@@ -432,7 +440,7 @@ export default function Setup({
             />
           </Field>
           <Field
-            label={<label htmlFor={`${id}-first`}>Which locations should come first?</label>}
+            label={<label htmlFor={`${id}-first`}>{PLACE_QUESTIONS.priority_locations}</label>}
             problem={problems.locations_first}
             hint="List places in order — the first is the one you want most. Use a city (add the state if the name is common, like Portland OR), or Remote with a country, like Remote US. Anywhere you don't name still shows up, just lower."
           >
@@ -447,7 +455,7 @@ export default function Setup({
             <RankedPlaces entries={listEntries(answers.locations_first)} />
           </Field>
           <Field
-            label={<label htmlFor={`${id}-limits`}>Anywhere you can't take a job?</label>}
+            label={<label htmlFor={`${id}-limits`}>{PLACE_QUESTIONS.excluded_locations}</label>}
             optional
             problem={problems.location_limits}
             hint="Optional, and only a rule-out: somewhere inside the searched area that you still couldn't take. It never narrows where the search looks on its own — leave it empty if nothing is ruled out."
@@ -463,7 +471,7 @@ export default function Setup({
             <PlaceEntries lead="Ruled out:" entries={listEntries(answers.location_limits)} />
           </Field>
           <Field
-            label={<label htmlFor={`${id}-note`}>Anything else about where you'd work?</label>}
+            label={<label htmlFor={`${id}-note`}>{PLACE_QUESTIONS.location_note}</label>}
             optional
             problem={problems.location_note}
             hint="Anything a list can't say. The search reads it as context."

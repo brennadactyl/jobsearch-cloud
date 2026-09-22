@@ -12,6 +12,19 @@ export type PlaceKey = (typeof PLACE_KEYS)[number];
 export type Places = Record<PlaceKey, string>;
 
 /**
+ * The question each setting asks, in the words both screens ask it. Setup and
+ * the account panel share these so a reword reaches both; their hints and
+ * placeholders stay their own, because each screen says something the other
+ * doesn't need to.
+ */
+export const PLACE_QUESTIONS: Readonly<Record<PlaceKey, string>> = {
+  search_locations: "What locations should be searched?",
+  priority_locations: "Which locations should come first?",
+  excluded_locations: "Anywhere you can't take a job?",
+  location_note: "Anything else about where you'd work?",
+};
+
+/**
  * A list's entries, in order: its text split on commas, each trimmed, empties
  * dropped. The server and tracker.ps1 split the same way, so a lead's area
  * names one of the ranked list's entries exactly as it's spelled here.

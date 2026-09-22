@@ -8,7 +8,7 @@
  * panel's Save.
  */
 import type { ReactNode } from "react";
-import { listEntries, type PlaceKey, type Places } from "../domain/places";
+import { listEntries, PLACE_QUESTIONS, type PlaceKey, type Places } from "../domain/places";
 import { PlaceEntries, RankedPlaces } from "./location";
 
 export default function LocationsSection({
@@ -30,6 +30,7 @@ export default function LocationsSection({
 }) {
   const field = (key: PlaceKey) => ({
     id: `loc-${key}`,
+    label: PLACE_QUESTIONS[key],
     value: values[key],
     changed: changed.has(key),
     problem: problem?.field === key ? problem.message : "",
@@ -48,7 +49,6 @@ export default function LocationsSection({
 
       <PlaceField
         {...field("search_locations")}
-        label="What locations should be searched?"
         placeholder="US, Greater Seattle area, Australia"
         hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
       >
@@ -58,7 +58,6 @@ export default function LocationsSection({
 
       <PlaceField
         {...field("priority_locations")}
-        label="Which locations should come first?"
         placeholder="Seattle area, Portland OR, Remote US"
         hint="In order — the first is the one you want most. Anywhere you don't name still shows up, just lower."
       >
@@ -67,7 +66,6 @@ export default function LocationsSection({
 
       <PlaceField
         {...field("excluded_locations")}
-        label="Anywhere you can't take a job?"
         optional
         placeholder="Portland OR, Texas"
         hint="Optional, and only a rule-out: somewhere inside the searched area that you still couldn't take. It never narrows where the search looks on its own."
@@ -77,7 +75,6 @@ export default function LocationsSection({
 
       <PlaceField
         {...field("location_note")}
-        label="Anything else about where you'd work?"
         optional
         multiline
         placeholder="Open to relocating for the right team."
