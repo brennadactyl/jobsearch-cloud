@@ -32,3 +32,17 @@ describe("the Overview's tile row", () => {
     expect(unpinned).toContain("#app.pinned.tiles{padding-right:0}");
   });
 });
+
+describe("the account panel", () => {
+  it("is a fixed frame its sections swap inside, rather than one sized by each", () => {
+    // Sized by its content, the panel resizes on every click of its sidebar.
+    const flat = css.replace(/\s+/g, "");
+    expect(flat).toContain(".account-panel{padding:0;width:100%;max-width:760px;height:min(720px,calc(100vh-40px))");
+    expect(flat).toContain(".account-body{overflow-y:auto");
+    // A phone has no room beside the pane, so the panel fills the screen and
+    // the sections sit above it. These live in their own narrow-width block,
+    // not the first one mediaBlock() finds.
+    expect(flat).toContain(".account-panel{max-width:none;height:100%");
+    expect(flat).toContain(".account-main{flex-direction:column}");
+  });
+});
