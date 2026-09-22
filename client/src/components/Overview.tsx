@@ -11,6 +11,7 @@ import type { TrackerData } from "../api/schema";
 import { ALL_LEADS, LABELS } from "../domain/constants";
 import { GONE_QUIET_DAYS, drillCount, drillRows, type DrillTarget, type RowSource } from "../domain/drills";
 import { shortDate } from "../domain/format";
+import { tierColour } from "../domain/geo";
 import {
   MIN_FOR_RESPONSE_RATE,
   flow,
@@ -76,7 +77,7 @@ export default function Overview({
 
   const tiles: TileSpec[] = [
     { title: "Untriaged", footnote: "leads marked New", highlighted: true, tab: ALL_LEADS, filter: "New" },
-    { title: topLabel, footnote: "still open", color: "var(--pri-0)", tab: ALL_LEADS, drill: "top-geo-open" },
+    { title: topLabel, footnote: "still open", color: tierColour(0), tab: ALL_LEADS, drill: "top-geo-open" },
     { title: "Open leads", footnote: `across ${trackCount} tracked search${trackCount === 1 ? "" : "es"}`, tab: ALL_LEADS },
     {
       title: "Applied",
