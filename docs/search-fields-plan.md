@@ -112,18 +112,14 @@ a search.
   saved immediately, and that search's next run is where it shows. Every one of
   these is prose a model reads, not a filter the server applies, so the effect
   is visible the next morning in what the search found and what it screened.
-- **Four warnings, shown beside the field and never blocking a save**, since
-  each is a way of writing that quietly costs a person leads:
-  - A preference in either fit field ("prefer companies with a strong design
-    culture") screens out almost everything and reports a quiet night. Each
-    entry must be something a posting either is or isn't.
-  - A fit clause that reads like a search ("look for Staff roles at AI labs"):
-    it is a test, not a search.
-  - An empty role line, which widens the search to "roles matching the resume".
-  - A place typed into a fit field when the location lists already say where to
-    look. Two copies of one rule drift; the location lists are its home.
-  - Pay typed into a fit field when the floor above already says it, for the
-    same reason.
+- **Nothing reads what a person wrote.** Each field's hint says what the field
+  is for - a rule is something a posting either is or isn't, a keep-rule is a
+  test rather than a search, the location lists are where places belong - and
+  the page never judges the words against it. A page that second-guesses a
+  person's own sentence is worse than one that explains the field.
+- **An emptied roles line is refused**, by the page and by the route. A blank
+  one is how the overnight run recognises a search that was never written up,
+  so it isn't a wording judgement.
 - Works at phone width and in both themes.
 
 ## Worth knowing
