@@ -132,6 +132,8 @@ doc, and a finding says whether anything was built on the wrong line.
   `prompt.js`.
 - Adding or removing a search from the account panel: a new role means a new
   tab, and removing one has leads and applications hanging off it.
+  [Splitting a search across tabs](tab-grouping-plan.md) is planned separately,
+  and promoting a tab to its own search waits on the track-doc split.
 - The run record counts leads added, screened and swept per day, so two runs
   of one search on the same day are counted together in the nightly run report.
 
