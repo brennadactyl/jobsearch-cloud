@@ -126,6 +126,12 @@ export const trackSchema = z.object({
   last_run: lastRunSchema,
   /** The search that fills this tab, "" when it runs its own. The account panel gives only running searches a resume. */
   fed_by: text,
+  /** The roles this search looks for; "" reads as "roles matching the resume". */
+  role_search_line: text,
+  /** What a posting must be to count as a find, beside "genuinely new" and "verified live". */
+  fit_clause: text,
+  /** What has a posting screened out, beside dead-on-arrival and wrong level. */
+  fit_disqualifier: text,
   // TRACK_CONFIG_FIELDS are on the payload too, but the page renders none of
   // them; listing them here would be a second copy of the server's config
   // vocabulary.

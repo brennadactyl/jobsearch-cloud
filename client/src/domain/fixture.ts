@@ -65,6 +65,9 @@ export const settings: Settings = {
 export const tracks: Track[] = [
   {
     key: "alpha", label: "Alpha roles", full_description: "Alpha search", sort_order: 1, fed_by: "",
+    role_search_line: "Staff or senior alpha engineer roles",
+    fit_clause: "which names alpha work in the posting itself",
+    fit_disqualifier: "the role is contract-only",
     last_run: {
       at: new Date(NOW - 8 * 3_600_000).toISOString(), on: daysAgo(0),
       status: "ok", leads_added: 3, screened_added: 5, delisted: 0, note: "",
@@ -72,6 +75,9 @@ export const tracks: Track[] = [
   },
   {
     key: "beta", label: "Beta roles", full_description: "Beta search", sort_order: 2, fed_by: "",
+    role_search_line: "",
+    fit_clause: "",
+    fit_disqualifier: "",
     last_run: {
       at: new Date(NOW - 8 * 86_400_000).toISOString(), on: daysAgo(8),
       status: "error", leads_added: 0, screened_added: 0, delisted: 0,

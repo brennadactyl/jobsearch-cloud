@@ -3,7 +3,7 @@
  * keep an unsaved change in another section from going unseen.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -94,8 +94,9 @@ describe("the account panel's sections", () => {
     await userEvent.type(screen.getByLabelText(/Companies you'd never work for/), "Initech{Enter}");
 
     await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-    await userEvent.clear(screen.getByLabelText("Alpha roles"));
-    await userEvent.type(screen.getByLabelText("Alpha roles"), "Eng - Platform");
+    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    await userEvent.clear(within(alpha).getByLabelText("What this search is called"));
+    await userEvent.type(within(alpha).getByLabelText("What this search is called"), "Eng - Platform");
     expect(screen.getByText("4 unsaved changes across 2 sections")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -132,13 +133,62 @@ describe("the account panel's sections", () => {
     );
     const panel = await openPanel();
     await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-    await userEvent.type(screen.getByLabelText("Beta roles"), " and more");
+    const beta = screen.getByRole("group", { name: "Beta roles" });
+    const name = within(beta).getByLabelText("What this search is called");
+    await userEvent.type(name, " and more");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const alert = await within(panel).findByRole("alert");
     expect(alert).toHaveTextContent("a search's name can be at most 60 characters");
-    expect(alert.closest(".loc-field")).toContainElement(screen.getByLabelText("Beta roles"));
-    expect(screen.getByLabelText("Beta roles")).toHaveValue("Beta roles and more");
+    expect(alert.closest(".loc-field")).toContainElement(name);
+    expect(name).toHaveValue("Beta roles and more");
+  });
+
+  it("saves what a search looks for, counting each field it changed", async () => {
+    const save = vi.spyOn(client, "saveSettings").mockResolvedValue(
+      reply({
+        searches: {
+          alpha: {
+            label: "Alpha roles",
+            role_search_line: "Staff platform engineer roles",
+            fit_clause: "which names alpha work in the posting itself",
+            fit_disqualifier: "the role is contract-only",
+          },
+        },
+      }),
+    );
+    const panel = await openPanel();
+    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
+    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    const roles = within(alpha).getByLabelText("What roles should this search look for?");
+    await userEvent.clear(roles);
+    await userEvent.type(roles, "Staff platform engineer roles");
+
+    expect(screen.getByText("1 unsaved change")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(save).toHaveBeenCalledWith({ searches: { alpha: { role_search_line: "Staff platform engineer roles" } } });
+    await waitFor(() => expect(screen.queryByText(/unsaved change/)).toBeNull());
+    expect(within(screen.getByRole("group", { name: "Alpha roles" })).getByLabelText("What roles should this search look for?")).toHaveValue(
+      "Staff platform engineer roles",
+    );
+  });
+
+  it("takes what a person writes as written, and refuses only an emptied roles line", async () => {
+    const save = vi.spyOn(client, "saveSettings");
+    const panel = await openPanel();
+    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
+    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+
+    // Nothing reads what was typed to judge it.
+    await userEvent.type(within(alpha).getByLabelText("What makes a posting worth keeping?"), "prefer a strong design culture");
+    expect(within(alpha).queryByRole("status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    // The one field the route refuses empty is refused here first.
+    await userEvent.clear(within(alpha).getByLabelText("What roles should this search look for?"));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(within(alpha).getByRole("alert")).toHaveTextContent("Say what roles this search looks for");
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("keeps the password out of the one Save, since it needs the current one", async () => {
