@@ -66,36 +66,36 @@ it verbatim as the filing rule in step 7b.
 
 **`fed_by` in `POST /api/settings`' `searches` entry**, beside the fields that
 panel already saves, so one Save carries a person's whole change as one
-transaction.
+transaction. A re-split landing while the rest of a save fails would leave
+someone's tabs regrouped with their words unchanged.
 
-It must not go through `POST /api/config`: that route's `tracks` array replaces
-the whole list, so a stale page deletes a search added since, and the delete
-takes that track's run record with it.
+That route names searches one at a time and writes fields on searches that
+already exist, so it cannot add or remove one. `POST /api/config` can: its
+`tracks` array replaces the whole list, so a stale page deletes a search added
+since, and the delete takes that track's run record with it. Grouping does not
+go there.
 
 Whichever route carries it, these checks are the route's, not the page's:
 
-- a track can't feed itself, and `fed_by` must name another track on the
-  account;
-- a track that feeds others can't itself be fed, or the group has no root;
+- the grouping is judged as a whole, after the save is applied: no track feeds
+  itself, no chains, no cycles, and every `fed_by` names a track the account
+  has. A group with no root fills a tab nothing writes to;
 - **the readable-resume check on `documents` runs after the grouping changes,
   not before.** A tab is exempt because its root reads for it, so the exemption
   moves with `fed_by`: promoting a tab, or demoting a root, can otherwise leave
   a search with nothing to read.
 
-**The alternative, rejected:** a narrow route taking only the grouping
-(`{ groups: { <root>: [<tab>, ...] } }`), which cannot delete a search by
-construction.
+A route of its own for grouping was considered and dropped: it would buy a
+smaller blast radius, not a guarantee the settings route lacks, and it would
+cost the single Save.
 
-Two facts weigh against it. The settings route already cannot add or remove a
-search - it writes a track's fields and never touches the track list, which is
-why it isn't `POST /api/config` - so the guarantee is one this change already
-has. And a second route costs the panel its single Save: a re-split becomes a
-request that can land while the rest of the save fails, or the reverse.
-
-What it would still buy is a smaller blast radius if the settings route grew
-careless later. That is real, and it is not worth a second way in nor a save a
-person can half-land: the guarantee is held by a test on the settings route, so
-losing it is a failing check rather than a quiet regression.
+**A save is judged whole, so a grouping the route won't accept refuses the words
+with it.** Someone regrouping two tabs and rewriting a roles line in one Save
+gets neither written. The page says which part was refused, beside the grouping
+control, and leaves the rest unsaved rather than half-applied - grouping is the
+first thing in the panel that can fail for a reason the person didn't type. The
+reply carries `fed_by` beside the fields it already returns, so the page redraws
+the grouping from the response rather than refetching.
 
 ## What a tab keeps while it is a tab
 
