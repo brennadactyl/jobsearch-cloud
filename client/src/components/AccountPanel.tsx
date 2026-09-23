@@ -25,7 +25,6 @@ import {
 } from "../domain/panel";
 import {
   changedPlaces,
-  listEntries,
   nowhereToSearch,
   PLACE_KEYS,
   unsavedPlacesSentence,
@@ -248,8 +247,6 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
                   ? { search: saveError.search, field: saveError.field ?? "label", message: saveError.message }
                   : null
               }
-              // A place said here as well as in Locations is two copies of one rule.
-              places={[...settings.areas, ...listEntries(settings.search_locations), ...listEntries(settings.excluded_locations)]}
               onChange={(key, field, value) => {
                 setSearchDraft((d) => ({ ...d, [key]: { ...d[key], [field]: value } }));
                 if (saveError?.search === key) setSaveError(null);

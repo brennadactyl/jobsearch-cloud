@@ -4,11 +4,12 @@
  *
  * Every field here is prose a night reads, not a filter the server applies, so
  * an edit is true the moment the panel's Save lands and shows in what that
- * search finds and screens the next morning. Nothing is regenerated, and what a
- * way of writing will cost is said beside the field rather than refused.
+ * search finds and screens the next morning. Nothing is regenerated. Each
+ * field's hint says what it is for; nothing reads what a person wrote to judge
+ * it.
  */
 import type { Track } from "../api/schema";
-import { searchWarnings, SEARCH_KEYS, type SearchDraft, type SearchFields, type SearchKey } from "../domain/panel";
+import { SEARCH_KEYS, type SearchDraft, type SearchFields, type SearchKey } from "../domain/panel";
 
 const QUESTIONS: Readonly<Record<Exclude<SearchKey, "label">, { label: string; hint: string; rows: number }>> = {
   role_search_line: {
@@ -33,7 +34,6 @@ export default function SearchesSection({
   draft,
   changed,
   problem,
-  places,
   onChange,
 }: {
   tracks: readonly Track[];
@@ -43,8 +43,6 @@ export default function SearchesSection({
   changed: Readonly<Record<string, Partial<SearchFields>>>;
   /** A refused save's message, beside the search and field it names. */
   problem: { search: string; field: string; message: string } | null;
-  /** The places this account has named, so a rule repeated here can be pointed out. */
-  places: readonly string[];
   onChange: (key: string, field: SearchKey, value: string) => void;
 }) {
   return (
@@ -59,7 +57,6 @@ export default function SearchesSection({
       {tracks.map((track) => {
         const values = { ...fieldsOf(track), ...draft[track.key] } as SearchFields;
         const edited = changed[track.key] ?? {};
-        const warnings = searchWarnings(values, places);
         return (
           // Named, because every block asks the same questions: without this a
           // field reads as "What this search is called" and nothing more.
@@ -83,7 +80,6 @@ export default function SearchesSection({
                 value={values[key]}
                 changed={key in edited}
                 problem={problem?.search === track.key && problem.field === key ? problem.message : ""}
-                warning={warnings[key] ?? ""}
                 hint={QUESTIONS[key].hint}
                 onChange={(value) => onChange(track.key, key, value)}
               />
@@ -115,7 +111,6 @@ function Field({
   rows = 0,
   changed,
   problem,
-  warning = "",
   hint,
   onChange,
 }: {
@@ -126,7 +121,6 @@ function Field({
   rows?: number;
   changed: boolean;
   problem: string;
-  warning?: string;
   hint: string;
   onChange: (value: string) => void;
 }) {
@@ -147,12 +141,6 @@ function Field({
       {problem && (
         <p className="loc-err" role="alert">
           {problem}
-        </p>
-      )}
-      {/* Said, never refused: a person can mean it. */}
-      {warning && (
-        <p className="loc-warn" role="status">
-          {warning}
         </p>
       )}
       <p className="loc-hint">{hint}</p>

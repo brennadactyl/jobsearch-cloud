@@ -173,29 +173,22 @@ describe("the account panel's sections", () => {
     );
   });
 
-  it("says what a way of writing will cost, without refusing it", async () => {
+  it("takes what a person writes as written, and refuses only an emptied roles line", async () => {
+    const save = vi.spyOn(client, "saveSettings");
     const panel = await openPanel();
     await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
+    const alpha = screen.getByRole("group", { name: "Alpha roles" });
 
-    // A search with nothing written reads as the wide fallback.
-    const beta = screen.getByRole("group", { name: "Beta roles" });
-    expect(within(beta).getByText(/roles matching the resume/)).toBeInTheDocument();
-
-    const keep = within(beta).getByLabelText("What makes a posting worth keeping?");
-    await userEvent.type(keep, "prefer companies with a strong design culture");
-    expect(within(beta).getByText(/reads as a preference/)).toBeInTheDocument();
-
-    await userEvent.clear(keep);
-    await userEvent.type(keep, "look for Staff roles at AI labs");
-    expect(within(beta).getByText(/reads as a search/)).toBeInTheDocument();
-
-    // A place already in Locations, said a second time here.
-    const out = within(beta).getByLabelText("What rules a posting out?");
-    await userEvent.type(out, "anything outside Metro core");
-    expect(within(beta).getByText(/already in your locations/)).toBeInTheDocument();
-
-    // None of it blocks a save.
+    // Nothing reads what was typed to judge it.
+    await userEvent.type(within(alpha).getByLabelText("What makes a posting worth keeping?"), "prefer a strong design culture");
+    expect(within(alpha).queryByRole("status")).toBeNull();
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    // The one field the route refuses empty is refused here first.
+    await userEvent.clear(within(alpha).getByLabelText("What roles should this search look for?"));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(within(alpha).getByRole("alert")).toHaveTextContent("Say what roles this search looks for");
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("keeps the password out of the one Save, since it needs the current one", async () => {
