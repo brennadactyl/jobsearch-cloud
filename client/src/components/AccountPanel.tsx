@@ -13,7 +13,7 @@ import { DATA_KEY, DOCUMENTS_KEY } from "../api/mutations";
 import { settingsSchema, type Settings, type TrackerData, type Track } from "../api/schema";
 import { MIN_PASSWORD } from "../domain/account";
 import {
-  blankName,
+  blankField,
   changedGeneral,
   changedSearches,
   GENERAL_KEYS,
@@ -148,13 +148,16 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
       ? nowhereToSearch(draft.search_locations ?? stored.search_locations, draft.priority_locations ?? stored.priority_locations)
       : "";
     if (nowhere) return setSaveError({ message: nowhere, field: "search_locations", search: null });
-    const blank = blankName(edits, searches);
-    if (blank === "display_title") {
-      return setSaveError({ message: "Give the page a name.", field: "display_title", search: null });
-    }
-    if (blank === "label") {
-      const key = Object.keys(searches).find((k) => searches[k].label === "") ?? null;
-      return setSaveError({ message: "Give the search a name.", field: "label", search: key });
+    const blank = blankField(edits, searches);
+    if (blank) {
+      // Cleared, a roles line is how the database says a search was never
+      // written up, so the overnight run would take it for one still to build.
+      const BLANK_MESSAGE: Record<string, string> = {
+        display_title: "Give the page a name.",
+        label: "Give the search a name.",
+        role_search_line: "Say what roles this search looks for. It can't be left empty once it's been set.",
+      };
+      return setSaveError({ message: BLANK_MESSAGE[blank.field], field: blank.field, search: blank.search });
     }
 
     setSaving(true);

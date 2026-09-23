@@ -62,13 +62,25 @@ export function changedSearches(tracks: readonly Track[], draft: SearchDraft): R
   return changed;
 }
 
-/** Why a save would be refused before it is sent, or "": the server refuses these too. */
-export function blankName(
+/**
+ * The fields that can't be emptied, and the search whose is, or null. The
+ * server refuses each of these too: a tab needs a name, and an empty roles line
+ * is how the database says a search was never written up, so clearing it would
+ * put the search back in front of the overnight run as one still to build.
+ */
+export function blankField(
   general: Partial<General>,
   searches: Record<string, Partial<SearchFields>>,
-): GeneralKey | "label" | "" {
-  if (general.display_title !== undefined && !general.display_title) return "display_title";
-  return Object.values(searches).some((s) => s.label !== undefined && !s.label) ? "label" : "";
+): { field: GeneralKey | "label" | "role_search_line"; search: string | null } | null {
+  if (general.display_title !== undefined && !general.display_title) {
+    return { field: "display_title", search: null };
+  }
+  for (const [search, fields] of Object.entries(searches)) {
+    for (const field of ["label", "role_search_line"] as const) {
+      if (fields[field] !== undefined && !fields[field]) return { field, search };
+    }
+  }
+  return null;
 }
 
 /** What leaving now would lose from General and Searches, or "" when nothing would. */

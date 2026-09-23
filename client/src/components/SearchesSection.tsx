@@ -13,7 +13,7 @@ import { searchWarnings, SEARCH_KEYS, type SearchDraft, type SearchFields, type 
 const QUESTIONS: Readonly<Record<Exclude<SearchKey, "label">, { label: string; hint: string; rows: number }>> = {
   role_search_line: {
     label: "What roles should this search look for?",
-    hint: "Titles and seniority, as they'd read mid-sentence: “Staff backend or distributed systems roles”. This is what the search looks for all night.",
+    hint: "Titles and seniority, as they'd read mid-sentence: “Staff backend or distributed systems roles”. This is what the search looks for all night, so it can't be left empty.",
     rows: 2,
   },
   fit_clause: {
