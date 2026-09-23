@@ -173,6 +173,24 @@ describe("the account panel's sections", () => {
     );
   });
 
+  it("asks what a search looks for only of searches that run, not of the tabs they fill", async () => {
+    const fed = {
+      ...fixture,
+      tracks: [fixture.tracks[0], { ...fixture.tracks[1], fed_by: "alpha" }],
+    };
+    const panel = await openPanel(fed);
+    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
+
+    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    expect(within(alpha).getByLabelText("What roles should this search look for?")).toBeInTheDocument();
+
+    // The fed tab keeps its own name and nothing else.
+    const beta = screen.getByRole("group", { name: "Beta roles" });
+    expect(within(beta).getByLabelText("What this search is called")).toBeInTheDocument();
+    expect(within(beta).queryByLabelText("What roles should this search look for?")).toBeNull();
+    expect(within(beta).getByText(/Alpha roles search fills this tab/)).toBeInTheDocument();
+  });
+
   it("takes what a person writes as written, and refuses only an emptied roles line", async () => {
     const save = vi.spyOn(client, "saveSettings");
     const panel = await openPanel();

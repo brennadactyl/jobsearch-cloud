@@ -24,7 +24,7 @@ const QUESTIONS: Readonly<Record<Exclude<SearchKey, "label">, { label: string; h
   },
   fit_disqualifier: {
     label: "What rules a posting out?",
-    hint: "Reasons to screen one out, beside dead-on-arrival and wrong level. What this matches is listed on Screened with its reason, so you can see what it caught.",
+    hint: "Reasons to screen one out, beside dead-on-arrival and wrong level. A run records what it screened and why; the Overview counts them per search.",
     rows: 2,
   },
 };
@@ -68,22 +68,30 @@ export default function SearchesSection({
               value={values.label}
               changed={"label" in edited}
               problem={problem?.search === track.key && problem.field === "label" ? problem.message : ""}
-              hint={track.fed_by ? `The tab's name. This tab is filled by the ${labelOf(tracks, track.fed_by)} search.` : "The tab's name on your tracker."}
+              hint={
+                track.fed_by
+                  ? `The tab's name. The ${labelOf(tracks, track.fed_by)} search fills this tab, so what it looks for is set there.`
+                  : "The tab's name on your tracker."
+              }
               onChange={(value) => onChange(track.key, "label", value)}
             />
-            {SEARCH_KEYS.filter((key) => key !== "label").map((key) => (
-              <Field
-                key={key}
-                id={`search-${track.key}-${key}`}
-                label={QUESTIONS[key].label}
-                rows={QUESTIONS[key].rows}
-                value={values[key]}
-                changed={key in edited}
-                problem={problem?.search === track.key && problem.field === key ? problem.message : ""}
-                hint={QUESTIONS[key].hint}
-                onChange={(value) => onChange(track.key, key, value)}
-              />
-            ))}
+            {/* A tab another search fills runs nothing of its own: what it
+                looks for is that search's, and asking here would offer edits no
+                run reads. Its name is still its own. */}
+            {!track.fed_by &&
+              SEARCH_KEYS.filter((key) => key !== "label").map((key) => (
+                <Field
+                  key={key}
+                  id={`search-${track.key}-${key}`}
+                  label={QUESTIONS[key].label}
+                  rows={QUESTIONS[key].rows}
+                  value={values[key]}
+                  changed={key in edited}
+                  problem={problem?.search === track.key && problem.field === key ? problem.message : ""}
+                  hint={QUESTIONS[key].hint}
+                  onChange={(value) => onChange(track.key, key, value)}
+                />
+              ))}
           </div>
         );
       })}
