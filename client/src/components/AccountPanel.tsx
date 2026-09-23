@@ -82,6 +82,8 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
   const [draft, setDraft] = useState<Partial<Places>>({});
   const [general, setGeneral] = useState<Partial<General>>({});
   const [searchDraft, setSearchDraft] = useState<SearchDraft>({});
+  // Which search the Searches section is showing; "" means its first.
+  const [shownSearch, setShownSearch] = useState("");
   const [resumeSentence, setResumeSentence] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
@@ -198,6 +200,8 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
         // A refusal about one search names it, so it can be shown beside that name.
         search: typeof failure?.search === "string" ? failure.search : null,
       });
+      // The section shows one search at a time, so the refused one is brought up.
+      if (typeof failure?.search === "string") setShownSearch(failure.search);
       saved.failed();
     } finally {
       setSaving(false);
@@ -240,6 +244,8 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
           {open === "searches" && (
             <SearchesSection
               tracks={tracks}
+              shown={tracks.find((t) => t.key === shownSearch) ?? tracks[0]}
+              onShow={setShownSearch}
               draft={searchDraft}
               changed={searches}
               problem={
