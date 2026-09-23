@@ -7,16 +7,19 @@
  */
 
 import { json, readJson } from "../http.js";
-import { LOCATION_SETTING_KEYS, parseDocumentList } from "../db.js";
+import { LOCATION_SETTING_KEYS, PANEL_TRACK_FIELDS, parseDocumentList } from "../db.js";
 import { PRONOUNS } from "../prompt.js";
 import { fileName, isChoosableResume, listedPathFor, resumeParts, samePairName, withResume } from "../resumes.js";
 import {
   DISPLAY_TITLE_MAX_CHARS,
   excludedCompaniesError,
+  FIT_PROSE_MAX_CHARS,
   locationSettingError,
   nameError,
   nowhereToSearchError,
   pronounsError,
+  ROLE_LINE_MAX_CHARS,
+  searchProseError,
   TRACK_LABEL_MAX_CHARS,
   unreadableDocumentsError,
 } from "../validate.js";
@@ -28,6 +31,19 @@ import {
 const PANEL_SETTING_KEYS = ["display_title", "pronouns", "excluded_companies"];
 const ACCEPTED = ["resumes", "searches", ...LOCATION_SETTING_KEYS, ...PANEL_SETTING_KEYS];
 
+// What each field a search carries is checked against. A tab name and the
+// roles line are refused empty: a tab needs a name, and an empty
+// `role_search_line` is how the database says a search has never been written
+// up (db.js WRITTEN_UP), so clearing it would put the search back in front of
+// the overnight run as one still to build. The two rules may be cleared,
+// because a rule someone no longer wants is one they can delete.
+const SEARCH_FIELD_CHECKS = {
+  label: (f, v) => nameError(f, v, TRACK_LABEL_MAX_CHARS),
+  role_search_line: (f, v) => nameError(f, v, ROLE_LINE_MAX_CHARS),
+  fit_clause: (f, v) => searchProseError(f, v, FIT_PROSE_MAX_CHARS),
+  fit_disqualifier: (f, v) => searchProseError(f, v, FIT_PROSE_MAX_CHARS),
+};
+
 // Every refusal about a chosen resume says which search it is about, so the
 // page can show it beside that search's picker.
 function refuse(status, search, error) {
@@ -38,10 +54,11 @@ function refuse(status, search, error) {
  * POST /api/settings - requires a Bearer token. Body `{ resumes?: { <search>:
  * <path> }, search_locations?, excluded_locations?, priority_locations?,
  * location_note?, display_title?, pronouns?, excluded_companies?, searches?:
- * { <key>: { label } } }` -> `{ resumes: { <search>: { documents,
- * profile_pending } }, locations: { <key>: <stored value> }, settings:
- * { display_title, pronouns, excluded_companies }, searches: { <key>:
- * { label } } }`.
+ * { <key>: { label?, role_search_line?, fit_clause?, fit_disqualifier? } } }`
+ * -> `{ resumes: { <search>: { documents, profile_pending } }, locations:
+ * { <key>: <stored value> }, settings: { display_title, pronouns,
+ * excluded_companies }, searches: { <key>: { label, role_search_line,
+ * fit_clause, fit_disqualifier } } }`.
  *
  * The account panel's one Save, so a request may carry a resume choice, a place
  * edit, a page title and a tab rename together, and everything it can write
@@ -51,9 +68,16 @@ function refuse(status, search, error) {
  *
  * `display_title` and each `label` are text, trimmed, refused empty; `pronouns`
  * is one the prompt knows or empty; `excluded_companies` is a list, and an
- * empty one means "exclude no one". `searches` renames tabs and can do nothing
- * else: a track's config, its place in the tab order and the track list itself
- * are `POST /api/config`'s, so a rename can't drop a search.
+ * empty one means "exclude no one".
+ *
+ * `searches` writes a search's name and what it looks for, each field optional
+ * and each refused by name with the search it belongs to. It can do nothing
+ * else: the rest of a track's config, its place in the tab order and the track
+ * list itself are `POST /api/config`'s, so a panel save can't drop a search.
+ * `fit_clause` and `fit_disqualifier` accept "" and clear, since a rule someone
+ * no longer wants is one they can delete; `label` and `role_search_line` are
+ * refused empty (validate.js, db.js WRITTEN_UP). The reply's `searches` carries
+ * every search, so one reply refreshes the panel.
  *
  * The location lists and note are stored as typed, trimmed at the ends, and
  * take effect on each search's next run (docs/location-settings-plan.md). Each
@@ -126,7 +150,7 @@ export async function handlePostSettings({ request, db, docs }) {
   const resumes = body.resumes;
   const searches = body.searches;
   if (searches !== undefined && (!searches || typeof searches !== "object" || Array.isArray(searches))) {
-    return json({ error: "searches must be an object of search key to { label }", field: "searches" }, 400);
+    return json({ error: "searches must be an object of search key to its fields", field: "searches" }, 400);
   }
   if (resumes !== undefined && (!resumes || typeof resumes !== "object" || Array.isArray(resumes))) {
     return json({ error: "resumes must be an object of search key to resume path", field: "resumes" }, 400);
@@ -135,20 +159,29 @@ export async function handlePostSettings({ request, db, docs }) {
   const rows = resumes === undefined && searches === undefined ? [] : await db.getResumeState();
   const byKey = new Map(rows.map((r) => [r.key, r]));
 
-  const labels = {};
+  const bySearch = {};
   for (const [key, sent] of Object.entries(searches || {})) {
     if (!byKey.has(key)) return json({ error: `unknown search "${key}"`, search: key, field: "label" }, 404);
-    const problem =
-      !sent || typeof sent !== "object" || Array.isArray(sent)
-        ? `the entry for ${key} must be { label }`
-        : nameError("label", sent.label, TRACK_LABEL_MAX_CHARS);
-    if (problem) return json({ error: problem, search: key, field: "label" }, 400);
-    labels[key] = sent.label.trim();
+    if (!sent || typeof sent !== "object" || Array.isArray(sent)) {
+      return json({ error: `the entry for ${key} must be an object of fields`, search: key, field: "label" }, 400);
+    }
+    for (const field of Object.keys(sent)) {
+      if (!PANEL_TRACK_FIELDS.includes(field)) {
+        return json({ error: `"${field}" is not something this page can change about a search`, search: key, field }, 400);
+      }
+    }
+    const fields = {};
+    for (const [field, value] of Object.entries(sent)) {
+      const problem = SEARCH_FIELD_CHECKS[field](field, value);
+      if (problem) return json({ error: problem, search: key, field }, 400);
+      fields[field] = value.trim();
+    }
+    if (Object.keys(fields).length) bySearch[key] = fields;
   }
 
   if (resumes === undefined) {
     await db.setSettings({ ...locations, ...values });
-    await db.setTrackLabels(labels);
+    await db.setTrackFields(bySearch);
     return json({ resumes: {}, locations, ...(await panelState(db)) });
   }
   if (!docs?.bucket) {
@@ -196,7 +229,7 @@ export async function handlePostSettings({ request, db, docs }) {
 
   await db.setSearchResumes(changes, new Date().toISOString());
   await db.setSettings({ ...locations, ...values });
-  await db.setTrackLabels(labels);
+  await db.setTrackFields(bySearch);
   return json({ resumes: reply, locations, ...(await panelState(db)) });
 }
 
@@ -214,6 +247,10 @@ async function panelState(db) {
       pronouns: settings.pronouns,
       excluded_companies: settings.excluded_companies,
     },
-    searches: Object.fromEntries(tracks.map((t) => [t.key, { label: t.label }])),
+    // Every search, not only the ones a save named, so one reply refreshes the
+    // whole panel.
+    searches: Object.fromEntries(
+      tracks.map((t) => [t.key, Object.fromEntries(PANEL_TRACK_FIELDS.map((f) => [f, t[f]]))])
+    ),
   };
 }
