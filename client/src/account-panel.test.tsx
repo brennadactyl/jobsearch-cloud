@@ -36,6 +36,15 @@ async function openPanel(data = fixture) {
 
 const nav = (panel: HTMLElement) => within(panel).getByRole("navigation", { name: "Account sections" });
 
+/** Opens Searches, then the one search whose questions should be on screen. */
+async function openSearch(panel: HTMLElement, name: string) {
+  // The sidebar's own name gains "Unsaved changes" once a search is edited.
+  await userEvent.click(within(nav(panel)).getByRole("button", { name: /Searches/ }));
+  const strip = within(panel).queryByRole("tablist", { name: "Your searches" });
+  if (strip) await userEvent.click(within(strip).getByRole("tab", { name }));
+  return screen.getByRole("group", { name });
+}
+
 beforeEach(() => {
   localStorage.clear();
   clearPrefs();
@@ -93,8 +102,7 @@ describe("the account panel's sections", () => {
     await userEvent.click(within(panel).getByRole("button", { name: "they/them" }));
     await userEvent.type(screen.getByLabelText(/Companies you'd never work for/), "Initech{Enter}");
 
-    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    const alpha = await openSearch(panel, "Alpha roles");
     await userEvent.clear(within(alpha).getByLabelText("What this search is called"));
     await userEvent.type(within(alpha).getByLabelText("What this search is called"), "Eng - Platform");
     expect(screen.getByText("4 unsaved changes across 2 sections")).toBeInTheDocument();
@@ -107,8 +115,13 @@ describe("the account panel's sections", () => {
       excluded_companies: ["Initech"],
       searches: { alpha: { label: "Eng - Platform" } },
     });
-    // The reply is what the page then shows, without waiting for a refetch.
-    expect(await screen.findByRole("tab", { name: /Eng - Platform/ })).toBeInTheDocument();
+    // The reply is what the page then shows, without waiting for a refetch:
+    // the tracker's own tab behind the panel, not only the strip inside it.
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("tab", { name: /Eng - Platform/ }).some((t) => !t.closest(".account-panel")),
+      ).toBe(true),
+    );
     expect(screen.getByRole("heading", { name: "Brenna's 2026 Search" })).toBeInTheDocument();
     expect(screen.queryByText(/unsaved change/)).toBeNull();
   });
@@ -132,8 +145,7 @@ describe("the account panel's sections", () => {
       }),
     );
     const panel = await openPanel();
-    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-    const beta = screen.getByRole("group", { name: "Beta roles" });
+    const beta = await openSearch(panel, "Beta roles");
     const name = within(beta).getByLabelText("What this search is called");
     await userEvent.type(name, " and more");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -158,8 +170,7 @@ describe("the account panel's sections", () => {
       }),
     );
     const panel = await openPanel();
-    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    const alpha = await openSearch(panel, "Alpha roles");
     const roles = within(alpha).getByLabelText("What roles should this search look for?");
     await userEvent.clear(roles);
     await userEvent.type(roles, "Staff platform engineer roles");
@@ -179,23 +190,54 @@ describe("the account panel's sections", () => {
       tracks: [fixture.tracks[0], { ...fixture.tracks[1], fed_by: "alpha" }],
     };
     const panel = await openPanel(fed);
-    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-
-    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    const alpha = await openSearch(panel, "Alpha roles");
     expect(within(alpha).getByLabelText("What roles should this search look for?")).toBeInTheDocument();
 
     // The fed tab keeps its own name and nothing else.
-    const beta = screen.getByRole("group", { name: "Beta roles" });
+    const beta = await openSearch(panel, "Beta roles");
     expect(within(beta).getByLabelText("What this search is called")).toBeInTheDocument();
     expect(within(beta).queryByLabelText("What roles should this search look for?")).toBeNull();
     expect(within(beta).getByText(/Alpha roles search fills this tab/)).toBeInTheDocument();
   });
 
+  it("shows one search at a time, and marks one holding an unsaved edit", async () => {
+    const panel = await openPanel();
+    const alpha = await openSearch(panel, "Alpha roles");
+    expect(screen.queryByRole("group", { name: "Beta roles" })).toBeNull();
+
+    await userEvent.type(within(alpha).getByLabelText("What roles should this search look for?"), " and more");
+    const strip = within(panel).getByRole("tablist", { name: "Your searches" });
+    expect(within(within(strip).getByRole("tab", { name: /Alpha roles/ })).getByRole("img", { name: "Unsaved changes" })).toBeInTheDocument();
+
+    // Reading another search keeps the edit and its mark.
+    await userEvent.click(within(strip).getByRole("tab", { name: /Beta roles/ }));
+    expect(screen.getByRole("group", { name: "Beta roles" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Alpha roles" })).toBeNull();
+    expect(screen.getByText("1 unsaved change")).toBeInTheDocument();
+  });
+
+  it("brings up the search a refusal names, whichever one is on screen", async () => {
+    vi.spyOn(client, "saveSettings").mockRejectedValue(
+      Object.assign(new Error("beta's roles line is longer than 300 characters"), {
+        status: 400,
+        field: "role_search_line",
+        search: "beta",
+      }),
+    );
+    const panel = await openPanel();
+    const beta = await openSearch(panel, "Beta roles");
+    await userEvent.type(within(beta).getByLabelText("What roles should this search look for?"), "Beta engineer roles");
+    await openSearch(panel, "Alpha roles");
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    const shown = await screen.findByRole("group", { name: "Beta roles" });
+    expect(within(shown).getByRole("alert")).toHaveTextContent("longer than 300 characters");
+  });
+
   it("takes what a person writes as written, and refuses only an emptied roles line", async () => {
     const save = vi.spyOn(client, "saveSettings");
     const panel = await openPanel();
-    await userEvent.click(within(nav(panel)).getByRole("button", { name: "Searches" }));
-    const alpha = screen.getByRole("group", { name: "Alpha roles" });
+    const alpha = await openSearch(panel, "Alpha roles");
 
     // Nothing reads what was typed to judge it.
     await userEvent.type(within(alpha).getByLabelText("What makes a posting worth keeping?"), "prefer a strong design culture");

@@ -31,18 +31,23 @@ const QUESTIONS: Readonly<Record<Exclude<SearchKey, "label">, { label: string; h
 
 export default function SearchesSection({
   tracks,
+  shown,
   draft,
   changed,
   problem,
+  onShow,
   onChange,
 }: {
   tracks: readonly Track[];
+  /** The search whose questions are on screen; the strip above chooses it. */
+  shown: Track | undefined;
   /** The edits in hand, by search key. */
   draft: SearchDraft;
   /** The fields of each search that differ from what's stored. */
   changed: Readonly<Record<string, Partial<SearchFields>>>;
   /** A refused save's message, beside the search and field it names. */
   problem: { search: string; field: string; message: string } | null;
+  onShow: (key: string) => void;
   onChange: (key: string, field: SearchKey, value: string) => void;
 }) {
   return (
@@ -54,14 +59,33 @@ export default function SearchesSection({
 
       {tracks.length === 0 && <p className="resume-quiet">No searches yet.</p>}
 
-      {tracks.map((track) => {
+      {/* One line however many searches there are: it scrolls sideways rather
+          than wrapping, so the questions below never move down the page. */}
+      {tracks.length > 1 && (
+        <div className="search-strip" role="tablist" aria-label="Your searches">
+          {tracks.map((track) => (
+            <button
+              key={track.key}
+              type="button"
+              role="tab"
+              aria-selected={track.key === shown?.key}
+              className={track.key === shown?.key ? "chosen" : undefined}
+              onClick={() => onShow(track.key)}
+            >
+              {draft[track.key]?.label ?? track.label ?? track.key}
+              {changed[track.key] && <span className="account-nav-dot" aria-label="Unsaved changes" role="img" />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(shown ? [shown] : []).map((track) => {
         const values = { ...fieldsOf(track), ...draft[track.key] } as SearchFields;
         const edited = changed[track.key] ?? {};
         return (
           // Named, because every block asks the same questions: without this a
           // field reads as "What this search is called" and nothing more.
           <div className="search-block" role="group" aria-label={track.label || track.key} key={track.key}>
-            <div className="search-block-name">{track.label || track.key}</div>
             <Field
               id={`search-${track.key}`}
               label="What this search is called"
