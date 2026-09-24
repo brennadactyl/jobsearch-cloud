@@ -116,6 +116,18 @@ doc, and a finding says whether anything was built on the wrong line.
   there, in the onboarding run's validation, and in the account panel's picker.
   Owner: Prompt Bro, with Backend Buddy for the route.
 
+- **Clear out screened postings after 30 days.** A rejection a month old is
+  clutter, and the table grows about 4,900 rows a year per search - fine for one
+  person, gigabytes at a few hundred. So a screened row is deleted 30 days after
+  its date, **except a row that records a person's own decision**: a delisting,
+  and anything added by hand. Those are the only rows whose loss a person would
+  see, because a lead they removed would come back as new. What the purge does
+  cost is memory: a posting the run rejected over 30 days ago and never became a
+  lead can be fetched and judged again, which is one check and the same verdict.
+  Cheapest shape is no new schedule - the server drops an account's expired rows
+  as that account's run posts new ones, so the purge happens where the data is
+  already being written. Owner: Backend Buddy, with Prompt Bro on what a
+  re-checked posting costs a night.
 - **Record which kind of reason screened a posting**, from a fixed list, beside
   the sentence a run already writes. The Screened tab lists what a search set
   aside, and every run stamp now gives both counts, so a thin night reads
