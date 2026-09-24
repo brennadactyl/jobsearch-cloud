@@ -1,6 +1,8 @@
+import { Link } from "react-router-dom";
 import type { Settings, Track } from "../api/schema";
 import { relWhen } from "../domain/format";
 import { pausedDay, runState, runSummary } from "../domain/runs";
+import { pathForSearch } from "../domain/screened";
 
 /** When a search last ran and what it found, beside its tab and on the Overview. */
 export function RunStamp({ track, settings }: { track: Track | undefined; settings: Settings }) {
@@ -35,7 +37,20 @@ export function RunStamp({ track, settings }: { track: Track | undefined; settin
     <span className={`runstamp ${st}`} title={`Last run ${run.at}${run.on ? ` (local date ${run.on})` : ""}`}>
       <i className="rdot" />
       Ran {relWhen(run.at)}
-      {run.on && <span className="mono"> {run.on}</span>} &middot; {runSummary(run)}
+      {run.on && <span className="mono"> {run.on}</span>} &middot;{" "}
+      {run.status === "error" ? (
+        runSummary(run)
+      ) : (
+        <>
+          {run.leads_added} new,{" "}
+          {/* What a night set aside is the one part of a run you can go and
+              read, so the count is the way in. */}
+          <Link className="runstamp-screened" to={pathForSearch(track.key)}>
+            {run.screened_added} screened out
+          </Link>
+          {run.delisted > 0 && `, ${run.delisted} taken down`}
+        </>
+      )}
     </span>
   );
 }

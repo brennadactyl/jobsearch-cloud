@@ -29,16 +29,19 @@ export function runState(track: RunTrack | null | undefined, settings: Settings)
   return h === null || h > limit ? "stale" : "ok";
 }
 
-/** Counts come from the run record, not leads[], so a day that added nothing still reads as a result. */
+/**
+ * Counts come from the run record, not leads[], so a day that added nothing
+ * still reads as a result. Both counts are always said, zero included: a night
+ * that kept nothing and a night that set 26 aside are different nights, and
+ * "found nothing new" said the same thing for both.
+ */
 export function runSummary(run: LastRun | null | undefined): string {
   if (!run || !run.at) return "";
   if (run.status === "error") return run.note || "the run reported an error";
-  const bits: string[] = [];
-  if (run.leads_added) bits.push(`${run.leads_added} new`);
-  if (run.screened_added) bits.push(`${run.screened_added} screened out`);
+  const bits = [`${run.leads_added} new`, `${run.screened_added} screened out`];
   // Only the run record counts these: the delisted rows were deleted.
   if (run.delisted) bits.push(`${run.delisted} taken down`);
-  return bits.length ? bits.join(", ") : "found nothing new";
+  return bits.join(", ");
 }
 
 /** The day a pause was stamped, "" when it isn't paused or the instant is unreadable. */

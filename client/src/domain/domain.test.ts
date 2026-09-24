@@ -154,9 +154,12 @@ describe("runState", () => {
 });
 
 describe("runSummary", () => {
-  it("says a day that found nothing found nothing, rather than going blank", () => {
+  it("says both counts of a day that found nothing, rather than going blank or vague", () => {
+    // "found nothing new" read the same for a thin night and for one whose
+    // rules set everything aside, which are different nights.
     const run = { at: new Date(NOW).toISOString(), on: "", status: "ok", leads_added: 0, screened_added: 0, delisted: 0, note: "" };
-    expect(runSummary(run)).toBe("found nothing new");
+    expect(runSummary(run)).toBe("0 new, 0 screened out");
+    expect(runSummary({ ...run, screened_added: 26 })).toBe("0 new, 26 screened out");
   });
 
   it("counts from the run record, not from the rows", () => {
@@ -210,7 +213,7 @@ describe("buildTabs", () => {
   it("takes every label from config, hardcoding none", () => {
     const tabs = buildTabs(leads, applications, tracks, settings);
     expect(tabs.map((t) => t.label)).toEqual([
-      "Overview", "Applications", "All leads", "Alpha roles", "Beta roles",
+      "Overview", "Applications", "All leads", "Alpha roles", "Beta roles", "Screened",
     ]);
     const renamed = buildTabs(leads, applications, tracks, {
       ...settings, overview_label: "Home", all_leads_label: "Everything",
