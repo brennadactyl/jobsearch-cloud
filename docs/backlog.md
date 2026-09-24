@@ -116,23 +116,28 @@ doc, and a finding says whether anything was built on the wrong line.
   there, in the onboarding run's validation, and in the account panel's picker.
   Owner: Prompt Bro, with Backend Buddy for the route.
 
-- **Clear out screened postings after 90 days.** The table grows about 4,900 rows
-  a year per search - nothing for one person, gigabytes at a few hundred - and a
-  rejection a season old is clutter. So a screened row is deleted 90 days after
-  its date, **except a row that records a person's own decision**: a delisting,
-  and anything added by hand. Those are the rows whose loss someone would see,
-  because a lead they removed would come back as new.
-  One horizon for every other kind, rather than a shorter one for facts like
-  `dead` and `out-of-scope` and a longer one for judgements like `wrong-role`: at
-  90 days a re-judged posting resurfacing is rare enough not to buy a second rule.
-  What the purge costs is memory, and it is more than one check: a re-discovered
-  posting is fetched and verified like any other, and one still listed is screened
-  again with today's date, so the table reaches a steady state rather than
-  shrinking. The dedup payload is already scoped to tonight's companies, so the
-  re-fetching lands only where a run is already looking.
-  Cheapest shape is no new schedule - the server drops an account's expired rows
-  as that account's run posts new ones, so the purge happens where the data is
-  already being written. Owner: Backend Buddy, with Prompt Bro on the run's cost.
+- **Show the page 90 days of screened postings, and keep the rest.** The table
+  grows about 4,900 rows a year per search - nothing for one person, gigabytes at
+  a few hundred - and a rejection a season old is clutter on the tab. So
+  `GET /api/data` returns the last 90 days plus a count of what is older, and the
+  page says those are kept rather than gone. Nothing is deleted.
+  Deleting was the first shape and it is worse: it needed carve-outs for a
+  delisting and for hand-added rows, it made "90 days" mean 90 days of active
+  searching, and a purged posting still listed would be fetched and screened again
+  on a later night. Windowing costs none of that.
+  It is safe because no run reads that route: dedupe comes from
+  `/api/dedup/<key>`, scoped to tonight's companies and the last few days, and
+  every `POST /api/leads` and `/api/screened` is deduped server-side against the
+  whole table whatever the caller has seen.
+  **The export keeps meaning what it says:** its "everything this tab holds"
+  option asks the server for the full set rather than the window, since someone
+  exporting to a spreadsheet wants their whole record. Client Comrade owns the
+  wording, Backend Buddy the parameter.
+  Moving screened rows to a blob store keyed by user and day, so a lifecycle rule
+  could expire them, was considered and rejected: dedupe asks "have we ever seen
+  this URL?", which is random access over all history, and splitting one live
+  dataset across two stores to buy an expiry rule gives up what D1 is for. If
+  storage ever binds, archive whole accounts instead. Owner: Backend Buddy.
 - **Record which kind of reason screened a posting**, from a fixed list, beside
   the sentence a run already writes. The Screened tab lists what a search set
   aside, and every run stamp now gives both counts, so a thin night reads
@@ -178,9 +183,9 @@ doc, and a finding says whether anything was built on the wrong line.
   account can read every account's rows in D1. Honest for friends; with
   strangers' resumes it needs a retention policy and a deletion path a person
   can invoke themselves. The delete-account route is the operator half of this.
-  The screened purge is the other half's shape and its limit: it runs as an
-  account's own run writes, so an abandoned or paused account never purges. A
-  retention promise made to strangers can't depend on them still searching.
+  Nothing deletes a person's rows on a clock today: the screened window hides old
+  rows rather than removing them, so a retention promise to a stranger still needs
+  its own mechanism, not tied to them still searching.
 - **Company discovery as its own nightly job**
   (planned on the unmerged `company-discovery-plan` branch) - searches
   re-evaluate the same companies on the same nights.
