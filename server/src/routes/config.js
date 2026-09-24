@@ -7,7 +7,15 @@
 
 import { LOCATION_SETTING_KEYS, parseDocumentList, WRITEUP_FIELDS } from "../db.js";
 import { json, readJson } from "../http.js";
-import { locationSettingError, trackDocumentsError, unknownTrack, unreadableDocumentsError } from "../validate.js";
+import {
+  halfSetPayFloorError,
+  locationSettingError,
+  payFloorError,
+  payFloorUnitError,
+  trackDocumentsError,
+  unknownTrack,
+  unreadableDocumentsError,
+} from "../validate.js";
 
 /**
  * The refusal for a `documents` list a search couldn't read its resume from,
@@ -140,11 +148,39 @@ export async function handleWriteUp({ request, db }) {
  * track, a non-positive `stale_run_hours`, or a location setting that isn't
  * text or is too long (validate.js locationSettingError).
  *
+ * A track may carry `pay_floor` and `pay_floor_unit`, the operator's door to
+ * the pair the account panel writes: the amount as typed, the unit `year` or
+ * `hour`, and the two set together and cleared together, judged on what the
+ * write leaves.
+ *
  * `tracks` replaces the whole track list, since setup writes the complete set
  * at once. Leads and applications under a removed track keep their `search`
  * and only lose their tab. search_runs stays 1:1 with the list: new tracks gain
  * a "never ran" row, removed tracks lose theirs.
  */
+/**
+ * What is wrong with a track's pay floor as posted, as `{ error, field }`, or
+ * null. The operator's door to the same pair the panel writes
+ * (docs/search-fields-plan.md): the amount as typed, the unit one of two, and
+ * the two set together and cleared together. Judged on what the write leaves,
+ * since replaceTracks keeps a field the post omits.
+ * @param {Object} t the track as posted
+ * @param {{pay_floor?: string, pay_floor_unit?: string}|undefined} was as stored
+ * @returns {{error: string, field: string}|null}
+ */
+function payFloorProblem(t, was) {
+  if (t.pay_floor === undefined && t.pay_floor_unit === undefined) return null;
+  for (const [field, check] of [["pay_floor", payFloorError], ["pay_floor_unit", payFloorUnitError]]) {
+    if (t[field] === undefined) continue;
+    const problem = check(field, t[field]);
+    if (problem) return { error: problem, field };
+  }
+  const amount = t.pay_floor === undefined ? was?.pay_floor || "" : t.pay_floor.trim();
+  const unit = t.pay_floor_unit === undefined ? was?.pay_floor_unit || "" : t.pay_floor_unit;
+  const halfSet = halfSetPayFloorError(amount, unit);
+  return halfSet ? { error: halfSet, field: "pay_floor" } : null;
+}
+
 export async function handleSetConfig({ request, db }) {
   const body = await readJson(request);
   if (body instanceof Response) return body;
@@ -172,6 +208,8 @@ export async function handleSetConfig({ request, db }) {
       }
       const paused = pausedSinceError(t, stored.get(t.key));
       if (paused) return json({ error: `track "${t.key}": ${paused}`, field: "paused_since" }, 400);
+      const floor = payFloorProblem(t, stored.get(t.key));
+      if (floor) return json({ error: `track "${t.key}": ${floor.error}`, field: floor.field }, 400);
       if (t.documents !== undefined) {
         const problem = trackDocumentsError(t.documents);
         if (problem) return json({ error: `track "${t.key}": ${problem}`, field: "documents" }, 400);

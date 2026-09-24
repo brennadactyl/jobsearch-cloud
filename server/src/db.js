@@ -200,6 +200,7 @@ export const TRACK_CONFIG_FIELDS = [
   "fit_clause", "fit_disqualifier", "fit_filter_step", "leads_note",
   "doc_file", "doc_summary", "doc_update_line", "intro_note", "report_line",
   "screened_examples", "schedule_time", "fed_by", "documents", "paused_since",
+  "pay_floor", "pay_floor_unit",
 ];
 
 /**
@@ -231,7 +232,10 @@ export function parseDocumentList(text) {
 // (docs/account-settings-plan.md). The rest of TRACK_CONFIG_FIELDS is
 // machinery the run follows or is owned elsewhere - the tab structure, the
 // resume chooser, the scheduler.
-export const PANEL_TRACK_FIELDS = ["label", "role_search_line", "fit_clause", "fit_disqualifier", "paused_since"];
+export const PANEL_TRACK_FIELDS = [
+  "label", "role_search_line", "fit_clause", "fit_disqualifier", "paused_since",
+  "pay_floor", "pay_floor_unit",
+];
 
 export const WRITEUP_FIELDS = [
   "role_search_line", "full_description", "resume_line", "search_note",
@@ -554,7 +558,8 @@ export class Db {
   async getResumeState() {
     const rows = await this.d1
       .prepare(
-        `SELECT key, label, fed_by, doc_file, documents, profile_stale_since, resume_was, role_search_line, paused_since
+        `SELECT key, label, fed_by, doc_file, documents, profile_stale_since, resume_was, role_search_line, paused_since,
+                pay_floor, pay_floor_unit
            FROM tracks WHERE user_id = ? ORDER BY sort_order, key`
       )
       .bind(this.userId)

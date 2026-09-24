@@ -3438,6 +3438,52 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await req("POST", "/api/writeup", { token: AP, body: { search: "SWE", fit_clause: "the run's words" } })).status === 200 &&
     apTrack(await apConfig(AP), "SWE")?.fit_clause === "the run's words");
 
+  // The lowest pay worth showing (docs/search-fields-plan.md): the amount as
+  // typed and the unit beside it, set together and cleared together. Nothing
+  // reads a number out of the amount.
+  const apFloor = await apSave(AP, { searches: { SWE: { pay_floor: "  $180,000  ", pay_floor_unit: "year" } } });
+  check("an amount is stored as typed, trimmed only at the ends, with its unit",
+    apFloor.status === 200 && apTrack(await apConfig(AP), "SWE")?.pay_floor === "$180,000" &&
+    apTrack(await apConfig(AP), "SWE")?.pay_floor_unit === "year" &&
+    apFloor.json?.searches?.SWE?.pay_floor === "$180,000", JSON.stringify(apFloor.json?.searches?.SWE));
+  check("an amount in another currency is kept as written, since it says its own",
+    (await apSave(AP, { searches: { SWE: { pay_floor: "£140,000" } } })).json?.searches?.SWE?.pay_floor === "£140,000");
+  check("the unit can change on its own while an amount is stored",
+    (await apSave(AP, { searches: { SWE: { pay_floor_unit: "hour" } } })).status === 200 &&
+    apTrack(await apConfig(AP), "SWE")?.pay_floor === "£140,000");
+  for (const [why, entry, field] of [
+    ["a unit the prompt can't state", { pay_floor_unit: "week" }, "pay_floor_unit"],
+    ["a unit that isn't text", { pay_floor_unit: 1 }, "pay_floor_unit"],
+    ["an amount that is a rule rather than a figure", { pay_floor: "x".repeat(41) }, "pay_floor"],
+    ["an amount that isn't text", { pay_floor: 180000 }, "pay_floor"],
+    ["an amount with no unit", { pay_floor: "200k", pay_floor_unit: "" }, "pay_floor"],
+    ["a unit with no amount", { pay_floor: "", pay_floor_unit: "year" }, "pay_floor"],
+  ]) {
+    const res = await apSave(AP, { searches: { SWE: entry } });
+    check(`a pay floor is refused: ${why}, naming where to fix it`,
+      res.status === 400 && res.json?.field === field && res.json?.search === "SWE", JSON.stringify(res.json));
+  }
+  check("a refused floor leaves the stored one alone",
+    apTrack(await apConfig(AP), "SWE")?.pay_floor === "£140,000" &&
+    apTrack(await apConfig(AP), "SWE")?.pay_floor_unit === "hour");
+  check("clearing both is how a search goes back to having no floor",
+    (await apSave(AP, { searches: { SWE: { pay_floor: "", pay_floor_unit: "" } } })).status === 200 &&
+    apTrack(await apConfig(AP), "SWE")?.pay_floor === "" && apTrack(await apConfig(AP), "SWE")?.pay_floor_unit === "");
+  check("a search with no floor is untouched by a save of other fields",
+    (await apSave(AP, { searches: { SWE: { fit_clause: "still here" } } })).status === 200 &&
+    apTrack(await apConfig(AP), "SWE")?.pay_floor === "");
+  // The operator's door takes the same pair, with the same pairing rule.
+  const apCfgTracks = (await apConfig(AP)).tracks.map((t) => ({ ...t, pay_floor: t.key === "CPM" ? "95" : t.pay_floor,
+    pay_floor_unit: t.key === "CPM" ? "hour" : t.pay_floor_unit }));
+  check("an operator can set a floor through the config",
+    (await req("POST", "/api/config", { token: AP, body: { tracks: apCfgTracks } })).status === 200 &&
+    apTrack(await apConfig(AP), "CPM")?.pay_floor === "95");
+  const apCfgHalf = await req("POST", "/api/config", { token: AP, body: { tracks: apCfgTracks.map((t) =>
+    (t.key === "CPM" ? { ...t, pay_floor_unit: "" } : t)) } });
+  check("and half a floor is refused there too, leaving the tracks alone",
+    apCfgHalf.status === 400 && apCfgHalf.json?.field === "pay_floor" &&
+    apTrack(await apConfig(AP), "CPM")?.pay_floor_unit === "hour", JSON.stringify(apCfgHalf.json));
+
   const apOther = await apConfig(AP_B);
   check("another account's title, tab names, words and companies are its own",
     apOther.settings?.display_title !== "Ada's search" &&

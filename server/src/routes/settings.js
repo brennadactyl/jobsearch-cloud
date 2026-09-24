@@ -16,7 +16,10 @@ import {
   FIT_PROSE_MAX_CHARS,
   locationSettingError,
   nameError,
+  halfSetPayFloorError,
   nowhereToSearchError,
+  payFloorError,
+  payFloorUnitError,
   pronounsError,
   ROLE_LINE_MAX_CHARS,
   searchProseError,
@@ -51,6 +54,8 @@ const SEARCH_FIELD_CHECKS = {
     if (track.fed_by) return `"${track.fed_by}" fills this tab - pause that search and this tab pauses with it`;
     return "";
   },
+  pay_floor: payFloorError,
+  pay_floor_unit: payFloorUnitError,
 };
 
 // Every refusal about a chosen resume says which search it is about, so the
@@ -64,10 +69,11 @@ function refuse(status, search, error) {
  * <path> }, search_locations?, excluded_locations?, priority_locations?,
  * location_note?, display_title?, pronouns?, excluded_companies?, searches?:
  * { <key>: { label?, role_search_line?, fit_clause?, fit_disqualifier?,
- * paused? } } }` -> `{ resumes: { <search>: { documents, profile_pending } },
+ * paused?, pay_floor?, pay_floor_unit? } } }` -> `{ resumes: { <search>: { documents, profile_pending } },
  * locations: { <key>: <stored value> }, settings: { display_title, pronouns,
  * excluded_companies }, searches: { <key>: { label, role_search_line,
- * fit_clause, fit_disqualifier, paused_since, paused } } }`.
+ * fit_clause, fit_disqualifier, paused_since, paused, pay_floor,
+ * pay_floor_unit } } }`.
  *
  * The account panel's one Save, so a request may carry a resume choice, a place
  * edit, a page title and a tab rename together, and everything it can write
@@ -94,6 +100,14 @@ function refuse(status, search, error) {
  * search can be paused - a tab follows its root - so `paused` on a fed tab is a
  * 400 naming the search to pause instead. The reply carries each search's
  * `paused_since` and the resolved `paused` a reader shows.
+ *
+ * `pay_floor` is the lowest pay worth showing, as the person typed it, and
+ * `pay_floor_unit` is `year` or `hour` beside it. Nothing reads a number out of
+ * the amount - prompt.js states both in step 7 and the run judges a posting
+ * against them (docs/search-fields-plan.md). The two are set together and
+ * cleared together: a write that would leave one without the other is a 400
+ * naming `pay_floor`, judged on what the save leaves, so sending one while the
+ * other is stored is an ordinary edit.
  *
  * The location lists and note are stored as typed, trimmed at the ends, and
  * take effect on each search's next run (docs/location-settings-plan.md). Each
@@ -199,6 +213,17 @@ export async function handlePostSettings({ request, db, docs }) {
     if (sent.paused !== undefined) {
       const stored = byKey.get(key).paused_since || "";
       fields.paused_since = sent.paused ? stored || new Date().toISOString() : "";
+    }
+    // The amount and its unit are set together and cleared together, judged on
+    // what the save leaves: sending one while the other is stored is a normal
+    // edit, and sending neither leaves a floor alone.
+    if (sent.pay_floor !== undefined || sent.pay_floor_unit !== undefined) {
+      const track = byKey.get(key);
+      const problem = halfSetPayFloorError(
+        fields.pay_floor ?? track.pay_floor ?? "",
+        fields.pay_floor_unit ?? track.pay_floor_unit ?? ""
+      );
+      if (problem) return json({ error: problem, search: key, field: "pay_floor" }, 400);
     }
     if (Object.keys(fields).length) bySearch[key] = fields;
   }
