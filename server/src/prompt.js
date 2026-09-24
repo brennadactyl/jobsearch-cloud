@@ -391,6 +391,22 @@ function filingStep(track, { fed, multi, allKeys }, doc) {
 
 // Not empty for a single tab: tracker.ps1 stamps `search` from TRACKER_SEARCH,
 // so there is no key to choose.
+// A screened row names the tab the posting would have been filed under, decided
+// by step 7b's rule, so a month of rejections can be read per tab rather than
+// all under the tab that happens to own the search. Only a multi-tab run has
+// anything to say: a single-tab search has one key, which the helper stamps.
+function screenedTabFields({ multi, allKeys }) {
+  if (!multi) return { screenedTab: "", screenedTabRule: "" };
+  return {
+    screenedTab: ", search",
+    screenedTabRule:
+      `\n\n   \`search\` is the tab this posting would have been filed under had it qualified - ` +
+      `${allKeys.map((k) => `\`"${k}"\``).join(" or ")} - decided by step 7b's rule, the same way a lead is filed. ` +
+      "It says where the rejection belongs, not that it was ever a lead. Leave it out when the posting fits none of " +
+      "them clearly; the row is then filed under this search itself rather than refused.",
+  };
+}
+
 function searchValueRule({ multi, allKeys }) {
   return multi
     ? `is the key step 7b filed that posting under - ${allKeys
@@ -472,6 +488,7 @@ export function buildSearchPrompt({ user, track, settings, feeds, docBudget = DE
   const dedup = dedupNote(tabs);
   const filing = filingStep(track, tabs, doc);
   const searchValue = searchValueRule(tabs);
+  const { screenedTab, screenedTabRule } = screenedTabFields(tabs);
   const delistTab = delistTabNote(tabs, name);
   const runFanout = runFanoutNote(tabs);
   const { areaKey, areaRule } = areaStep(settings, name);
@@ -537,10 +554,24 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
    didn't state.${areaRule} Every row's \`"search"\` ${searchValue}${leadsNote}.
 9b. RECORD SCREENED-OUT CANDIDATES so tomorrow's run doesn't re-verify them.
    Write the disqualified-but-new candidates from step 7 to \`screened.json\` -
-   \`{url, company, title, location, reason}\` - then run
+   \`{url, company, title, location, reason, kind${screenedTab}}\` - then run
    \`./tracker screened screened.json\`. \`reason\` is a short, specific,
    human-readable explanation (e.g. ${screenedExamples}); it is what makes the
    entry useful later, so don't leave it vague.
+
+   \`kind\` is what it was rejected for, as one word from this list and nothing
+   else, so the page can group a month of rejections: \`dead\` (the posting is
+   gone - a 404, a closed notice, a redirect to an error page), \`duplicate\`
+   (the same posting already seen under another url), \`out-of-scope\` (its
+   location, or a remote restriction, puts it outside step 5),
+   \`pay-below-floor\`, \`wrong-level\`, \`wrong-role\` (the work itself isn't
+   what this search is for), \`contract\` (contract, temporary or an
+   internship), or \`other\`. **Where two fit, take the first of those that
+   applies** - a posting that is gone was never judged on its fit, and one
+   already seen isn't a fresh rejection. \`other\` is a real answer for a
+   rejection none of them describes; an invented word is stored as \`other\`
+   anyway, so it only costs you the grouping. The sentence still says
+   everything: the kind says which pile.${screenedTabRule}
 9c. RECORD THE RUN: \`./tracker run --status ok --note "one short line for the webpage"\`
    (e.g. \`--note "no new postings; 34 screened out"\`).
 

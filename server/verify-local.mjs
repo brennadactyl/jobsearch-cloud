@@ -732,6 +732,55 @@ const listed = buildSearchPrompt({
     docStep.includes("correct a line in place") && docStep.includes("dated note"));
 }
 
+// ---- Step 9b's `kind`: a closed list, with a stated precedence.
+//
+// The page groups a month of rejections by it, so the step names the set and
+// the order to break a tie in; `delisted` is not among them, because a run
+// never writes one - a delisting's screened row is the delist route's.
+{
+  const nineB = (() => {
+    const p = buildSearchPrompt({
+      user: { id: "u", name: "Nobody" },
+      track: { key: "T", label: "T", full_description: "t", role_search_line: "r" },
+      settings: {},
+      feeds: [],
+    });
+    return p.slice(p.indexOf("9b. RECORD"), p.indexOf("\n9c."));
+  })();
+  check("step 9b asks for a kind beside the reason",
+    nineB.includes("reason, kind}") && nineB.includes("one word from this list and nothing"));
+  check("and names every kind a run may pick",
+    ["`dead`", "`duplicate`", "`out-of-scope`", "`pay-below-floor`", "`wrong-level`", "`wrong-role`", "`contract`", "`other`"]
+      .every((k) => nineB.includes(k)));
+  check("but never asks a run for `delisted`, which only the delist route writes",
+    !nineB.includes("delisted"));
+  check("and states the precedence rather than leaving a tie to the night",
+    /first of those that\s+applies/.test(nineB));
+  check("and says an unknown kind costs the grouping, not the row",
+    nineB.includes("stored as `other`"));
+
+  // A rejection reads per tab like a lead does, so a multi-tab run says which
+  // tab each one belongs to. A single-tab search has one key and is asked for
+  // nothing.
+  const nineBof = (feeds) => {
+    const p = buildSearchPrompt({
+      user: { id: "u", name: "Nobody" },
+      track: { key: "SWE", label: "Eng - Gaming", full_description: "games", role_search_line: "r" },
+      settings: {},
+      feeds,
+    });
+    return p.slice(p.indexOf("9b. RECORD"), p.indexOf("\n9c."));
+  };
+  const multiTab = nineBof([{ key: "swe-ai", label: "Eng - AI", full_description: "AI" }]);
+  check("a multi-tab run names each screened row's tab, by step 7b's rule",
+    multiTab.includes("reason, kind, search}") &&
+    multiTab.includes("would have been filed under had it qualified") &&
+    multiTab.includes('`"swe-ai"`') &&
+    multiTab.includes("filed under this search itself rather than refused"));
+  check("and a single-tab search is asked for no tab at all",
+    nineBof([]).includes("reason, kind}") && !nineBof([]).includes("would have been filed under"));
+}
+
 // ---- A search's pay floor, composed into step 7's two lists.
 //
 // The amount is the person's own text, so the clauses have to read sensibly
