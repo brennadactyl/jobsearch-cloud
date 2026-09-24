@@ -755,7 +755,13 @@ const listed = buildSearchPrompt({
   check("but never asks a run for `delisted`, which only the delist route writes",
     !nineB.includes("delisted"));
   check("and states the precedence rather than leaving a tie to the night",
-    /first of those that\s+applies/.test(nineB));
+    /first of those\s+that\s+applies/.test(nineB));
+  // The precedence is the order the list is written in, so the order carries a
+  // meaning: `pay-below-floor` last makes its count the postings the floor
+  // alone kept off the page.
+  check("and lists `pay-below-floor` last of the real kinds, after `contract`",
+    nineB.indexOf("`pay-below-floor`") > nineB.indexOf("`contract`") &&
+    nineB.indexOf("`pay-below-floor`") < nineB.indexOf("`other`"));
   check("and says an unknown kind costs the grouping, not the row",
     nineB.includes("stored as `other`"));
 

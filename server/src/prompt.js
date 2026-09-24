@@ -564,11 +564,13 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
    gone - a 404, a closed notice, a redirect to an error page), \`duplicate\`
    (the same posting already seen under another url), \`out-of-scope\` (its
    location, or a remote restriction, puts it outside step 5),
-   \`pay-below-floor\`, \`wrong-level\`, \`wrong-role\` (the work itself isn't
-   what this search is for), \`contract\` (contract, temporary or an
-   internship), or \`other\`. **Where two fit, take the first of those that
-   applies** - a posting that is gone was never judged on its fit, and one
-   already seen isn't a fresh rejection. \`other\` is a real answer for a
+   \`wrong-level\`, \`wrong-role\` (the work itself isn't what this search is
+   for), \`contract\` (contract, temporary or an internship),
+   \`pay-below-floor\`, or \`other\`. **Where two fit, take the first of those
+   that applies** - a posting that is gone was never judged on its fit, and one
+   already seen isn't a fresh rejection. \`pay-below-floor\` comes last of the
+   real kinds, so its count is the postings ${name} would otherwise have seen,
+   which is what a pay floor's cost is. \`other\` is a real answer for a
    rejection none of them describes; an invented word is stored as \`other\`
    anyway, so it only costs you the grouping. The sentence still says
    everything: the kind says which pile.${screenedTabRule}

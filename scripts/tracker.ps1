@@ -508,8 +508,8 @@ function Invoke-LeadsCommand {
 # different thing. Sent here it becomes `other`, so a month of rejections can't
 # fill up with rows claiming to be lost leads.
 $ScreenedKinds = @(
-    "dead", "duplicate", "out-of-scope", "pay-below-floor",
-    "wrong-level", "wrong-role", "contract", "other"
+    "dead", "duplicate", "out-of-scope", "wrong-level",
+    "wrong-role", "contract", "pay-below-floor", "other"
 )
 $script:KindsCoerced = 0
 function Invoke-ScreenedCommand {
