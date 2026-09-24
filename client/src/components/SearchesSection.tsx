@@ -106,6 +106,17 @@ export default function SearchesSection({
               }
               onChange={(value) => onChange(track.key, "label", value)}
             />
+            {/* Above the questions about what it looks for: whether it runs at
+                all is the answer someone comes here for, and below four prose
+                fields it would be off the screen. */}
+            <PauseField
+              track={track}
+              tracks={tracks}
+              paused={edits.paused ?? Boolean(track.paused)}
+              changed={edited.paused !== undefined}
+              problem={problem?.search === track.key && problem.field === "paused" ? problem.message : ""}
+              onPause={(next) => onPause(track.key, next)}
+            />
             {/* A tab another search fills runs nothing of its own: what it
                 looks for is that search's, and asking here would offer edits no
                 run reads. Its name is still its own. */}
@@ -123,14 +134,6 @@ export default function SearchesSection({
                   onChange={(value) => onChange(track.key, key, value)}
                 />
               ))}
-            <PauseField
-              track={track}
-              tracks={tracks}
-              paused={edits.paused ?? Boolean(track.paused)}
-              changed={edited.paused !== undefined}
-              problem={problem?.search === track.key && problem.field === "paused" ? problem.message : ""}
-              onPause={(next) => onPause(track.key, next)}
-            />
           </div>
         );
       })}
