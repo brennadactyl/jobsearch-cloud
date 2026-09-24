@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0024_retire_priority_rules.sql` applied in order. This is the
+`0001_schema.sql` through `0025_track_paused.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -110,6 +110,7 @@ erDiagram
         TEXT documents "JSON list of paths"
         TEXT profile_stale_since
         TEXT resume_was
+        TEXT paused_since
     }
     search_runs {
         TEXT user_id PK, FK
@@ -313,6 +314,10 @@ search of its own.
   `profile_refreshed`). Only a track that runs its own search is marked, and
   only once it has been written up (`role_search_line` set): before that there
   is no profile to be stale.
+- `paused_since` is the ISO 8601 instant a search was paused, `''` while it
+  runs. Only a track that runs its own search carries one; a tab it fills is
+  paused with it. Pausing leaves every other row alone, so resuming picks up
+  where the search stopped.
 
 ### search_runs
 

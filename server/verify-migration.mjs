@@ -535,5 +535,28 @@ INSERT INTO intake (user_id, answers, status) VALUES ('u1', '{"priority_location
   db.close();
 }
 
+console.log("\n== 0025 leaves every search running ==");
+{
+  // A database with tracks already in it: pausing is a switch someone throws
+  // later, so the migration must start every existing search running and
+  // change nothing else about them.
+  const STOP25 = MIGRATIONS.find((f) => f.startsWith("0025_"));
+  const db = migratedThrough(STOP25, `
+INSERT INTO users (id, name) VALUES ('u1', 'One'), ('u2', 'Two');
+INSERT INTO tracks (user_id, key, label, sort_order, role_search_line, fed_by, schedule_time) VALUES
+  ('u1', 'CPM', 'CPM', 0, 'program roles', '', '06:30'),
+  ('u1', 'cpm-lead', 'CPM lead', 1, '', 'CPM', ''),
+  ('u2', 'SWE', 'SWE', 0, 'engineering roles', '', '07:00');
+`);
+  const track = (user, key) => db.prepare("SELECT * FROM tracks WHERE user_id = ? AND key = ?").get(user, key);
+  check("every existing track is running, with no NULLs to read around",
+    ["CPM", "cpm-lead"].every((k) => track("u1", k).paused_since === "") && track("u2", "SWE").paused_since === "");
+  check("and keeps its label, its order, what it searches for and its slot",
+    track("u1", "CPM").label === "CPM" && track("u1", "CPM").role_search_line === "program roles" &&
+    track("u1", "CPM").schedule_time === "06:30" && track("u1", "cpm-lead").fed_by === "CPM" &&
+    track("u1", "cpm-lead").sort_order === 1);
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

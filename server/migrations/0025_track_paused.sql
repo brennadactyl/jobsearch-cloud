@@ -1,0 +1,25 @@
+-- tracks.paused_since: a search that has stopped running, with everything it
+-- found kept (docs/pause-search-plan.md).
+--
+-- The only way to stop a search was to retire it - take it out of the config
+-- and purge it - which deletes its leads, screened rows and sweeps. Disabling
+-- its scheduled task by hand lasted only until the scheduler next registered
+-- tasks from the config. A person whose search has done its job wants neither:
+-- the leads and applications are their record, and they may want it back.
+--
+--   paused_since  ISO 8601 instant the search was paused, '' while it runs.
+--
+-- Set on the track that runs the search, through POST /api/config. A tab that
+-- search fills (`fed_by`) is paused with it and never carries a stamp of its
+-- own: one search, one switch. Readers take a tab's state from its root
+-- (db.getTracksAndSettings serves it as `paused`).
+--
+-- Pausing changes nothing else. Leads, applications, screened rows, sweeps,
+-- the track doc and the rotation cursor stay as they are, so resuming carries
+-- on where the search stopped. What stops is enforced where a run starts: GET
+-- /api/prompt refuses a paused search, and scripts/setup-scheduler.ps1
+-- registers no task for one.
+--
+-- Every existing track defaults to running.
+
+ALTER TABLE tracks ADD COLUMN paused_since TEXT NOT NULL DEFAULT '';

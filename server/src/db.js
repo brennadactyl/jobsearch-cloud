@@ -134,6 +134,7 @@
  * @property {string} schedule_time
  * @property {string} fed_by - key of the sibling track whose search fills this tab, '' when this track runs its own
  * @property {string} documents - JSON array of document paths this search reads besides doc_file (migrations/0017)
+ * @property {string} paused_since - ISO 8601 instant this search was paused, '' while it runs; only ever set on a feed group's root (migrations/0025_track_paused.sql)
  */
 
 /**
@@ -157,7 +158,7 @@
  */
 
 import { normalize as normalizeCompany } from "./exclude.js";
-import { searchRootKey } from "./tracks.js";
+import { searchRootKey, searchRootOf } from "./tracks.js";
 import { canonicalUrl } from "./url.js";
 import { today } from "./validate.js";
 
@@ -189,14 +190,16 @@ export const DELISTED_REASON = "posting taken down";
 const WRITTEN_UP = "role_search_line <> ''";
 
 // Every track column except `key`, split by audience: the client reads the
-// first list to draw tabs, and only prompt.js reads the second. POST
-// /api/config writes both.
+// first list to draw tabs, and prompt.js reads the second. POST /api/config
+// writes both. `paused_since` sits in the second because it is config the
+// tracker sets, not a display label, though the page reads it too (as `paused`,
+// resolved through the feed group - see getTracksAndSettings).
 export const TRACK_DISPLAY_FIELDS = ["label", "full_description", "sort_order"];
 export const TRACK_CONFIG_FIELDS = [
   "role_search_line", "target_companies", "search_note", "resume_line",
   "fit_clause", "fit_disqualifier", "fit_filter_step", "leads_note",
   "doc_file", "doc_summary", "doc_update_line", "intro_note", "report_line",
-  "screened_examples", "schedule_time", "fed_by", "documents",
+  "screened_examples", "schedule_time", "fed_by", "documents", "paused_since",
 ];
 
 /**
@@ -820,6 +823,13 @@ export class Db {
       };
       return track;
     });
+
+    // A tab another search fills is paused when that search is, and never
+    // carries a stamp of its own (migrations/0025_track_paused.sql). `paused`
+    // is the answer resolved through the feed group, so no reader has to find
+    // the root to know whether a tab is running.
+    const pausedAt = new Map(tracks.map((t) => [t.key, t.paused_since || ""]));
+    for (const t of tracks) t.paused = pausedAt.get(searchRootOf(t)) ?? t.paused_since ?? "";
 
     return { tracks, settings };
   }
