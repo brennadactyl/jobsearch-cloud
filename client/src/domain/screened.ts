@@ -14,6 +14,15 @@ import { isoDay } from "./format";
  */
 export const SCREENED = "screened";
 
+/**
+ * The Screened tab showing one search. The search rides in the URL so a run
+ * stamp's count can link straight to what that night set aside, and so the view
+ * is one someone can come back to.
+ */
+export function pathForSearch(search: string): string {
+  return search ? `/screened?search=${encodeURIComponent(search)}` : "/screened";
+}
+
 /** How far back the list looks. 0 is everything, and is last for that reason. */
 export const SCREENED_WINDOWS: readonly { days: number; label: string }[] = [
   { days: 7, label: "the last 7 days" },

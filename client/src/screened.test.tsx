@@ -80,6 +80,27 @@ describe("the screened tab", () => {
     expect(screen.queryByText(/above target level/)).toBeNull();
   });
 
+  it("opens on one search when a run stamp's count links to it", async () => {
+    vi.spyOn(client, "getData").mockResolvedValue(fixture);
+    window.history.pushState({}, "", "/");
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <App />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    // Alpha's stamp says what its last run kept and what it set aside; the
+    // second is the way in.
+    const alpha = screen.getAllByRole("link", { name: "5 screened out" })[0];
+    await userEvent.click(alpha);
+    await screen.findByRole("heading", { name: "What your searches set aside" });
+    expect(window.location.search).toBe("?search=alpha");
+    expect(screen.getByRole("button", { name: /Alpha roles/ })).toHaveAttribute("aria-pressed", "true");
+    expect(rows()).toHaveLength(3);
+  });
+
   it("marks a posting the person removed themselves, which no run decided", async () => {
     await openTab();
     const mine = screen.getByText("not for me").closest("tr")!;

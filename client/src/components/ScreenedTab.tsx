@@ -4,6 +4,7 @@
  * nothing here groups or judges a reason (docs/backlog.md).
  */
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Screened, TrackerData } from "../api/schema";
 import { safeUrl } from "../domain/format";
 import { countsBySearch, keptWithin, screenedWithin, SCREENED_WINDOWS } from "../domain/screened";
@@ -16,7 +17,10 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   // Read once per opening: a window that moved under someone mid-read would
   // drop a row between one glance and the next.
   const [now] = useState(() => Date.now());
-  const [search, setSearch] = useState(ALL);
+  // In the URL, so a run stamp can link to one search and Back undoes it.
+  const [params, setParams] = useSearchParams();
+  const search = params.get("search") ?? ALL;
+  const setSearch = (next: string) => setParams(next ? { search: next } : {}, { replace: true });
 
   const tracks = buildTracks(data.tracks);
   const inWindow = screenedWithin(data.screened, days, now);
