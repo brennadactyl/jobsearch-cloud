@@ -21,8 +21,11 @@ record, and they may want the search back.
 `tracks.paused_since` (ISO instant, empty when running), set on a feed group's
 root. A tab filled by that search (`fed_by`) is paused with it.
 
-- **Set through the tracker's own config**, `POST /api/config`, like the rest of
-  a track's settings. A migration adds the column.
+- **A person pauses their own search in the panel**, through `POST /api/settings`
+  under `searches`, beside the fields that section already saves. `POST
+  /api/config` still carries it for an operator. A migration adds the column.
+- **The server stamps the instant**, not the page: a save says paused or
+  running, and the server writes the time it happened or clears it.
 - **Pausing keeps everything:** leads, applications, screened rows, sweeps, the
   track doc and the config are untouched. The shared company list keeps the
   search's place in its rotation, so it resumes where it stopped.
@@ -48,8 +51,15 @@ root. A tab filled by that search (`fed_by`) is paused with it.
   date, in place of the last run. No amber "hasn't run" dot.
 - The Overview's searches table keeps its row, marked Paused, and the "reporting
   on schedule" line counts only running searches.
-- Pausing and resuming from the page belong to account settings; until then it
-  is a config change made for the person.
+- **Pausing and resuming is the person's own action**, in the account panel's
+  Searches section: each search says Running or Paused since a date, and the
+  control switches it, inside the panel's one Save. Pausing asks first, naming
+  what stops and saying the leads stay. Nobody's search is paused for them.
+- **A paused search's other fields stay editable.** Pausing is not archiving.
+- **The task it leaves behind.** A search stops being run the same night, since
+  the run refuses. Its scheduled task is removed by the next scheduler run,
+  which is an operator step, so the panel says the pause is in force now rather
+  than implying the machine has already been told.
 
 ## Order of work
 
