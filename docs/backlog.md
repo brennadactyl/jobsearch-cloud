@@ -180,7 +180,10 @@ doc, and a finding says whether anything was built on the wrong line.
   and no two are worded alike, so 33 rows in 30 days on one account are read one
   at a time. A stored kind makes them countable, and the grouped artboard of the
   [Screened postings mockup](https://claude.ai/artifact/EfsFEW2tDuUfEeBUAGJUYy)
-  is a day's work once it exists. It is a field a run reports, so the column and
+  is a day's work once it exists. **It counts distinct postings, not rows:** one
+  posting can be screened several times, and four of the twenty rows a live floor
+  accounts for are the same job at one company, so counting rows would overstate
+  the first number a person reads. It is a field a run reports, so the column and
   route, `tracker.ps1` and the prompt step go together - Backend Buddy and Prompt
   Bro, then Client Comrade for the grouping.
   The list, from counting every screened row on the five live searches:
