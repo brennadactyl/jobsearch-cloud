@@ -43,20 +43,27 @@ export function changedGeneral(stored: General, draft: Partial<General>): Partia
 export const SEARCH_KEYS = ["label", "role_search_line", "fit_clause", "fit_disqualifier"] as const;
 export type SearchKey = (typeof SEARCH_KEYS)[number];
 export type SearchFields = Record<SearchKey, string>;
-/** The edits in hand, by search key: only the fields someone has touched. */
-export type SearchDraft = Readonly<Record<string, Partial<SearchFields>>>;
+/**
+ * What one search's save carries: its prose fields, and whether it runs at all.
+ * `paused` is the wish, never a time - the server stamps the instant, and a
+ * search already paused keeps the instant it carries.
+ */
+export type SearchEdit = Partial<SearchFields> & { paused?: boolean };
+/** The edits in hand, by search key: only what someone has touched. */
+export type SearchDraft = Readonly<Record<string, SearchEdit>>;
 
-/** The fields of each search that differ from what's stored, as the save route takes them. */
-export function changedSearches(tracks: readonly Track[], draft: SearchDraft): Record<string, Partial<SearchFields>> {
-  const changed: Record<string, Partial<SearchFields>> = {};
+/** What differs from what's stored, per search, as the save route takes it. */
+export function changedSearches(tracks: readonly Track[], draft: SearchDraft): Record<string, SearchEdit> {
+  const changed: Record<string, SearchEdit> = {};
   for (const track of tracks) {
     const edits = draft[track.key];
     if (!edits) continue;
-    const fields: Partial<SearchFields> = {};
+    const fields: SearchEdit = {};
     for (const key of SEARCH_KEYS) {
       const value = edits[key];
       if (value !== undefined && value.trim() !== track[key].trim()) fields[key] = value.trim();
     }
+    if (edits.paused !== undefined && edits.paused !== Boolean(track.paused)) fields.paused = edits.paused;
     if (Object.keys(fields).length) changed[track.key] = fields;
   }
   return changed;
@@ -70,7 +77,7 @@ export function changedSearches(tracks: readonly Track[], draft: SearchDraft): R
  */
 export function blankField(
   general: Partial<General>,
-  searches: Record<string, Partial<SearchFields>>,
+  searches: Record<string, SearchEdit>,
 ): { field: GeneralKey | "label" | "role_search_line"; search: string | null } | null {
   if (general.display_title !== undefined && !general.display_title) {
     return { field: "display_title", search: null };
@@ -84,13 +91,15 @@ export function blankField(
 }
 
 /** What leaving now would lose from General and Searches, or "" when nothing would. */
-export function unsavedAccountSentence(
-  general: Partial<General>,
-  searches: Record<string, Partial<SearchFields>>,
-): string {
+export function unsavedAccountSentence(general: Partial<General>, searches: Record<string, SearchEdit>): string {
   const named = GENERAL_KEYS.filter((k) => k in general).map((k) => CALLED[k]);
-  const count = Object.keys(searches).length;
-  if (count) named.push(count === 1 ? "what a search looks for" : `what ${count} searches look for`);
+  const entries = Object.values(searches);
+  // A pause is named apart: "what a search looks for" would not tell someone
+  // they are about to lose a search they meant to stop.
+  const fields = entries.filter((e) => SEARCH_KEYS.some((k) => k in e)).length;
+  const pauses = entries.filter((e) => e.paused !== undefined).length;
+  if (fields) named.push(fields === 1 ? "what a search looks for" : `what ${fields} searches look for`);
+  if (pauses) named.push(pauses === 1 ? "whether a search runs" : `whether ${pauses} searches run`);
   if (!named.length) return "";
   return `You changed ${joinNames(named)} but didn't save, so they stay as they are.`;
 }

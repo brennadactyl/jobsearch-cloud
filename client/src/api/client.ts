@@ -5,7 +5,7 @@
  * because the token it carries is the one being discarded.
  */
 import { z } from "zod";
-import type { SearchFields } from "../domain/panel";
+import type { SearchEdit } from "../domain/panel";
 import type { Places } from "../domain/places";
 import {
   intakeResponseSchema,
@@ -264,8 +264,8 @@ export type SettingsChanges = {
   display_title?: string;
   pronouns?: string;
   excluded_companies?: string[];
-  /** Each changed search, by its key: only the fields that changed. */
-  searches?: Record<string, Partial<SearchFields>>;
+  /** Each changed search, by its key: only what changed, including whether it runs. */
+  searches?: Record<string, SearchEdit>;
 } & Partial<Places>;
 
 /**
@@ -300,6 +300,8 @@ export function saveSettings(changes: SettingsChanges) {
           role_search_line: z.string().optional(),
           fit_clause: z.string().optional(),
           fit_disqualifier: z.string().optional(),
+          /** The resolved state, as the page reads it everywhere: a tab carries its root's. */
+          paused: z.string().optional(),
         }),
       )
       .default({}),
