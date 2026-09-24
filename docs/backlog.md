@@ -93,6 +93,22 @@ doc, and a finding says whether anything was built on the wrong line.
   `role_search_line`, no doc) and give a built one prose only, leaving its doc,
   `documents`, `schedule_time` and `label` alone. No server change. Moot if the
   doc split above ships first.
+- **Reset a search, from its block in the account panel.** A search whose rules
+  were wrong for weeks carries weeks of wrong results, and there is no way back
+  short of an operator deleting rows. Reset empties what the runs put there for
+  one search: its leads and its screened rows. It works on a single tab as well as
+  on a search that fills several, because a tab is where a mis-scoped rule shows.
+  It keeps what the person did: applications stay, since they record what someone
+  applied to and not what a search found. What resetting does to the company
+  rotation is the open question - leaving it means the same companies are not
+  revisited for weeks, clearing it means the next night re-crawls from scratch -
+  and it is the difference between a reset that looks empty and one that refills.
+  It is the most destructive thing the panel would offer, so: a danger-styled
+  step that names the search and the counts it is about to delete, confirmed by
+  typing the search's name, outside the panel's one Save because it isn't an edit,
+  and not undoable - say so rather than implying a trash can. One route of its own,
+  never a side effect of another write. Client Comrade and Backend Buddy, with
+  Prompt Bro on the rotation.
 - **An `attempts` column on `intake`** - the retry bound is a three-day rule on
   `sent_at` today, which is the right stop in the wrong unit. Counting nights is
   one column and one increment, and needs its own migration.
