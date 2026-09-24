@@ -206,6 +206,17 @@ export const dataSchema = z.object({
   leads: z.array(leadSchema).default([]),
   applications: z.array(applicationSchema).default([]),
   screened: z.array(screenedSchema).default([]),
+  /**
+   * How much of the screened record `screened` holds: `days` is the window it
+   * was cut to and `older` how many rows are kept but not sent. `days: 0` means
+   * no window, which is what `?screened=all` and a server without the window
+   * both answer, so one reader handles every case. Nothing is deleted - the
+   * rows outside the window still stop a later run re-finding those postings.
+   */
+  screened_window: z
+    .object({ days: z.number().default(0), older: z.number().default(0) })
+    .nullish()
+    .transform((w) => w ?? { days: 0, older: 0 }),
   tracks: z.array(trackSchema).default([]),
   settings: settingsSchema,
 });

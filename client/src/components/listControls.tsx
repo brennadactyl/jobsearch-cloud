@@ -94,11 +94,19 @@ export function ExportButton<T>({
   all,
   columns,
   label,
+  loadAll,
 }: {
   shown: readonly T[];
   all: readonly T[];
   columns: readonly Column<T>[];
   label: string;
+  /**
+   * Fetches the rows "all" means when the page holds only part of them, as the
+   * screened list does: a file of the window would be a quieter kind of wrong
+   * than an empty one. Its length is unknown until it answers, so the menu
+   * names it without a count.
+   */
+  loadAll?: () => Promise<readonly T[]>;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -127,7 +135,14 @@ export function ExportButton<T>({
     downloadFile(name, toCsv(columns, rows), "text/csv;charset=utf-8");
   };
 
-  if (shown.length === all.length) {
+  /** Writes what the server holds when the page holds less, and what the page holds otherwise. */
+  const saveEverything = async () => {
+    if (!loadAll) return save(all, false);
+    setOpen(false);
+    save(await loadAll(), false);
+  };
+
+  if (shown.length === all.length && !loadAll) {
     const n = all.length;
     const title =
       n === 0 ? "Nothing in this list to export" : n === 1 ? "Download the one row as a CSV file" : `Download all ${n} rows as a CSV file`;
@@ -167,8 +182,14 @@ export function ExportButton<T>({
           >
             Export {shown.length} shown
           </button>
-          <button className="export-item" type="button" role="menuitem" autoFocus={!shown.length} onClick={() => save(all, false)}>
-            Export all {all.length}
+          <button
+            className="export-item"
+            type="button"
+            role="menuitem"
+            autoFocus={!shown.length}
+            onClick={() => void saveEverything()}
+          >
+            {loadAll ? "Export everything" : `Export all ${all.length}`}
           </button>
         </div>
       )}

@@ -140,6 +140,9 @@ export const data: TrackerData = {
   leads,
   applications,
   screened,
+  // No window: the fixture's rows are the whole record, as a server without the
+  // window answers.
+  screened_window: { days: 0, older: 0 },
   tracks,
   settings,
 };

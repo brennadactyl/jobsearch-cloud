@@ -57,6 +57,9 @@ export const LABELS = {
   responded: "Responded",
   applyRate: "Apply rate",
   responseRate: "Response rate",
+  setAside: "Set aside",
+  setAsideBy: "Set aside by",
+  why: "Why",
 } as const;
 
 /**
