@@ -127,6 +127,21 @@ doc, and a finding says whether anything was built on the wrong line.
   is a day's work once it exists. It is a field a run reports, so the column and
   route, `tracker.ps1` and the prompt step go together - Backend Buddy and Prompt
   Bro, then Client Comrade for the grouping.
+  The list, from counting every screened row on the five live searches:
+  `dead`, `duplicate`, `out-of-scope`, `pay-below-floor`, `wrong-level`,
+  `wrong-role`, `contract`, `other`. A third of rows cite two reasons, so the run
+  picks by a fixed precedence in that order - first one that applies - and the
+  sentence keeps saying everything. `contract` is in from the start although no
+  current search excludes contract work, because adding a kind later means
+  backfilling again.
+  **The path that can lose a row forgives; the path that can't refuses.**
+  `POST /api/screened` stores an unknown kind as `other` and reports the value,
+  since refusing loses the only record stopping tomorrow's run re-finding that
+  posting. The operator backfill refuses a kind outside the list and writes
+  nothing, and writes only rows whose kind is still empty.
+  A delisting is stored as `dead` and also carries the exact reason
+  `posting taken down`, which `countRunActivity` splits on. Once the backfill has
+  run, that split reads the kind and the string stops being load-bearing.
 
 ## Worth doing, unscheduled
 
