@@ -3646,6 +3646,42 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await req("GET", "/api/prompt/CPM", { token: PS })).status === 200);
   check("resuming leaves everything as it was before the pause",
     (await psSnapshot()) === psBefore);
+
+  // The panel's own switch: a person says paused or running and the server
+  // stamps the time (docs/pause-search-plan.md, "The switch").
+  const psSave = (token, body) => req("POST", "/api/settings", { token, body });
+  const psPanelPause = await psSave(PS, { searches: { CPM: { paused: true } } });
+  const psPanelPaused = await psTracks(PS);
+  const stamped = psTrack(psPanelPaused, "CPM")?.paused_since || "";
+  check("the panel pauses a search without sending a time, and the server stamps it",
+    psPanelPause.status === 200 && /^\d{4}-\d\d-\d\dT.*Z$/.test(stamped) &&
+    Math.abs(Date.parse(stamped) - Date.now()) < 60_000, JSON.stringify([psPanelPause.json?.error, stamped]));
+  check("the reply carries the stamp and the tab's resolved state",
+    psPanelPause.json?.searches?.CPM?.paused_since === stamped &&
+    psPanelPause.json?.searches?.CPM?.paused === stamped &&
+    psPanelPause.json?.searches?.["cpm-lead"]?.paused === stamped &&
+    psPanelPause.json?.searches?.["cpm-lead"]?.paused_since === "",
+    JSON.stringify(psPanelPause.json?.searches?.["cpm-lead"]));
+  check("its prompt is refused while paused, with the code a runner reads",
+    (await req("GET", "/api/prompt/CPM", { token: PS })).json?.code === "paused");
+  await psSave(PS, { searches: { CPM: { label: "CPM renamed" } } });
+  check("a save of another field is not a new pause - the instant stands",
+    psTrack(await psTracks(PS), "CPM")?.paused_since === stamped);
+  check("pausing again keeps the instant it already carries",
+    (await psSave(PS, { searches: { CPM: { paused: true } } })).json?.searches?.CPM?.paused_since === stamped);
+  const psPauseTab = await psSave(PS, { searches: { "cpm-lead": { paused: true } } });
+  check("a tab can't be paused on its own - the refusal names the search that fills it",
+    psPauseTab.status === 400 && psPauseTab.json?.field === "paused" && /"CPM"/.test(psPauseTab.json?.error || ""),
+    JSON.stringify(psPauseTab.json));
+  check("paused must be true or false, not a date someone typed",
+    (await psSave(PS, { searches: { CPM: { paused: "2026-09-18" } } })).json?.field === "paused");
+  const psPanelResume = await psSave(PS, { searches: { CPM: { paused: false } } });
+  check("and the panel resumes it, clearing the stamp everywhere",
+    psPanelResume.status === 200 && psPanelResume.json?.searches?.CPM?.paused_since === "" &&
+    psPanelResume.json?.searches?.["cpm-lead"]?.paused === "" &&
+    (await req("GET", "/api/prompt/CPM", { token: PS })).status === 200);
+  check("another account's searches are untouched by either",
+    psTrack(await psTracks(PS_B), "CPM")?.paused_since === "");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

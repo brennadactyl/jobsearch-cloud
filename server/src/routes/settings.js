@@ -37,11 +37,20 @@ const ACCEPTED = ["resumes", "searches", ...LOCATION_SETTING_KEYS, ...PANEL_SETT
 // up (db.js WRITTEN_UP), so clearing it would put the search back in front of
 // the overnight run as one still to build. The two rules may be cleared,
 // because a rule someone no longer wants is one they can delete.
+// `paused` is the one that isn't stored as sent: it is true or false, and the
+// server stamps `paused_since` or clears it. Only the track that runs a search
+// carries the switch - a tab follows its root - so pausing a tab is refused,
+// naming the search to pause instead.
 const SEARCH_FIELD_CHECKS = {
   label: (f, v) => nameError(f, v, TRACK_LABEL_MAX_CHARS),
   role_search_line: (f, v) => nameError(f, v, ROLE_LINE_MAX_CHARS),
   fit_clause: (f, v) => searchProseError(f, v, FIT_PROSE_MAX_CHARS),
   fit_disqualifier: (f, v) => searchProseError(f, v, FIT_PROSE_MAX_CHARS),
+  paused: (f, v, track) => {
+    if (typeof v !== "boolean") return "paused must be true or false";
+    if (track.fed_by) return `"${track.fed_by}" fills this tab - pause that search and this tab pauses with it`;
+    return "";
+  },
 };
 
 // Every refusal about a chosen resume says which search it is about, so the
@@ -54,11 +63,11 @@ function refuse(status, search, error) {
  * POST /api/settings - requires a Bearer token. Body `{ resumes?: { <search>:
  * <path> }, search_locations?, excluded_locations?, priority_locations?,
  * location_note?, display_title?, pronouns?, excluded_companies?, searches?:
- * { <key>: { label?, role_search_line?, fit_clause?, fit_disqualifier? } } }`
- * -> `{ resumes: { <search>: { documents, profile_pending } }, locations:
- * { <key>: <stored value> }, settings: { display_title, pronouns,
+ * { <key>: { label?, role_search_line?, fit_clause?, fit_disqualifier?,
+ * paused? } } }` -> `{ resumes: { <search>: { documents, profile_pending } },
+ * locations: { <key>: <stored value> }, settings: { display_title, pronouns,
  * excluded_companies }, searches: { <key>: { label, role_search_line,
- * fit_clause, fit_disqualifier } } }`.
+ * fit_clause, fit_disqualifier, paused_since, paused } } }`.
  *
  * The account panel's one Save, so a request may carry a resume choice, a place
  * edit, a page title and a tab rename together, and everything it can write
@@ -78,6 +87,13 @@ function refuse(status, search, error) {
  * no longer wants is one they can delete; `label` and `role_search_line` are
  * refused empty (validate.js, db.js WRITTEN_UP). The reply's `searches` carries
  * every search, so one reply refreshes the panel.
+ *
+ * `paused` is true or false, and the server stamps `paused_since` or clears it:
+ * the page never sends a time, and pausing a search already paused keeps the
+ * instant it carries (docs/pause-search-plan.md). Only the track that runs a
+ * search can be paused - a tab follows its root - so `paused` on a fed tab is a
+ * 400 naming the search to pause instead. The reply carries each search's
+ * `paused_since` and the resolved `paused` a reader shows.
  *
  * The location lists and note are stored as typed, trimmed at the ends, and
  * take effect on each search's next run (docs/location-settings-plan.md). Each
@@ -166,15 +182,23 @@ export async function handlePostSettings({ request, db, docs }) {
       return json({ error: `the entry for ${key} must be an object of fields`, search: key, field: "label" }, 400);
     }
     for (const field of Object.keys(sent)) {
-      if (!PANEL_TRACK_FIELDS.includes(field)) {
+      if (!SEARCH_FIELD_CHECKS[field]) {
         return json({ error: `"${field}" is not something this page can change about a search`, search: key, field }, 400);
       }
     }
     const fields = {};
     for (const [field, value] of Object.entries(sent)) {
-      const problem = SEARCH_FIELD_CHECKS[field](field, value);
+      const problem = SEARCH_FIELD_CHECKS[field](field, value, byKey.get(key));
       if (problem) return json({ error: problem, search: key, field }, 400);
-      fields[field] = value.trim();
+      if (field !== "paused") fields[field] = value.trim();
+    }
+    // The page says paused or running and the server stamps the time, so no
+    // caller can date a pause (docs/pause-search-plan.md, "The switch").
+    // Pausing a search that is already paused keeps the instant it carries,
+    // since a save of another field is not a new pause.
+    if (sent.paused !== undefined) {
+      const stored = byKey.get(key).paused_since || "";
+      fields.paused_since = sent.paused ? stored || new Date().toISOString() : "";
     }
     if (Object.keys(fields).length) bySearch[key] = fields;
   }
@@ -248,9 +272,10 @@ async function panelState(db) {
       excluded_companies: settings.excluded_companies,
     },
     // Every search, not only the ones a save named, so one reply refreshes the
-    // whole panel.
+    // whole panel. `paused` rides along because it is what a reader shows: on a
+    // tab it is the root's, while the tab's own `paused_since` stays empty.
     searches: Object.fromEntries(
-      tracks.map((t) => [t.key, Object.fromEntries(PANEL_TRACK_FIELDS.map((f) => [f, t[f]]))])
+      tracks.map((t) => [t.key, { ...Object.fromEntries(PANEL_TRACK_FIELDS.map((f) => [f, t[f]])), paused: t.paused }])
     ),
   };
 }
