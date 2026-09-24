@@ -3953,5 +3953,46 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await skRow(SK, "not-for-me"))?.added_by === "hand", JSON.stringify(await skRow(SK, "not-for-me")));
 }
 
+{
+  console.log("\n== the page is served a window of the screened table ==");
+  // The rows older than the window are kept and still do their work: every
+  // write is deduped against the whole table, whatever a reader has seen
+  // (routes/data.js SCREENED_WINDOW_DAYS).
+  const swRun = Date.now();
+  const name = `Window ${swRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name, password: "window-long-password" } });
+  const SW = (await req("POST", "/api/login", { body: { name, password: "window-long-password" } })).json.token;
+  await req("POST", "/api/config", { token: SW, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+  const swUrl = (n) => `https://example.com/window/${swRun.toString(36)}/${n}`;
+  const day = (daysAgo) => new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+  const screen = (url, on) => req("POST", "/api/screened", { token: SW, body: { search: "SWE", on,
+    screened: [{ search: "SWE", url, company: "Acme", title: "SDE", reason: "out of scope", kind: "out-of-scope" }] } });
+  await screen(swUrl("recent"), day(2));
+  await screen(swUrl("edge"), day(89));
+  await screen(swUrl("old"), day(120));
+  await screen(swUrl("ancient"), day(400));
+
+  const windowed = (await req("GET", "/api/data", { token: SW })).json;
+  const has = (data, n) => data.screened.some((r) => r.url === swUrl(n));
+  check("the page gets the last 90 days, and is told how many older rows are kept",
+    has(windowed, "recent") && has(windowed, "edge") && !has(windowed, "old") && !has(windowed, "ancient") &&
+    windowed.screened_window?.days === 90 && windowed.screened_window?.older === 2,
+    JSON.stringify([windowed.screened.length, windowed.screened_window]));
+  const everything = (await req("GET", "/api/data?screened=all", { token: SW })).json;
+  check("and an export can ask for every row, so \"everything this tab holds\" stays true",
+    has(everything, "old") && has(everything, "ancient") && everything.screened.length === 4 &&
+    everything.screened_window?.days === 0 && everything.screened_window?.older === 0,
+    JSON.stringify(everything.screened_window));
+  // The point of keeping them: a posting screened outside the window is still
+  // one the next run is told it has already seen.
+  const again = await screen(swUrl("ancient"), day(1));
+  check("a posting screened before the window still can't come back as a new row",
+    again.json?.added === 0 && again.json?.duplicates === 1, JSON.stringify(again.json));
+  const asLead = await req("POST", "/api/leads", { token: SW, body: { leads: [
+    { search: "SWE", company: "Acme", title: "SDE", location: "Remote", url: swUrl("ancient") }] } });
+  check("nor as a new lead",
+    asLead.json?.added === 0, JSON.stringify(asLead.json));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
