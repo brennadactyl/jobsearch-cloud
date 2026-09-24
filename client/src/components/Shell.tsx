@@ -109,7 +109,9 @@ export default function Shell({
               <Link
                 key={t.id}
                 to={t.path}
-                className={t.paused ? "tab paused" : "tab"}
+                // Screened sits back until you want it: it holds nothing to
+                // act on, and it shouldn't compete with the searches beside it.
+                className={`tab${t.paused ? " paused" : ""}${t.kind === "screened" ? " quiet" : ""}`}
                 // The whole tab carries the pause: greyed with no symbol, the
                 // hover has to explain it, and it should work anywhere on it.
                 title={t.paused ? pausedTitle(t.paused) : undefined}
