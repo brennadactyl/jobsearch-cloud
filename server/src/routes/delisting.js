@@ -141,7 +141,10 @@ async function delistLead(db, lead, on) {
   //
   // `removed` is what the DELETE actually matched: two concurrent reports of
   // one lead both pass the check above, and the second deletes nothing.
-  const removed = await db.deleteLeadAndScreen(lead, DELISTED_REASON, on, "run");
+  // A run can report a posting gone but can never file one as a rejection: it
+  // was a lead on this person's board first, and that is what `delisted` marks
+  // (validate.js SCREENED_KINDS). Stamped here because nothing else can.
+  const removed = await db.deleteLeadAndScreen(lead, DELISTED_REASON, on, "run", "delisted");
   return { kept: false, removed };
 }
 

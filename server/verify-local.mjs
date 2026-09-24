@@ -3858,6 +3858,23 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await skRow(SK, "said-nothing"))?.kind === "wrong-level");
   check("another account's row named in this account's fill is untouched",
     (await skRow(SK_B, "theirs"))?.kind === "");
+
+  // A run reports a posting gone through /api/delist, never as a rejection, so
+  // the route stamps the kind that no run can send.
+  const skLead = await req("POST", "/api/leads", { token: SK.token, body: { leads: [
+    { search: "SWE", company: "Acme", title: "Staff SDE", location: "Remote", url: skUrl("was-a-lead") }] } });
+  const skGone = await req("POST", "/api/delist", { token: SK.token, body: {
+    search: "SWE", on: "2026-09-24", urls: [skUrl("was-a-lead")] } });
+  check("a delisted posting's screened row is filed as delisted by the route",
+    skLead.json?.added === 1 && skGone.status === 200 && (await skRow(SK, "was-a-lead"))?.kind === "delisted",
+    JSON.stringify([skGone.status, (await skRow(SK, "was-a-lead"))?.kind]));
+  const skHand = await req("POST", "/api/leads", { token: SK.token, body: { leads: [
+    { search: "SWE", company: "Acme", title: "Principal SDE", location: "Remote", url: skUrl("not-for-me") }] } });
+  const handId = (await req("GET", "/api/data", { token: SK.token })).json.leads.find((l) => l.url === skUrl("not-for-me"))?.id;
+  await req("POST", "/api/delete-leads", { token: SK.token, body: { ids: [handId], reason: "not for me" } });
+  check("a lead someone clears off their board carries no kind - it isn't a search's rejection",
+    skHand.json?.added === 1 && (await skRow(SK, "not-for-me"))?.kind === "" &&
+    (await skRow(SK, "not-for-me"))?.added_by === "hand", JSON.stringify(await skRow(SK, "not-for-me")));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

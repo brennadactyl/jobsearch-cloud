@@ -1831,9 +1831,15 @@ export class Db {
    * @param {'run'|'hand'} addedBy - 'run' for a search reporting a posting gone,
    *   'hand' for a person clearing it off their board. Required, not defaulted:
    *   countRunActivity counts only 'run' (docs/glossary.md#postings).
+   * @param {string} kind - the screened row's kind (validate.js SCREENED_KINDS).
+   *   'delisted' for a posting that went away, since no run can report that as
+   *   a rejection - it was a lead on this person's board first. '' for a lead
+   *   someone cleared off their board themselves: that is a decision, not one
+   *   of the sorts of rejection a search makes, and inventing a kind for it
+   *   would put it in a group it doesn't belong to.
    * @returns {Promise<boolean>} true if the lead row was actually deleted
    */
-  async deleteLeadAndScreen(lead, reason, date, addedBy) {
+  async deleteLeadAndScreen(lead, reason, date, addedBy, kind) {
     // Throw rather than default: a fallback would misattribute the rows. Only
     // a programming error reaches this, never request input.
     if (addedBy !== "run" && addedBy !== "hand") {
@@ -1842,8 +1848,8 @@ export class Db {
     const results = await this.d1.batch([
       this.d1
         .prepare(
-          `INSERT OR IGNORE INTO screened (user_id, search, url, company, title, location, reason, date, added_by, found)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT OR IGNORE INTO screened (user_id, search, url, company, title, location, reason, date, added_by, found, kind)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           this.userId,
@@ -1855,7 +1861,8 @@ export class Db {
           reason,
           date || today(),
           addedBy,
-          lead.found || ""
+          lead.found || "",
+          kind || ""
         ),
       this.d1
         .prepare("DELETE FROM leads WHERE id = ? AND user_id = ?")
