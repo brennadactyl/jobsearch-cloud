@@ -180,10 +180,13 @@ doc, and a finding says whether anything was built on the wrong line.
   and no two are worded alike, so 33 rows in 30 days on one account are read one
   at a time. A stored kind makes them countable, and the grouped artboard of the
   [Screened postings mockup](https://claude.ai/artifact/EfsFEW2tDuUfEeBUAGJUYy)
-  is a day's work once it exists. **It counts distinct postings, not rows.** Rows
-  and postings match today, kind for kind, but a job re-posted under a new url is
-  screened again, and counting rows would then overstate what a rule cost the
-  person reading it. It is a field a run reports, so the column and
+  is a day's work once it exists. **It counts by url**, which is the only key the
+  data has: rows and urls match today, kind for kind. A job re-posted under a new
+  url counts twice, and the page must not guess at company-plus-title to merge
+  them - that splits two real openings sharing a title and still misses a re-post
+  whose title moved a word. If those counts ever matter, the run says a posting is
+  a re-post, the way it now says which kind. It is a field a run reports, so the
+  column and
   route, `tracker.ps1` and the prompt step go together - Backend Buddy and Prompt
   Bro, then Client Comrade for the grouping.
   The list, from counting every screened row on the five live searches:
