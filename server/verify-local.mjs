@@ -732,6 +732,59 @@ const listed = buildSearchPrompt({
     docStep.includes("correct a line in place") && docStep.includes("dated note"));
 }
 
+// ---- A search's pay floor, composed into step 7's two lists.
+//
+// The amount is the person's own text, so the clauses have to read sensibly
+// interpolated verbatim, and nothing here converts a period or a currency.
+{
+  const step7 = (track) => {
+    const p = buildSearchPrompt({
+      user: { id: "u", name: "Nobody" },
+      track: { key: "T", label: "T", full_description: "t", role_search_line: "r", ...track },
+      settings: {},
+      feeds: [],
+    });
+    return p.split("\n").find((l) => l.startsWith("7. ")) || "";
+  };
+  const annual = step7({
+    fit_clause: "a Senior or above product role",
+    fit_disqualifier: "below Senior",
+    pay_floor: "$195K",
+    pay_floor_unit: "year",
+  });
+  check("step 7 keeps pay that reaches the floor, a figure above it, or no stated pay",
+    annual.includes("paying at least $195K a year") &&
+    annual.includes("includes that or lies entirely above it") &&
+    annual.includes("single stated figure at or above it") &&
+    annual.includes("stating no pay at all"));
+  check("and screens only pay wholly below it, naming the reason to record",
+    annual.includes('the whole stated pay sits below $195K a year (screen it with the reason "range entirely below $195K")'));
+  // Anchored on what follows the floor rather than what precedes it: a rule
+  // added after the duplicate clause would otherwise keep this green while the
+  // floor stopped being last.
+  check("the floor goes last in each list, after the search's own fit rules",
+    /a Senior or above product role, and paying at least \$195K[^,]*$|and paying at least \$195K.*- a finding/.test(annual) &&
+    /"range entirely below \$195K"\)\) - goes to step 9b/.test(annual));
+  const hourly = step7({ pay_floor: "$62", pay_floor_unit: "hour" });
+  check("an hourly floor is stated as an hour, with no conversion anywhere in step 7",
+    hourly.includes("paying at least $62 an hour") && !/2,?080|annual equivalent|per year/.test(hourly));
+  check("the amount reaches the prompt as typed",
+    step7({ pay_floor: "180k", pay_floor_unit: "year" }).includes("paying at least 180k a year"));
+  // A comma in the amount is the likeliest thing a person types, and both
+  // clauses join lists - the finding list with "and", the disqualified list
+  // with commas - so an amount carrying one must not read as another item.
+  const comma = step7({ fit_disqualifier: "below Senior", pay_floor: "$195,000", pay_floor_unit: "year" });
+  check("an amount containing a comma stays one clause in both lists",
+    comma.includes("paying at least $195,000 a year") &&
+    /"range entirely below \$195,000"\)\) - goes to step 9b/.test(comma) &&
+    !/below Senior, \$195,000|, 000/.test(comma));
+  check("a search with no floor composes nothing about pay",
+    !/paying at least|whole stated pay/.test(step7({ fit_clause: "at Senior or Staff level" })));
+  check("and neither half of a floor composes on its own",
+    !/paying at least/.test(step7({ pay_floor: "195k", pay_floor_unit: "" })) &&
+    !/paying at least/.test(step7({ pay_floor: "", pay_floor_unit: "year" })));
+}
+
 // ---- A lead's area: one of the places ranked first, copied exactly.
 {
   const syncStep = (settings) => {
