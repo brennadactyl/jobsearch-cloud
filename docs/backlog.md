@@ -140,12 +140,17 @@ doc, and a finding says whether anything was built on the wrong line.
   route, `tracker.ps1` and the prompt step go together - Backend Buddy and Prompt
   Bro, then Client Comrade for the grouping.
   The list, from counting every screened row on the five live searches:
-  `dead`, `duplicate`, `out-of-scope`, `pay-below-floor`, `wrong-level`,
-  `wrong-role`, `contract`, `other`. A third of rows cite two reasons, so the run
-  picks by a fixed precedence in that order - first one that applies - and the
-  sentence keeps saying everything. `contract` is in from the start although no
-  current search excludes contract work, because adding a kind later means
-  backfilling again.
+  `delisted`, `dead`, `duplicate`, `out-of-scope`, `pay-below-floor`,
+  `wrong-level`, `wrong-role`, `contract`, `other`. A third of rows cite two
+  reasons, so the run picks by a fixed precedence in that order - first one that
+  applies - and the sentence keeps saying everything. `contract` is in from the
+  start although no current search excludes contract work, because adding a kind
+  later means backfilling again.
+  **`delisted` is its own kind, not `dead`:** a posting found already gone was
+  never anyone's, while a delisted one was a lead on a person's board and then
+  vanished, which is the only screened row that records something lost. It is
+  also the row the 30-day purge keeps, so the distinction has to be stored rather
+  than inferred from a reason string.
   **The path that can lose a row forgives; the path that can't refuses.**
   `POST /api/screened` stores an unknown kind as `other` and reports the value,
   since refusing loses the only record stopping tomorrow's run re-finding that
