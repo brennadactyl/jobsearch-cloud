@@ -15,6 +15,17 @@ export type General = Pick<Settings, "display_title" | "pronouns" | "excluded_co
 export const GENERAL_KEYS = ["display_title", "pronouns", "excluded_companies"] as const;
 export type GeneralKey = (typeof GENERAL_KEYS)[number];
 
+/**
+ * How each General question is asked. Setup asks all three of a person who has
+ * no tracker yet, and asks them in these words: one question, one wording,
+ * wherever it is asked.
+ */
+export const GENERAL_QUESTIONS: Readonly<Record<GeneralKey, string>> = {
+  display_title: "What should this page be called?",
+  pronouns: "How should a run write about you?",
+  excluded_companies: "Companies you'd never work for",
+};
+
 /** What each setting is called in the sentence about leaving without saving. */
 const CALLED: Readonly<Record<GeneralKey, string>> = {
   display_title: "what this page is called",
@@ -42,6 +53,19 @@ export function changedGeneral(stored: General, draft: Partial<General>): Partia
 /** What the Searches section edits about one search. */
 export const SEARCH_KEYS = ["label", "role_search_line", "fit_clause", "fit_disqualifier"] as const;
 export type SearchKey = (typeof SEARCH_KEYS)[number];
+
+/**
+ * How each question about a search is asked. Setup asks three of these too, of
+ * a search it is building, and asks them in these words: a question worded one
+ * way at setup and another in the panel reads as two different questions about
+ * the same answer. The hints differ, because the situations do.
+ */
+export const SEARCH_QUESTIONS: Readonly<Record<SearchKey, string>> = {
+  label: "What this search is called",
+  role_search_line: "What roles should this search look for?",
+  fit_clause: "What makes a posting worth keeping?",
+  fit_disqualifier: "What rules a posting out?",
+};
 export type SearchFields = Record<SearchKey, string>;
 /**
  * What one search's save carries: its prose fields, and whether it runs at all.

@@ -18,6 +18,7 @@ import {
   setupProblems,
   type SetupProblems,
 } from "../domain/onboarding";
+import { GENERAL_QUESTIONS, SEARCH_QUESTIONS } from "../domain/panel";
 import { listEntries, PLACE_QUESTIONS } from "../domain/places";
 import { saved, useSaved } from "../ui/saved";
 import PlaceChips from "./PlaceChips";
@@ -164,11 +165,11 @@ function RoleBlock({
           </button>
         )}
       </div>
-      <Field label={<label htmlFor={`${id}-name`}>Call it</label>} hint="This is the name on its tab.">
+      <Field label={<label htmlFor={`${id}-name`}>{SEARCH_QUESTIONS.label}</label>} hint="This is the name on its tab.">
         <input id={`${id}-name`} type="text" placeholder="Engineering" value={role.name} onChange={set("name")} />
       </Field>
       <Field
-        label={<label htmlFor={`${id}-titles`}>What roles?</label>}
+        label={<label htmlFor={`${id}-titles`}>{SEARCH_QUESTIONS.role_search_line}</label>}
         problem={problem}
         hint="Titles and seniority, e.g. “Senior or Staff backend engineer”. Anything you don't want goes in the box below."
       >
@@ -195,7 +196,7 @@ function RoleBlock({
         />
       </Field>
       <Field
-        label={<label htmlFor={`${id}-rules`}>Anything that rules a job out</label>}
+        label={<label htmlFor={`${id}-rules`}>{SEARCH_QUESTIONS.fit_disqualifier}</label>}
         optional
         hint="Only real mismatches — something you genuinely don't have or won't do. Anything vaguer here quietly hides jobs you'd have wanted."
       >
@@ -210,7 +211,7 @@ function RoleBlock({
       <Field
         label={<label htmlFor={`${id}-pay`}>Lowest acceptable pay</label>}
         optional
-        hint="A posting that states lower pay is screened out. One that doesn't say is kept."
+        hint="A posting stays if its range reaches this, or if it names no pay at all. One whose whole range sits below it is screened out."
       >
         <input id={`${id}-pay`} type="text" placeholder="$180k base" value={role.min_pay} onChange={set("min_pay")} />
       </Field>
@@ -351,15 +352,15 @@ export default function Setup({
           </p>
           <p className="setup-lede">You fill this in once, so take your time with it.</p>
 
-          <Field label={<label htmlFor={`${id}-title`}>What should this page be called?</label>}>
+          <Field label={<label htmlFor={`${id}-title`}>{GENERAL_QUESTIONS.display_title}</label>}>
             <input id={`${id}-title`} type="text" value={answers.page_title} onChange={(e) => set("page_title", e.target.value)} />
           </Field>
           <Field
-            label="Your pronouns"
+            label={GENERAL_QUESTIONS.pronouns}
             optional
             hint="Used when the search writes about you. Skip it and the search uses they/them."
           >
-            <div className="viewsw setup-pronouns" role="group" aria-label="Your pronouns">
+            <div className="viewsw setup-pronouns" role="group" aria-label={GENERAL_QUESTIONS.pronouns}>
               {PRONOUNS.map((p) => (
                 <button
                   key={p}
@@ -500,7 +501,7 @@ export default function Setup({
 
           <SetupHeading title="Anything else" />
           <Field
-            label={<label htmlFor={`${id}-never`}>Companies you'd never work for</label>}
+            label={<label htmlFor={`${id}-never`}>{GENERAL_QUESTIONS.excluded_companies}</label>}
             hint="These are never searched and never shown, at all."
           >
             <input
