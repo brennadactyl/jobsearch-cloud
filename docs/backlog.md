@@ -178,6 +178,9 @@ doc, and a finding says whether anything was built on the wrong line.
   account can read every account's rows in D1. Honest for friends; with
   strangers' resumes it needs a retention policy and a deletion path a person
   can invoke themselves. The delete-account route is the operator half of this.
+  The screened purge is the other half's shape and its limit: it runs as an
+  account's own run writes, so an abandoned or paused account never purges. A
+  retention promise made to strangers can't depend on them still searching.
 - **Company discovery as its own nightly job**
   (planned on the unmerged `company-discovery-plan` branch) - searches
   re-evaluate the same companies on the same nights.
