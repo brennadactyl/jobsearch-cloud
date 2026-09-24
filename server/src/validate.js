@@ -144,6 +144,51 @@ export function searchProseError(field, value, max) {
   return "";
 }
 
+// Which sort of rejection a screened row was (migrations/0027_screened_kind.sql):
+// a closed list, because a page groups and counts by it and a value that drifts
+// makes a group nobody can read. The row's `reason` stays the sentence about
+// that one posting; this is the part that answers "how many, of what".
+//
+// KIND_WHEN_UNKNOWN is where anything else is filed. A run sending a word that
+// isn't here is not refused - the row is what stops the next night re-finding a
+// posting this one rejected, and no grouping nicety is worth losing that.
+// `delisted` is first because it outranks the rest: a posting found already
+// gone was never anyone's, while a delisted one was a lead on someone's board
+// and then vanished. It is also the kind a purge has to recognise, since that
+// row is a person's own decision rather than a run's screening.
+export const SCREENED_KINDS = [
+  "delisted", "dead", "duplicate", "out-of-scope", "pay-below-floor",
+  "wrong-level", "wrong-role", "contract", "other",
+];
+export const KIND_WHEN_UNKNOWN = "other";
+
+/**
+ * The kind to store for what a caller sent, and whether it had to be changed.
+ * "" stays "" - a row nobody has classified is not the same as one classified
+ * as the catch-all, and only the first can be filled in later.
+ * @param {unknown} sent
+ * @returns {{kind: string, coercedFrom: string}}
+ */
+export function storedKind(sent) {
+  const value = typeof sent === "string" ? sent.trim().toLowerCase() : "";
+  if (!value) return { kind: "", coercedFrom: "" };
+  if (SCREENED_KINDS.includes(value)) return { kind: value, coercedFrom: "" };
+  return { kind: KIND_WHEN_UNKNOWN, coercedFrom: typeof sent === "string" ? sent : String(sent) };
+}
+
+/**
+ * The refusal for a kind an operator sent that isn't one of the list, or "".
+ * It quotes what was sent: the operator is classifying rows in bulk from a
+ * file, and "which value was wrong" is the thing they have to go and fix.
+ */
+export function screenedKindError(field, value) {
+  if (typeof value !== "string" || !SCREENED_KINDS.includes(value)) {
+    const sent = typeof value === "string" ? `"${value}"` : `${field} of ${typeof value}`;
+    return `${sent} is not a kind - one of ${SCREENED_KINDS.join(", ")}`;
+  }
+  return "";
+}
+
 // The lowest pay worth showing (docs/search-fields-plan.md): the amount as the
 // person typed it, and the one part that has to be machine-readable beside it.
 // The cap is what an amount runs to - "$180,000 base" is already generous -

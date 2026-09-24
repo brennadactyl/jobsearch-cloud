@@ -12,6 +12,7 @@ import { getUserByName } from "../auth.js";
 import { CompanyList } from "../companies.js";
 import { Db } from "../db.js";
 import { json, readJson } from "../http.js";
+import { screenedKindError } from "../validate.js";
 
 /**
  * POST /api/purge - requires the ADMIN_TOKEN secret as Bearer. Body
@@ -120,4 +121,55 @@ export async function handleCleanUpCompanies({ request, env }) {
     // list each one now has.
     aliases: result.aliasOnly.map((a) => ({ company: a.company, aliases: a.aliases })),
   });
+}
+
+/**
+ * POST /api/screened/kinds - requires the ADMIN_TOKEN secret as Bearer. Body
+ * `{ user, rows: [{id, kind}], dryRun? }` -> `{ dryRun, set, skipped, unknown,
+ * rows: [{id, was, now, outcome}] }`; 400 without a user or for a kind outside
+ * the list (naming the row), 404 for an unknown user.
+ *
+ * Fills in the kind on rows screened before the column existed
+ * (migrations/0027_screened_kind.sql). Which kind each row was is read from its
+ * `reason` beforehand and decided by a person; this route stores those
+ * decisions, one account at a time.
+ *
+ * **It refuses a kind outside the list**, unlike POST /api/screened, which
+ * stores an unknown one as the catch-all. The difference is what a refusal
+ * costs: a run refused loses a row that nothing can rebuild, while this creates
+ * no rows, so a typo here is worth catching rather than filing under `other`.
+ *
+ * Answers per row - `unknown` for an id that isn't this account's screened row,
+ * `already set` for one classified already, `set`/`would set` for one filled in
+ * - because a total hides which rows those were. It writes only where the kind
+ * is still empty, so a re-run after a partial write can't overwrite a value
+ * someone has since corrected. `dryRun` reports the same rows and writes
+ * nothing.
+ *
+ * Admin-only, and meant to be retired once the backfill is done: an operator
+ * write path that outlives its job is a way to change rows nobody reviewed.
+ */
+export async function handleSetScreenedKinds({ request, env }) {
+  const body = await readJson(request);
+  if (body instanceof Response) return body;
+
+  const name = typeof body.user === "string" ? body.user.trim() : "";
+  if (!name) return json({ error: "user is required" }, 400);
+  const user = await getUserByName(env.DB, name);
+  if (!user) return json({ error: `no user named "${name}"` }, 404);
+
+  const sent = Array.isArray(body.rows) ? body.rows : [];
+  const rows = [];
+  for (const row of sent) {
+    if (!row || !Number.isInteger(Number(row.id))) {
+      return json({ error: "each row needs an id and a kind", field: "rows" }, 400);
+    }
+    const problem = screenedKindError("kind", row.kind);
+    if (problem) return json({ error: `row ${row.id}: ${problem}`, field: "kind" }, 400);
+    rows.push({ id: Number(row.id), kind: row.kind });
+  }
+
+  const db = new Db(env.DB, user.id);
+  const result = await db.setScreenedKinds(rows, body.dryRun === true);
+  return json({ dryRun: body.dryRun === true, ...result });
 }

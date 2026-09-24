@@ -1443,8 +1443,8 @@ export class Db {
     const stmt = this.d1.prepare(
       // added_by is always 'run': this path serves POST /api/screened, a
       // search's report. A person's removal goes through deleteLeadAndScreen.
-      `INSERT OR IGNORE INTO screened (user_id, search, url, company, title, location, reason, date, added_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'run')`
+      `INSERT OR IGNORE INTO screened (user_id, search, url, company, title, location, reason, kind, date, added_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'run')`
     );
     const batch = fresh.map((item) =>
       stmt.bind(
@@ -1455,11 +1455,61 @@ export class Db {
         item.title || "",
         item.location || "",
         item.reason || "",
+        // Already checked and, where it had to be, coerced (routes/screened.js).
+        item.kind || "",
         item.date || t
       )
     );
     const results = await this.d1.batch(batch);
     return { added: results.reduce((n, r) => n + (r.meta.changes || 0), 0), duplicates };
+  }
+
+  /**
+   * Fill in the kind on this user's screened rows that have none
+   * (routes/admin.js handleSetScreenedKinds). Rows written before the column
+   * existed carry '', and what each one was is a judgement someone makes from
+   * its `reason` - so this stores decisions already taken rather than applying
+   * a rule of its own.
+   *
+   * Answers per row rather than in totals: an id that isn't this user's
+   * screened row, one already classified, and one filled in are three different
+   * outcomes, and a total hides which. A row that already has a kind is left as
+   * it is, so a re-run after a partial write can't overwrite a value someone
+   * has since corrected.
+   *
+   * @param {Array<{id: number, kind: string}>} rows kinds already checked against the list
+   * @param {boolean} dryRun report what would happen, write nothing
+   * @returns {Promise<{rows: Array<{id: number, was: string, now: string, outcome: string}>, set: number, skipped: number, unknown: number}>}
+   */
+  async setScreenedKinds(rows, dryRun) {
+    const stored = new Map();
+    const ids = rows.map((r) => r.id);
+    for (let i = 0; i < ids.length; i += ID_CHUNK) {
+      const chunk = ids.slice(i, i + ID_CHUNK);
+      const found = await this.d1
+        .prepare(`SELECT id, kind FROM screened WHERE user_id = ? AND id IN (${chunk.map(() => "?").join(",")})`)
+        .bind(this.userId, ...chunk)
+        .all();
+      for (const row of found.results) stored.set(row.id, row.kind);
+    }
+
+    const answer = rows.map((r) => {
+      if (!stored.has(r.id)) return { id: r.id, was: "", now: "", outcome: "unknown" };
+      const was = stored.get(r.id);
+      if (was) return { id: r.id, was, now: was, outcome: "already set" };
+      return { id: r.id, was: "", now: r.kind, outcome: dryRun ? "would set" : "set" };
+    });
+    const fill = answer.filter((r) => r.outcome === "set");
+    if (fill.length) {
+      const stmt = this.d1.prepare("UPDATE screened SET kind = ? WHERE id = ? AND user_id = ? AND kind = ''");
+      await this.d1.batch(fill.map((r) => stmt.bind(r.now, r.id, this.userId)));
+    }
+    return {
+      rows: answer,
+      set: answer.filter((r) => r.outcome === "set" || r.outcome === "would set").length,
+      skipped: answer.filter((r) => r.outcome === "already set").length,
+      unknown: answer.filter((r) => r.outcome === "unknown").length,
+    };
   }
 
   /**

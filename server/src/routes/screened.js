@@ -11,7 +11,7 @@ import { DELISTED_REASON } from "../db.js";
 import { excludedCompanyMatcher, normalize } from "../exclude.js";
 import { json, readJson } from "../http.js";
 import { feedGroupKeys, searchRootKey, searchRootOf } from "../tracks.js";
-import { dateDaysAgo, isoDate, unknownTrack, unknownTrackResponse } from "../validate.js";
+import { dateDaysAgo, isoDate, storedKind, unknownTrack, unknownTrackResponse } from "../validate.js";
 import { COVERAGE_BATCH, upcomingCompanies } from "./coverage.js";
 
 // How far back a scoped dedup read keeps a screened URL at a company outside the
@@ -128,8 +128,17 @@ export async function handleGetDedup({ db, params, url }) {
 
 /**
  * POST /api/screened - requires a Bearer token. Body `{ on?, screened: [...] }`
- * -> `{ added, duplicates, excluded }`; 400 for no valid items, 404 naming any
- * unknown track (nothing inserted).
+ * -> `{ added, duplicates, excluded, kinds_coerced? }`; 400 for no valid items,
+ * 404 naming any unknown track (nothing inserted).
+ *
+ * Each item may carry a `kind` from validate.js SCREENED_KINDS, the part a page
+ * groups and counts by; `reason` stays the sentence about that one posting. A
+ * kind that isn't on the list is stored as the catch-all and named back in
+ * `kinds_coerced` (`{ <sent value>: <times> }`, absent when nothing was
+ * coerced), rather than refusing the row: the row is the only thing stopping
+ * the next night re-finding this posting, so no grouping word is worth losing
+ * one. An item with no kind stores "", which means nobody has said - a state
+ * the operator backfill can still fill, unlike the catch-all.
  *
  * Records postings the search looked at and decided NOT to add as a lead (see
  * docs/glossary.md#postings). Deduped like handleAddLeads, but no
@@ -186,6 +195,18 @@ export async function handleAddScreened({ request, db }) {
     }
   }
 
+  // A kind that isn't one of the list is stored as the catch-all rather than
+  // refusing the row: the row is what stops the next night re-finding a posting
+  // this one rejected, and no grouping word is worth losing that. What was
+  // coerced is named back, so a run inventing a synonym is visible rather than
+  // quietly filed (validate.js storedKind).
+  const coerced = {};
+  for (const item of allowed) {
+    const { kind, coercedFrom } = storedKind(item.kind);
+    item.kind = kind;
+    if (coercedFrom) coerced[coercedFrom] = (coerced[coercedFrom] || 0) + 1;
+  }
+
   // One hop, not a walk to a root: a fed track is a tab, and the track that
   // fills it runs its own search, so `fed_by` chains have no meaning in the
   // model (see docs/glossary.md#searches-and-tracks) and none exist. Resolving
@@ -193,7 +214,9 @@ export async function handleAddScreened({ request, db }) {
   const filed = allowed.map((item) => ({ ...item, search: searchRootKey(tracks, item.search) }));
 
   const { added, duplicates } = await db.addScreened(filed, on);
-  return json({ added, duplicates, excluded });
+  const reply = { added, duplicates, excluded };
+  if (Object.keys(coerced).length) reply.kinds_coerced = coerced;
+  return json(reply);
 }
 
 /**
