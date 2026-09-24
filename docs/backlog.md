@@ -184,12 +184,19 @@ doc, and a finding says whether anything was built on the wrong line.
   route, `tracker.ps1` and the prompt step go together - Backend Buddy and Prompt
   Bro, then Client Comrade for the grouping.
   The list, from counting every screened row on the five live searches:
-  `delisted`, `dead`, `duplicate`, `out-of-scope`, `pay-below-floor`,
-  `wrong-level`, `wrong-role`, `contract`, `other`. A third of rows cite two
-  reasons, so the run picks by a fixed precedence in that order - first one that
-  applies - and the sentence keeps saying everything. `contract` is in from the
-  start although no current search excludes contract work, because adding a kind
-  later means backfilling again.
+  `delisted`, `dead`, `duplicate`, `out-of-scope`, `wrong-level`, `wrong-role`,
+  `contract`, `pay-below-floor`, `other`. A third of rows cite two reasons, so the
+  run picks by a fixed precedence in that order - first one that applies - and the
+  sentence keeps saying everything. `contract` is in from the start although no
+  current search excludes contract work, because adding a kind later means
+  backfilling again.
+  **`pay-below-floor` is last of the real kinds** so that its count answers the
+  question a floor raises: what is this number costing me? A posting that was the
+  wrong level anyway would still be screened at any floor, so counting it against
+  the floor invites someone to lower a number and gain nothing. What is left under
+  `pay-below-floor` is the postings a person would otherwise have seen. The same
+  reasoning puts the facts first: a dead or out-of-scope posting was never judged
+  on fit at all.
   **`delisted` is its own kind, not `dead`:** a posting found already gone was
   never anyone's, while a delisted one was a lead on a person's board and then
   vanished, which is the only screened row that records something lost. It is
