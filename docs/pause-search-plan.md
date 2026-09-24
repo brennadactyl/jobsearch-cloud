@@ -32,9 +32,13 @@ root. A tab filled by that search (`fed_by`) is paused with it.
 
 ## What stops, deterministically
 
-- **`setup-scheduler.ps1` registers no task for a paused search**, and
-  unregisters one that exists, reporting it by name - the same way it skips a
-  track that isn't written up.
+- **The run stops itself, and nothing else stops it.** A paused search keeps its
+  scheduled task; the task fires on its slot, the run asks the server, and the
+  run ends. Pausing is enforced in one place, so there is no registry to
+  disagree with the tracker: the check holds on any machine whatever tasks it
+  has. Nothing unregisters a task - not the scheduler script, not a run.
+- **A paused search runs a task that does nothing**, every night, and its log
+  line is the only trace. That is the design, not a fault.
 - **`GET /api/prompt/<key>` refuses a paused search** with a sentence naming
   when it was paused, so a task left over on some machine can't run it. The
   refusal carries a stable code beside the sentence, and the runner branches on
@@ -56,10 +60,8 @@ root. A tab filled by that search (`fed_by`) is paused with it.
   control switches it, inside the panel's one Save. Pausing asks first, naming
   what stops and saying the leads stay. Nobody's search is paused for them.
 - **A paused search's other fields stay editable.** Pausing is not archiving.
-- **The task it leaves behind.** A search stops being run the same night, since
-  the run refuses. Its scheduled task is removed by the next scheduler run,
-  which is an operator step, so the panel says the pause is in force now rather
-  than implying the machine has already been told.
+- **The pause holds from the save**, because the run itself refuses. Nothing on
+  any machine has to be told, so the panel says nothing about tasks.
 
 ## Order of work
 
