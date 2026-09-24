@@ -581,5 +581,30 @@ INSERT INTO tracks (user_id, key, label, sort_order, role_search_line, fit_disqu
   db.close();
 }
 
+console.log("\n== 0027 leaves every screened row unclassified, and says nothing about its reason ==");
+{
+  // The kind of an existing row is a judgement someone makes from its reason,
+  // through the operator route, one account at a time - not a rule applied
+  // here over prose nobody has read. A delisting is the case that would hurt:
+  // guessing it wrong would let a purge, or a person reading the tab, treat a
+  // record of their own decision as a run's screening.
+  const STOP27 = MIGRATIONS.find((f) => f.startsWith("0027_"));
+  const db = migratedThrough(STOP27, `
+INSERT INTO users (id, name) VALUES ('u1', 'One');
+INSERT INTO screened (user_id, search, url, company, title, location, reason, date, added_by) VALUES
+  ('u1', 'SWE', 'https://example.com/a', 'Acme', 'SDE', 'Remote', 'outside the US', '2026-09-01', 'run'),
+  ('u1', 'SWE', 'https://example.com/b', 'Acme', 'SDE II', 'Remote', 'posting taken down', '2026-09-02', 'run'),
+  ('u1', 'SWE', 'https://example.com/c', 'Acme', 'SDE III', 'Remote', 'not for me', '2026-09-03', 'hand');
+`);
+  const rows = db.prepare("SELECT url, kind, reason, added_by FROM screened WHERE user_id = 'u1' ORDER BY id").all();
+  check("every existing row starts unclassified, with no NULLs to read around",
+    rows.length === 3 && rows.every((r) => r.kind === ""));
+  check("a delisting is not guessed at from its reason",
+    rows[1].reason === "posting taken down" && rows[1].kind === "");
+  check("and every row keeps its reason and who added it",
+    rows[0].reason === "outside the US" && rows[2].added_by === "hand");
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

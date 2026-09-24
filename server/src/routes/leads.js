@@ -193,7 +193,9 @@ export async function handleDeleteLeads({ request, db }) {
     }
     // 'hand': a person clearing their own board isn't a run's work, so the
     // screened row isn't counted as one (docs/glossary.md#postings).
-    if (await db.deleteLeadAndScreen(lead, reason, null, "hand")) removed++;
+    // No kind: clearing a lead off a board is a person's decision, not one of
+    // the sorts of rejection a search makes (validate.js SCREENED_KINDS).
+    if (await db.deleteLeadAndScreen(lead, reason, null, "hand", "")) removed++;
   }
 
   if (removed) await db.touchUpdated();

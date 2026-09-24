@@ -1,0 +1,24 @@
+-- screened.kind: which sort of rejection a screened row was, from a closed
+-- list, beside the sentence the run already writes (docs/screened-kinds-plan.md).
+--
+-- A screened row has always carried `reason`, a sentence about that one
+-- posting. It reads well and groups not at all: counting how many postings a
+-- month were out of scope means matching prose. `kind` is the part a page can
+-- group and count by, and the sentence stays exactly as it is - the two answer
+-- different questions about the same row.
+--
+--   kind  one of the values in src/validate.js SCREENED_KINDS, or '' on a row
+--         written before this existed. '' is not a default to display: it means
+--         nobody has said, and a reader shows the row without a group rather
+--         than inventing one.
+--
+-- A run sends a kind with each rejection. An unknown one is stored as the
+-- catch-all rather than refused, because the row is the only thing that stops
+-- the next night re-finding a posting this one already rejected: a mistyped
+-- grouping word must never cost that record (routes/screened.js).
+--
+-- Every existing row starts with no kind. They are filled afterwards, per
+-- account, through an operator route, each row's before and after checked -
+-- not by a rule applied here over prose nobody has read.
+
+ALTER TABLE screened ADD COLUMN kind TEXT NOT NULL DEFAULT '';

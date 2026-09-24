@@ -3783,5 +3783,99 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     psTrack(await psTracks(PS_B), "CPM")?.paused_since === "");
 }
 
+{
+  console.log("\n== which sort of rejection a screened row was ==");
+  // `kind` is the part a page groups and counts by; `reason` stays the sentence
+  // about that one posting (migrations/0027_screened_kind.sql).
+  const skRun = Date.now();
+  const skUser = async (tag) => {
+    const name = `Kinds ${tag} ${skRun}`;
+    await req("POST", "/api/users", { admin: true, body: { name, password: `kinds-${tag}-long-password` } });
+    const token = (await req("POST", "/api/login", { body: { name, password: `kinds-${tag}-long-password` } })).json.token;
+    await req("POST", "/api/config", { token, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+    return { name, token };
+  };
+  const SK = await skUser("a"), SK_B = await skUser("b");
+  const skUrl = (n) => `https://example.com/kinds/${skRun.toString(36)}/${n}`;
+  const skRows = async (who) => (await req("GET", "/api/data", { token: who.token })).json.screened;
+  const skRow = async (who, n) => (await skRows(who)).find((r) => r.url === skUrl(n));
+
+  const sent = await req("POST", "/api/screened", { token: SK.token, body: { screened: [
+    { search: "SWE", url: skUrl("scope"), company: "Acme", title: "SDE", reason: "outside the US", kind: "out-of-scope" },
+    { search: "SWE", url: skUrl("pay"), company: "Acme", title: "SDE II", reason: "range tops out at $120k", kind: "pay-below-floor" },
+    { search: "SWE", url: skUrl("said-nothing"), company: "Acme", title: "SDE III", reason: "too junior" },
+  ] } });
+  check("a run files each rejection under a kind, beside the sentence it wrote",
+    sent.json?.added === 3 && (await skRow(SK, "scope"))?.kind === "out-of-scope" &&
+    (await skRow(SK, "pay"))?.kind === "pay-below-floor" &&
+    (await skRow(SK, "scope"))?.reason === "outside the US", JSON.stringify(sent.json));
+  check("a row nobody classified reads as empty, not as the catch-all",
+    (await skRow(SK, "said-nothing"))?.kind === "" && !("kinds_coerced" in (sent.json || {})));
+
+  // The row is what stops the next night re-finding this posting, so a word
+  // that isn't on the list costs a grouping, never the record.
+  const odd = await req("POST", "/api/screened", { token: SK.token, body: { screened: [
+    { search: "SWE", url: skUrl("synonym"), company: "Acme", title: "SDE IV", reason: "wrong seniority", kind: "too-junior" },
+    { search: "SWE", url: skUrl("synonym-again"), company: "Acme", title: "SDE V", reason: "wrong seniority", kind: "too-junior" },
+  ] } });
+  check("an unknown kind is stored as the catch-all rather than losing the row",
+    odd.json?.added === 2 && (await skRow(SK, "synonym"))?.kind === "other");
+  check("and the reply names what it coerced, and how often",
+    JSON.stringify(odd.json?.kinds_coerced) === JSON.stringify({ "too-junior": 2 }), JSON.stringify(odd.json));
+  check("a kind in another case is the same kind, not a coercion",
+    (await req("POST", "/api/screened", { token: SK.token, body: { screened: [
+      { search: "SWE", url: skUrl("shouty"), company: "Acme", title: "SDE VI", reason: "dead", kind: "DEAD" }] } })).json?.kinds_coerced === undefined &&
+    (await skRow(SK, "shouty"))?.kind === "dead");
+
+  // The operator backfill: it creates no row, so a typo is worth refusing.
+  const fill = (body) => req("POST", "/api/screened/kinds", { admin: true, body: { user: SK.name, ...body } });
+  const blankId = (await skRow(SK, "said-nothing")).id;
+  const setId = (await skRow(SK, "scope")).id;
+  const theirsId = (await req("POST", "/api/screened", { token: SK_B.token, body: { screened: [
+    { search: "SWE", url: skUrl("theirs"), company: "Acme", title: "SDE", reason: "out of scope" }] } })).status === 200
+    ? (await skRow(SK_B, "theirs")).id : -1;
+  check("the backfill needs the admin token",
+    (await req("POST", "/api/screened/kinds", { token: SK.token, body: { user: SK.name, rows: [] } })).status === 401);
+  const badKind = await fill({ rows: [{ id: blankId, kind: "too-junior" }] });
+  check("it refuses a kind outside the list, naming the row, and writes nothing",
+    badKind.status === 400 && badKind.json?.field === "kind" && /too-junior/.test(badKind.json?.error || "") &&
+    (await skRow(SK, "said-nothing"))?.kind === "", JSON.stringify(badKind.json));
+  const dry = await fill({ dryRun: true, rows: [
+    { id: blankId, kind: "wrong-level" }, { id: setId, kind: "dead" }, { id: theirsId, kind: "dead" }] });
+  check("a dry run answers per row - what would be set, what is already set, what isn't this account's",
+    dry.json?.set === 1 && dry.json?.skipped === 1 && dry.json?.unknown === 1 &&
+    dry.json?.rows?.find((r) => r.id === blankId)?.outcome === "would set" &&
+    dry.json?.rows?.find((r) => r.id === setId)?.was === "out-of-scope" &&
+    dry.json?.rows?.find((r) => r.id === theirsId)?.outcome === "unknown", JSON.stringify(dry.json));
+  check("and writes nothing", (await skRow(SK, "said-nothing"))?.kind === "");
+  const wrote = await fill({ rows: [{ id: blankId, kind: "wrong-level" }, { id: setId, kind: "dead" }] });
+  check("applying it fills only the row that had none, and says so per row",
+    wrote.json?.set === 1 && (await skRow(SK, "said-nothing"))?.kind === "wrong-level" &&
+    (await skRow(SK, "scope"))?.kind === "out-of-scope" &&
+    wrote.json?.rows?.find((r) => r.id === setId)?.outcome === "already set", JSON.stringify(wrote.json));
+  check("a re-run can't overwrite a kind someone has since corrected",
+    (await fill({ rows: [{ id: blankId, kind: "dead" }] })).json?.set === 0 &&
+    (await skRow(SK, "said-nothing"))?.kind === "wrong-level");
+  check("another account's row named in this account's fill is untouched",
+    (await skRow(SK_B, "theirs"))?.kind === "");
+
+  // A run reports a posting gone through /api/delist, never as a rejection, so
+  // the route stamps the kind that no run can send.
+  const skLead = await req("POST", "/api/leads", { token: SK.token, body: { leads: [
+    { search: "SWE", company: "Acme", title: "Staff SDE", location: "Remote", url: skUrl("was-a-lead") }] } });
+  const skGone = await req("POST", "/api/delist", { token: SK.token, body: {
+    search: "SWE", on: "2026-09-24", urls: [skUrl("was-a-lead")] } });
+  check("a delisted posting's screened row is filed as delisted by the route",
+    skLead.json?.added === 1 && skGone.status === 200 && (await skRow(SK, "was-a-lead"))?.kind === "delisted",
+    JSON.stringify([skGone.status, (await skRow(SK, "was-a-lead"))?.kind]));
+  const skHand = await req("POST", "/api/leads", { token: SK.token, body: { leads: [
+    { search: "SWE", company: "Acme", title: "Principal SDE", location: "Remote", url: skUrl("not-for-me") }] } });
+  const handId = (await req("GET", "/api/data", { token: SK.token })).json.leads.find((l) => l.url === skUrl("not-for-me"))?.id;
+  await req("POST", "/api/delete-leads", { token: SK.token, body: { ids: [handId], reason: "not for me" } });
+  check("a lead someone clears off their board carries no kind - it isn't a search's rejection",
+    skHand.json?.added === 1 && (await skRow(SK, "not-for-me"))?.kind === "" &&
+    (await skRow(SK, "not-for-me"))?.added_by === "hand", JSON.stringify(await skRow(SK, "not-for-me")));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

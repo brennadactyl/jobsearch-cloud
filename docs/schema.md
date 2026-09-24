@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0026_track_pay_floor.sql` applied in order. This is the
+`0001_schema.sql` through `0027_screened_kind.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -163,6 +163,7 @@ erDiagram
         TEXT date
         TEXT added_by
         TEXT found
+        TEXT kind
     }
     applications {
         INTEGER id PK
@@ -362,6 +363,14 @@ Unique on `(user_id, search, url)`, as `leads` is.
 
 - `reason` is free text. A deleted delisted lead leaves the reason
   `posting taken down` (`DELISTED_REASON` in `server/src/db.js`).
+- `kind` is which sort of rejection it was, from the closed list in
+  `server/src/validate.js` (`SCREENED_KINDS`), and is what a page groups and
+  counts by; `reason` stays the sentence about that one posting. `''` means
+  nobody has said, which is every row written before the column existed and any
+  a run sends without one - a reader shows such a row without a group rather
+  than inventing one. A kind a run sends that isn't on the list is stored as
+  `other` rather than refused, since losing the row would let the next run
+  re-find the posting.
 - `added_by` is `run` for a row a search wrote, `hand` for a posting a person
   removed from their board, and `''` for older rows that could not be
   attributed (`0007_screened_added_by.sql`). Run records count only `run`.
