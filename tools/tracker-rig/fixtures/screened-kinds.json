@@ -1,0 +1,31 @@
+[
+ {
+  "url": "https://s/10",
+  "reason": "404 - closed",
+  "kind": "dead"
+ },
+ {
+  "url": "https://s/11",
+  "reason": "outside scope: Austin, TX",
+  "kind": "OUT-OF-SCOPE"
+ },
+ {
+  "url": "https://s/12",
+  "reason": "range entirely below $195K",
+  "kind": "pay-below-floor"
+ },
+ {
+  "url": "https://s/13",
+  "reason": "not really a product role",
+  "kind": "wrong domain"
+ },
+ {
+  "url": "https://s/14",
+  "reason": "a lead we removed",
+  "kind": "delisted"
+ },
+ {
+  "url": "https://s/15",
+  "reason": "no kind given"
+ }
+]

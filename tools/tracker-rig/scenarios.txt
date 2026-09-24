@@ -27,6 +27,7 @@ leads-area|ok|leads leads-area.json
 leads-area-noranked|noranked|leads leads-area.json
 screened|ok|screened screened.json
 screened-empty|ok|screened empty.json
+screened-kinds|ok|screened screened-kinds.json
 verified|ok|verified urls.json
 verified-wrapped|ok|verified urls-wrapped.json
 delist|ok|delist urls.json

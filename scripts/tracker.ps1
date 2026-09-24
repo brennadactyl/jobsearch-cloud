@@ -495,6 +495,23 @@ function Invoke-LeadsCommand {
     }
 }
 
+# What a screened row was rejected for, as one of a closed set, beside the
+# sentence that says it in full. The page groups by it, so an invented word
+# would make its own group of one; the route stores an unknown kind as `other`
+# and names it back, and this does the same before sending, so a run hears
+# about it on the night rather than in a reply nobody reads. First that applies
+# wins, which is the order the prompt's step 9b states.
+#
+# `delisted` is the tenth kind and deliberately not here: that row is written
+# when a lead this person had is confirmed gone (/api/delist), and a run
+# calling this command is recording a candidate it rejected, which is a
+# different thing. Sent here it becomes `other`, so a month of rejections can't
+# fill up with rows claiming to be lost leads.
+$ScreenedKinds = @(
+    "dead", "duplicate", "out-of-scope", "pay-below-floor",
+    "wrong-level", "wrong-role", "contract", "other"
+)
+$script:KindsCoerced = 0
 function Invoke-ScreenedCommand {
     $rows = Read-Rows $PositionalArg "screened"
     $send = @()
@@ -508,11 +525,26 @@ function Invoke-ScreenedCommand {
             $fieldValue = Get-TrimmedField $inputRow $fieldName
             if ($fieldValue) { $row[$fieldName] = $fieldValue }
         }
+        $kind = (Get-TrimmedField $inputRow "kind").ToLowerInvariant()
+        if ($kind) {
+            if ($ScreenedKinds -contains $kind) {
+                $row["kind"] = $kind
+            } else {
+                $script:KindsCoerced++
+                $row["kind"] = "other"
+                Write-TrackerLine "kind '$kind' on $url is not one of $($ScreenedKinds -join ', ') - sent as 'other'"
+            }
+        }
         $send += $row
     }
     if ($send.Count -eq 0) { Write-TrackerLine "screened: nothing to send (refused=$($script:Refused))"; exit 0 }
     $res = Invoke-Tracker "POST" "/api/screened" @{ search = $Search; on = $Today; screened = @($send) }
-    Write-TrackerLine "screened: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) on=$Today"
+    Write-TrackerLine "screened: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) kinds_coerced=$($script:KindsCoerced) on=$Today"
+    # Every kind sent was checked above, so the route coercing one means the
+    # two copies of the list have drifted apart.
+    foreach ($sent in @($res.kinds_coerced.PSObject.Properties | Where-Object { $_ })) {
+        Write-TrackerLine "WARNING: the tracker stored '$($sent.Name)' as 'other' $($sent.Value) time(s) - its list of kinds and this one have drifted apart"
+    }
 }
 
 function Invoke-UrlReportCommand {

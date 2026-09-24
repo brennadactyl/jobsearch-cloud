@@ -537,10 +537,24 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
    didn't state.${areaRule} Every row's \`"search"\` ${searchValue}${leadsNote}.
 9b. RECORD SCREENED-OUT CANDIDATES so tomorrow's run doesn't re-verify them.
    Write the disqualified-but-new candidates from step 7 to \`screened.json\` -
-   \`{url, company, title, location, reason}\` - then run
+   \`{url, company, title, location, reason, kind}\` - then run
    \`./tracker screened screened.json\`. \`reason\` is a short, specific,
    human-readable explanation (e.g. ${screenedExamples}); it is what makes the
    entry useful later, so don't leave it vague.
+
+   \`kind\` is what it was rejected for, as one word from this list and nothing
+   else, so the page can group a month of rejections: \`dead\` (the posting is
+   gone - a 404, a closed notice, a redirect to an error page), \`duplicate\`
+   (the same posting already seen under another url), \`out-of-scope\` (its
+   location, or a remote restriction, puts it outside step 5),
+   \`pay-below-floor\`, \`wrong-level\`, \`wrong-role\` (the work itself isn't
+   what this search is for), \`contract\` (contract, temporary or an
+   internship), or \`other\`. **Where two fit, take the first of those that
+   applies** - a posting that is gone was never judged on its fit, and one
+   already seen isn't a fresh rejection. \`other\` is a real answer for a
+   rejection none of them describes; an invented word is stored as \`other\`
+   anyway, so it only costs you the grouping. The sentence still says
+   everything: the kind says which pile.
 9c. RECORD THE RUN: \`./tracker run --status ok --note "one short line for the webpage"\`
    (e.g. \`--note "no new postings; 34 screened out"\`).
 
