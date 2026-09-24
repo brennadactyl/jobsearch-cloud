@@ -181,7 +181,10 @@ $rows | Sort-Object Start | ForEach-Object {
         Start    = $_.Start.ToString("HH:mm")
         Minutes  = if ($null -ne $_.Minutes) { $_.Minutes } else { "-" }
         Waited   = if ($null -ne $_.Waited) { "{0}m" -f [Math]::Round($_.Waited / 60) } else { "-" }
-        Exit     = if ($null -ne $_.Exit) { $_.Exit } else { "unfinished" }
+        # A paused search's run does nothing, so it logs no job state, elapsed
+        # time or exit code. `status=paused` is what says it ended deliberately:
+        # without it, a run with no footer really did die part-way.
+        Exit     = if ($null -ne $_.Exit) { $_.Exit } elseif ($_.Status -eq "paused") { "-" } else { "unfinished" }
         Status   = $_.Status
         Leads    = $_.Leads
         Screened = $_.Screened
