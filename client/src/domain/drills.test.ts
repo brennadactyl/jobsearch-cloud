@@ -143,6 +143,7 @@ describe("drillId", () => {
   // Every builder needs an entry here, so a new one can't skip the check.
   const built: Record<keyof typeof drillId, string[]> = {
     foundWeek: [drillId.foundWeek("2026-09-07")],
+    foundDay: [drillId.foundDay("alpha", "2026-09-09")],
     appliedWeek: [drillId.appliedWeek("2026-09-07")],
     searchApplied: [drillId.searchApplied("alpha")],
     searchResponded: [drillId.searchResponded("alpha")],

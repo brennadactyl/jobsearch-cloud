@@ -103,6 +103,25 @@ describe("the screened tab", () => {
     expect(rows()).toHaveLength(3);
   });
 
+  it("opens what a run put on the board from its other count", async () => {
+    vi.spyOn(client, "getData").mockResolvedValue(fixture);
+    window.history.pushState({}, "", "/");
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <App />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    // Alpha ran today and added 3. Every status shows, so a lead marked "Not a
+    // fit" since is still one that run found.
+    await userEvent.click(screen.getAllByRole("link", { name: "3 new" })[0]);
+    expect(window.location.pathname).toBe("/t/alpha");
+    expect(window.location.search).toContain(`drill=found-day%3Aalpha%3A${fixture.tracks[0].last_run.on}`);
+    expect(screen.getByText(/still on your board/)).toBeInTheDocument();
+  });
+
   it("marks a posting the person removed themselves, which no run decided", async () => {
     await openTab();
     const mine = screen.getByText("not for me").closest("tr")!;
