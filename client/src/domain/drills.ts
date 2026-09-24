@@ -143,6 +143,8 @@ type TierSegment = (typeof TIER_SEGMENTS)[number];
 export const drillId = {
   /** Postings found in the week starting `monday` (YYYY-MM-DD). */
   foundWeek: (monday: string) => `found-week:${monday}`,
+  /** What one search recorded on a run's own local date (YYYY-MM-DD), which is what its stamp counts. */
+  foundDay: (trackKey: string, day: string) => `found-day:${trackKey}:${day}`,
   /** Applications sent in the week starting `monday` (YYYY-MM-DD). */
   appliedWeek: (monday: string) => `applied-week:${monday}`,
   /** Applications sent from a lead one search found. */
@@ -178,6 +180,23 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
           test: (l) => weekOf(l.found) === monday,
         }
       : undefined,
+  /**
+   * One night's finds, which is what a run stamp counts. The list can be
+   * shorter than the stamp says: a lead applied to since is on Applications,
+   * and a removed one is gone, so the label gives both numbers.
+   */
+  "found-day": (arg) => {
+    const [trackKey, day] = splitOnce(arg);
+    if (!trackKey || !localDay(day)) return undefined;
+    return {
+      scope: "leads",
+      label: (c) => {
+        const found = leadRows(c.leads, trackKey).filter((l) => l.found === day);
+        return `Found ${shortDate(day)} · ${found.length} still on your board`;
+      },
+      test: (l) => l.found === day && l.search === trackKey,
+    };
+  },
   "applied-week": (monday) =>
     localDay(monday)
       ? {
