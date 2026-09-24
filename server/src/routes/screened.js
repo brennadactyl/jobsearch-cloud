@@ -127,9 +127,20 @@ export async function handleGetDedup({ db, params, url }) {
 }
 
 /**
- * POST /api/screened - requires a Bearer token. Body `{ on?, screened: [...] }`
- * -> `{ added, duplicates, excluded, kinds_coerced? }`; 400 for no valid items,
- * 404 naming any unknown track (nothing inserted).
+ * POST /api/screened - requires a Bearer token. Body `{ search?, on?, screened:
+ * [...] }` -> `{ added, duplicates, excluded, kinds_coerced?,
+ * tabs_filed_at_root? }`; 400 for no valid items, 404 naming any unknown track
+ * (nothing inserted).
+ *
+ * Each item's `search` is the tab the rejection was judged for, which for a
+ * search filling several tabs is not always the one that ran: a row filed under
+ * the root reads on the page as though a games search rejected a hospital. It
+ * is kept when it names a track in the running search's own group - the body's
+ * `search`, or the item's own for a caller that sends none - and falls back to
+ * that group's root otherwise, counted in `tabs_filed_at_root`
+ * (`{ <sent key>: <times> }`). A key no track has is still a 404 for the whole
+ * batch; a key in another group is filed at the root rather than refused,
+ * because a misfiled row is worth more than a lost one.
  *
  * Each item may carry a `kind` from validate.js SCREENED_KINDS, the part a page
  * groups and counts by; `reason` stays the sentence about that one posting. A
@@ -207,15 +218,35 @@ export async function handleAddScreened({ request, db }) {
     if (coercedFrom) coerced[coercedFrom] = (coerced[coercedFrom] || 0) + 1;
   }
 
+  // A rejection is filed under the tab it was judged for, when the run says
+  // which: one search fills several tabs, and a row filed under the root reads
+  // on the page as though a games search rejected a hospital. The run's own key
+  // - the batch's `search`, or each item's own for a caller that sends none -
+  // decides which group that may be, so a run can never file a rejection into
+  // another search's tab. A key outside that group falls back to the root
+  // rather than being refused: the row is what stops the next night re-finding
+  // the posting, and a misfiled row is worth more than no row. Fallbacks are
+  // named back, so a prompt that stops sending tabs is visible.
+  //
   // One hop, not a walk to a root: a fed track is a tab, and the track that
   // fills it runs its own search, so `fed_by` chains have no meaning in the
-  // model (see docs/glossary.md#searches-and-tracks) and none exist. Resolving
-  // repeatedly would only be guessing at what a chain ought to mean.
-  const filed = allowed.map((item) => ({ ...item, search: searchRootKey(tracks, item.search) }));
+  // model (see docs/glossary.md#searches-and-tracks) and none exist.
+  const batchKey = typeof body.search === "string" && body.search.trim() ? body.search.trim() : "";
+  const groupOf = (key) => new Set(feedGroupKeys(tracks, searchRootKey(tracks, key)));
+  const batchGroup = batchKey ? groupOf(batchKey) : null;
+  const tabsFallback = {};
+  const filed = allowed.map((item) => {
+    const group = batchGroup || groupOf(item.search);
+    const root = searchRootKey(tracks, batchKey || item.search);
+    if (group.has(item.search)) return { ...item, search: item.search };
+    tabsFallback[item.search] = (tabsFallback[item.search] || 0) + 1;
+    return { ...item, search: root };
+  });
 
   const { added, duplicates } = await db.addScreened(filed, on);
   const reply = { added, duplicates, excluded };
   if (Object.keys(coerced).length) reply.kinds_coerced = coerced;
+  if (Object.keys(tabsFallback).length) reply.tabs_filed_at_root = tabsFallback;
   return json(reply);
 }
 
