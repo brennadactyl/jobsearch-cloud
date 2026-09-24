@@ -45,6 +45,8 @@ describe("the screened tab", () => {
     const tab = screen.getByRole("tab", { name: "Screened" });
     expect(tab).toHaveAttribute("href", "/screened");
     expect(tab.querySelector(".n")).toBeNull();
+    // Quiet beside the searches: nothing in here is waiting on anyone.
+    expect(tab).toHaveClass("quiet");
   });
 
   it("shows each posting with the sentence its run wrote", async () => {
