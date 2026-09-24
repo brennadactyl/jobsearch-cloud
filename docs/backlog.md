@@ -99,10 +99,12 @@ doc, and a finding says whether anything was built on the wrong line.
   one search: its leads and its screened rows. It works on a single tab as well as
   on a search that fills several, because a tab is where a mis-scoped rule shows.
   It keeps what the person did: applications stay, since they record what someone
-  applied to and not what a search found. What resetting does to the company
-  rotation is the open question - leaving it means the same companies are not
-  revisited for weeks, clearing it means the next night re-crawls from scratch -
-  and it is the difference between a reset that looks empty and one that refills.
+  applied to and not what a search found. **It resets that search's place in the
+  company rotation** (`tracks.sweep_cursor`) so the next night starts the list
+  again: a reset that left the cursor where it was would sit empty for weeks while
+  the search worked round to companies it had already covered. Prompt Bro says
+  what else a fresh cycle needs - the per-company sweep records are the other
+  thing a night reads.
   It is the most destructive thing the panel would offer, so: a danger-styled
   step that names the search and the counts it is about to delete, confirmed by
   typing the search's name, outside the panel's one Save because it isn't an edit,
