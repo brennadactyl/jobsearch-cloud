@@ -152,6 +152,12 @@ export function searchProseError(field, value, max) {
 // KIND_WHEN_UNKNOWN is where anything else is filed. A run sending a word that
 // isn't here is not refused - the row is what stops the next night re-finding a
 // posting this one rejected, and no grouping nicety is worth losing that.
+//
+// The catch-all should stay near-empty, and that is how this list is judged: it
+// was derived from what nights actually write rather than guessed at, so a
+// rising count there means the kinds have drifted from the work - either the
+// prompt's wording has moved, or searches are rejecting postings for a reason
+// none of these describes and one is missing.
 // `delisted` is first because it outranks the rest: a posting found already
 // gone was never anyone's, while a delisted one was a lead on someone's board
 // and then vanished. It is also the kind a purge has to recognise, since that
