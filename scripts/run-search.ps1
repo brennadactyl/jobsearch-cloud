@@ -322,6 +322,22 @@ function Send-RunLog {
     }
 }
 
+# A paused search is not a failed one. Its task shouldn't exist - the next
+# scheduler run removes it - so this exits 0 and records nothing: a run row
+# would talk over the tab's Paused state, and a red Last Run Result for an
+# expected state teaches people to ignore red. The log carries the word
+# "paused" and the date so a leftover task is findable by grep, since that is
+# the only place it shows.
+function Stop-PausedRun($sentence, $pausedSince) {
+    Log "paused:           $sentence"
+    Log "run record:       status=paused since=$pausedSince"
+    Log "       Nothing was searched and no run was recorded. This task will go the next time setup-scheduler.ps1 runs; until then this search logs this every night."
+    if (Get-Command Exit-RunLock -ErrorAction SilentlyContinue) { Exit-RunLock }
+    Send-RunLog
+    Log "finished $Task - paused, nothing to do"
+    exit 0
+}
+
 function Stop-Run($tag, $reason, $userMessage) {
     # The tag names the shape of the failure rather than its wording, so
     # scripts/run-report.ps1 keeps counting it after the sentence is reworded.
@@ -371,10 +387,20 @@ try {
     }
 } catch {
     $status = Get-HttpStatus $_
+    # The tracker's own reason is in the response body, which Windows
+    # PowerShell keeps in ErrorDetails; a refusal it expects carries a `code`
+    # beside it, and the code is what this branches on - the sentence is
+    # written for a person and may be reworded.
+    $body = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { "" }
+    $refusal = $null
+    if ($body) { try { $refusal = $body | ConvertFrom-Json } catch { } }
+    if ($status -eq 409 -and $refusal -and $refusal.code -eq "paused") {
+        Stop-PausedRun ([string]$refusal.error) ([string]$refusal.paused_since)
+    }
     $hint = switch ($status) {
         401 { "the token in $trackerFile isn't valid (revoked, or from another deployment)" }
         404 { "no track '$Task' is configured for this user - check the tracker's config" }
-        default { $_.Exception.Message }
+        default { if ($refusal -and $refusal.error) { [string]$refusal.error } else { $_.Exception.Message } }
     }
     # After a 401 or 404 the failure record is refused too; recording is
     # best-effort, so the run still exits on the error that explains it.
