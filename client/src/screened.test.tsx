@@ -71,6 +71,11 @@ describe("the screened tab", () => {
     await openTab();
     await userEvent.click(screen.getByRole("button", { name: /Beta roles/ }));
     expect(rows()).toHaveLength(2);
+    // The line follows the chip: both halves count the same search, or the
+    // comparison is between two different things.
+    expect(screen.getByText(/set aside, against/)).toHaveTextContent(
+      "2 set aside, against 4 kept by Beta roles, the last 30 days.",
+    );
     expect(screen.getByRole("button", { name: /Beta roles/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText(/above target level/)).toBeNull();
   });

@@ -48,11 +48,12 @@ export function countsBySearch(rows: readonly Screened[]): Record<string, number
 }
 
 /**
- * Leads found in the same window: what the searches kept, against what they set
- * aside. Counted from `found`, which is the day a run recorded the lead, so a
- * lead moved along since still counts as kept.
+ * Leads found in the same window: what was kept, against what was set aside.
+ * Counted from `found`, the day a run recorded the lead, so one moved along
+ * since still counts as kept. Narrowed to one search when the list is, or the
+ * two halves of the comparison would be counting different searches.
  */
-export function keptWithin(leads: readonly Lead[], days: number, now: number): number {
+export function keptWithin(leads: readonly Lead[], days: number, now: number, search = ""): number {
   const start = windowStart(days, now);
-  return leads.filter((l) => l.found >= start).length;
+  return leads.filter((l) => l.found >= start && (!search || l.search === search)).length;
 }

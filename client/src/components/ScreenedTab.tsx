@@ -22,7 +22,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const inWindow = screenedWithin(data.screened, days, now);
   const counts = countsBySearch(inWindow);
   const rows = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
-  const kept = keptWithin(data.leads, days, now);
+  const kept = keptWithin(data.leads, days, now, search);
   const nameOf = (key: string) => tracks[key]?.label || key;
 
   return (
@@ -49,8 +49,8 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
 
       {data.screened.length > 0 && (
         <p className="screened-sum">
-          <strong className="mono">{inWindow.length}</strong> set aside, against{" "}
-          <strong className="mono">{kept}</strong> kept, {SCREENED_WINDOWS.find((w) => w.days === days)?.label}.
+          <strong className="mono">{rows.length}</strong> set aside, against <strong className="mono">{kept}</strong>{" "}
+          kept{search && ` by ${nameOf(search)}`}, {SCREENED_WINDOWS.find((w) => w.days === days)?.label}.
         </p>
       )}
 
