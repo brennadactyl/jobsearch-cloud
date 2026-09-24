@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Track } from "../api/schema";
 import { ALL_LEADS } from "./constants";
 import { NOW, applications, leads, settings, tracks as trackList } from "./fixture";
 import { daysSince, hostOf, relWhen, safeUrl } from "./format";
@@ -131,21 +132,24 @@ describe("fillState", () => {
 });
 
 describe("runState", () => {
+  /** A search judged only by its run: not paused. */
+  const running = (last_run: Track["last_run"]) => ({ last_run, paused_since: "" });
+
   it("treats a track that has never run as honest, not broken", () => {
-    const never = { at: "", on: "", status: "", leads_added: 0, screened_added: 0, delisted: 0, note: "" };
+    const never = running({ at: "", on: "", status: "", leads_added: 0, screened_added: 0, delisted: 0, note: "" });
     expect(runState(never, settings)).toBe("never");
     expect(trackWarn(never, settings)).toBeNull();
   });
 
   it("reports a clean recent run as ok and an old one as stale", () => {
-    expect(runState(trackList[0].last_run, settings)).toBe("ok");
-    expect(runState(trackList[1].last_run, settings)).toBe("error");
+    expect(runState(trackList[0], settings)).toBe("ok");
+    expect(runState(trackList[1], settings)).toBe("error");
   });
 
   it("uses the configured staleness threshold", () => {
-    const run = { ...trackList[0].last_run, status: "ok" };
-    expect(runState(run, { ...settings, stale_run_hours: 4 })).toBe("stale");
-    expect(runState(run, { ...settings, stale_run_hours: 48 })).toBe("ok");
+    const track = running({ ...trackList[0].last_run, status: "ok" });
+    expect(runState(track, { ...settings, stale_run_hours: 4 })).toBe("stale");
+    expect(runState(track, { ...settings, stale_run_hours: 48 })).toBe("ok");
   });
 });
 

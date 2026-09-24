@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { usePinnedLayout } from "../ui/hooks";
-import type { TrackerData } from "../api/schema";
+import type { Settings, TrackerData } from "../api/schema";
 import { ALL_LEADS, LABELS } from "../domain/constants";
 import { GONE_QUIET_DAYS, drillCount, drillRows, type DrillTarget, type RowSource } from "../domain/drills";
 import { shortDate } from "../domain/format";
@@ -240,6 +240,30 @@ function WeeksChart({
 
 /* ---------------------------------------------------------------- searches */
 
+/**
+ * The line under "Daily searches": whether every scheduled search is still
+ * firing, which is the one thing the lead counts genuinely cannot show - a
+ * search that stopped running and a search that found nothing produce the same
+ * unchanged numbers. A paused search isn't meant to report, so it is counted
+ * apart rather than among them.
+ */
+function searchesSubline(trackKeys: string[], tracks: ReturnType<typeof buildTracks>, settings: Settings): string {
+  const state = (k: string) => runState(tracks[k], settings);
+  const running = trackKeys.filter((k) => state(k) !== "paused");
+  const paused = trackKeys.filter((k) => state(k) === "paused");
+  const bad = running.filter((k) => ["stale", "error"].includes(state(k)));
+  const never = running.filter((k) => state(k) === "never");
+
+  if (!trackKeys.length) return "No tracks configured yet";
+  if (!running.length) return paused.length === 1 ? "Paused" : `All ${paused.length} paused`;
+
+  let line: string;
+  if (bad.length) line = `${bad.length} of ${running.length} haven’t reported a clean run recently`;
+  else if (never.length === running.length) line = "Waiting on the first recorded run";
+  else line = `All ${running.length} reporting on schedule`;
+  return paused.length ? `${line} · ${paused.length} paused` : line;
+}
+
 function SearchesSection({
   data,
   trackKeys,
@@ -250,16 +274,7 @@ function SearchesSection({
   tracks: ReturnType<typeof buildTracks>;
 }) {
   const { settings } = data;
-  // Whether every scheduled search is still firing is the one thing the lead
-  // counts genuinely cannot show - a search that stopped running and a search
-  // that found nothing produce the same unchanged numbers.
-  const bad = trackKeys.filter((k) => ["stale", "error"].includes(runState(tracks[k].last_run, settings)));
-  const never = trackKeys.filter((k) => runState(tracks[k].last_run, settings) === "never");
-  let subline: string;
-  if (!trackKeys.length) subline = "No tracks configured yet";
-  else if (bad.length) subline = `${bad.length} of ${trackKeys.length} haven’t reported a clean run recently`;
-  else if (never.length === trackKeys.length) subline = "Waiting on the first recorded run";
-  else subline = `All ${trackKeys.length} reporting on schedule`;
+  const subline = searchesSubline(trackKeys, tracks, settings);
 
   return (
     <Section id="searches" title="Daily searches" sub={subline}>

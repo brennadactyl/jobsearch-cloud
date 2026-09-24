@@ -93,7 +93,7 @@ export function buildTabs(
       // Untriaged only: Reviewing and "Not a fit" have been looked at, and
       // Applied leads live in the Applications tab.
       n: leads.filter((l) => l.search === key && l.status === "New").length,
-      warn: trackWarn(tracks[key].last_run, settings),
+      warn: trackWarn(tracks[key], settings),
       path: pathForTab(key),
     });
   }
