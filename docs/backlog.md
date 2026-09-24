@@ -116,18 +116,23 @@ doc, and a finding says whether anything was built on the wrong line.
   there, in the onboarding run's validation, and in the account panel's picker.
   Owner: Prompt Bro, with Backend Buddy for the route.
 
-- **Clear out screened postings after 30 days.** A rejection a month old is
-  clutter, and the table grows about 4,900 rows a year per search - fine for one
-  person, gigabytes at a few hundred. So a screened row is deleted 30 days after
+- **Clear out screened postings after 90 days.** The table grows about 4,900 rows
+  a year per search - nothing for one person, gigabytes at a few hundred - and a
+  rejection a season old is clutter. So a screened row is deleted 90 days after
   its date, **except a row that records a person's own decision**: a delisting,
-  and anything added by hand. Those are the only rows whose loss a person would
-  see, because a lead they removed would come back as new. What the purge does
-  cost is memory: a posting the run rejected over 30 days ago and never became a
-  lead can be fetched and judged again, which is one check and the same verdict.
+  and anything added by hand. Those are the rows whose loss someone would see,
+  because a lead they removed would come back as new.
+  One horizon for every other kind, rather than a shorter one for facts like
+  `dead` and `out-of-scope` and a longer one for judgements like `wrong-role`: at
+  90 days a re-judged posting resurfacing is rare enough not to buy a second rule.
+  What the purge costs is memory, and it is more than one check: a re-discovered
+  posting is fetched and verified like any other, and one still listed is screened
+  again with today's date, so the table reaches a steady state rather than
+  shrinking. The dedup payload is already scoped to tonight's companies, so the
+  re-fetching lands only where a run is already looking.
   Cheapest shape is no new schedule - the server drops an account's expired rows
   as that account's run posts new ones, so the purge happens where the data is
-  already being written. Owner: Backend Buddy, with Prompt Bro on what a
-  re-checked posting costs a night.
+  already being written. Owner: Backend Buddy, with Prompt Bro on the run's cost.
 - **Record which kind of reason screened a posting**, from a fixed list, beside
   the sentence a run already writes. The Screened tab lists what a search set
   aside, and every run stamp now gives both counts, so a thin night reads
