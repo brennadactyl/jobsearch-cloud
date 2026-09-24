@@ -126,7 +126,9 @@ doc, and a finding says whether anything was built on the wrong line.
   Its first artboard needs nothing new stored. The grouped one needs the run to
   write which kind of reason it was, from a fixed list, beside the sentence it
   already writes: no two reasons are worded alike, so nothing can group them
-  without guessing at the words.
+  without guessing at the words. That kind is a field a run reports, so it
+  crosses the column and route, `tracker.ps1` and the prompt step together -
+  Backend Buddy and Prompt Bro - and it can follow the list rather than block it.
   Owner: Client Comrade.
 
 ## Worth doing, unscheduled
