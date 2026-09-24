@@ -102,9 +102,15 @@ doc, and a finding says whether anything was built on the wrong line.
   applied to and not what a search found. **It resets that search's place in the
   company rotation** (`tracks.sweep_cursor`) so the next night starts the list
   again: a reset that left the cursor where it was would sit empty for weeks while
-  the search worked round to companies it had already covered. Prompt Bro says
-  what else a fresh cycle needs - the per-company sweep records are the other
-  thing a night reads.
+  the search worked round to companies it had already covered.
+  **It deletes that search's `company_sweeps` rows too** - about 190 per search
+  today, each a dated note on one company in the run's own words. They are
+  knowledge, but knowledge reached under the rules being reset: a note saying a
+  company's roles are all out of scope was written against the locations or the
+  level that are about to change. So a reset forgets them, and the next cycle
+  re-reads every company, which is the cost being bought deliberately. The shared
+  company list (`company_fetch`) is untouched: how to fetch a company is a fact
+  about the company, not about one search.
   It is the most destructive thing the panel would offer, so: a danger-styled
   step that names the search and the counts it is about to delete, confirmed by
   typing the search's name, outside the panel's one Save because it isn't an edit,
