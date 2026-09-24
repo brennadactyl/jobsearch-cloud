@@ -33,7 +33,12 @@ root. A tab filled by that search (`fed_by`) is paused with it.
   unregisters one that exists, reporting it by name - the same way it skips a
   track that isn't written up.
 - **`GET /api/prompt/<key>` refuses a paused search** with a sentence naming
-  when it was paused, so a task left over on some machine can't run it.
+  when it was paused, so a task left over on some machine can't run it. The
+  refusal carries a stable code beside the sentence, and the runner branches on
+  the code, never on the English.
+- **A refused run records nothing.** A paused search writes no run row and no
+  error: an error every night would talk over the tab's Paused state and read as
+  a search that broke. The runner says it is paused and exits without failing.
 - **Nothing marks it stale.** A paused search is not a search that stopped
   reporting.
 
