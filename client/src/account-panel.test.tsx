@@ -200,6 +200,48 @@ describe("the account panel's sections", () => {
     expect(within(beta).getByText(/Alpha roles search fills this tab, so what it looks for is set there/)).toBeInTheDocument();
   });
 
+  it("saves a pay floor as typed, and reads no number out of it", async () => {
+    const save = vi.spyOn(client, "saveSettings").mockResolvedValue(
+      reply({ searches: { beta: { label: "Beta roles", pay_floor: "95/hr, flexible", pay_floor_unit: "hour" } } }),
+    );
+    const panel = await openPanel();
+    const beta = await openSearch(panel, "Beta roles");
+    await userEvent.type(within(beta).getByLabelText("Lowest acceptable pay"), "95/hr, flexible");
+    await userEvent.selectOptions(within(beta).getByLabelText("Is that a year or an hour?"), "hour");
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    // As typed: the comma, the slash and the word all survive the round trip.
+    expect(save).toHaveBeenCalledWith({ searches: { beta: { pay_floor: "95/hr, flexible", pay_floor_unit: "hour" } } });
+    await waitFor(() => expect(screen.queryByText(/unsaved change/)).toBeNull());
+    expect(within(screen.getByRole("group", { name: "Beta roles" })).getByLabelText("Lowest acceptable pay")).toHaveValue(
+      "95/hr, flexible",
+    );
+  });
+
+  it("stores a year with an amount typed against the unit it shows, which no one had to choose", async () => {
+    const save = vi.spyOn(client, "saveSettings").mockResolvedValue(reply());
+    const panel = await openPanel();
+    const beta = await openSearch(panel, "Beta roles");
+    // Beta has no floor at all, so the unit shows the one almost every salary is.
+    expect(within(beta).getByLabelText("Is that a year or an hour?")).toHaveValue("year");
+    await userEvent.type(within(beta).getByLabelText("Lowest acceptable pay"), "$180k base");
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(save).toHaveBeenCalledWith({ searches: { beta: { pay_floor: "$180k base", pay_floor_unit: "year" } } });
+  });
+
+  it("takes the unit away with the amount, since a unit alone says nothing", async () => {
+    const save = vi.spyOn(client, "saveSettings").mockResolvedValue(
+      reply({ searches: { alpha: { label: "Alpha roles", pay_floor: "", pay_floor_unit: "" } } }),
+    );
+    const panel = await openPanel();
+    const alpha = await openSearch(panel, "Alpha roles");
+    await userEvent.clear(within(alpha).getByLabelText("Lowest acceptable pay"));
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(save).toHaveBeenCalledWith({ searches: { alpha: { pay_floor: "", pay_floor_unit: "" } } });
+  });
+
   it("pauses a search from the panel, and shows it paused once the save lands", async () => {
     const save = vi.spyOn(client, "saveSettings").mockResolvedValue(
       reply({ searches: { alpha: { label: "Alpha roles", paused: "2026-09-10T12:00:00.000Z" }, beta: { label: "Beta roles", paused: "" } } }),

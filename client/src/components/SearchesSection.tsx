@@ -12,7 +12,9 @@ import { useState } from "react";
 import type { Track } from "../api/schema";
 import { isoDay } from "../domain/format";
 import {
-  SEARCH_KEYS,
+  DEFAULT_PAY_UNIT,
+  PAY_UNITS,
+  PROSE_KEYS,
   SEARCH_QUESTIONS,
   type SearchDraft,
   type SearchEdit,
@@ -20,7 +22,7 @@ import {
   type SearchKey,
 } from "../domain/panel";
 
-const QUESTIONS: Readonly<Record<Exclude<SearchKey, "label">, { hint: string; rows: number }>> = {
+const QUESTIONS: Readonly<Record<(typeof PROSE_KEYS)[number], { hint: string; rows: number }>> = {
   role_search_line: {
     hint: "Titles and seniority, as they'd read mid-sentence: “Staff backend or distributed systems roles”. This is what the search looks for all night, so it can't be left empty.",
     rows: 2,
@@ -90,8 +92,7 @@ export default function SearchesSection({
 
       {(shown ? [shown] : []).map((track) => {
         const edits = draft[track.key] ?? {};
-        const values = { ...fieldsOf(track) };
-        for (const key of SEARCH_KEYS) if (edits[key] !== undefined) values[key] = edits[key];
+        const values = { ...fieldsOf(track), ...stringEdits(edits) };
         const edited = changed[track.key] ?? {};
         return (
           // Named, because every block asks the same questions: without this a
@@ -125,7 +126,7 @@ export default function SearchesSection({
                 looks for is that search's, and asking here would offer edits no
                 run reads. Its name is still its own. */}
             {!track.fed_by &&
-              SEARCH_KEYS.filter((key) => key !== "label").map((key) => (
+              PROSE_KEYS.map((key) => (
                 <Field
                   key={key}
                   id={`search-${track.key}-${key}`}
@@ -138,6 +139,20 @@ export default function SearchesSection({
                   onChange={(value) => onChange(track.key, key, value)}
                 />
               ))}
+            {!track.fed_by && (
+              <PayFloorField
+                id={`search-${track.key}-pay`}
+                amount={values.pay_floor}
+                unit={values.pay_floor_unit}
+                changed={"pay_floor" in edited || "pay_floor_unit" in edited}
+                problem={
+                  problem?.search === track.key && (problem.field === "pay_floor" || problem.field === "pay_floor_unit")
+                    ? problem.message
+                    : ""
+                }
+                onChange={(key, value) => onChange(track.key, key, value)}
+              />
+            )}
           </div>
         );
       })}
@@ -241,12 +256,85 @@ function PauseField({
   );
 }
 
+/**
+ * The lowest pay a search takes: the amount in the person's own words, and the
+ * unit as a choice, because "a year" and "an hour" are the two the run knows
+ * and typing them is a spelling test. The amount is stored as typed and read
+ * back as typed - nothing here reads a number out of it - and the sentence the
+ * run says is composed where the prompt is, not here, so there is one wording.
+ */
+function PayFloorField({
+  id,
+  amount,
+  unit,
+  changed,
+  problem,
+  onChange,
+}: {
+  id: string;
+  amount: string;
+  unit: string;
+  changed: boolean;
+  problem: string;
+  onChange: (key: "pay_floor" | "pay_floor_unit", value: string) => void;
+}) {
+  return (
+    <div className="loc-field">
+      <div className="loc-label">
+        <label htmlFor={id}>{SEARCH_QUESTIONS.pay_floor}</label>
+        <span className="loc-optional">optional</span>
+        {changed && <span className="resume-changed">Changed</span>}
+      </div>
+      <div className="pay-floor">
+        <input
+          id={id}
+          type="text"
+          placeholder="$180k base"
+          value={amount}
+          className={changed ? "changed" : undefined}
+          aria-invalid={problem ? true : undefined}
+          onChange={(e) => onChange("pay_floor", e.target.value)}
+        />
+        <select
+          aria-label={SEARCH_QUESTIONS.pay_floor_unit}
+          value={unit || DEFAULT_PAY_UNIT}
+          className={changed ? "changed" : undefined}
+          onChange={(e) => onChange("pay_floor_unit", e.target.value)}
+        >
+          {PAY_UNITS.map((u) => (
+            <option key={u.value} value={u.value}>
+              {u.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {problem && (
+        <p className="loc-err" role="alert">
+          {problem}
+        </p>
+      )}
+      <p className="loc-hint">
+        Kept exactly as you write it. A posting stays when its range reaches this, or when it names no pay at all; it is
+        screened only when its whole range sits below it. Empty it and the search has no pay rule.
+      </p>
+    </div>
+  );
+}
+
+/** A draft's text edits alone: `paused` is a choice, not one of the written fields. */
+function stringEdits(edits: SearchEdit): Partial<SearchFields> {
+  const { paused: _paused, ...rest } = edits;
+  return rest;
+}
+
 function fieldsOf(track: Track): SearchFields {
   return {
     label: track.label,
     role_search_line: track.role_search_line,
     fit_clause: track.fit_clause,
     fit_disqualifier: track.fit_disqualifier,
+    pay_floor: track.pay_floor,
+    pay_floor_unit: track.pay_floor_unit,
   };
 }
 

@@ -133,6 +133,14 @@ export const trackSchema = z.object({
   /** What has a posting screened out, beside dead-on-arrival and wrong level. */
   fit_disqualifier: text,
   /**
+   * The lowest pay this search accepts, as the person typed it, and whether
+   * that is a year's or an hour's; "" and "" when the search has no floor. The
+   * run composes its own sentence from the pair - the page never writes one,
+   * which would be a second wording of the same rule.
+   */
+  pay_floor: text,
+  pay_floor_unit: text,
+  /**
    * When this tab's search was paused, as an ISO instant; "" while it runs. The
    * switch itself (`paused_since`) is set only on the search that runs, never on
    * a tab it fills; this is the server's resolved answer, which a tab inherits

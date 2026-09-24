@@ -51,8 +51,31 @@ export function changedGeneral(stored: General, draft: Partial<General>): Partia
 }
 
 /** What the Searches section edits about one search. */
-export const SEARCH_KEYS = ["label", "role_search_line", "fit_clause", "fit_disqualifier"] as const;
+export const SEARCH_KEYS = [
+  "label",
+  "role_search_line",
+  "fit_clause",
+  "fit_disqualifier",
+  "pay_floor",
+  "pay_floor_unit",
+] as const;
 export type SearchKey = (typeof SEARCH_KEYS)[number];
+
+/** The three asked as prose, in the order the section asks them. */
+export const PROSE_KEYS = ["role_search_line", "fit_clause", "fit_disqualifier"] as const;
+
+/** What a pay floor's unit can be, and how each reads beside the amount. */
+export const PAY_UNITS = [
+  { value: "year", label: "a year" },
+  { value: "hour", label: "an hour" },
+] as const;
+
+/**
+ * What the unit shows on a search with no floor yet. A year is what almost
+ * every stated salary is, so the question is answered before it's asked and
+ * typing an amount is enough.
+ */
+export const DEFAULT_PAY_UNIT = "year";
 
 /**
  * How each question about a search is asked. Setup asks three of these too, of
@@ -65,6 +88,9 @@ export const SEARCH_QUESTIONS: Readonly<Record<SearchKey, string>> = {
   role_search_line: "What roles should this search look for?",
   fit_clause: "What makes a posting worth keeping?",
   fit_disqualifier: "What rules a posting out?",
+  pay_floor: "Lowest acceptable pay",
+  // The select beside the amount, which has no visible label of its own.
+  pay_floor_unit: "Is that a year or an hour?",
 };
 export type SearchFields = Record<SearchKey, string>;
 /**
@@ -82,8 +108,9 @@ export function changedSearches(tracks: readonly Track[], draft: SearchDraft): R
   for (const track of tracks) {
     const edits = draft[track.key];
     if (!edits) continue;
-    const fields: SearchEdit = {};
+    const fields: SearchEdit = { ...payEdit(track, edits) };
     for (const key of SEARCH_KEYS) {
+      if (key === "pay_floor" || key === "pay_floor_unit") continue;
       const value = edits[key];
       if (value !== undefined && value.trim() !== track[key].trim()) fields[key] = value.trim();
     }
@@ -91,6 +118,22 @@ export function changedSearches(tracks: readonly Track[], draft: SearchDraft): R
     if (Object.keys(fields).length) changed[track.key] = fields;
   }
   return changed;
+}
+
+/**
+ * The pay floor a save should carry, which is the pair or neither. A unit alone
+ * says nothing, so it is stored only against an amount and goes when the amount
+ * goes; an amount typed against the unit shown stores that unit, which is why a
+ * search with no floor shows a year rather than an empty choice.
+ */
+function payEdit(track: Track, edits: SearchEdit): Partial<SearchFields> {
+  if (edits.pay_floor === undefined && edits.pay_floor_unit === undefined) return {};
+  const amount = (edits.pay_floor ?? track.pay_floor).trim();
+  const unit = amount ? edits.pay_floor_unit ?? (track.pay_floor_unit || DEFAULT_PAY_UNIT) : "";
+  const pay: Partial<SearchFields> = {};
+  if (amount !== track.pay_floor.trim()) pay.pay_floor = amount;
+  if (unit !== track.pay_floor_unit) pay.pay_floor_unit = unit;
+  return pay;
 }
 
 /**
@@ -118,11 +161,15 @@ export function blankField(
 export function unsavedAccountSentence(general: Partial<General>, searches: Record<string, SearchEdit>): string {
   const named = GENERAL_KEYS.filter((k) => k in general).map((k) => CALLED[k]);
   const entries = Object.values(searches);
-  // A pause is named apart: "what a search looks for" would not tell someone
-  // they are about to lose a search they meant to stop.
-  const fields = entries.filter((e) => SEARCH_KEYS.some((k) => k in e)).length;
+  // A pause and a pay floor are named apart: "what a search looks for" would
+  // not tell someone they are about to lose a search they meant to stop, or the
+  // number they just set.
+  const isPay = (k: string) => k === "pay_floor" || k === "pay_floor_unit";
+  const fields = entries.filter((e) => SEARCH_KEYS.some((k) => k in e && !isPay(k))).length;
+  const pays = entries.filter((e) => Object.keys(e).some(isPay)).length;
   const pauses = entries.filter((e) => e.paused !== undefined).length;
   if (fields) named.push(fields === 1 ? "what a search looks for" : `what ${fields} searches look for`);
+  if (pays) named.push(pays === 1 ? "the lowest pay a search takes" : `the lowest pay ${pays} searches take`);
   if (pauses) named.push(pauses === 1 ? "whether a search runs" : `whether ${pauses} searches run`);
   if (!named.length) return "";
   return `You changed ${joinNames(named)} but didn't save, so they stay as they are.`;

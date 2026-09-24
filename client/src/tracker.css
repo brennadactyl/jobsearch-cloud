@@ -518,6 +518,10 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 /* Whether the search runs: the state first, its switch beside it, so the answer
    reads before the button that changes it. */
 .search-pause .search-pause-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+/* The amount as typed, and the unit as a choice beside it. */
+.pay-floor{display:flex;gap:8px}
+.pay-floor input{flex-grow:1}
+.pay-floor select{width:auto;flex:none}
 .search-pause strong.paused{color:var(--warn)}
 /* A place list edited as chips: one per entry, with an × and, when ranked, its place and arrows. */
 .place-chips{display:flex;flex-direction:column;gap:7px}
