@@ -82,6 +82,11 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 .tab .n{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink3);
   background:var(--surface2);padding:1px 6px;border-radius:9px}
 .tab[aria-selected="true"] .n{color:var(--accent);background:var(--accent-soft)}
+/* A paused search's tab sits back rather than wearing a mark: it isn't
+   reporting, and nothing about it is waiting on anyone. A mark of its own would
+   join the dots that mean something is wrong. Its hover says when it paused. */
+.tab.paused{color:var(--ink3)}
+.tab.paused:hover{color:var(--ink2)}
 .tab .tabwarn{width:6px;height:6px;border-radius:50%;flex:none;margin-left:-2px}
 .tab .tabwarn.stale{background:var(--warn)}
 .tab .tabwarn.error{background:var(--crit)}

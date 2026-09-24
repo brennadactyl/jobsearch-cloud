@@ -18,6 +18,12 @@ export interface Tab {
   /** Badge count, or null for no badge. */
   n: number | null;
   warn: TabWarning | null;
+  /**
+   * When this search was paused, "" while it runs. Its own state, not a
+   * warning: a pause is a choice someone made, and the tab says so rather than
+   * looking like a search that simply went quiet.
+   */
+  paused: string;
   path: string;
 }
 
@@ -59,6 +65,7 @@ export function buildTabs(
       label: settings.overview_label || "Overview",
       n: null,
       warn: null,
+      paused: "",
       path: pathForTab("dashboard"),
     },
     {
@@ -71,6 +78,7 @@ export function buildTabs(
       warn: applications.some((a) => fillState(a) === "stuck")
         ? { cls: "fill", title: "A posting couldn’t be read — a row here needs filling in by hand" }
         : null,
+      paused: "",
       path: pathForTab("applications"),
     },
     {
@@ -81,6 +89,7 @@ export function buildTabs(
       label: settings.all_leads_label || "All leads",
       n: leads.filter((l) => l.status === "New").length,
       warn: null,
+      paused: "",
       path: pathForTab(ALL_LEADS),
     },
   ];
@@ -94,6 +103,7 @@ export function buildTabs(
       // Applied leads live in the Applications tab.
       n: leads.filter((l) => l.search === key && l.status === "New").length,
       warn: trackWarn(tracks[key], settings),
+      paused: tracks[key].paused,
       path: pathForTab(key),
     });
   }

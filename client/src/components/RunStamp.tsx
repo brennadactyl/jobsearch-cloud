@@ -1,6 +1,6 @@
 import type { Settings, Track } from "../api/schema";
-import { isoDay, relWhen } from "../domain/format";
-import { runState, runSummary } from "../domain/runs";
+import { relWhen } from "../domain/format";
+import { pausedDay, runState, runSummary } from "../domain/runs";
 
 /** When a search last ran and what it found, beside its tab and on the Overview. */
 export function RunStamp({ track, settings }: { track: Track | undefined; settings: Settings }) {
@@ -8,8 +8,7 @@ export function RunStamp({ track, settings }: { track: Track | undefined; settin
   const run = track.last_run;
   const st = runState(track, settings);
   if (st === "paused") {
-    const since = new Date(track.paused);
-    const day = Number.isNaN(since.getTime()) ? "" : isoDay(since);
+    const day = pausedDay(track.paused);
     return (
       <span className="runstamp paused" title="Paused: this search doesn't run until it's resumed. Its leads stay here.">
         Paused

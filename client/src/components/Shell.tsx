@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS } from "../domain/constants";
+import { pausedDay } from "../domain/runs";
 import { buildTabs, buildTracks, pathForTab } from "../domain/tabs";
 import { usePinnedLayout, useTheme } from "../ui/hooks";
 import { useSaved } from "../ui/saved";
@@ -10,6 +11,12 @@ import ApplicationsTab from "./ApplicationsTab";
 import AccountPanel from "./AccountPanel";
 import LeadsTab from "./LeadsTab";
 import Overview from "./Overview";
+
+/** The same sentence the run stamp gives, on a tab that has room for one word. */
+function pausedTitle(paused: string): string {
+  const day = pausedDay(paused);
+  return `Paused${day ? ` since ${day}` : ""}: this search doesn't run until it's resumed. Its leads stay here.`;
+}
 
 function TrackPanel({ data }: { data: TrackerData }) {
   const { trackKey = "" } = useParams();
@@ -100,7 +107,13 @@ export default function Shell({
               <Link
                 key={t.id}
                 to={t.path}
-                className="tab"
+                className={t.paused ? "tab paused" : "tab"}
+                // The whole tab carries the pause: greyed with no symbol, the
+                // hover has to explain it, and it should work anywhere on it.
+                title={t.paused ? pausedTitle(t.paused) : undefined}
+                // Grey is nothing to a screen reader, so the name says it. The
+                // count goes in too: an aria-label replaces the whole name.
+                aria-label={t.paused ? `${t.label} (paused)${t.n === null ? "" : `, ${t.n}`}` : undefined}
                 role="tab"
                 // Exactly its own path. Every tab page sits at one path with no
                 // pages under it, and a prefix test would light two track tabs
@@ -108,6 +121,9 @@ export default function Shell({
                 aria-selected={location.pathname === t.path}
               >
                 {t.label}
+                {/* Said on the tab, not only inside it: a paused search's tab
+                    is quiet for a reason, and the reason should be visible
+                    without opening it. */}
                 {t.warn && <i className={`tabwarn ${t.warn.cls}`} title={t.warn.title} />}
                 {t.n !== null && <span className="n">{t.n}</span>}
               </Link>
