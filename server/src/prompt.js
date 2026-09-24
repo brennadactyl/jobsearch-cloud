@@ -251,7 +251,7 @@ function profileRefreshStep(track, doc) {
 // point back at it rather than restating it.
 function findingIs(track, settings) {
   const where = hasLocations(settings) ? "somewhere step 5 says qualifies" : "";
-  return joinAnd(["genuinely new", "verified live", where, track.fit_clause]);
+  return joinAnd(["genuinely new", "verified live", where, track.fit_clause, payFloor(track).finding]);
 }
 function disqualifiedReasons(track, settings) {
   return [
@@ -260,9 +260,36 @@ function disqualifiedReasons(track, settings) {
     track.fit_disqualifier,
     "wrong level",
     "duplicate of an existing lead",
+    payFloor(track).disqualified,
   ]
     .filter(Boolean)
     .join(", ");
+}
+
+// A pay floor, as the person typed it, with a unit from a select - so nothing
+// here parses a number or converts a period, and the clauses read as the
+// comparison a person makes at a glance. A posting stays unless its whole
+// stated pay sits below the floor: a range including the amount qualifies, so
+// does one above it, and so does a posting that states nothing, since most
+// states don't require a range. The rejecting case is stated positively rather
+// than as the negation of the other, because that is the one a night could
+// read backwards.
+//
+// Both clauses join lists in step 7 - "and" for findings, commas for
+// disqualifiers - so they go last and stay comma-light.
+const PAY_FLOOR_UNITS = { year: "a year", hour: "an hour" };
+function payFloor(track) {
+  const amount = typeof track.pay_floor === "string" ? track.pay_floor.trim() : "";
+  const unit = PAY_FLOOR_UNITS[track.pay_floor_unit] || "";
+  if (!amount || !unit) return { finding: "", disqualified: "" };
+  return {
+    finding:
+      `paying at least ${amount} ${unit} - a stated range that includes that or lies entirely above it, ` +
+      "or a single stated figure at or above it - or stating no pay at all",
+    disqualified:
+      `the whole stated pay sits below ${amount} ${unit} (screen it with the reason ` +
+      `"range entirely below ${amount}")`,
+  };
 }
 
 // ---- Where the search looks.
