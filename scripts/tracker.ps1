@@ -521,6 +521,12 @@ function Invoke-ScreenedCommand {
         if (-not $url) { Refuse "a screened row with no url" "the url is what stops tomorrow re-verifying it"; continue }
         if (-not $reason) { Refuse "$url" "a screened row needs a reason - it is the whole value of the entry"; continue }
         $row = @{ search = $Search; url = $url; reason = $reason }
+        # The tab the posting would have been filed under, for a run that fills
+        # several: a rejection reads per tab like a lead does, rather than all
+        # of them under the tab that owns the search. A row that names none is
+        # filed under this search, which is what it was before.
+        $rowSearch = Get-TrimmedField $inputRow "search"
+        if ($rowSearch) { $row["search"] = $rowSearch }
         foreach ($fieldName in @("company", "title", "location")) {
             $fieldValue = Get-TrimmedField $inputRow $fieldName
             if ($fieldValue) { $row[$fieldName] = $fieldValue }

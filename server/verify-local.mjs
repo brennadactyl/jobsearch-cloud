@@ -758,6 +758,27 @@ const listed = buildSearchPrompt({
     /first of those that\s+applies/.test(nineB));
   check("and says an unknown kind costs the grouping, not the row",
     nineB.includes("stored as `other`"));
+
+  // A rejection reads per tab like a lead does, so a multi-tab run says which
+  // tab each one belongs to. A single-tab search has one key and is asked for
+  // nothing.
+  const nineBof = (feeds) => {
+    const p = buildSearchPrompt({
+      user: { id: "u", name: "Nobody" },
+      track: { key: "SWE", label: "Eng - Gaming", full_description: "games", role_search_line: "r" },
+      settings: {},
+      feeds,
+    });
+    return p.slice(p.indexOf("9b. RECORD"), p.indexOf("\n9c."));
+  };
+  const multiTab = nineBof([{ key: "swe-ai", label: "Eng - AI", full_description: "AI" }]);
+  check("a multi-tab run names each screened row's tab, by step 7b's rule",
+    multiTab.includes("reason, kind, search}") &&
+    multiTab.includes("would have been filed under had it qualified") &&
+    multiTab.includes('`"swe-ai"`') &&
+    multiTab.includes("filed under this search itself rather than refused"));
+  check("and a single-tab search is asked for no tab at all",
+    nineBof([]).includes("reason, kind}") && !nineBof([]).includes("would have been filed under"));
 }
 
 // ---- A search's pay floor, composed into step 7's two lists.
