@@ -122,6 +122,11 @@ doc, and a finding says whether anything was built on the wrong line.
   be told from a rule that is screening out everything, which is the question
   behind most "why did it find nothing?" - and it is what makes a pay floor,
   or any rule a person writes, something they can check rather than trust.
+  Screens: [Screened postings mockup](https://claude.ai/artifact/EfsFEW2tDuUfEeBUAGJUYy).
+  Its first artboard needs nothing new stored. The grouped one needs the run to
+  write which kind of reason it was, from a fixed list, beside the sentence it
+  already writes: no two reasons are worded alike, so nothing can group them
+  without guessing at the words.
   Owner: Client Comrade.
 
 ## Worth doing, unscheduled
