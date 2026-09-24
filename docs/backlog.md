@@ -116,20 +116,17 @@ doc, and a finding says whether anything was built on the wrong line.
   there, in the onboarding run's validation, and in the account panel's picker.
   Owner: Prompt Bro, with Backend Buddy for the route.
 
-- **Somewhere to read what a search screened out, and why.** Every rule-out is
-  stored with its reason and `GET /api/data` already sends them, but the page
-  only counts them: no list shows what a night dropped. So a quiet morning can't
-  be told from a rule that is screening out everything, which is the question
-  behind most "why did it find nothing?" - and it is what makes a pay floor,
-  or any rule a person writes, something they can check rather than trust.
-  Screens: [Screened postings mockup](https://claude.ai/artifact/EfsFEW2tDuUfEeBUAGJUYy).
-  Its first artboard needs nothing new stored. The grouped one needs the run to
-  write which kind of reason it was, from a fixed list, beside the sentence it
-  already writes: no two reasons are worded alike, so nothing can group them
-  without guessing at the words. That kind is a field a run reports, so it
-  crosses the column and route, `tracker.ps1` and the prompt step together -
-  Backend Buddy and Prompt Bro - and it can follow the list rather than block it.
-  Owner: Client Comrade.
+- **Record which kind of reason screened a posting**, from a fixed list, beside
+  the sentence a run already writes. The Screened tab lists what a search set
+  aside, and every run stamp now gives both counts, so a thin night reads
+  differently from a rule setting everything aside. What can't be answered is
+  "what is this rule costing me?": each reason is a sentence about one posting
+  and no two are worded alike, so 33 rows in 30 days on one account are read one
+  at a time. A stored kind makes them countable, and the grouped artboard of the
+  [Screened postings mockup](https://claude.ai/artifact/EfsFEW2tDuUfEeBUAGJUYy)
+  is a day's work once it exists. It is a field a run reports, so the column and
+  route, `tracker.ps1` and the prompt step go together - Backend Buddy and Prompt
+  Bro, then Client Comrade for the grouping.
 
 ## Worth doing, unscheduled
 
