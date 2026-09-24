@@ -1338,11 +1338,11 @@ check("a fed (fed_by) key is still accepted by /api/leads", fedLead.status === 2
 const fedScreenUrl = `https://boards.example.com/jobs/${Date.now()}46`;
 const fedScreened = await req("POST", "/api/screened", { token: A_TOK, body: { screened: [
   { search: "LEAD", url: fedScreenUrl, reason: "wrong level" }] } });
-check("and by /api/screened, which then rewrites it to the feed root",
+check("and by /api/screened",
   fedScreened.status === 200 && fedScreened.json.added === 1, fedScreened.text.slice(0, 140));
-check("the rewrite still happened - the row is filed under SWE, not LEAD",
+check("the row is filed under the tab it was judged for, LEAD, not its feed root",
   (await req("GET", "/api/data", { token: A_TOK })).json.screened
-    .find((s) => s.url === fedScreenUrl)?.search === "SWE");
+    .find((s) => s.url === fedScreenUrl)?.search === "LEAD");
 
 // Another user's track key is an unconfigured key here, which is the property
 // this shares with the rest of the cross-user matrix. "DATA" is one of Ada's
@@ -3858,6 +3858,27 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await skRow(SK, "said-nothing"))?.kind === "wrong-level");
   check("another account's row named in this account's fill is untouched",
     (await skRow(SK_B, "theirs"))?.kind === "");
+
+  // A rejection is filed under the tab it was judged for. One search fills
+  // several tabs, and a row filed under the root reads as though that tab's
+  // search rejected it.
+  await req("POST", "/api/config", { token: SK.token, body: { tracks: [
+    { key: "SWE", label: "Eng" }, { key: "swe-health", label: "Eng - Health", fed_by: "SWE" },
+    { key: "CPM", label: "Program" }] } });
+  const tabbed = await req("POST", "/api/screened", { token: SK.token, body: { search: "SWE", screened: [
+    { search: "swe-health", url: skUrl("tab"), company: "Mercy", title: "SDE", reason: "wrong level", kind: "wrong-level" },
+    { search: "SWE", url: skUrl("root"), company: "Acme", title: "SDE", reason: "dead", kind: "dead" },
+    { search: "CPM", url: skUrl("elsewhere"), company: "Acme", title: "PM", reason: "wrong role", kind: "wrong-role" },
+  ] } });
+  check("a rejection judged for a tab is filed under that tab, not its root",
+    tabbed.json?.added === 3 && (await skRow(SK, "tab"))?.search === "swe-health" &&
+    (await skRow(SK, "root"))?.search === "SWE", JSON.stringify(tabbed.json));
+  check("a tab outside the running search's group falls back to the root, counted rather than refused",
+    (await skRow(SK, "elsewhere"))?.search === "SWE" &&
+    JSON.stringify(tabbed.json?.tabs_filed_at_root) === JSON.stringify({ CPM: 1 }), JSON.stringify(tabbed.json));
+  check("and a batch that files every row where it was judged reports no fallback",
+    !("tabs_filed_at_root" in ((await req("POST", "/api/screened", { token: SK.token, body: { search: "SWE", screened: [
+      { search: "swe-health", url: skUrl("tab-2"), company: "Mercy", title: "RN", reason: "wrong role", kind: "wrong-role" }] } })).json || {})));
 
   // A run reports a posting gone through /api/delist, never as a rejection, so
   // the route stamps the kind that no run can send.
