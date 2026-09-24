@@ -20,7 +20,7 @@ One block per search, under the name it already edits.
 | What roles should this search look for? | `role_search_line` | Names the roles both searching steps look for, at the known companies and in the discovery sweep. Empty falls back to "roles matching the resume" - a real search, but a vague one. |
 | What makes a posting worth keeping? | `fit_clause` | Joins what a finding must be, beside "genuinely new", "verified live" and the location rule. A test applied to a posting already found, not a search. |
 | What rules a posting out? | `fit_disqualifier` | Joins the reasons a posting is screened out, beside dead-on-arrival, wrong level and duplicate. What it matches is recorded as screened with a reason, so a wrong edit shows on the Screened tab the next morning. |
-| The lowest pay worth showing | `pay_floor`, `pay_floor_unit` | The amount as typed, and a year or an hour. The prompt composes a clause into each side of step 7 around it: a posting is a find when the top of its stated range reaches the floor or it states no range, and is disqualified when the top is below it. |
+| The lowest pay worth showing | `pay_floor`, `pay_floor_unit` | The amount as typed, and a year or an hour. The prompt composes a clause into each side of step 7 around it: a posting is a find when its stated range reaches the floor - it contains the amount or lies above it - or when it states no range at all, and is disqualified only when its whole range sits below the floor. Most states don't require a range, so a missing one is never a reason to drop a posting. |
 
 **The amount is the person's, and the rule around it lives in the prompt.** A
 floor written into prose at save time freezes that day's rule in every row: a
@@ -34,7 +34,7 @@ posting is sorted into a find or a disqualification, and it carries its own
 reasons; a floor placed earlier would be a second screening authority that step
 7 doesn't mention. It also matters for what a person sees: what step 7
 disqualifies is recorded with a reason, so a floor there reads on the Screened
-tab as "range tops out below the floor", while a rule in its own step is
+tab as "the whole range sits below the floor", while a rule in its own step is
 recorded only if its prose remembers to say so.
 
 **What is stored.** `pay_floor`, the amount **as typed**, trimmed at the ends,
