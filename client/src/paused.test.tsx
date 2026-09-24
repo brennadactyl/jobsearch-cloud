@@ -65,7 +65,7 @@ describe("a paused search's tab", () => {
 
     const stamp = document.querySelector(".runstamp")!;
     expect(stamp).toHaveClass("paused");
-    expect(stamp).toHaveTextContent(/^Paused 2026-09-0[23]$/);
+    expect(stamp).toHaveTextContent(/^Paused since 2026-09-0[23]$/);
     expect(stamp.querySelector(".rdot")).toBeNull();
     expect(stamp).not.toHaveTextContent(/Ran|error/);
   });

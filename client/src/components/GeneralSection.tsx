@@ -4,7 +4,7 @@
  * are true the moment the panel's Save lands - no run is involved.
  */
 import { PRONOUNS } from "../api/schema";
-import type { General, GeneralKey } from "../domain/panel";
+import { GENERAL_QUESTIONS, type General, type GeneralKey } from "../domain/panel";
 import PlaceChips from "./PlaceChips";
 
 export default function GeneralSection({
@@ -34,7 +34,7 @@ export default function GeneralSection({
 
       <Field
         id="gen-title"
-        label="What should this page be called?"
+        label={GENERAL_QUESTIONS.display_title}
         changed={changed.has("display_title")}
         problem={problemFor("display_title")}
         hint="The heading at the top of your tracker."
@@ -51,7 +51,7 @@ export default function GeneralSection({
 
       <Field
         id="gen-pronouns"
-        label="How should a run write about you?"
+        label={GENERAL_QUESTIONS.pronouns}
         changed={changed.has("pronouns")}
         problem={problemFor("pronouns")}
         hint="Used in the wording a run writes about you. It never reaches an employer."
@@ -75,7 +75,7 @@ export default function GeneralSection({
 
       <Field
         id="gen-companies"
-        label="Companies you'd never work for"
+        label={GENERAL_QUESTIONS.excluded_companies}
         optional
         changed={changed.has("excluded_companies")}
         problem={problemFor("excluded_companies")}

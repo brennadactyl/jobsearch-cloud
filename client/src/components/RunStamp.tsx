@@ -13,7 +13,12 @@ export function RunStamp({ track, settings }: { track: Track | undefined; settin
     return (
       <span className="runstamp paused" title="Paused: this search doesn't run until it's resumed. Its leads stay here.">
         Paused
-        {day && <span className="mono"> {day}</span>}
+        {day && (
+          <>
+            {" since "}
+            <span className="mono">{day}</span>
+          </>
+        )}
       </span>
     );
   }

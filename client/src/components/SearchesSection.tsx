@@ -11,21 +11,25 @@
 import { useState } from "react";
 import type { Track } from "../api/schema";
 import { isoDay } from "../domain/format";
-import { SEARCH_KEYS, type SearchDraft, type SearchEdit, type SearchFields, type SearchKey } from "../domain/panel";
+import {
+  SEARCH_KEYS,
+  SEARCH_QUESTIONS,
+  type SearchDraft,
+  type SearchEdit,
+  type SearchFields,
+  type SearchKey,
+} from "../domain/panel";
 
-const QUESTIONS: Readonly<Record<Exclude<SearchKey, "label">, { label: string; hint: string; rows: number }>> = {
+const QUESTIONS: Readonly<Record<Exclude<SearchKey, "label">, { hint: string; rows: number }>> = {
   role_search_line: {
-    label: "What roles should this search look for?",
     hint: "Titles and seniority, as they'd read mid-sentence: “Staff backend or distributed systems roles”. This is what the search looks for all night, so it can't be left empty.",
     rows: 2,
   },
   fit_clause: {
-    label: "What makes a posting worth keeping?",
     hint: "A test a posting passes or fails, beside the ones every search applies: genuinely new, still live, and in one of your places.",
     rows: 2,
   },
   fit_disqualifier: {
-    label: "What rules a posting out?",
     hint: "Reasons to screen one out, beside dead-on-arrival and wrong level. A run records what it screened and why; the Overview counts them per search.",
     rows: 2,
   },
@@ -95,7 +99,7 @@ export default function SearchesSection({
           <div className="search-block" role="group" aria-label={track.label || track.key} key={track.key}>
             <Field
               id={`search-${track.key}`}
-              label="What this search is called"
+              label={SEARCH_QUESTIONS.label}
               value={values.label}
               changed={"label" in edited}
               problem={problem?.search === track.key && problem.field === "label" ? problem.message : ""}
@@ -125,7 +129,7 @@ export default function SearchesSection({
                 <Field
                   key={key}
                   id={`search-${track.key}-${key}`}
-                  label={QUESTIONS[key].label}
+                  label={SEARCH_QUESTIONS[key]}
                   rows={QUESTIONS[key].rows}
                   value={values[key]}
                   changed={key in edited}

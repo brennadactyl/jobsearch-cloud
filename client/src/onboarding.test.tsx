@@ -11,6 +11,7 @@ import * as client from "./api/client";
 import type { Intake, IntakeAnswers, TrackerData } from "./api/schema";
 import { NOW, data as fixture } from "./domain/fixture";
 import { emptyAnswers } from "./domain/onboarding";
+import { GENERAL_KEYS, GENERAL_QUESTIONS, SEARCH_QUESTIONS } from "./domain/panel";
 import { clearPrefs } from "./ui/prefs";
 
 const newAccount: TrackerData = { ...fixture, tracks: [], leads: [], applications: [], user: { id: "u9", name: "Sam" } };
@@ -143,11 +144,26 @@ describe("the setup form", () => {
     await screen.findByRole("heading", { name: "Set up your job search" });
   }
 
+  it("asks about a search in the words the account panel asks them in", async () => {
+    await openSetup();
+    // A question worded one way here and another in the panel reads as two
+    // questions about the same answer.
+    for (const key of ["label", "role_search_line", "fit_disqualifier"] as const) {
+      expect(screen.getByLabelText(SEARCH_QUESTIONS[key])).toBeInTheDocument();
+    }
+    // Where a question has no pair, setup keeps its own: a search being built
+    // isn't yet a thing with postings to keep or rule out.
+    expect(screen.getByLabelText("Kinds of companies you'd like")).toBeInTheDocument();
+    expect(screen.queryByLabelText(SEARCH_QUESTIONS.fit_clause)).toBeNull();
+
+    for (const key of GENERAL_KEYS) expect(screen.getByLabelText(GENERAL_QUESTIONS[key])).toBeInTheDocument();
+  });
+
   /** The two answers a form can't send without: where work is possible, and one role. */
   async function fillRequired() {
     await userEvent.type(screen.getByLabelText("What locations should be searched?"), "Anywhere in the US, remote or around Denver{Enter}");
-    await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
-    await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
+    await userEvent.type(screen.getByLabelText("What this search is called"), "Engineering");
+    await userEvent.type(screen.getByLabelText("What roles should this search look for?"), "Staff backend engineer");
   }
 
   it("says once that ranked places are always searched, and sends when they sit outside the area to search", async () => {
@@ -311,8 +327,8 @@ describe("the setup form", () => {
   it("asks where the person can work before it will send", async () => {
     const submit = vi.spyOn(client, "submitIntake");
     await openSetup();
-    await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
-    await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
+    await userEvent.type(screen.getByLabelText("What this search is called"), "Engineering");
+    await userEvent.type(screen.getByLabelText("What roles should this search look for?"), "Staff backend engineer");
     // An exclusion answered on its own is what scoped a search to the one place
     // its person had ruled out.
     await userEvent.type(screen.getByLabelText("Anywhere you can't take a job?"), "Nowhere in Texas{Enter}");
@@ -327,8 +343,8 @@ describe("the setup form", () => {
   it("sends with only ranked places, reading the empty searched list back as those", async () => {
     const submit = vi.spyOn(client, "submitIntake").mockResolvedValue(["engineering"]);
     await openSetup();
-    await userEvent.type(screen.getByLabelText("Call it"), "Engineering");
-    await userEvent.type(screen.getByLabelText("What roles?"), "Staff backend engineer");
+    await userEvent.type(screen.getByLabelText("What this search is called"), "Engineering");
+    await userEvent.type(screen.getByLabelText("What roles should this search look for?"), "Staff backend engineer");
     await userEvent.type(screen.getByLabelText("Or paste it here"), "Engineer");
     expect(screen.queryByText("Only the ranked places")).toBeNull();
     await userEvent.type(screen.getByLabelText("What locations should the search prioritize?"), "Seattle, Remote US{Enter}");
