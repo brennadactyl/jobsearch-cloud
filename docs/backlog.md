@@ -108,6 +108,14 @@ doc, and a finding says whether anything was built on the wrong line.
   there, in the onboarding run's validation, and in the account panel's picker.
   Owner: Prompt Bro, with Backend Buddy for the route.
 
+- **Somewhere to read what a search screened out, and why.** Every rule-out is
+  stored with its reason and `GET /api/data` already sends them, but the page
+  only counts them: no list shows what a night dropped. So a quiet morning can't
+  be told from a rule that is screening out everything, which is the question
+  behind most "why did it find nothing?" - and it is what makes a pay floor,
+  or any rule a person writes, something they can check rather than trust.
+  Owner: Client Comrade.
+
 ## Worth doing, unscheduled
 
 - **[Split user tokens from machine tokens](token-split-plan.md)** - planned;
