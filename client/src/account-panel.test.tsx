@@ -225,6 +225,8 @@ describe("the account panel's sections", () => {
     // Beta has no floor at all, so the unit shows the one almost every salary is.
     expect(within(beta).getByLabelText("Is that a year or an hour?")).toHaveValue("year");
     await userEvent.type(within(beta).getByLabelText("Lowest acceptable pay"), "$180k base");
+    // One answer, however many fields it takes to store.
+    expect(screen.getByText("1 unsaved change")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(save).toHaveBeenCalledWith({ searches: { beta: { pay_floor: "$180k base", pay_floor_unit: "year" } } });
