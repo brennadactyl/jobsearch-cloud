@@ -157,6 +157,10 @@ doc, and a finding says whether anything was built on the wrong line.
   tab, and removing one has leads and applications hanging off it.
   [Splitting a search across tabs](tab-grouping-plan.md) is planned separately,
   and promoting a tab to its own search waits on the track-doc split.
+- Show a person the rule their search actually follows, served from `prompt.js`
+  rather than copied into the page: the composed pay clause first, since a floor
+  is the rule most easily contradicted by their own words. A copy in the page was
+  ruled out for being a second wording of one rule.
 - The run record counts leads added, screened and swept per day, so two runs
   of one search on the same day are counted together in the nightly run report.
 

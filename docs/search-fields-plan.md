@@ -73,10 +73,16 @@ carrying its own commas reads as extra list items. The composed clauses go last
 in each list and stay comma-light. This is why a hand-written floor reads
 awkwardly in that list today.
 
-**The fit fields show the whole sentence.** A floor is an extra condition on
-the same posting, not a replacement, so what the run reads is the person's own
-clause and the composed one as one list. The page shows both together under the
-field, so nobody writes a rule that contradicts the floor without seeing it.
+**The page doesn't show the composed clause.** A floor is an extra condition on
+the same posting, not a replacement, but the composed wording lives in
+`prompt.js` and a copy in the page would be a second wording of one rule, wrong
+the first time the prompt changes. A person's own rule-out text sits right above
+the floor, which is where a contradiction shows. Serving that clause from
+`prompt.js` is the only honest way to preview it, and it isn't in this change.
+
+**The unit follows the amount.** It pre-selects a year, and is stored only
+against an amount: typing the amount is the whole answer, and emptying it clears
+the unit. Half a floor isn't a state the page can produce.
 
 **What the panel doesn't edit.** The rest of a search's fields are machinery
 written in the register a run follows - `doc_summary`, `report_line`,
