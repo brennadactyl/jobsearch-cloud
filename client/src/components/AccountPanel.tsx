@@ -21,7 +21,7 @@ import {
   type General,
   type GeneralKey,
   type SearchDraft,
-  type SearchFields,
+  type SearchEdit,
 } from "../domain/panel";
 import {
   changedPlaces,
@@ -61,7 +61,7 @@ const SECTIONS = [
 type SectionKey = (typeof SECTIONS)[number]["key"];
 
 /** One change per field, so the footer counts a renamed search and its new rule as two. */
-const countFields = (searches: Readonly<Record<string, Partial<SearchFields>>>) =>
+const countFields = (searches: Readonly<Record<string, SearchEdit>>) =>
   Object.values(searches).reduce((n, fields) => n + Object.keys(fields).length, 0);
 
 const isPlaceKey = (field: string | null): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
@@ -255,6 +255,10 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
               }
               onChange={(key, field, value) => {
                 setSearchDraft((d) => ({ ...d, [key]: { ...d[key], [field]: value } }));
+                if (saveError?.search === key) setSaveError(null);
+              }}
+              onPause={(key, paused) => {
+                setSearchDraft((d) => ({ ...d, [key]: { ...d[key], paused } }));
                 if (saveError?.search === key) setSaveError(null);
               }}
             />

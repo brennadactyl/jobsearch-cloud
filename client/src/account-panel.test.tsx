@@ -197,7 +197,77 @@ describe("the account panel's sections", () => {
     const beta = await openSearch(panel, "Beta roles");
     expect(within(beta).getByLabelText("What this search is called")).toBeInTheDocument();
     expect(within(beta).queryByLabelText("What roles should this search look for?")).toBeNull();
-    expect(within(beta).getByText(/Alpha roles search fills this tab/)).toBeInTheDocument();
+    expect(within(beta).getByText(/Alpha roles search fills this tab, so what it looks for is set there/)).toBeInTheDocument();
+  });
+
+  it("pauses a search from the panel, and shows it paused once the save lands", async () => {
+    const save = vi.spyOn(client, "saveSettings").mockResolvedValue(
+      reply({ searches: { alpha: { label: "Alpha roles", paused: "2026-09-10T12:00:00.000Z" }, beta: { label: "Beta roles", paused: "" } } }),
+    );
+    const panel = await openPanel();
+    const alpha = await openSearch(panel, "Alpha roles");
+    expect(within(alpha).getByText("Running")).toBeInTheDocument();
+
+    // Pausing asks first, naming what stops and saying the leads stay.
+    await userEvent.click(within(alpha).getByRole("button", { name: "Pause this search" }));
+    const ask = screen.getByRole("alertdialog", { name: "Pause Alpha roles?" });
+    expect(ask).toHaveTextContent(/nothing new found or screened/);
+    expect(ask).toHaveTextContent(/stays in its tab/);
+    await userEvent.click(within(ask).getByRole("button", { name: "Pause it" }));
+
+    expect(screen.getByText("1 unsaved change")).toBeInTheDocument();
+    // Nothing is sent until Save, and no time is ever sent: the server stamps it.
+    expect(save).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(save).toHaveBeenCalledWith({ searches: { alpha: { paused: true } } });
+    await waitFor(() => expect(screen.queryByText(/unsaved change/)).toBeNull());
+    // The tab behind the panel takes the reply too, so its stamp says Paused.
+    const stamp = [...document.querySelectorAll(".runstamp")].find((s) => !s.closest(".account-panel"));
+    expect(stamp).toHaveTextContent(/^Paused/);
+    expect(within(screen.getByRole("group", { name: "Alpha roles" })).getByText(/^Paused since/)).toBeInTheDocument();
+  });
+
+  it("names a pause on the way out, where 'what a search looks for' wouldn't say what is being lost", async () => {
+    const panel = await openPanel();
+    const alpha = await openSearch(panel, "Alpha roles");
+    await userEvent.click(within(alpha).getByRole("button", { name: "Pause this search" }));
+    await userEvent.click(screen.getByRole("button", { name: "Pause it" }));
+    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
+
+    const ask = screen.getByRole("alertdialog", { name: "Leave without saving?" });
+    expect(ask).toHaveTextContent("You changed whether a search runs but didn't save, so they stay as they are.");
+  });
+
+  it("offers a paused search a way back, and sends no time to resume it", async () => {
+    const save = vi.spyOn(client, "saveSettings").mockResolvedValue(reply());
+    const paused = { ...fixture, tracks: fixture.tracks.map((t) => (t.key === "alpha" ? { ...t, paused: "2026-09-02T17:30:00.000Z" } : t)) };
+    const panel = await openPanel(paused);
+    const alpha = await openSearch(panel, "Alpha roles");
+    expect(within(alpha).getByText(/^Paused since/)).toBeInTheDocument();
+    expect(within(alpha).getByText("2026-09-02")).toBeInTheDocument();
+
+    // Only a pause asks: letting a search run again costs nothing.
+    await userEvent.click(within(alpha).getByRole("button", { name: "Let it run again" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(within(alpha).getByText("Running")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(save).toHaveBeenCalledWith({ searches: { alpha: { paused: false } } });
+  });
+
+  it("gives a tab another search fills no switch of its own, since it pauses with that search", async () => {
+    const fed = {
+      ...fixture,
+      tracks: [
+        { ...fixture.tracks[0], paused: "2026-09-02T17:30:00.000Z" },
+        { ...fixture.tracks[1], fed_by: "alpha", paused: "2026-09-02T17:30:00.000Z" },
+      ],
+    };
+    const panel = await openPanel(fed);
+    const beta = await openSearch(panel, "Beta roles");
+    expect(within(beta).getByText(/^Paused since/)).toBeInTheDocument();
+    expect(within(beta).queryByRole("button", { name: /Pause|run again/ })).toBeNull();
+    expect(within(beta).getByText(/runs and pauses with that search/)).toBeInTheDocument();
   });
 
   it("shows one search at a time, and marks one holding an unsaved edit", async () => {

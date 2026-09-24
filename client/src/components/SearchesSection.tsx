@@ -8,8 +8,10 @@
  * field's hint says what it is for; nothing reads what a person wrote to judge
  * it.
  */
+import { useState } from "react";
 import type { Track } from "../api/schema";
-import { SEARCH_KEYS, type SearchDraft, type SearchFields, type SearchKey } from "../domain/panel";
+import { isoDay } from "../domain/format";
+import { SEARCH_KEYS, type SearchDraft, type SearchEdit, type SearchFields, type SearchKey } from "../domain/panel";
 
 const QUESTIONS: Readonly<Record<Exclude<SearchKey, "label">, { label: string; hint: string; rows: number }>> = {
   role_search_line: {
@@ -37,18 +39,21 @@ export default function SearchesSection({
   problem,
   onShow,
   onChange,
+  onPause,
 }: {
   tracks: readonly Track[];
   /** The search whose questions are on screen; the strip above chooses it. */
   shown: Track | undefined;
   /** The edits in hand, by search key. */
   draft: SearchDraft;
-  /** The fields of each search that differ from what's stored. */
-  changed: Readonly<Record<string, Partial<SearchFields>>>;
+  /** What differs from what's stored, per search. */
+  changed: Readonly<Record<string, SearchEdit>>;
   /** A refused save's message, beside the search and field it names. */
   problem: { search: string; field: string; message: string } | null;
   onShow: (key: string) => void;
   onChange: (key: string, field: SearchKey, value: string) => void;
+  /** Whether the search should run. Like every field here, it waits for the panel's Save. */
+  onPause: (key: string, paused: boolean) => void;
 }) {
   return (
     <section className="account-section" aria-labelledby="searchTitle">
@@ -80,7 +85,9 @@ export default function SearchesSection({
       )}
 
       {(shown ? [shown] : []).map((track) => {
-        const values = { ...fieldsOf(track), ...draft[track.key] } as SearchFields;
+        const edits = draft[track.key] ?? {};
+        const values = { ...fieldsOf(track) };
+        for (const key of SEARCH_KEYS) if (edits[key] !== undefined) values[key] = edits[key];
         const edited = changed[track.key] ?? {};
         return (
           // Named, because every block asks the same questions: without this a
@@ -116,10 +123,114 @@ export default function SearchesSection({
                   onChange={(value) => onChange(track.key, key, value)}
                 />
               ))}
+            <PauseField
+              track={track}
+              tracks={tracks}
+              paused={edits.paused ?? Boolean(track.paused)}
+              changed={edited.paused !== undefined}
+              problem={problem?.search === track.key && problem.field === "paused" ? problem.message : ""}
+              onPause={(next) => onPause(track.key, next)}
+            />
           </div>
         );
       })}
     </section>
+  );
+}
+
+/**
+ * Whether the search runs. Paused it keeps its tab, its leads and its place in
+ * the company rotation and simply isn't run, so this is a switch rather than
+ * anything that removes a search - retiring one is still a separate act.
+ *
+ * A tab another search fills has no switch of its own: the server refuses one,
+ * because the pause belongs to the search that runs.
+ */
+function PauseField({
+  track,
+  tracks,
+  paused,
+  changed,
+  problem,
+  onPause,
+}: {
+  track: Track;
+  tracks: readonly Track[];
+  paused: boolean;
+  changed: boolean;
+  problem: string;
+  onPause: (paused: boolean) => void;
+}) {
+  const [asking, setAsking] = useState(false);
+  const name = track.label || track.key;
+  const feeder = track.fed_by ? labelOf(tracks, track.fed_by) : "";
+  // The stored instant, so a pause chosen but not yet saved shows no date: the
+  // server stamps it, and naming a day it hasn't stamped would be a guess.
+  const since = paused && track.paused && !changed ? isoDay(new Date(track.paused)) : "";
+  const hint = feeder
+    ? `The ${feeder} search fills this tab, so it runs and pauses with that search.`
+    : paused
+      ? "It runs nothing until you let it run again. Its tab and everything it found stay as they are."
+      : "Paused, it stops running but keeps its tab and everything it found. It picks up where it stopped.";
+  return (
+    <div className="loc-field search-pause">
+      <div className="loc-label">
+        <span>Is this search running?</span>
+        {changed && <span className="resume-changed">Changed</span>}
+      </div>
+      <div className="search-pause-row">
+        <strong className={paused ? "paused" : undefined}>
+          {paused ? "Paused" : "Running"}
+          {since && (
+            <>
+              {" since "}
+              <span className="mono">{since}</span>
+            </>
+          )}
+        </strong>
+        {!track.fed_by && (
+          <button className="btn" type="button" onClick={() => (paused ? onPause(false) : setAsking(true))}>
+            {paused ? "Let it run again" : "Pause this search"}
+          </button>
+        )}
+      </div>
+      {problem && (
+        <p className="loc-err" role="alert">
+          {problem}
+        </p>
+      )}
+      <p className="loc-hint">{hint}</p>
+      {/* Asked of a pause and not of a resume: stopping a search is the choice
+          with a consequence overnight, and the fear it answers - that the leads
+          go with it - is worth answering before the switch moves. */}
+      {asking && (
+        <div className="modal-overlay">
+          <div className="card modal-card wide" role="alertdialog" aria-modal="true" aria-labelledby={`pause-${track.key}`}>
+            <h3 id={`pause-${track.key}`}>Pause {name}?</h3>
+            <p>
+              Once you save, it stops being run: nothing new found or screened for it. Everything it has already found
+              stays in its tab, and you can still change what it looks for. Let it run again whenever you like.
+            </p>
+            <div className="modal-actions">
+              <button className="btn" type="button" onClick={() => setAsking(false)}>
+                Keep it running
+              </button>
+              <button
+                className="btn primary"
+                type="button"
+                autoFocus
+                onClick={() => {
+                  setAsking(false);
+                  onPause(true);
+                }}
+              >
+                Pause it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
