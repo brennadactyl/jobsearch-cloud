@@ -334,8 +334,12 @@ Say "Configured $(@($data.tracks).Count) tracks and the page settings."
 
 # ------------------------------------------------------------------- leads --
 
+# The hand-removed postings are added as leads in the same call, then removed
+# below: a screened row is marked as the person's own only by going through the
+# route a person uses (db.deleteLeadAndScreen's addedBy), never by being posted
+# to /api/screened, which is always a run's work.
 $leadPayload = @()
-foreach ($lead in $data.leads) {
+foreach ($lead in (@($data.leads) + @($data.handRemoved))) {
     $row = @{
         search   = $lead.search
         company  = $lead.company
@@ -356,6 +360,30 @@ foreach ($lead in $data.leads) {
 }
 $added = Invoke-Api -Method POST -Path "/api/leads" -Token $token -What "Adding leads" -Body @{ leads = $leadPayload }
 Say "Leads: $($added.added) added, $($added.duplicates) already present."
+
+# --------------------------------------------------- postings removed by hand --
+
+if (@($data.handRemoved).Count -gt 0) {
+    $current = Invoke-Api -Method GET -Path "/api/data" -Token $token -What "Reading back the leads to remove by hand"
+    $idByUrl = @{}
+    foreach ($lead in $current.leads) { $idByUrl[$lead.url] = $lead.id }
+    $removed = 0
+    foreach ($spec in $data.handRemoved) {
+        $id = $idByUrl[$spec.url]
+        if (-not $id) {
+            Write-Warning "No lead id came back for $($spec.url) - skipping its removal."
+            continue
+        }
+        # One call per posting: the route takes a list, but the reason is stored
+        # on every row it removes, and each of these has its own.
+        $result = Invoke-Api -Method POST -Path "/api/delete-leads" -Token $token -What "Removing $($spec.company) by hand" -Body @{
+            ids    = @($id)
+            reason = $spec.reason
+        }
+        $removed += $result.removed
+    }
+    Say "Removed $removed posting(s) by hand - they read as the person's own, not a run's."
+}
 
 # ---------------------------------------------------------------- screened --
 
