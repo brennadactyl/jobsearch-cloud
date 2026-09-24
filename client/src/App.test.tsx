@@ -81,6 +81,9 @@ describe("the shell", () => {
     expect(tabs[2]).toMatch(/^All leads/);
     expect(tabs[3]).toMatch(/^Alpha roles/);
     expect(tabs[4]).toMatch(/^Beta roles/);
+    // Screened sits after the searches, and is the one fixed tab config has no
+    // name for: it holds no person's words, only what their runs set aside.
+    expect(tabs[5]).toBe("Screened");
   });
 
   it("marks the track whose search reported an error, and leaves the healthy one alone", async () => {

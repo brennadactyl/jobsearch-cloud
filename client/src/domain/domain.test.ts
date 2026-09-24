@@ -210,7 +210,7 @@ describe("buildTabs", () => {
   it("takes every label from config, hardcoding none", () => {
     const tabs = buildTabs(leads, applications, tracks, settings);
     expect(tabs.map((t) => t.label)).toEqual([
-      "Overview", "Applications", "All leads", "Alpha roles", "Beta roles",
+      "Overview", "Applications", "All leads", "Alpha roles", "Beta roles", "Screened",
     ]);
     const renamed = buildTabs(leads, applications, tracks, {
       ...settings, overview_label: "Home", all_leads_label: "Everything",

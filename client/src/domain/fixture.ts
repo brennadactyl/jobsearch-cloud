@@ -11,7 +11,7 @@
  * ago" is exactly the sort of rule that would start passing or failing on its
  * own.
  */
-import type { Application, Lead, Settings, Track, TrackerData } from "../api/schema";
+import type { Application, Lead, Screened, Settings, Track, TrackerData } from "../api/schema";
 
 /** 2026-09-10T12:00:00Z. Tests freeze Date.now() here. */
 export const NOW = Date.parse("2026-09-10T12:00:00Z");
@@ -119,12 +119,27 @@ export const applications: Application[] = [
   app({ id: 24, status: "To Apply", link: "https://example.com/24", autofill: "failed", autofill_note: "The posting page returned 404" }),
 ];
 
+/**
+ * What the searches set aside. Each reason is its own sentence, as a run writes
+ * them - the demo and every real account read this way, and rows worded alike
+ * would make the page look like it can group them.
+ */
+export const screened: Screened[] = [
+  { id: 31, search: "alpha", url: "https://example.com/31", company: "Umber", title: "Staff Engineer", location: "Berlin, Germany", reason: "outside the US, with no remote option stated", date: daysAgo(1), added_by: "run", found: "" },
+  { id: 32, search: "alpha", url: "https://example.com/32", company: "Vela", title: "Principal Engineer", location: "Springfield", reason: "above target level - principal, twelve years required", date: daysAgo(3), added_by: "run", found: "" },
+  { id: 33, search: "alpha", url: "https://example.com/33", company: "Wick", title: "Support Engineer", location: "Remote", reason: "support queue rather than an engineering role", date: daysAgo(9), added_by: "run", found: "" },
+  { id: 34, search: "beta", url: "https://example.com/34", company: "Xeno", title: "PM, Growth", location: "Shelbyville", reason: "six-month contract, not a permanent role", date: daysAgo(4), added_by: "run", found: "" },
+  // Removed from the board by the person, not decided by a run.
+  { id: 35, search: "beta", url: "https://example.com/35", company: "Yarrow", title: "PM, Platform", location: "Ogdenville", reason: "not for me", date: daysAgo(2), added_by: "hand", found: daysAgo(12) },
+  { id: 36, search: "alpha", url: "https://example.com/36", company: "Zephyr", title: "Backend Engineer", location: "Springfield", reason: "states $120k-$150k, below the floor set for this search", date: daysAgo(50), added_by: "run", found: "" },
+];
+
 export const data: TrackerData = {
   user: { id: "u1", name: "Fixture" },
   updated: daysAgo(0),
   leads,
   applications,
-  screened: [],
+  screened,
   tracks,
   settings,
 };

@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-rou
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS } from "../domain/constants";
 import { pausedDay } from "../domain/runs";
+import { SCREENED } from "../domain/screened";
 import { buildTabs, buildTracks, pathForTab } from "../domain/tabs";
 import { usePinnedLayout, useTheme } from "../ui/hooks";
 import { useSaved } from "../ui/saved";
@@ -11,6 +12,7 @@ import ApplicationsTab from "./ApplicationsTab";
 import AccountPanel from "./AccountPanel";
 import LeadsTab from "./LeadsTab";
 import Overview from "./Overview";
+import ScreenedTab from "./ScreenedTab";
 
 /** The same sentence the run stamp gives, on a tab that has room for one word. */
 function pausedTitle(paused: string): string {
@@ -141,6 +143,7 @@ export default function Shell({
             <Route path={pathForTab("dashboard")} element={<Overview data={data} {...pinned} />} />
             <Route path={pathForTab("applications")} element={<ApplicationsTab data={data} />} />
             <Route path={pathForTab(ALL_LEADS)} element={<LeadsTab data={data} trackKey={ALL_LEADS} />} />
+            <Route path={pathForTab(SCREENED)} element={<ScreenedTab data={data} />} />
             {/* pathForTab's /t/<key>, for every track. */}
             <Route path="/t/:trackKey" element={<TrackPanel data={data} />} />
             <Route path="*" element={<Navigate to="/" replace />} />

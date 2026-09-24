@@ -380,6 +380,22 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .sec h2{font-size:17px;font-weight:700}
 .sec p{margin:0;font-size:13px;color:var(--ink3)}
 
+/* What the searches set aside: a reason is a sentence, so it gets the width and
+   the rest of the row stays narrow beside it. */
+.screened .toolbar{align-items:flex-start}
+.screened-head h2{font-size:19px;margin:0 0 3px}
+.screened-head .hint{margin:0;max-width:60ch}
+.screened-window{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);
+  white-space:nowrap}
+.screened-window select{width:auto}
+.screened-sum{margin:0 0 12px;font-size:14px;color:var(--ink2)}
+.screened-searches{margin:0 0 12px}
+.screened-grid .screened-date{color:var(--ink2);font-size:13px;white-space:nowrap}
+.screened-grid .screened-where{color:var(--ink2);font-size:13px;max-width:200px}
+.screened-role{color:var(--ink2);font-size:13px}
+.screened-search{color:var(--ink3)}
+.screened-hand{display:inline-block;margin-left:8px;font-size:11px;letter-spacing:.03em;
+  padding:1px 8px;border-radius:99px;background:var(--surface2);color:var(--ink3);white-space:nowrap}
 .empty{padding:44px 22px;text-align:center;color:var(--ink3)}
 .empty strong{display:block;color:var(--ink2);font-weight:600;margin-bottom:5px;font-size:15px}
 

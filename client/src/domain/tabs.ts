@@ -7,9 +7,10 @@ import type { Application, Lead, Settings, Track } from "../api/schema";
 import type { DrillTarget } from "./drills";
 import { ALL_LEADS } from "./constants";
 import { fillState } from "./rows";
+import { SCREENED } from "./screened";
 import { trackWarn, type TabWarning } from "./runs";
 
-export type TabKind = "overview" | "applications" | "allleads" | "track";
+export type TabKind = "overview" | "applications" | "allleads" | "screened" | "track";
 
 export interface Tab {
   id: string;
@@ -41,6 +42,7 @@ export function pathForTab(id: string): string {
   if (id === "dashboard") return "/";
   if (id === "applications") return "/applications";
   if (id === ALL_LEADS) return "/all-leads";
+  if (id === SCREENED) return "/screened";
   return `/t/${encodeURIComponent(id)}`;
 }
 
@@ -107,6 +109,19 @@ export function buildTabs(
       path: pathForTab(key),
     });
   }
+
+  // Last, after the searches themselves: what they set aside is a place to go
+  // looking, not one of the tabs a morning starts in. No badge either - a count
+  // of postings nobody has to act on would read as work waiting.
+  tabs.push({
+    id: SCREENED,
+    kind: "screened",
+    label: "Screened",
+    n: null,
+    warn: null,
+    paused: "",
+    path: pathForTab(SCREENED),
+  });
 
   return tabs;
 }
