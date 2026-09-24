@@ -88,6 +88,14 @@ describe("a paused search's tab", () => {
     await renderAt("/", pausedBeta);
     expect(tab("Beta roles").querySelector(".tabwarn")).toBeNull();
   });
+
+  it("greys the tab itself, so a quiet search isn't quiet for no visible reason", async () => {
+    await renderAt("/", pausedBeta);
+    const beta = screen.getByRole("tab", { name: "Beta roles (paused), 2" });
+    expect(beta).toHaveClass("paused");
+    expect(beta).toHaveAttribute("title", expect.stringMatching(/^Paused since 2026-09-0[23]: this search doesn't run/));
+    expect(tab("Alpha roles")).not.toHaveClass("paused");
+  });
 });
 
 describe("the Overview's searches", () => {

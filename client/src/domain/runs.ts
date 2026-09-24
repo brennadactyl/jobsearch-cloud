@@ -4,7 +4,7 @@
  * in both cases.
  */
 import { DEFAULT_STALE_RUN_HOURS, type LastRun, type Settings, type Track } from "../api/schema";
-import { hoursSince } from "./format";
+import { hoursSince, isoDay } from "./format";
 
 export type RunState = "ok" | "stale" | "error" | "never" | "paused";
 
@@ -39,6 +39,13 @@ export function runSummary(run: LastRun | null | undefined): string {
   // Only the run record counts these: the delisted rows were deleted.
   if (run.delisted) bits.push(`${run.delisted} taken down`);
   return bits.length ? bits.join(", ") : "found nothing new";
+}
+
+/** The day a pause was stamped, "" when it isn't paused or the instant is unreadable. */
+export function pausedDay(paused: string): string {
+  if (!paused) return "";
+  const at = new Date(paused);
+  return Number.isNaN(at.getTime()) ? "" : isoDay(at);
 }
 
 export interface TabWarning {
