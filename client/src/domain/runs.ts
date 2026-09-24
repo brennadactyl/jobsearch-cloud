@@ -9,7 +9,7 @@ import { hoursSince } from "./format";
 export type RunState = "ok" | "stale" | "error" | "never" | "paused";
 
 /** What judging a search's state needs of it: when it last ran, and whether it's paused. */
-export type RunTrack = Pick<Track, "last_run" | "paused_since">;
+export type RunTrack = Pick<Track, "last_run" | "paused">;
 
 /**
  * "never" is not a problem: flagging it would open every new install covered in
@@ -20,7 +20,7 @@ export type RunTrack = Pick<Track, "last_run" | "paused_since">;
  * paused search without its pause and read it as stale.
  */
 export function runState(track: RunTrack | null | undefined, settings: Settings): RunState {
-  if (track?.paused_since) return "paused";
+  if (track?.paused) return "paused";
   const run: LastRun | null | undefined = track?.last_run;
   if (!run || !run.at) return "never";
   if (run.status === "error") return "error";

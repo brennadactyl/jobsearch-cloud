@@ -18,7 +18,7 @@ import { clearPrefs } from "./ui/prefs";
 const PAUSED_AT = "2026-09-02T17:30:00.000Z";
 const pausedBeta: TrackerData = {
   ...fixture,
-  tracks: fixture.tracks.map((t) => (t.key === "beta" ? { ...t, paused_since: PAUSED_AT } : t)),
+  tracks: fixture.tracks.map((t) => (t.key === "beta" ? { ...t, paused: PAUSED_AT } : t)),
 };
 
 function renderAt(path: string, data: TrackerData) {
@@ -50,7 +50,7 @@ afterEach(() => {
 describe("runState", () => {
   it("reads a paused search as paused, whatever its last run says, and never warns about it", () => {
     const beta = fixture.tracks[1];
-    const paused = { ...beta, paused_since: PAUSED_AT };
+    const paused = { ...beta, paused: PAUSED_AT };
     expect(runState(beta, fixture.settings)).toBe("error");
     expect(runState(paused, fixture.settings)).toBe("paused");
     expect(trackWarn(paused, fixture.settings)).toBeNull();
@@ -68,6 +68,20 @@ describe("a paused search's tab", () => {
     expect(stamp).toHaveTextContent(/^Paused 2026-09-0[23]$/);
     expect(stamp.querySelector(".rdot")).toBeNull();
     expect(stamp).not.toHaveTextContent(/Ran|error/);
+  });
+
+  it("reads the pause the server resolved, so a tab the paused search fills says Paused too", async () => {
+    // A fed tab never carries the switch itself: only `paused`, its root's.
+    const fed: TrackerData = {
+      ...pausedBeta,
+      tracks: [
+        ...pausedBeta.tracks,
+        { ...fixture.tracks[1], key: "gamma", label: "Gamma roles", sort_order: 3, fed_by: "beta", paused: PAUSED_AT },
+      ],
+    };
+    await renderAt("/t/gamma", fed);
+    expect(document.querySelector(".runstamp")).toHaveClass("paused");
+    expect(tab("Gamma roles").querySelector(".tabwarn")).toBeNull();
   });
 
   it("has no warning dot on its tab, where the same search running would", async () => {
@@ -94,7 +108,7 @@ describe("the Overview's searches", () => {
   });
 
   it("says so when every search is paused", async () => {
-    await renderAt("/", { ...fixture, tracks: fixture.tracks.map((t) => ({ ...t, paused_since: PAUSED_AT })) });
+    await renderAt("/", { ...fixture, tracks: fixture.tracks.map((t) => ({ ...t, paused: PAUSED_AT })) });
     expect(screen.getByText("All 2 paused")).toBeInTheDocument();
   });
 });

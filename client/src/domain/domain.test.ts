@@ -133,7 +133,7 @@ describe("fillState", () => {
 
 describe("runState", () => {
   /** A search judged only by its run: not paused. */
-  const running = (last_run: Track["last_run"]) => ({ last_run, paused_since: "" });
+  const running = (last_run: Track["last_run"]) => ({ last_run, paused: "" });
 
   it("treats a track that has never run as honest, not broken", () => {
     const never = running({ at: "", on: "", status: "", leads_added: 0, screened_added: 0, delisted: 0, note: "" });
