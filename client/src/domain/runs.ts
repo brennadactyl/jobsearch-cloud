@@ -3,13 +3,25 @@
  * nothing" apart from "stopped running"; lead counts and badges look the same
  * in both cases.
  */
-import { DEFAULT_STALE_RUN_HOURS, type LastRun, type Settings } from "../api/schema";
+import { DEFAULT_STALE_RUN_HOURS, type LastRun, type Settings, type Track } from "../api/schema";
 import { hoursSince } from "./format";
 
-export type RunState = "ok" | "stale" | "error" | "never";
+export type RunState = "ok" | "stale" | "error" | "never" | "paused";
 
-/** "never" is not a problem: flagging it would open every new install covered in warnings. */
-export function runState(run: LastRun | null | undefined, settings: Settings): RunState {
+/** What judging a search's state needs of it: when it last ran, and whether it's paused. */
+export type RunTrack = Pick<Track, "last_run" | "paused_since">;
+
+/**
+ * "never" is not a problem: flagging it would open every new install covered in
+ * warnings. "paused" comes first: a paused search isn't meant to run, so however
+ * long ago its last run was, it isn't stale.
+ *
+ * The whole track is passed rather than its run alone, so no caller can judge a
+ * paused search without its pause and read it as stale.
+ */
+export function runState(track: RunTrack | null | undefined, settings: Settings): RunState {
+  if (track?.paused_since) return "paused";
+  const run: LastRun | null | undefined = track?.last_run;
   if (!run || !run.at) return "never";
   if (run.status === "error") return "error";
   const h = hoursSince(run.at);
@@ -34,8 +46,8 @@ export interface TabWarning {
   title: string;
 }
 
-export function trackWarn(run: LastRun | null | undefined, settings: Settings): TabWarning | null {
-  const st = runState(run, settings);
+export function trackWarn(track: RunTrack | null | undefined, settings: Settings): TabWarning | null {
+  const st = runState(track, settings);
   if (st === "error") return { cls: "error", title: "The last scheduled run reported an error" };
   if (st === "stale") return { cls: "stale", title: "This search hasn’t run recently" };
   return null;

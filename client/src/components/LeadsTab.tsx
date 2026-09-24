@@ -153,7 +153,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
     // differently. Whether anything is still tracked separates a search that has
     // turned up nothing from one whose finds have all been applied to; the run
     // record separates a real zero from a search that hasn't run in a week.
-    const st = runState(track?.last_run, settings);
+    const st = runState(track, settings);
     // Parenthesised: `a || b && x` binds as `a || (b && x)`, which renders
     // `true` (nothing) for a stale search.
     const warn = (st === "stale" || st === "error") && (
