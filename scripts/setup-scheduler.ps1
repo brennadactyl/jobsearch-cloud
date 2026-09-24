@@ -16,7 +16,9 @@
       doesn't.
 
   A track with `fed_by` set gets no task: its tab is filled by that sibling
-  track's search (see server/migrations/0003_branched_tracks.sql).
+  track's search (see server/migrations/0003_branched_tracks.sql). A paused
+  search (`paused_since` set, docs/pause-search-plan.md) gets none either, and a
+  task it already has is removed and named in the output.
 
   Safe to re-run: tasks for existing tracks are replaced in place, and tasks
   for removed tracks are unregistered. Cleanup is scoped to the people this run
@@ -249,6 +251,22 @@ foreach ($person in $people) {
         # the next run after the night writes it up.
         if (-not $track.role_search_line) {
             Write-Host "  $($track.key) - no task yet; waiting for a run to write up what it searches for"
+            continue
+        }
+        # A paused search keeps its leads and config but runs nothing, and
+        # GET /api/prompt refuses it. Its task is removed here, by name, rather
+        # than left for the stale sweep below, which would report the track as
+        # no longer configured. Resuming clears the field and the next run
+        # registers it again.
+        if ($track.paused_since) {
+            $pausedName = $prefix + (ConvertTo-TaskSuffix $track.key)
+            $since = ([datetime]$track.paused_since).ToLocalTime().ToString("yyyy-MM-dd")
+            if (Get-ScheduledTask -TaskName $pausedName -ErrorAction SilentlyContinue) {
+                Unregister-ScheduledTask -TaskName $pausedName -Confirm:$false
+                Write-Host "  removed $pausedName - $($track.key) is paused (since $since)"
+            } else {
+                Write-Host "  $($track.key) - no task; paused since $since"
+            }
             continue
         }
         $time = $track.schedule_time
