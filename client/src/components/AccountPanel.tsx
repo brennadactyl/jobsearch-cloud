@@ -60,9 +60,18 @@ const SECTIONS = [
 ] as const;
 type SectionKey = (typeof SECTIONS)[number]["key"];
 
-/** One change per field, so the footer counts a renamed search and its new rule as two. */
+/**
+ * One change per field, so the footer counts a renamed search and its new rule
+ * as two - except a pay floor, whose amount and unit are one answer: typing an
+ * amount stores the unit beside it, and counting that as two changes tells
+ * someone they made an edit they never made.
+ */
 const countFields = (searches: Readonly<Record<string, SearchEdit>>) =>
-  Object.values(searches).reduce((n, fields) => n + Object.keys(fields).length, 0);
+  Object.values(searches).reduce((n, fields) => {
+    const keys = Object.keys(fields);
+    const pay = keys.filter((k) => k === "pay_floor" || k === "pay_floor_unit").length;
+    return n + keys.length - (pay > 1 ? pay - 1 : 0);
+  }, 0);
 
 const isPlaceKey = (field: string | null): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
 const isGeneralKey = (field: string | null): field is GeneralKey => GENERAL_KEYS.some((k) => k === field);
