@@ -3931,6 +3931,17 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("a tab outside the running search's group falls back to the root, counted rather than refused",
     (await skRow(SK, "elsewhere"))?.search === "SWE" &&
     JSON.stringify(tabbed.json?.tabs_filed_at_root) === JSON.stringify({ CPM: 1 }), JSON.stringify(tabbed.json));
+  check("a multi-tab search is told how many rows named a tab, so silence is visible",
+    tabbed.json?.tabs_named === 1 && tabbed.json?.tabs_of === 3, JSON.stringify(tabbed.json));
+  const noneNamed = await req("POST", "/api/screened", { token: SK.token, body: { search: "SWE", screened: [
+    { search: "SWE", url: skUrl("quiet"), company: "Acme", title: "SDE", reason: "dead", kind: "dead" }] } });
+  check("a run that stopped naming tabs reads as none named, not as a clean night",
+    noneNamed.json?.tabs_named === 0 && noneNamed.json?.tabs_of === 1 &&
+    !("tabs_filed_at_root" in (noneNamed.json || {})), JSON.stringify(noneNamed.json));
+  const single = await req("POST", "/api/screened", { token: SK.token, body: { search: "CPM", screened: [
+    { search: "CPM", url: skUrl("single"), company: "Acme", title: "PM", reason: "dead", kind: "dead" }] } });
+  check("a search with one tab is not asked about tabs at all",
+    single.json?.added === 1 && !("tabs_named" in (single.json || {})), JSON.stringify(single.json));
   check("and a batch that files every row where it was judged reports no fallback",
     !("tabs_filed_at_root" in ((await req("POST", "/api/screened", { token: SK.token, body: { search: "SWE", screened: [
       { search: "swe-health", url: skUrl("tab-2"), company: "Mercy", title: "RN", reason: "wrong role", kind: "wrong-role" }] } })).json || {})));
