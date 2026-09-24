@@ -558,5 +558,28 @@ INSERT INTO tracks (user_id, key, label, sort_order, role_search_line, fed_by, s
   db.close();
 }
 
+console.log("\n== 0026 leaves every search without a pay floor ==");
+{
+  // A search whose pay rule is already typed into its prose keeps it: the
+  // migration adds the pair and touches nothing else, so nothing changes for
+  // an account until someone sets a floor in the panel.
+  const STOP26 = MIGRATIONS.find((f) => f.startsWith("0026_"));
+  const db = migratedThrough(STOP26, `
+INSERT INTO users (id, name) VALUES ('u1', 'One');
+INSERT INTO tracks (user_id, key, label, sort_order, role_search_line, fit_disqualifier, fit_filter_step) VALUES
+  ('u1', 'CPM', 'CPM', 0, 'program roles', 'anything under 195k', 'a whole screening step'),
+  ('u1', 'SWE', 'SWE', 1, 'engineering roles', '', '');
+`);
+  const track = (key) => db.prepare("SELECT * FROM tracks WHERE user_id = 'u1' AND key = ?").get(key);
+  check("every existing track starts with no floor, and no NULLs to read around",
+    track("CPM").pay_floor === "" && track("CPM").pay_floor_unit === "" &&
+    track("SWE").pay_floor === "" && track("SWE").pay_floor_unit === "");
+  check("a pay rule already written as prose is kept exactly as it was",
+    track("CPM").fit_disqualifier === "anything under 195k" &&
+    track("CPM").fit_filter_step === "a whole screening step" &&
+    track("CPM").role_search_line === "program roles");
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

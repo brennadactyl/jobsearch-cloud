@@ -144,6 +144,59 @@ export function searchProseError(field, value, max) {
   return "";
 }
 
+// The lowest pay worth showing (docs/search-fields-plan.md): the amount as the
+// person typed it, and the one part that has to be machine-readable beside it.
+// The cap is what an amount runs to - "$180,000 base" is already generous -
+// rather than anything the column needs; the prompt carries it every night.
+export const PAY_FLOOR_MAX_CHARS = 40;
+export const PAY_FLOOR_UNITS = ["year", "hour"];
+
+/**
+ * What is wrong with a pay floor's amount, or "". "" clears it, and nothing
+ * here reads a number out of the text: "180k", "$180,000" and "£140,000" are
+ * all a person saying what they mean, and the last says its own currency.
+ * @param {string} field the key to name in the refusal
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function payFloorError(field, value) {
+  if (typeof value !== "string") return `${field} must be text`;
+  if (value.trim().length > PAY_FLOOR_MAX_CHARS) {
+    return `${field} is longer than ${PAY_FLOOR_MAX_CHARS} characters - it is an amount, not a rule`;
+  }
+  return "";
+}
+
+/**
+ * What is wrong with a pay floor's unit, or "". Two values and "", because
+ * this is the half the prompt has to state as words ("a year", "an hour")
+ * rather than repeat.
+ * @param {string} field
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function payFloorUnitError(field, value) {
+  if (typeof value !== "string" || (value !== "" && !PAY_FLOOR_UNITS.includes(value))) {
+    return `${field} must be ${PAY_FLOOR_UNITS.join(" or ")}, or "" for no floor`;
+  }
+  return "";
+}
+
+/**
+ * The refusal when a write would leave a pay floor half set, or "". The two
+ * are set together and cleared together: a unit with no amount says nothing,
+ * and an amount with no unit can't be stated in the prompt. Judged on what the
+ * write leaves, so sending one while the other is already stored is fine.
+ * @param {string} amount the `pay_floor` the write leaves
+ * @param {string} unit the `pay_floor_unit` it leaves
+ * @returns {string}
+ */
+export function halfSetPayFloorError(amount, unit) {
+  if (!amount && unit) return "a pay floor needs an amount as well as a unit";
+  if (amount && !unit) return `a pay floor needs a unit - ${PAY_FLOOR_UNITS.join(" or ")}`;
+  return "";
+}
+
 /**
  * What is wrong with a `pronouns` setting, or "". "" is unset; the rest are the
  * pronouns the prompt knows how to write, which the caller passes rather than

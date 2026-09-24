@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0025_track_paused.sql` applied in order. This is the
+`0001_schema.sql` through `0026_track_pay_floor.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -111,6 +111,8 @@ erDiagram
         TEXT profile_stale_since
         TEXT resume_was
         TEXT paused_since
+        TEXT pay_floor
+        TEXT pay_floor_unit
     }
     search_runs {
         TEXT user_id PK, FK
@@ -318,6 +320,11 @@ search of its own.
   runs. Only a track that runs its own search carries one; a tab it fills is
   paused with it. Pausing leaves every other row alone, so resuming picks up
   where the search stopped.
+- `pay_floor` is the lowest pay worth showing, as the person typed it (`''`
+  when unset), and `pay_floor_unit` is `year` or `hour` beside it (`''` when
+  there is no floor). Nothing parses a number out of the amount: the prompt
+  states both and the run judges a posting against them. The two are set
+  together and cleared together.
 
 ### search_runs
 
