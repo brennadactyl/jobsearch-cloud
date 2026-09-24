@@ -106,6 +106,11 @@ a search.
 
 - **Each search's block** holds its name, then the questions, in the Searches
   section the panel already has.
+- **Setup and the panel ask in the same words.** A question a person answers at
+  signup and edits later is one question: same label, same vocabulary, wherever
+  they meet it. Where a screen needs to say more it says it in the hint, as the
+  location questions do. The name, the roles, what rules a posting out and the
+  pay floor all appear in both.
 - **The panel's one Save** carries them with everything else it owns, and the
   sidebar marks a section holding unsaved changes.
 - **Stored at once, read tonight.** The section says which it is: the value is
