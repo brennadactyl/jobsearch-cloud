@@ -129,7 +129,7 @@ foreach ($log in $logs) {
                     Account = $account.Substring(0, [Math]::Min(8, $account.Length))
                     Search = $Matches[1]; Start = $at; Minutes = $null; Waited = $queueWait
                     Exit = $null; Status = "-"; Leads = "-"; Screened = "-"; Delisted = "-"; Swept = "-"
-                    DocUpdated = $null; DocRefused = $null; Profile = "none"
+                    DocUpdated = $null; DocRefused = $null; Profile = "none"; Paused = $false
                     Problems = New-Object System.Collections.Generic.List[string]
                 }
             } else { $null }
@@ -161,6 +161,10 @@ foreach ($log in $logs) {
             if ($label -eq "refresh-refused" -or $label -eq "profile-not-refreshed" -or $label -eq "profile-mark-failed") { $run.Profile = "kept stale" }
             $run.Problems.Add($label)
         }
+        # A paused search's run does nothing and records nothing, so its footer
+        # carries no job state, elapsed time or exit code. It is not a problem
+        # and gets no tag; the row says Paused and its counts stay "-".
+        elseif ($text -match '^finished .+ - paused') { $run.Paused = $true }
         elseif ($text -eq "===== done =====") { $rows.Add($run); $run = $null }
     }
     if ($run) { $rows.Add($run) }   # a run still going, or one that died without its footer
@@ -181,7 +185,7 @@ $rows | Sort-Object Start | ForEach-Object {
         Start    = $_.Start.ToString("HH:mm")
         Minutes  = if ($null -ne $_.Minutes) { $_.Minutes } else { "-" }
         Waited   = if ($null -ne $_.Waited) { "{0}m" -f [Math]::Round($_.Waited / 60) } else { "-" }
-        Exit     = if ($null -ne $_.Exit) { $_.Exit } else { "unfinished" }
+        Exit     = if ($null -ne $_.Exit) { $_.Exit } elseif ($_.Paused) { "-" } else { "unfinished" }
         Status   = $_.Status
         Leads    = $_.Leads
         Screened = $_.Screened
