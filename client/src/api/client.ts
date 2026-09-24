@@ -302,6 +302,8 @@ export function saveSettings(changes: SettingsChanges) {
           fit_disqualifier: z.string().optional(),
           /** The resolved state, as the page reads it everywhere: a tab carries its root's. */
           paused: z.string().optional(),
+          pay_floor: z.string().optional(),
+          pay_floor_unit: z.string().optional(),
         }),
       )
       .default({}),
