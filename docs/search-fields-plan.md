@@ -140,9 +140,11 @@ goes in.** Some searches carry their pay rule inside `fit_clause` and
 `fit_disqualifier` today. Setting `pay_floor` on one of those makes step 7 say
 it twice, in two wordings. So the conversion is one change per affected search:
 set the floor, and strip the floor sentence from the two prose fields in the
-same write. It is a live write on a real person's search, drafted by Prompt Bro
-and approved by the account's person before it is sent, and it is a step of
-this work rather than something assumed.
+same write. It is a live write on a real person's search, so Prompt Bro reads
+every search's prose first and hands over one row per search - the amount as
+that search states it, its unit, and the sentence to strip - which the operator
+approves in one pass and writes once the field exists. The reading happens
+before the build; the writing waits for it.
 
 Until a search is converted, the panel showing a search's own clause and the
 composed one together is what makes the duplicate visible.
