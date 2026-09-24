@@ -8,7 +8,7 @@ export function RunStamp({ track, settings }: { track: Track | undefined; settin
   const run = track.last_run;
   const st = runState(track, settings);
   if (st === "paused") {
-    const since = new Date(track.paused_since);
+    const since = new Date(track.paused);
     const day = Number.isNaN(since.getTime()) ? "" : isoDay(since);
     return (
       <span className="runstamp paused" title="Paused: this search doesn't run until it's resumed. Its leads stay here.">

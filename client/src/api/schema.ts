@@ -133,12 +133,13 @@ export const trackSchema = z.object({
   /** What has a posting screened out, beside dead-on-arrival and wrong level. */
   fit_disqualifier: text,
   /**
-   * When the search was paused, as an ISO instant; "" while it runs. The server
-   * copies a feed group's pause onto every tab it fills, so each tab reads its
-   * own. A paused search keeps its tab and leads but doesn't run, so nothing
-   * about it is stale.
+   * When this tab's search was paused, as an ISO instant; "" while it runs. The
+   * switch itself (`paused_since`) is set only on the search that runs, never on
+   * a tab it fills; this is the server's resolved answer, which a tab inherits
+   * from its root. A paused search keeps its tab and leads but doesn't run, so
+   * nothing about it is stale.
    */
-  paused_since: text,
+  paused: text,
   // TRACK_CONFIG_FIELDS are on the payload too, but the page renders none of
   // them; listing them here would be a second copy of the server's config
   // vocabulary.
