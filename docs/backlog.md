@@ -40,10 +40,18 @@ doc, and a finding says whether anything was built on the wrong line.
   tests, rebuilding a search's doc and PowerShell script conventions; fixes to
   `edit-tracker-page`, `job-search-setup`, `add-target-company` and
   `change-search-prompt`; a nightly run report and a backup query script.
-- **[Account settings](account-settings-plan.md), the rest** - the resume and
-  locations sections and "My account" are live. Still to build: editing the page
-  title, pronouns, excluded companies and search names, and the setup answers
-  the night turns into prose. Needs its own mockup pass first.
+- **[One task asks what is due](dispatcher-plan.md)**, instead of one Windows
+  task per search. The schedule is a copy of the config made when someone last
+  ran `setup-scheduler.ps1`, and it drifts three ways: a new search with no
+  task, a paused search whose task outlives it, and a task disabled by hand that
+  the tracker knows nothing about. A dispatcher asking `GET /api/due` removes
+  the copy, and with it the register, skip, unregister and report rules - none of
+  which survive the searches leaving the PC. The endpoint answers with a claim,
+  so two callers can't run one search twice; that is also what makes the move off
+  the PC a transition rather than a cutover. Its cost is one point of failure
+  where today a broken task costs one search, watched through run health. Backend
+  Buddy for the endpoint, Fullstack Friend for the dispatcher, Prompt Bro on what
+  a run needs at its start.
 - **"Don't show me this company again", from a lead.** Ruling a company out
   means typing its name in settings today, at the moment the person is looking
   straight at it on a job. One action on the row adds the company to
@@ -52,13 +60,13 @@ doc, and a finding says whether anything was built on the wrong line.
   It covers every search, and it hides that company's existing leads too. The
   person is told what it did and can undo it, and removing the chip in the
   panel is the other way back.
-- **[Edit what a search looks for](search-fields-plan.md), from the account
-  panel** - the role line, what keeps a posting, what rules one out, the pay
-  floor. Planned, unbuilt. It writes through `POST /api/settings` beside `label`, not
-  `POST /api/config`, whose `tracks` array replaces the whole list and would drop
-  the person's other searches. Nothing is regenerated and no run is involved.
-  This is the useful half of the answers edit the account panel dropped, at a
-  fraction of its cost.
+- **[A pay floor on each search](search-fields-plan.md)** - the rest of that
+  plan. The roles line and the two fit rules are live in the panel; the floor is
+  the part that needs two stored values, a migration, and the clauses the prompt
+  composes in step 7. A posting stays when its range reaches the amount or states
+  none, and is screened only when its whole range sits below it. Prompt Bro has
+  read the two searches that state a pay rule today, so their numbers can be set
+  once the field exists.
 - **Split a track doc into what is composed and what is accumulated.** One file
   holds both the parts generated from config and what the runs earn over weeks -
   companies tried, delisting guards, notes on a careers site - and its only
