@@ -162,6 +162,16 @@ doc, and a finding says whether anything was built on the wrong line.
   this URL?", which is random access over all history, and splitting one live
   dataset across two stores to buy an expiry rule gives up what D1 is for. If
   storage ever binds, archive whole accounts instead. Owner: Backend Buddy.
+- **A screened row can't say which tab it belongs to**, so a search that fills
+  several files all of them under its root: on one account 824 screened rows sit
+  on the root tab against 131 across the other three, while its leads spread 37 /
+  125 / 245 / 68. Nothing is misjudged - the row carries the only key it can, and
+  the tab's label then reads as the verdict, so a healthcare company appears filed
+  under a games tab. A lead already names its tab (`search` per row in
+  `tracker.ps1`); a screened row takes the run's own key. Give it the same field,
+  checked against that search's own tabs and falling back to the root, and the
+  Screened tab's per-tab filter starts telling the truth. Rides with the kind
+  below: same route, same helper, same prompt step.
 - **Record which kind of reason screened a posting**, from a fixed list, beside
   the sentence a run already writes. The Screened tab lists what a search set
   aside, and every run stamp now gives both counts, so a thin night reads
