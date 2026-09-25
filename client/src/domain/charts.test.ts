@@ -32,7 +32,7 @@ function app(over: Partial<Application> & Pick<Application, "id">): Application 
 function screened(over: Partial<Screened> & Pick<Screened, "id">): Screened {
   return {
     search: "alpha", url: `https://example.com/s${over.id}`, company: "", title: "", location: "",
-    reason: "", date: daysAgo(1), added_by: "run", found: "", ...over,
+    reason: "", kind: "", date: daysAgo(1), added_by: "run", found: "", ...over,
   };
 }
 

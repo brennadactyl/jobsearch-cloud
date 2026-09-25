@@ -95,6 +95,14 @@ export const screenedSchema = z.object({
   title: text,
   location: text,
   reason: text,
+  /**
+   * Which sort of rejection this was, from the closed list the server keeps
+   * (SCREENED_KINDS in server/src/validate.js); "" is a row nobody has
+   * classified, which is not the same as one classified as the catch-all. The
+   * page groups and counts by this, never by `reason`, which is the sentence
+   * about this one posting.
+   */
+  kind: text,
   date: text,
   added_by: text, // "run" | "hand" | "" for rows older than the column
   // The removed lead's found date, "" if it never was a lead. Absent (not "")

@@ -9,7 +9,7 @@ import { getAllScreened } from "../api/client";
 import type { Screened, TrackerData } from "../api/schema";
 import { screenedColumns } from "../domain/export";
 import { safeUrl } from "../domain/format";
-import { countsBySearch, keptWithin, screenedWithin, SCREENED_WINDOWS } from "../domain/screened";
+import { countsByKind, countsBySearch, keptWithin, SCREENED_KINDS, screenedWithin, SCREENED_WINDOWS } from "../domain/screened";
 import { buildTracks } from "../domain/tabs";
 import { ExportButton } from "./listControls";
 
@@ -23,12 +23,23 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   // In the URL, so a run stamp can link to one search and Back undoes it.
   const [params, setParams] = useSearchParams();
   const search = params.get("search") ?? ALL;
-  const setSearch = (next: string) => setParams(next ? { search: next } : {}, { replace: true });
+  const kind = params.get("kind");
+  const narrow = (next: { search?: string; kind?: string | null }) => {
+    const set = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(next)) {
+      if (value) set.set(key, value);
+      else set.delete(key);
+    }
+    setParams(set, { replace: true });
+  };
+  const setSearch = (next: string) => narrow({ search: next, kind: null });
 
   const tracks = buildTracks(data.tracks);
   const inWindow = screenedWithin(data.screened, days, now);
   const counts = countsBySearch(inWindow);
-  const rows = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
+  const ofSearch = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
+  const kinds = countsByKind(ofSearch);
+  const rows = kind === null ? ofSearch : ofSearch.filter((r) => r.kind === kind);
   const kept = keptWithin(data.leads, days, now, search);
   const nameOf = (key: string) => tracks[key]?.label || key;
 
@@ -101,6 +112,42 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
               </button>
             ))}
         </div>
+      )}
+
+      {/* What the rules cost, by the kind a run filed each rejection under -
+          never by reading the sentences, which are one per posting and no two
+          alike. Counted by posting: a job re-listed under a new url is two. */}
+      {kinds.length > 1 && (
+        <div className="screened-kinds">
+          {kinds.map((k) => {
+            const share = Math.round((k.postings / Math.max(...kinds.map((x) => x.postings))) * 100);
+            const chosen = kind === k.kind;
+            return (
+              <button
+                key={k.kind || "unsorted"}
+                type="button"
+                className={chosen ? "screened-kind chosen" : "screened-kind"}
+                aria-pressed={chosen}
+                onClick={() => narrow({ kind: chosen ? null : k.kind || "" })}
+                disabled={chosen ? false : undefined}
+              >
+                <span className="mono screened-kind-n">{k.postings}</span>
+                <span className="screened-kind-label">{k.label}</span>
+                <span className="screened-kind-bar">
+                  <span style={{ width: `${share}%` }} />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {kind !== null && (
+        <p className="screened-narrowed">
+          Showing {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind}.{" "}
+          <button type="button" className="linkish" onClick={() => narrow({ kind: null })}>
+            Show every reason
+          </button>
+        </p>
       )}
 
       {rows.length === 0 ? (
