@@ -122,6 +122,16 @@ export const lastRunSchema = z.object({
   status: text, // "ok" | "error" | ""
   leads_added: z.number().default(0),
   screened_added: z.number().default(0),
+  /**
+   * Of those, the ones this person's own settings turned away - the count that
+   * answers "what are my rules costing me". `screened_added` keeps counting
+   * every rejection, so no past night is restated.
+   *
+   * Null for a night that recorded no such count, which is not the same as a
+   * night whose rules turned nothing away: the page says nothing rather than
+   * claim a zero it can't stand behind.
+   */
+  screened_by_rules: z.number().nullish(),
   delisted: z.number().default(0),
   note: text,
 });
@@ -221,6 +231,16 @@ export const dataSchema = z.object({
    * both answer, so one reader handles every case. Nothing is deleted - the
    * rows outside the window still stop a later run re-finding those postings.
    */
+  /**
+   * How many postings each search's own settings turned away, over the whole
+   * table rather than the window. A search is absent when it has none, which is
+   * not the same as none: the rows from before a run recorded kinds carry none,
+   * so a search that only ran then can't be said to have turned nothing away.
+   */
+  screened_counts: z
+    .record(z.string(), z.number())
+    .nullish()
+    .transform((c) => c ?? {}),
   screened_window: z
     .object({ days: z.number().default(0), older: z.number().default(0) })
     .nullish()

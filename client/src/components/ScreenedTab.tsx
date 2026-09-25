@@ -7,7 +7,16 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Screened, TrackerData } from "../api/schema";
 import { safeUrl } from "../domain/format";
-import { countsByKind, countsBySearch, keptWithin, SCREENED_KINDS, screenedWithin, SCREENED_WINDOWS } from "../domain/screened";
+import {
+  countsByKind,
+  countsBySearch,
+  groupOf,
+  HAND,
+  keptWithin,
+  SCREENED_KINDS,
+  screenedWithin,
+  SCREENED_WINDOWS,
+} from "../domain/screened";
 import { buildTracks } from "../domain/tabs";
 
 const ALL = "";
@@ -39,8 +48,9 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const counts = countsBySearch(inWindow);
   const ofSearch = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
   const kinds = countsByKind(ofSearch);
-  const rows = kind === null ? ofSearch : ofSearch.filter((r) => r.kind === kind);
+  const rows = kind === null ? ofSearch : ofSearch.filter((r) => groupOf(r) === kind);
   const kept = keptWithin(data.leads, days, now, search);
+  const byHand = rows.filter((r) => groupOf(r) === HAND).length;
   const nameOf = (key: string) => tracks[key]?.label || key;
 
   return (
@@ -68,10 +78,27 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
         </label>
       </div>
 
+      {/* What this person's settings cost, which is the server's count and never
+          the length of what the page happens to hold: the list also carries
+          postings they removed themselves, and a number derived from it would
+          answer a different question than the Overview's. Only per search,
+          since that is the only count on the wire. */}
+      {search !== ALL && data.screened_counts[search] !== undefined && (
+        <p className="screened-claim">
+          {nameOf(search)}&rsquo;s settings have turned away{" "}
+          <strong className="mono">{data.screened_counts[search]}</strong>{" "}
+          {data.screened_counts[search] === 1 ? "posting" : "postings"} in all.
+        </p>
+      )}
+
       {everRejected.length > 0 && (
         <p className="screened-sum">
-          <strong className="mono">{rows.length}</strong> set aside, against <strong className="mono">{kept}</strong>{" "}
-          kept{search && ` by ${nameOf(search)}`}, {SCREENED_WINDOWS.find((w) => w.days === days)?.label}.
+          Showing <strong className="mono">{rows.length}</strong> from{" "}
+          {SCREENED_WINDOWS.find((w) => w.days === days)?.label}, against <strong className="mono">{kept}</strong> kept
+          {search && ` by ${nameOf(search)}`}
+          {/* The gap between this list and the count above, named rather than
+              left for someone to work out by counting rows. */}
+          {byHand > 0 && `, including ${byHand} you removed yourself`}.
           {/* A page showing part of the record has to say so, or a window reads
               as a purge. Nothing is deleted, and the rows outside it are still
               working: they are what stops a run finding those postings again. */}
@@ -109,8 +136,10 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
       )}
 
       {/* What the rules cost, by the kind a run filed each rejection under -
-          never by reading the sentences, which are one per posting and no two
-          alike. Counted by posting: a job re-listed under a new url is two. */}
+          and what this person turned away themselves, which is a group of its
+          own rather than an unclassified one. Never by reading the sentences,
+          which are one per posting and no two alike. Counted by posting: a job
+          re-listed under a new url is two. */}
       {kinds.length > 1 && (
         <div className="screened-kinds">
           {kinds.map((k) => {
@@ -145,11 +174,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
       )}
 
       {rows.length === 0 ? (
-        <p className="empty">
-          {everRejected.length === 0
-            ? "Nothing has been set aside yet. A run records each posting it looks at and doesn't keep, with its reason."
-            : "Nothing was set aside in this window."}
-        </p>
+        <p className="empty">{emptyLine(data, search, everRejected.length)}</p>
       ) : (
         <div className="card grid-wrap screened-grid">
           <table>
@@ -171,6 +196,22 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
       )}
     </div>
   );
+}
+
+/**
+ * What an empty list means, which is three different things. A search with no
+ * count at all has a record that predates a run saying which kind each rejection
+ * was: its rows exist and can't be attributed, so saying it turned nothing away
+ * would be a claim about months nobody can speak for.
+ */
+function emptyLine(data: TrackerData, search: string, everRejected: number): string {
+  if (search && data.screened_counts[search] === undefined) {
+    return "No record of what this search turned away: its rejections were written before a run said which rule caused each one.";
+  }
+  if (everRejected === 0) {
+    return "Nothing has been set aside yet. A run records each posting your settings turn away, with its reason.";
+  }
+  return "Nothing was set aside in this window.";
 }
 
 function Row({ row, search }: { row: Screened; search: string }) {

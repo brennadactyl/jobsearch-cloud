@@ -64,6 +64,9 @@ export function screenedWithin(rows: readonly Screened[], days: number, now: num
  * the wrong level anyway is counted there rather than against the pay floor, so
  * what is left under the floor is what the floor alone cost.
  */
+/** The group for a posting someone removed themselves; no kind, because no rule made it. */
+export const HAND = "hand";
+
 export const SCREENED_KINDS: readonly { kind: string; label: string }[] = [
   { kind: "dead", label: "Gone before you saw it" },
   { kind: "duplicate", label: "Already seen" },
@@ -75,10 +78,24 @@ export const SCREENED_KINDS: readonly { kind: string; label: string }[] = [
   { kind: "contract", label: "Contract or temporary" },
   { kind: "pay-below-floor", label: "Below your pay floor" },
   { kind: "other", label: "Other" },
-  // Never classified, which is not a verdict: these rows predate the kinds, or
-  // are postings the person took off their own board.
+  // A posting the person took off their own board. It has no kind because no
+  // rule produced it, but it isn't unclassified either - it is the one thing
+  // here they decided themselves, and the only record of having done so.
+  { kind: HAND, label: "You removed it" },
+  // Never classified: written before a run said which rule caused each
+  // rejection. Not a verdict, and not something to call theirs.
   { kind: "", label: "Not grouped" },
 ];
+
+/**
+ * Which group a row belongs to. The tab shows what someone's settings rejected
+ * **and what they rejected themselves**, which is two rules rather than one: a
+ * reader who simplifies this back to the kind alone drops their own decisions
+ * into the unclassified pile.
+ */
+export function groupOf(row: Screened): string {
+  return row.added_by === "hand" ? HAND : row.kind;
+}
 
 /**
  * How many postings each kind holds, counted by url: a posting re-listed under
@@ -90,9 +107,9 @@ export function countsByKind(rows: readonly Screened[]): { kind: string; label: 
   for (const row of rows) {
     // A row with no url is its own posting: there is nothing to match it on.
     const key = row.url || `#${row.id}`;
-    const seen = urls.get(row.kind) ?? new Set<string>();
+    const seen = urls.get(groupOf(row)) ?? new Set<string>();
     seen.add(key);
-    urls.set(row.kind, seen);
+    urls.set(groupOf(row), seen);
   }
   return SCREENED_KINDS.filter(({ kind }) => urls.has(kind)).map(({ kind, label }) => ({
     kind,

@@ -27,6 +27,8 @@ async function openTab(data: TrackerData = fixture) {
 }
 
 const rows = () => within(document.querySelector(".screened-grid")!).getAllByRole("row").slice(1);
+/** The sentence describing the list, which the window select's own label would otherwise match. */
+const sumLine = () => document.querySelector(".screened-sum")!;
 
 beforeEach(() => {
   localStorage.clear();
@@ -61,23 +63,38 @@ describe("the screened tab", () => {
     expect(screen.queryByText(/below the floor set for this search/)).toBeNull();
   });
 
-  it("counts what was set aside against what was kept, over the window it is showing", async () => {
+  it("describes the list it is showing, and names what is in it beyond the rules", async () => {
     await openTab();
-    expect(screen.getByText(/set aside, against/)).toHaveTextContent("5 set aside, against 8 kept, the last 30 days.");
+    // The list carries a posting she removed herself, so the sentence says so:
+    // nobody should have to count rows to see why two numbers differ.
+    expect(sumLine()).toHaveTextContent(
+      "Showing 5 from the last 30 days, against 8 kept, including 1 you removed yourself.",
+    );
 
     await userEvent.selectOptions(screen.getByRole("combobox"), "0");
     expect(rows()).toHaveLength(6);
-    expect(screen.getByText(/set aside, against/)).toHaveTextContent("6 set aside, against 8 kept, everything.");
+    expect(sumLine()).toHaveTextContent("Showing 6 from everything, against 8 kept");
+  });
+
+  it("takes what the settings cost from the server's count, never from the rows it holds", async () => {
+    await openTab();
+    await userEvent.click(screen.getByRole("button", { name: /Alpha roles/ }));
+    // Three of alpha's rows are inside the window; the claim is its whole
+    // record, and the page never adds up rows to make it.
+    expect(rows()).toHaveLength(3);
+    expect(screen.getByText(/settings have turned away/)).toHaveTextContent(
+      "Alpha roles’s settings have turned away 4 postings in all.",
+    );
   });
 
   it("narrows to one search, counting each search's own rows", async () => {
     await openTab();
     await userEvent.click(screen.getByRole("button", { name: /Beta roles/ }));
     expect(rows()).toHaveLength(2);
-    // The line follows the chip: both halves count the same search, or the
+    // The line follows the chip: both halves describe the same search, or the
     // comparison is between two different things.
-    expect(screen.getByText(/set aside, against/)).toHaveTextContent(
-      "2 set aside, against 4 kept by Beta roles, the last 30 days.",
+    expect(sumLine()).toHaveTextContent(
+      "Showing 2 from the last 30 days, against 4 kept by Beta roles",
     );
     expect(screen.getByRole("button", { name: /Beta roles/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText(/above target level/)).toBeNull();
@@ -96,7 +113,7 @@ describe("the screened tab", () => {
 
     // Alpha's stamp says what its last run kept and what it set aside; the
     // second is the way in.
-    const alpha = screen.getAllByRole("link", { name: "5 screened out" })[0];
+    const alpha = screen.getAllByRole("link", { name: "3 screened out" })[0];
     await userEvent.click(alpha);
     await screen.findByRole("heading", { name: "What your searches set aside" });
     expect(window.location.search).toBe("?search=alpha");
@@ -129,7 +146,7 @@ describe("the screened tab", () => {
     // the second row down.
     expect(screen.queryByText("posting taken down")).toBeNull();
     expect(screen.queryByRole("link", { name: "Ash" })).toBeNull();
-    expect(screen.getByText(/set aside, against/)).toHaveTextContent("5 set aside");
+    expect(sumLine()).toHaveTextContent("Showing 5 from the last 30 days");
     expect(screen.queryByText(/Taken down after you saw it/)).toBeNull();
   });
 
@@ -161,7 +178,8 @@ describe("the screened tab", () => {
       "1Not your level",
       "1Different kind of work",
       "1Contract or temporary",
-      "1Not grouped",
+      // The person's own removal is its own group, not an unclassified one.
+      "1You removed it",
     ]);
 
     await userEvent.click(screen.getByRole("button", { name: /Not your level/ }));
@@ -171,6 +189,11 @@ describe("the screened tab", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Show every reason" }));
     expect(rows()).toHaveLength(5);
+
+    // What she took off her own board is reachable as its own group.
+    await userEvent.click(screen.getByRole("button", { name: /You removed it/ }));
+    expect(rows()).toHaveLength(1);
+    expect(screen.getByText("you removed this")).toBeInTheDocument();
   });
 
   it("counts postings rather than rows, since one job re-listed is two rows", async () => {
@@ -194,6 +217,44 @@ describe("the screened tab", () => {
     expect(within(mine).getByText("you removed this")).toBeInTheDocument();
     // A run's row carries no such mark.
     expect(within(screen.getByText(/outside the US/).closest("tr")!).queryByText("you removed this")).toBeNull();
+  });
+
+  it("won't say a search turned nothing away when its record predates the kinds", async () => {
+    // Beta has no count of its own: its rejections were written before a run
+    // said which rule caused each one, so "nothing" would be a claim about
+    // months nobody can speak for.
+    const noCount: TrackerData = { ...fixture, screened_counts: { alpha: 4 }, screened: [] };
+    vi.spyOn(client, "getData").mockResolvedValue(noCount);
+    window.history.pushState({}, "", "/screened?search=beta");
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <App />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { name: "What your searches set aside" });
+    expect(screen.getByText(/No record of what this search turned away/)).toBeInTheDocument();
+  });
+
+  it("says nothing about screening on a night that recorded no such count", async () => {
+    const older: TrackerData = {
+      ...fixture,
+      tracks: fixture.tracks.map((t) =>
+        t.key === "alpha" ? { ...t, last_run: { ...t.last_run, screened_by_rules: null } } : t,
+      ),
+    };
+    vi.spyOn(client, "getData").mockResolvedValue(older);
+    window.history.pushState({}, "", "/t/alpha");
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <App />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    const stamp = document.querySelector(".runstamp")!;
+    expect(stamp).toHaveTextContent(/3 new/);
+    expect(stamp).not.toHaveTextContent(/screened out/);
   });
 
   it("says so when a search has set nothing aside at all", async () => {

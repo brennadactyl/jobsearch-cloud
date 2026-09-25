@@ -71,7 +71,9 @@ export const tracks: Track[] = [
     pay_floor: "$180k base", pay_floor_unit: "year",
     last_run: {
       at: new Date(NOW - 8 * 3_600_000).toISOString(), on: daysAgo(0),
-      status: "ok", leads_added: 3, screened_added: 5, delisted: 0, note: "",
+      // Five rejections, three of them this person's own rules: the other two were
+      // a dead link and a duplicate, which no setting caused.
+      status: "ok", leads_added: 3, screened_added: 5, screened_by_rules: 3, delisted: 0, note: "",
     },
   },
   {
@@ -81,7 +83,7 @@ export const tracks: Track[] = [
     fit_disqualifier: "", pay_floor: "", pay_floor_unit: "",
     last_run: {
       at: new Date(NOW - 8 * 86_400_000).toISOString(), on: daysAgo(8),
-      status: "error", leads_added: 0, screened_added: 0, delisted: 0,
+      status: "error", leads_added: 0, screened_added: 0, screened_by_rules: 0, delisted: 0,
       note: "the run reported an error",
     },
   },
@@ -145,7 +147,9 @@ export const data: TrackerData = {
   applications,
   screened,
   // No window: the fixture's rows are the whole record, as a server without the
-  // window answers.
+  // window answers. Both searches have settings-caused rejections, so both have
+  // a count; a search with none is absent, never zero.
+  screened_counts: { alpha: 4, beta: 1 },
   screened_window: { days: 0, older: 0 },
   tracks,
   settings,
