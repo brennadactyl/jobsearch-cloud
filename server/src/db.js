@@ -138,7 +138,7 @@
  */
 
 /**
- * @typedef {Track & {last_run: {at: string, on: string, status: string, leads_added: number, screened_added: number, delisted: number, swept: number, note: string}}} TrackWithRun
+ * @typedef {Track & {last_run: {at: string, on: string, status: string, leads_added: number, screened_added: number, screened_by_rules: number|null, delisted: number, swept: number, note: string}}} TrackWithRun
  */
 
 /**
@@ -839,7 +839,7 @@ export class Db {
         .prepare(
           `SELECT ${trackCols},
                   r.last_run_at, r.last_run_on, r.status AS last_run_status,
-                  r.leads_added, r.screened_added, r.delisted, r.swept, r.note
+                  r.leads_added, r.screened_added, r.screened_by_rules, r.delisted, r.swept, r.note
            FROM tracks t
            LEFT JOIN search_runs r ON r.track_key = t.key AND r.user_id = t.user_id
            WHERE t.user_id = ?
@@ -885,6 +885,11 @@ export class Db {
         status: row.last_run_status || "",
         leads_added: row.leads_added || 0,
         screened_added: row.screened_added || 0,
+        // null, not 0: a night recorded before this count existed turned
+        // postings away and nobody recorded which were rules, which is not the
+        // same as a night whose rules turned nothing away
+        // (migrations/0028_run_screened_by_rules.sql).
+        screened_by_rules: row.screened_by_rules ?? null,
         delisted: row.delisted || 0,
         swept: row.swept || 0,
         note: row.note || "",

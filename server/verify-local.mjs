@@ -4064,6 +4064,14 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   const swQuiet = await req("POST", "/api/runs", { token: QUIET, body: { search: "SWE", status: "ok", on: day(0) } });
   check("and 0 is a real answer, for a night whose rules turned nothing away",
     swQuiet.status === 200 && swQuiet.json?.run?.screened_by_rules === 0, JSON.stringify(swQuiet.json?.run));
+  // The count has to survive the read as well as the write: a number stored
+  // and never served is a page quietly losing it.
+  const swStamp = (await req("GET", "/api/config", { token: QUIET })).json?.tracks?.find((t) => t.key === "SWE")?.last_run;
+  check("a run stamp carries the count, so a page reads it rather than inferring",
+    swStamp?.screened_by_rules === 0 && "screened_by_rules" in swStamp, JSON.stringify(swStamp));
+  const swData = (await req("GET", "/api/data", { token: QUIET })).json?.tracks?.find((t) => t.key === "SWE")?.last_run;
+  check("and /api/data's copy of the stamp carries it too",
+    swData?.screened_by_rules === 0, JSON.stringify(swData));
 
   const windowed = (await req("GET", "/api/data", { token: SW })).json;
   const has = (data, n) => data.screened.some((r) => r.url === swUrl(n));
