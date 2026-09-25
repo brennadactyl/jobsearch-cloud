@@ -339,7 +339,7 @@ Say "Configured $(@($data.tracks).Count) tracks and the page settings."
 # route a person uses (db.deleteLeadAndScreen's addedBy), never by being posted
 # to /api/screened, which is always a run's work.
 $leadPayload = @()
-foreach ($lead in (@($data.leads) + @($data.handRemoved))) {
+foreach ($lead in (@($data.leads) + @($data.handRemoved) + @($data.delisted))) {
     $row = @{
         search   = $lead.search
         company  = $lead.company
@@ -397,10 +397,42 @@ foreach ($item in $data.screened) {
         url      = $item.url
         reason   = $item.reason
         date     = DaysAgo $item.daysAgo
+        # What the reason was, from the server's fixed list (validate.js
+        # SCREENED_KINDS): the part the page groups by, beside the sentence.
+        kind     = $item.kind
     }
 }
 $screenedResult = Invoke-Api -Method POST -Path "/api/screened" -Token $token -What "Adding screened postings" -Body @{ screened = $screenedPayload }
 Say "Screened: $($screenedResult.added) added, $($screenedResult.duplicates) already present."
+if ($screenedResult.PSObject.Properties["kinds_coerced"]) {
+    # A kind the server doesn't know is filed as the catch-all rather than
+    # refused, so it would otherwise land silently and skew what the page groups.
+    Write-Warning "The server didn't recognise these kinds and filed them as 'other': $($screenedResult.kinds_coerced | ConvertTo-Json -Compress)"
+}
+
+# --------------------------------------------------- postings that came down --
+
+if (@($data.delisted).Count -gt 0) {
+    $current = Invoke-Api -Method GET -Path "/api/data" -Token $token -What "Reading back the leads to report gone"
+    $present = @{}
+    foreach ($lead in $current.leads) { $present[$lead.url] = $true }
+    $gone = 0
+    foreach ($spec in $data.delisted) {
+        if (-not $present[$spec.url]) {
+            Write-Warning "No lead for $($spec.url) - skipping its delisting."
+            continue
+        }
+        # One call per posting: /api/delist stamps every URL in a call with the
+        # same date, and these came down on different days.
+        $result = Invoke-Api -Method POST -Path "/api/delist" -Token $token -What "Reporting $($spec.company) gone" -Body @{
+            search = $spec.search
+            on     = DaysAgo $spec.daysAgo
+            urls   = @($spec.url)
+        }
+        $gone += $result.removed
+    }
+    Say "Reported $gone posting(s) gone - they read as leads that came down, not as postings screened on sight."
+}
 
 # ------------------------------------------------- lead notes and statuses --
 
