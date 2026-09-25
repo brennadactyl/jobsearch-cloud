@@ -37,9 +37,11 @@ role.
   goes straight to main.
 - **`docs/backlog.md` is the exception,** and the product session pushes it
   straight to main, with no PR and no approval. It is a running list of intent,
-  owned by one session, that changes several times a day and that nothing acts
-  on: no run reads it, and no teammate follows it as an instruction. That is
-  what makes it unlike `CLAUDE.md` and the skills, which wait for the full set
+  owned by one session, that changes several times a day and that nothing
+  executes: no run reads it, and no teammate follows it as an instruction,
+  though every session reads it when starting fresh. A wrong line there
+  misleads a reader who can check; a wrong line in `CLAUDE.md` or a skill is
+  followed. That is what makes it unlike those, which wait for the full set
   of reviewers however long that takes. The exception is the backlog alone - a
   plan is a PR like anything else, and another file wanting the same treatment
   is a change to this rule, not an application of it.
