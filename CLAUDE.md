@@ -39,7 +39,9 @@ role.
   Bro, a client change Client Comrade. Fullstack Friend works across every area
   and sees the operator-side consequence the area's owner doesn't. An author is
   never one of their own required reviewers: when one of the three writes the
-  PR, the area's owner takes that slot.
+  PR, the area's owner takes that slot, and when the author is the area's owner
+  too, Product Partner takes it - it owns no code area, so it is always free to
+  stand in, and the count stays at three readers.
 - **When a required reviewer's session isn't running,** say so in the PR and
   wait for it if the change can wait. If it can't, the remaining required
   reviewers may approve and merge, and the PR names who was missing and why it
