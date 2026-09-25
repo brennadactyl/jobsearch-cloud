@@ -606,5 +606,26 @@ INSERT INTO screened (user_id, search, url, company, title, location, reason, da
   db.close();
 }
 
+console.log("\n== 0028 leaves every recorded night's numbers as they were ==");
+{
+  // The new count is not recomputed for nights already recorded: the kinds it
+  // would need were not stored when they ran, so 0 is what "this night never
+  // counted that" looks like. What must not change is the number a stamp
+  // already shows.
+  const STOP28 = MIGRATIONS.find((f) => f.startsWith("0028_"));
+  const db = migratedThrough(STOP28, `
+INSERT INTO users (id, name) VALUES ('u1', 'One');
+INSERT INTO tracks (user_id, key, label, sort_order) VALUES ('u1', 'SWE', 'SWE', 0);
+INSERT INTO search_runs (user_id, track_key, last_run_at, last_run_on, status, leads_added, screened_added, delisted, swept, note)
+VALUES ('u1', 'SWE', '2026-09-01T09:00:00.000Z', '2026-09-01', 'ok', 3, 26, 2, 40, '3 new, 26 screened out');
+`);
+  const run = db.prepare("SELECT * FROM search_runs WHERE user_id = 'u1' AND track_key = 'SWE'").get();
+  check("a night already recorded keeps the number its stamp shows",
+    run.screened_added === 26 && run.delisted === 2 && run.leads_added === 3 && run.note === "3 new, 26 screened out");
+  check("and says nothing rather than 0 for the count it never took",
+    run.screened_by_rules === null);
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
