@@ -45,7 +45,8 @@ role.
   reviewers may approve and merge, and the PR names who was missing and why it
   couldn't wait. The absent reviewer reads it afterwards, and anything they
   find is an ordinary follow-up PR. This never applies to `CLAUDE.md` or
-  `.claude/skills/**`, which wait for the full set however long that takes.
+  anything under `.claude/`, which wait for the full set however long that
+  takes. Push a branch freely: the gate is the merge, not the push.
 - **A review reads the diff and says something specific.** Run the checks the
   change claims to pass and say what they printed, name each finding blocking
   or not, and approve explicitly. "LGTM" is not a review, and neither is
@@ -53,16 +54,19 @@ role.
   merges only once the required approvals are in.
 - **A prose-only PR needs one approval,** from any reviewer. It still gets a
   real review: what drops is the number of readers, not the reading. A change
-  qualifies when every file it touches is prose by path (`docs/**`, a README,
-  `private.example/**`) or passes `tools/proof/check-comment-only.mjs` or
-  `check-ps1-tokens.ps1`; the check decides, not the author, and the author
-  pastes what it printed into the PR. `CLAUDE.md` and `.claude/skills/**` never
-  qualify, Markdown though they are: they are what every session acts on, so a
-  wrong word there travels furthest. A mixed PR - one doc line beside a code
+  qualifies when every file it touches is prose by path - a `.md` under
+  `docs/`, a README, or anything under `private.example/` - or passes
+  `tools/proof/check-comment-only.mjs` or `check-ps1-tokens.ps1`; the check
+  decides, not the author, and the author pastes what it printed into the PR.
+  `CLAUDE.md` and everything under `.claude/` never qualify, Markdown though
+  the skills are: they are instructions every session and this machine act on,
+  so a wrong word there travels furthest. A mixed PR - one doc line beside a code
   change - is the case this refuses; split the doc fix out rather than letting
   it ride along.
-- **A broken nightly run is the one exception:** one approval merges the fix,
-  and the PR says why it took the short path.
+- **A broken nightly run is the one exception:** one approval merges the fix.
+  The PR names the failed run - its date and what it reported - so "broken"
+  is evidence rather than the author's word, and the other reviewers read it
+  afterwards. The short path defers a review; it doesn't skip one.
 - **A merge is not a ship.** Merging needs no go, deploying does, so a merged
   `server/` or `prompt.js` change can sit on main reaching no nightly run, and
   a merged `client/` change can sit unseen. `scripts/` goes the other way: it
