@@ -92,16 +92,23 @@ itself as that user's folder.
 Optional, and machine-wide rather than per-person, at the top of the data dir:
 
 ```json
-{ "url": "https://<api worker>", "client_url": "https://<tracker page>", "admin_token": "..." }
+{ "url": "https://<api worker>", "client_url": "https://<tracker page>", "admin_token": "...", "demo_password": "..." }
 ```
 
 - `url` is the API worker, and `admin_token` is its `ADMIN_TOKEN` secret.
 - `client_url` is the tracker page. `scripts\new-invite.ps1` uses it to print a
   whole invite link; without it the script prints the bare code.
+- `demo_password` is the demonstration account's password, and only that
+  account's. `scripts\seed-demo-user.ps1` signs in as the demo to write its
+  invented data - every one of those writes is a session route, and no admin
+  route can write another account's rows - so without a password it has to
+  invent one, which resets the account's. Recording it here is what keeps a
+  re-seed from changing it. Leave it out on a machine that never seeds a demo.
 
-Read by `scripts\new-invite.ps1`, `scripts\set-password.ps1` and the nightly
-`scripts\run-onboarding.ps1`. `setup-scheduler.ps1` registers the onboarding
-task only while this file holds an `admin_token`.
+Read by `scripts\new-invite.ps1`, `scripts\set-password.ps1`,
+`scripts\seed-demo-user.ps1` and the nightly `scripts\run-onboarding.ps1`.
+`setup-scheduler.ps1` registers the onboarding task only while this file holds
+an `admin_token`.
 
 `admin_token` creates accounts, mints invites and resets **anyone's** password.
 It also mints search tokens (`POST /api/tokens`), which read and write
