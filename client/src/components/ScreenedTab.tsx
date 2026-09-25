@@ -7,7 +7,15 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Screened, TrackerData } from "../api/schema";
 import { safeUrl } from "../domain/format";
-import { countsByKind, countsBySearch, keptWithin, SCREENED_KINDS, screenedWithin, SCREENED_WINDOWS } from "../domain/screened";
+import {
+  countsByKind,
+  countsBySearch,
+  groupOf,
+  keptWithin,
+  SCREENED_KINDS,
+  screenedWithin,
+  SCREENED_WINDOWS,
+} from "../domain/screened";
 import { buildTracks } from "../domain/tabs";
 
 const ALL = "";
@@ -39,7 +47,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const counts = countsBySearch(inWindow);
   const ofSearch = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
   const kinds = countsByKind(ofSearch);
-  const rows = kind === null ? ofSearch : ofSearch.filter((r) => r.kind === kind);
+  const rows = kind === null ? ofSearch : ofSearch.filter((r) => groupOf(r) === kind);
   const kept = keptWithin(data.leads, days, now, search);
   const nameOf = (key: string) => tracks[key]?.label || key;
 
@@ -109,8 +117,10 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
       )}
 
       {/* What the rules cost, by the kind a run filed each rejection under -
-          never by reading the sentences, which are one per posting and no two
-          alike. Counted by posting: a job re-listed under a new url is two. */}
+          and what this person turned away themselves, which is a group of its
+          own rather than an unclassified one. Never by reading the sentences,
+          which are one per posting and no two alike. Counted by posting: a job
+          re-listed under a new url is two. */}
       {kinds.length > 1 && (
         <div className="screened-kinds">
           {kinds.map((k) => {

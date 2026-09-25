@@ -161,7 +161,8 @@ describe("the screened tab", () => {
       "1Not your level",
       "1Different kind of work",
       "1Contract or temporary",
-      "1Not grouped",
+      // The person's own removal is its own group, not an unclassified one.
+      "1You removed it",
     ]);
 
     await userEvent.click(screen.getByRole("button", { name: /Not your level/ }));
@@ -171,6 +172,11 @@ describe("the screened tab", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Show every reason" }));
     expect(rows()).toHaveLength(5);
+
+    // What she took off her own board is reachable as its own group.
+    await userEvent.click(screen.getByRole("button", { name: /You removed it/ }));
+    expect(rows()).toHaveLength(1);
+    expect(screen.getByText("you removed this")).toBeInTheDocument();
   });
 
   it("counts postings rather than rows, since one job re-listed is two rows", async () => {
