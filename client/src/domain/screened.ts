@@ -82,8 +82,13 @@ export const HAND = "hand";
  *
  * `mine` is what this tab shows. No `mine` means the row is here to keep a
  * history whole - a posting that was once theirs and went away - rather than
- * because anything of theirs caused it, so the three unmarked kinds are
- * deliberate and not unfinished.
+ * because anything of theirs caused it, so the unmarked kinds are deliberate
+ * and not unfinished.
+ *
+ * `mine` is the complement of SCREENED_NOT_BY_RULES in server/src/validate.js,
+ * plus HAND. Nothing checks the two against each other, so a kind added there
+ * has to be added here: the tab asks the same question as the server's count,
+ * and the two drifting apart is a list that disagrees with the number above it.
  */
 export const SCREENED_KINDS: readonly { kind: string; label: string; mine?: true }[] = [
   { kind: "delisted", label: "Taken down after you saw it" },
