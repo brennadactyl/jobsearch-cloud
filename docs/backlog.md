@@ -45,11 +45,19 @@ doc, and a finding says whether anything was built on the wrong line.
   search tab's run stamp and the Screened tab all read that. A rule this is the
   whole point of should not be re-derived by three callers.
   **The uncounted kinds aren't shown either.** A dead link or a duplicate tells
-  a person nothing they can act on, so the route doesn't serve them and the tab
-  has no view of them: no chip, no toggle, nothing to expand. They stay stored,
-  because that is what stops a run finding the same posting again - the change is
-  what leaves the server, not what it keeps. Backend Buddy for the filter, Client
-  Comrade for the three places it shows.
+  a person nothing they can act on, so the tab has no view of them: no chip, no
+  toggle, nothing to expand.
+  **Two questions, two rules, each stated once.** The wire asks whether a row
+  records a posting someone once had - a `found` date, `delisted`, added by hand -
+  and those always travel, because the Overview counts them as postings found and
+  later lost. Only a run's rejection of a posting nobody ever had is withheld.
+  The tab asks whether a person's own settings rejected it, and shows only those.
+  Filtering the wire by kind alone would drop every past week's found count with
+  nothing saying why, zero the "removed" figure, and leave the page's
+  removed-are-counted flag reading true over incomplete data.
+  Every row stays stored either way - that is what stops a run finding the same
+  posting again. Backend Buddy for the filter, Client Comrade for the three places
+  it shows.
 - **Team skills and tools** - approved from every role's workflow review. In
   order: commit the proof tools under `tools/` (comment-only checks, one prompt
   snapshot, the tracker helper rig, the doc link checker and diagram generator)
