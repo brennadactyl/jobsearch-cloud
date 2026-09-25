@@ -150,11 +150,27 @@ describe("the screened tab", () => {
     expect(screen.queryByText(/Already seen/)).toBeNull();
   });
 
-  it("shows a kind it has never heard of rather than hiding it", () => {
+  it("shows a kind it has never heard of, and counts it where it shows it", () => {
     // A rule someone's settings caused is what they came here to see, and
-    // silence is the worse way for this page to be wrong about a new kind.
-    const odd = [{ ...fixture.screened[0], id: 95, kind: "relocation-required" }];
-    expect(screenedWithin(odd, 0, NOW)).toHaveLength(1);
+    // silence is the worse way for this page to be wrong about a new kind. It
+    // has to be counted too: a row in the list that the table below it omits
+    // makes both numbers untrustworthy.
+    const odd = [
+      { ...fixture.screened[0], id: 95, kind: "relocation-required" },
+      { ...fixture.screened[0], id: 96, url: "https://example.com/96", kind: "out-of-scope" },
+    ];
+    const shown = screenedWithin(odd, 0, NOW);
+    expect(shown).toHaveLength(2);
+    expect(countsByKind(shown).reduce((n, k) => n + k.postings, 0)).toBe(2);
+    expect(countsByKind(shown).find((k) => k.kind === "")?.label).toBe("Not grouped");
+  });
+
+  it("leaves out the catch-all kind, which the count leaves out too", () => {
+    // `other` is a rejection none of the named kinds describes, so nobody can
+    // say a setting caused it (SCREENED_NOT_BY_RULES in server/src/validate.js).
+    // A list wider than the number above it is how someone stops trusting both.
+    const catchAll = [{ ...fixture.screened[0], id: 97, kind: "other", added_by: "run" }];
+    expect(screenedWithin(catchAll, 0, NOW)).toHaveLength(0);
   });
 
   it("leaves out a lead that was taken down, which no rule rejected", async () => {

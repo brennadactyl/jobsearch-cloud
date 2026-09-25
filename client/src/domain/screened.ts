@@ -49,10 +49,13 @@ export function windowStart(days: number, now: number): string {
  *
  * A kind this page has never heard of is shown rather than hidden: a new rule
  * someone's settings caused is exactly what they came here to see, and silence
- * would be the worse way to be wrong.
+ * would be the worse way to be wrong. It is judged on the row's own kind rather
+ * than its group, because an unknown kind groups as "not grouped" and that
+ * bucket is not one of theirs.
  */
-function isRejection(row: Screened): boolean {
-  const known = SCREENED_KINDS.find((k) => k.kind === groupOf(row));
+function isOwnRejection(row: Screened): boolean {
+  if (row.added_by === "hand") return true;
+  const known = SCREENED_KINDS.find((k) => k.kind === row.kind);
   return known ? known.mine === true : true;
 }
 
@@ -60,26 +63,29 @@ function isRejection(row: Screened): boolean {
 export function screenedWithin(rows: readonly Screened[], days: number, now: number): Screened[] {
   const start = windowStart(days, now);
   return rows
-    .filter((r) => isRejection(r) && r.date >= start)
+    .filter((r) => isOwnRejection(r) && r.date >= start)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 }
 
-/**
- * The kinds of rejection, in the order the run decides between them
- * (SCREENED_KINDS in server/src/validate.js), and how each is said on the page.
- * The order is the answer to "what is this rule costing me": a posting that was
- * the wrong level anyway is counted there rather than against the pay floor, so
- * what is left under the floor is what the floor alone cost.
- */
 /** The group for a posting someone removed themselves; no kind, because no rule made it. */
 export const HAND = "hand";
 
+/**
+ * The kinds of rejection, in the order the run decides between them
+ * (SCREENED_KINDS in server/src/validate.js), how each is said on the page, and
+ * which of them are the person's own.
+ *
+ * The order is the answer to "what is this rule costing me": a posting that was
+ * the wrong level anyway is counted there rather than against the pay floor, so
+ * what is left under the floor is what the floor alone cost.
+ *
+ * `mine` is what this tab shows. No `mine` means the row is here to keep a
+ * history whole - a posting that was once theirs and went away - rather than
+ * because anything of theirs caused it, so the three unmarked kinds are
+ * deliberate and not unfinished.
+ */
 export const SCREENED_KINDS: readonly { kind: string; label: string; mine?: true }[] = [
-  // `mine` is what this tab shows: a rejection someone's own settings caused,
-  // or their own hand. The rest arrive because they record a posting that was
-  // once theirs - which is what keeps the Overview's found-and-removed history
-  // whole - and are none of this tab's business.
   { kind: "delisted", label: "Taken down after you saw it" },
   { kind: "dead", label: "Gone before you saw it" },
   { kind: "duplicate", label: "Already seen" },
@@ -90,7 +96,14 @@ export const SCREENED_KINDS: readonly { kind: string; label: string; mine?: true
   { kind: "wrong-role", label: "Different kind of work", mine: true },
   { kind: "contract", label: "Contract or temporary", mine: true },
   { kind: "pay-below-floor", label: "Below your pay floor", mine: true },
-  { kind: "other", label: "Other", mine: true },
+  // Not theirs, though it is tempting: a rejection none of the named kinds
+  // describes cannot be attributed to a setting, which is why the server leaves
+  // it out of the count (SCREENED_NOT_BY_RULES in server/src/validate.js). The
+  // tab asks the same question as the count, so it leaves it out too - a list
+  // wider than the number above it is how someone stops trusting both. A rule
+  // of theirs landing here is a kind the vocabulary is missing, and a case for
+  // adding one rather than for showing the catch-all.
+  { kind: "other", label: "Other" },
   // A posting the person took off their own board. It has no kind because no
   // rule produced it, but it isn't unclassified either - it is the one thing
   // here they decided themselves, and the only record of having done so.
@@ -105,9 +118,14 @@ export const SCREENED_KINDS: readonly { kind: string; label: string; mine?: true
  * **and what they rejected themselves**, which is two rules rather than one: a
  * reader who simplifies this back to the kind alone drops their own decisions
  * into the unclassified pile.
+ *
+ * A kind this page can't name groups as "not grouped" rather than as itself, so
+ * that a row the list shows is a row the counts count. A group with no label
+ * would be a row in the list that the table below it silently omits.
  */
 export function groupOf(row: Screened): string {
-  return row.added_by === "hand" ? HAND : row.kind;
+  if (row.added_by === "hand") return HAND;
+  return SCREENED_KINDS.some((k) => k.kind === row.kind) ? row.kind : "";
 }
 
 /**

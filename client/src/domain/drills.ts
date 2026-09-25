@@ -43,6 +43,11 @@ export interface DrillContext {
 /**
  * Postings found in the week starting `monday`: leads in any status, plus
  * removed postings whose screened row kept their found date.
+ *
+ * This counts what the server serves, so a row it stops sending stops counting
+ * and a past week's number changes. That is deliberate: dead links and
+ * duplicates are withheld, and a week that counted them counts them no longer.
+ * A drop in a month gone by is this, not a bug.
  */
 export function foundInWeek(c: DrillContext, monday: string): number {
   return (
