@@ -33,14 +33,16 @@ role.
   the PR with a hand-written title and body saying what it does and what you
   checked. On her go it is merged with `gh pr merge <n> --squash` and a
   hand-written subject and body, never GitHub's default list of commits; the
-  repo allows only squash merges and deletes a branch once merged.
+  repo allows only squash merges and deletes a branch once merged. Nothing else
+  goes straight to main.
 - **`docs/backlog.md` is the exception,** and the product session pushes it
   straight to main, with no PR and no approval. It is a running list of intent,
   owned by one session, that changes several times a day and that nothing acts
   on: no run reads it, and no teammate follows it as an instruction. That is
   what makes it unlike `CLAUDE.md` and the skills, which wait for the full set
-  of reviewers however long that takes. The exception is the backlog alone -
-  a plan is a PR like anything else.
+  of reviewers however long that takes. The exception is the backlog alone - a
+  plan is a PR like anything else, and another file wanting the same treatment
+  is a change to this rule, not an application of it.
 - **Who reviews:** Clean Code Companion, Documentation Dude and Fullstack
   Friend on every PR, plus the area's owner when they aren't the author, plus
   anyone whose area the change reaches - a prompt or runner change wants Prompt
