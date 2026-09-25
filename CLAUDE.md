@@ -91,8 +91,15 @@ role.
   Ask each route for everything it can serve, or read a backup, write down what
   each answer held, and stop when a count moves between two reads - that is the
   view moving, and the saved count is what tells it from the data.
-- **The repo is public.** No account ids, tokens, passwords, resumes or anyone's
-  search details in code, tests, docs or commit messages.
+- **The repo is public,** and a PR description, a commit message and a review
+  comment are part of it. No account ids, tokens, passwords, resumes or
+  anyone's search details in code, tests, docs, commit messages or PRs - and no
+  real data from a real account either: counts, totals, row numbers, the
+  companies a search covers. No narrating a person's reactions or instructions,
+  which a public PR is not the place for: say what the change does and why the
+  rule is what it is. A review is where the temptation is highest, because a
+  reviewer wants to show they checked against something real; say what you
+  checked and what held, without the rows.
 - **Times are US Pacific,** labelled PT, and the system stays on Pacific: runs
   stamp their local date. Don't propose a switch to server-side UTC without a
   new reason. Date-only fields (`found`, `verified`, `last_swept`,
