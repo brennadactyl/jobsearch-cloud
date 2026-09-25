@@ -157,6 +157,11 @@ doc, and a finding says whether anything was built on the wrong line.
   record of their own search; what a run passed over isn't, and the page saying
   how many older rows are kept is enough. A full-record download belongs to the
   "download my data" item, not here.
+  **`?screened=all` stays, unused**, as the one way the API can answer for rows
+  older than the window. Without it, reading them means an operator and a backup,
+  which is the state the privacy posture is supposed to leave. It is the first
+  piece of that download, not a leftover of the cancelled export - say so where
+  it lives, since an unused parameter is the kind of thing a later reader removes.
   Moving screened rows to a blob store keyed by user and day, so a lifecycle rule
   could expire them, was considered and rejected: dedupe asks "have we ever seen
   this URL?", which is random access over all history, and splitting one live
