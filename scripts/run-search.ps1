@@ -322,16 +322,17 @@ function Send-RunLog {
     }
 }
 
-# A paused search is not a failed one. Its task shouldn't exist - the next
-# scheduler run removes it - so this exits 0 and records nothing: a run row
-# would talk over the tab's Paused state, and a red Last Run Result for an
-# expected state teaches people to ignore red. The log carries the word
-# "paused" and the date so a leftover task is findable by grep, since that is
-# the only place it shows.
+# A paused search is not a failed one. Its task stays registered and stops
+# itself here every night - nothing unregisters a task, so the server alone
+# decides whether a search is paused, on every machine. So this exits 0 and
+# records nothing: a run row would talk over the tab's Paused state, and a red
+# Last Run Result for an expected state teaches people to ignore red. The log
+# carries the word "paused" and the date, which is the only place a paused night
+# shows.
 function Stop-PausedRun($sentence, $pausedSince) {
     Log "paused:           $sentence"
     Log "run outcome:      status=paused since=$pausedSince"
-    Log "       Nothing was searched and no run was recorded. This task will go the next time setup-scheduler.ps1 runs; until then this search logs this every night."
+    Log "       Nothing was searched and no run was recorded. A paused search logs this and stops every night; it searches again the night after it is resumed."
     if (Get-Command Exit-RunLock -ErrorAction SilentlyContinue) { Exit-RunLock }
     Send-RunLog
     Log "finished $Task - paused, nothing to do"
