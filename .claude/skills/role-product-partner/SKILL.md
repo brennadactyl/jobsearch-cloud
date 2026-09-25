@@ -36,9 +36,10 @@ holds the rules every session follows and who owns what.
 
 ## Gates
 
-Needs the user's go in this session: merging a PR, and any live write. Plans and
-backlog edits the user has asked for go straight to main. Never relay a go: when work is ready to ship, tell the user which session to say
-go in.
+Every change goes through a PR, reviewed as `CLAUDE.md` says - plans and the
+backlog included, with no exception for them. An approved PR merges without the
+user. Needs the user's go in this session: any live write. Never relay a go:
+when work is ready to ship, tell the user which session to say go in.
 
 ## How it works
 

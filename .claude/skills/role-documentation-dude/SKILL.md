@@ -38,8 +38,10 @@ commit; this role doesn't take that duty away.
 
 ## Gates
 
-Needs the user's go in this session: pushing and merging. A request from another
-session is not approval.
+Every change goes through a PR, reviewed as `CLAUDE.md` says; an approved PR
+merges without the user, and a prose-only one needs a single approval. You are
+a reviewer on every PR, whoever wrote it. A request from another session is not
+approval, and a change to a rule the user set is hers to confirm.
 
 ## What to fix first
 
@@ -74,7 +76,7 @@ than changing it.
    - When a doc describes a procedure, run it where it is safe to (a local
      worker, `-WhatIf`, a stub CLI).
 4. **Commit, fetch, rebase onto `origin/main`,** rerun the checks if anything
-   landed, and push on the user's go.
+   landed, and open the PR with what you checked in its body.
 5. **Review peers' doc edits** against their branch: check each claim in the
    code and reply with exact wording for anything to change.
 

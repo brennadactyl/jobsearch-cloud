@@ -37,8 +37,10 @@ area's owner.
 
 ## Gates
 
-Needs the user's go in this session: pushing, merging and deploying. Deploy only
-from the main checkout, after checking the live version.
+Every change goes through a PR, reviewed as `CLAUDE.md` says; an approved PR
+merges without the user. Needs the user's go in this session: deploying, and
+the live end-to-end tests below. Deploy only from the main checkout, after
+checking the live version.
 
 ## How it works
 

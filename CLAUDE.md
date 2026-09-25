@@ -23,14 +23,37 @@ role.
   things readably: a route as `/api/documents/<path>`, not its regex.
 - **Reference docs describe today.** A change that makes one wrong updates it in
   the same commit. A plan is never read as the current state.
-- **A push, merge, deploy or live write needs the user's go typed in the session
-  doing it.** A go passed along by another session doesn't count; tell the user
-  which session to say go in. The product session's plans and backlog edits
-  that the user has asked for are the exception: they go straight to main.
-- **Merge PRs with `gh pr merge <n> --squash`** and a hand-written title and
-  body, never GitHub's default list of commits. The repo allows only squash
-  merges and deletes a branch once merged. Docs and small changes can go straight to main: rebase onto
-  `origin/main` first, so no merge commits land there.
+- **A deploy or a live data write needs the user's go typed in the session doing
+  it.** A go passed along by another session doesn't count; tell the user which
+  session to say go in. Merging an approved PR doesn't need her.
+- **Every change goes through a PR, however small** - code, docs, plans, the
+  backlog, skills. Nothing goes straight to main. Branch, rebase onto
+  `origin/main` so no merge commit lands, and open the PR with a hand-written
+  title and body saying what it does and what you checked. Merge it with
+  `gh pr merge <n> --squash` and a hand-written subject and body, never
+  GitHub's default list of commits; the repo allows only squash merges and
+  deletes a branch once merged.
+- **Who reviews:** Clean Code Companion and Documentation Dude on every PR,
+  plus the area's owner when they aren't the author, plus anyone whose area the
+  change reaches - a prompt or runner change wants Prompt Bro, a client change
+  Client Comrade, a script Fullstack Friend.
+- **A review reads the diff and says something specific.** Run the checks the
+  change claims to pass and say what they printed, name each finding blocking
+  or not, and approve explicitly. "LGTM" is not a review, and neither is
+  approving a diff nobody read. Nobody approves their own PR, and the author
+  merges only once the required approvals are in.
+- **A prose-only PR needs one approval,** from any reviewer. It still gets a
+  real review: what drops is the number of readers, not the reading. A change
+  qualifies when every file it touches is prose by path (`docs/**`, a README,
+  `private.example/**`) or passes `tools/proof/check-comment-only.mjs` or
+  `check-ps1-tokens.ps1`; the check decides, not the author, and the author
+  pastes what it printed into the PR. `CLAUDE.md` and `.claude/skills/**` never
+  qualify, Markdown though they are: they are what every session acts on, so a
+  wrong word there travels furthest. A mixed PR - one doc line beside a code
+  change - is the case this refuses; split the doc fix out rather than letting
+  it ride along.
+- **A broken nightly run is the one exception:** one approval merges the fix,
+  and the PR says why it took the short path.
 - **Other sessions push to main all the time.** Fetch before building on main,
   and coordinate before editing a file another session owns or is changing.
 - **Production data is written only through the API.** Never write production
