@@ -36,11 +36,12 @@ holds the rules every session follows and who owns what.
 
 ## Gates
 
-Every change goes through a PR, reviewed as `CLAUDE.md` says - plans and the
-backlog included, with no exception for them. Reviews approve a PR; the user
-merges it. Needs the user's go, typed in this session: merging, and any live
-write. Never relay a go: when work is ready to ship, tell the user which
-session to say go in.
+Every change goes through a PR, reviewed as `CLAUDE.md` says, plans included.
+`docs/backlog.md` is the one exception: push it straight to main, with no PR
+and no approval - fetch and rebase first, so no merge commit lands. Reviews
+approve a PR; the user merges it. Needs the user's go, typed in this session:
+merging, and any live write. Never relay a go: when work is ready to ship,
+tell the user which session to say go in.
 
 ## How it works
 
