@@ -59,21 +59,25 @@ describe("the screened tab", () => {
     expect(within(first).getByText("outside the US, with no remote option stated")).toBeInTheDocument();
     expect(within(first).getByText("Berlin, Germany")).toBeInTheDocument();
     // Newest first, and the 50-day-old row is outside the 30 days it opens on.
-    expect(rows()).toHaveLength(5);
+    expect(rows()).toHaveLength(4);
     expect(screen.queryByText(/below the floor set for this search/)).toBeNull();
   });
 
-  it("describes the list it is showing, and names what is in it beyond the rules", async () => {
+  it("describes the list it is showing", async () => {
     await openTab();
-    // The list carries a posting she removed herself, so the sentence says so:
-    // nobody should have to count rows to see why two numbers differ.
-    expect(sumLine()).toHaveTextContent(
-      "Showing 5 from the last 30 days, against 8 kept, including 1 you removed yourself.",
-    );
+    expect(sumLine()).toHaveTextContent("Showing 4 from the last 30 days, against 8 kept.");
 
     await userEvent.selectOptions(screen.getByRole("combobox"), "0");
-    expect(rows()).toHaveLength(6);
-    expect(sumLine()).toHaveTextContent("Showing 6 from everything, against 8 kept");
+    expect(rows()).toHaveLength(5);
+    expect(sumLine()).toHaveTextContent("Showing 5 from everything, against 8 kept");
+  });
+
+  it("leaves out a posting someone removed themselves, which no rule of theirs turned away", async () => {
+    await openTab();
+    // Their own decision is one they already know about; this tab is what their
+    // settings cost them without their seeing it.
+    expect(screen.queryByText("not for me")).toBeNull();
+    expect(screen.queryByText(/You removed it/)).toBeNull();
   });
 
   it("takes what the settings cost from the server's count, never from the rows it holds", async () => {
@@ -90,11 +94,11 @@ describe("the screened tab", () => {
   it("narrows to one search, counting each search's own rows", async () => {
     await openTab();
     await userEvent.click(screen.getByRole("button", { name: /Beta roles/ }));
-    expect(rows()).toHaveLength(2);
+    expect(rows()).toHaveLength(1);
     // The line follows the chip: both halves describe the same search, or the
     // comparison is between two different things.
     expect(sumLine()).toHaveTextContent(
-      "Showing 2 from the last 30 days, against 4 kept by Beta roles",
+      "Showing 1 from the last 30 days, against 4 kept by Beta roles",
     );
     expect(screen.getByRole("button", { name: /Beta roles/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText(/above target level/)).toBeNull();
@@ -179,7 +183,7 @@ describe("the screened tab", () => {
     // the second row down.
     expect(screen.queryByText("posting taken down")).toBeNull();
     expect(screen.queryByRole("link", { name: "Ash" })).toBeNull();
-    expect(sumLine()).toHaveTextContent("Showing 5 from the last 30 days");
+    expect(sumLine()).toHaveTextContent("Showing 4 from the last 30 days");
     expect(screen.queryByText(/Taken down after you saw it/)).toBeNull();
   });
 
@@ -202,11 +206,13 @@ describe("the screened tab", () => {
     expect(firstCompany()).not.toBe(up);
   });
 
-  it("sorts the Why column by the kind, so like reasons sit together", async () => {
+  it("sorts the Why column in the order the counts above it use, not alphabetically", async () => {
     await openTab();
     await userEvent.click(screen.getByRole("button", { name: "Why" }));
     const whys = rows().map((r) => within(r).getAllByRole("cell")[3].textContent);
-    expect(whys).toEqual([...whys].sort((a, b) => (a ?? "").localeCompare(b ?? "")));
+    // The order a run decides the kinds in, which is the order the bars are
+    // counted in: the two views agreeing beats either being A-to-Z.
+    expect(whys).toEqual(["Location", "Level", "Bad fit", "Contract"]);
   });
 
   it("offers no export, since what a run passed over is not a record of your own search", async () => {
@@ -232,27 +238,15 @@ describe("the screened tab", () => {
       [...document.querySelectorAll(".screened-kind")].map((b) => b.textContent?.replace(/\s+/g, " ").trim());
     // In the order a run decides between them, so the pay floor's count is what
     // the floor alone cost rather than everything it would also have caught.
-    expect(kinds()).toEqual([
-      "1Outside your locations",
-      "1Not your level",
-      "1Different kind of work",
-      "1Contract or temporary",
-      // The person's own removal is its own group, not an unclassified one.
-      "1You removed it",
-    ]);
+    expect(kinds()).toEqual(["1Location", "1Level", "1Bad fit", "1Contract"]);
 
-    await userEvent.click(screen.getByRole("button", { name: /Not your level/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Level/ }));
     expect(rows()).toHaveLength(1);
     expect(screen.getByText(/above target level/)).toBeInTheDocument();
     expect(window.location.search).toContain("kind=wrong-level");
 
     await userEvent.click(screen.getByRole("button", { name: "Show every reason" }));
-    expect(rows()).toHaveLength(5);
-
-    // What she took off her own board is reachable as its own group.
-    await userEvent.click(screen.getByRole("button", { name: /You removed it/ }));
-    expect(rows()).toHaveLength(1);
-    expect(within(rows()[0]).getByText("You removed it")).toBeInTheDocument();
+    expect(rows()).toHaveLength(4);
   });
 
   it("counts postings rather than rows, since one job re-listed is two rows", async () => {
@@ -261,7 +255,7 @@ describe("the screened tab", () => {
       { ...fixture.screened[0], id: 91, url: "https://example.com/same", kind: "wrong-level" },
       { ...fixture.screened[0], id: 92, url: "https://example.com/other", kind: "wrong-level" },
     ];
-    expect(countsByKind(twice)).toEqual([{ kind: "wrong-level", label: "Not your level", postings: 2 }]);
+    expect(countsByKind(twice)).toEqual([{ kind: "wrong-level", label: "Level", postings: 2 }]);
     // A row with no url is its own posting: there is nothing to match it on.
     const blank = [
       { ...fixture.screened[0], id: 93, url: "", kind: "dead" },
@@ -270,13 +264,10 @@ describe("the screened tab", () => {
     expect(countsByKind(blank)[0].postings).toBe(2);
   });
 
-  it("says in the Why column when a posting was the person's own decision", async () => {
+  it("names the rule that turned a posting away, beside the sentence about it", async () => {
     await openTab();
-    const mine = screen.getByText("not for me").closest("tr")!;
-    expect(within(mine).getByText("You removed it")).toBeInTheDocument();
-    // A run's row says which rule of theirs did it, in the same column.
     const byRule = screen.getByText(/outside the US/).closest("tr")!;
-    expect(within(byRule).getByText("Outside your locations")).toBeInTheDocument();
+    expect(within(byRule).getByText("Location")).toBeInTheDocument();
   });
 
   it("won't say a search turned nothing away when its record predates the kinds", async () => {
