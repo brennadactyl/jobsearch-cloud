@@ -21,7 +21,6 @@ import {
   type IntakeAnswers,
   type InviteCheck,
   type Lead,
-  type Screened,
   type StoredResume,
   type TrackerData,
 } from "./schema";
@@ -176,15 +175,6 @@ async function request<T>(
 
 export function getData(): Promise<TrackerData> {
   return request("/api/data", dataSchema);
-}
-
-/**
- * Every screened posting, however old, for an export: what the page holds is
- * cut to a window, and someone taking their record to a spreadsheet wants all
- * of it. Asked for only when they export, since it is the larger answer.
- */
-export async function getAllScreened(): Promise<Screened[]> {
-  return (await request("/api/data?screened=all", dataSchema)).screened;
 }
 
 /**

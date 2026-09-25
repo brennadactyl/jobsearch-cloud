@@ -10,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
-import { screenedColumns } from "./domain/export";
 import { NOW, data as fixture } from "./domain/fixture";
 import { countsByKind } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
@@ -124,42 +123,21 @@ describe("the screened tab", () => {
     expect(screen.getByText(/still on your board/)).toBeInTheDocument();
   });
 
-  it("exports the whole record, asking the server for what the page doesn't hold", async () => {
-    const all = vi.spyOn(client, "getAllScreened").mockResolvedValue(fixture.screened);
+  it("offers no export, since what a run passed over is not a record of your own search", async () => {
     await openTab();
-    await userEvent.click(screen.getByRole("button", { name: /Export/ }));
-    const menu = screen.getByRole("menu", { name: "Export" });
-    // The count is the window's; "everything" carries none, because the page
-    // doesn't know how much is stored until the server answers.
-    expect(within(menu).getByRole("menuitem", { name: "Export 5 shown" })).toBeInTheDocument();
-
-    await userEvent.click(within(menu).getByRole("menuitem", { name: "Export everything" }));
-    expect(all).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /Export/ })).toBeNull();
   });
 
   it("says how many postings are kept outside the window, since nothing is deleted", async () => {
     await openTab({ ...fixture, screened_window: { days: 90, older: 412 } });
     expect(screen.getByText(/412 older postings aren't shown here/)).toBeInTheDocument();
-    expect(screen.getByText(/Export everything includes them/)).toBeInTheDocument();
+    // What those rows are still doing, which is the reassurance that matters.
+    expect(screen.getByText(/still stop a search finding them again/)).toBeInTheDocument();
 
     // A server with no window sends nothing older, and the line stays away.
     cleanup();
     await openTab();
     expect(screen.queryByText(/older postings aren't shown/)).toBeNull();
-  });
-
-  it("writes the run's own sentence and who set each posting aside", () => {
-    const columns = screenedColumns({ alpha: fixture.tracks[0], beta: fixture.tracks[1] });
-    expect(columns.map((c) => c.header)).toEqual([
-      "Search", "Set aside", "Company", "Role", "Location", "Why", "Set aside by", "Posting URL",
-    ]);
-    const byRun = fixture.screened.find((r) => r.added_by === "run")!;
-    const byHand = fixture.screened.find((r) => r.added_by === "hand")!;
-    const cell = (row: typeof byRun, header: string) => columns.find((c) => c.header === header)!.value(row);
-    expect(cell(byRun, "Why")).toBe(byRun.reason);
-    expect(cell(byRun, "Set aside by")).toBe("a run");
-    expect(cell(byHand, "Set aside by")).toBe("you");
-    expect(cell(byRun, "Search")).toBe("Alpha roles");
   });
 
   it("counts what each kind of rule set aside, and narrows to one", async () => {

@@ -5,13 +5,10 @@
  */
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getAllScreened } from "../api/client";
 import type { Screened, TrackerData } from "../api/schema";
-import { screenedColumns } from "../domain/export";
 import { safeUrl } from "../domain/format";
 import { countsByKind, countsBySearch, keptWithin, SCREENED_KINDS, screenedWithin, SCREENED_WINDOWS } from "../domain/screened";
 import { buildTracks } from "../domain/tabs";
-import { ExportButton } from "./listControls";
 
 const ALL = "";
 
@@ -53,16 +50,9 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
             keeps its link.
           </p>
         </div>
-        {/* Everything stored, not the window on screen: someone exporting to a
-            spreadsheet wants their whole record, so it is fetched rather than
-            taken from the page. */}
-        <ExportButton
-          shown={rows}
-          all={data.screened}
-          columns={screenedColumns(tracks)}
-          label="screened"
-          loadAll={getAllScreened}
-        />
+        {/* No export here, unlike leads and applications: those are someone's
+            record of their own search, and what a run passed over isn't
+            (docs/backlog.md). */}
         <label className="screened-window">
           Showing{" "}
           <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
@@ -80,13 +70,14 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
           <strong className="mono">{rows.length}</strong> set aside, against <strong className="mono">{kept}</strong>{" "}
           kept{search && ` by ${nameOf(search)}`}, {SCREENED_WINDOWS.find((w) => w.days === days)?.label}.
           {/* A page showing part of the record has to say so, or a window reads
-              as a purge. Nothing is deleted: the older rows still stop a run
-              re-finding those postings, and the export writes them out. */}
+              as a purge. Nothing is deleted, and the rows outside it are still
+              working: they are what stops a run finding those postings again. */}
           {data.screened_window.older > 0 && (
             <span className="screened-older">
               {" "}
               {data.screened_window.older} older {data.screened_window.older === 1 ? "posting isn't" : "postings aren't"}{" "}
-              shown here. They're kept, and Export everything includes them.
+              shown here. {data.screened_window.older === 1 ? "It's" : "They're"} kept, and still stop a search finding{" "}
+              {data.screened_window.older === 1 ? "it" : "them"} again.
             </span>
           )}
         </p>
