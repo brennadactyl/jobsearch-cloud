@@ -144,7 +144,9 @@ foreach ($log in $logs) {
             $run.Exit = [int]$Matches.exit
             if ($Matches.state -ne "Completed") { $run.Problems.Add("job $($Matches.state.ToLower())") }
         }
-        elseif ($text -match '^run record:\s+(.*)$') {
+        # Both labels, because logs already uploaded say `run record:` and a
+        # report over a past night has to read them.
+        elseif ($text -match '^run (?:outcome|record):\s+(.*)$') {
             foreach ($pair in ($Matches[1] -split '\s+')) {
                 $k, $v = $pair -split '=', 2
                 switch ($k) { "status" { $run.Status = $v } "leads_added" { $run.Leads = $v } "screened_added" { $run.Screened = $v } "delisted" { $run.Delisted = $v } "swept" { $run.Swept = $v } }
