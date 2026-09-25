@@ -32,14 +32,6 @@ doc, and a finding says whether anything was built on the wrong line.
 
 ## Next
 
-- **Team skills and tools** - approved from every role's workflow review. In
-  order: commit the proof tools under `tools/` (comment-only checks, one prompt
-  snapshot, the tracker helper rig, the doc link checker and diagram generator)
-  with a `prove-a-change` skill; fix `verify-and-deploy`; three CLAUDE.md lines;
-  then skills for testing the page against a local server, live end-to-end
-  tests, rebuilding a search's doc and PowerShell script conventions; fixes to
-  `edit-tracker-page`, `job-search-setup`, `add-target-company` and
-  `change-search-prompt`; a nightly run report and a backup query script.
 - **[One task asks what is due](dispatcher-plan.md)**, instead of one Windows
   task per search. The schedule is a copy of the config made when someone last
   ran `setup-scheduler.ps1`, and it drifts three ways: a new search with no
@@ -114,18 +106,10 @@ doc, and a finding says whether anything was built on the wrong line.
   `sent_at` today, which is the right stop in the wrong unit. Counting nights is
   one column and one increment, and needs its own migration.
 
-- **Split `db.js`, moving the shared company list into its own module**, ahead of
-  any work that touches the company list or coverage. At ~1,850 lines it is the
-  file every server feature edits, and it mixes per-person data with the one
-  list every account shares.
-
-- **One CLI-failure check for all three runners.** `run-search`, `run-fill` and
-  `run-onboarding` each find the CLI and recognise "not logged in" their own way,
-  and the wordings have drifted, so a new CLI message can fail the fill silently
-  while the searches catch it. Detection becomes one shared helper; what each
-  run does about it stays its own. Onboarding stops putting an operator's login
-  problem on a person's page: it leaves the intake pending and fails loudly in
-  the log. Owner: Prompt Bro, as its own change with a stub-CLI test per wording.
+- **`db.js` is 1,900 lines**, and every server feature edits it. The shared
+  company list already moved to `companies.js`; what is left is one file holding
+  every table's access. Worth splitting the next time something large lands in
+  it, rather than as a change of its own.
 
 - **Refuse a search whose documents are all unreadable.** The prompt route
   refuses an empty `documents` list, but a list naming only `.docx` passes and
@@ -168,7 +152,12 @@ doc, and a finding says whether anything was built on the wrong line.
 
 - A stray phrase in `prompt.js` step 3b, "when the named list reads as big
   tech", left over from per-search company lists. Next change that touches
-  `prompt.js`.
+  `prompt.js`, along with a line saying why step 7(c)'s fixed "wrong level"
+  stays even when a track's own rule repeats it.
+- A script for querying the newest backup, so reading production doesn't mean
+  writing a one-off node script each time. The rest of the team-tools work -
+  the proof tools under `tools/`, the role and procedure skills, the run report -
+  has shipped.
 - Adding or removing a search from the account panel: a new role means a new
   tab, and removing one has leads and applications hanging off it.
   [Splitting a search across tabs](tab-grouping-plan.md) is planned separately,
@@ -186,9 +175,9 @@ doc, and a finding says whether anything was built on the wrong line.
 
 ## Watching
 
-- **The first nights without per-search company lists, and with the run queue.**
-  Compare companies covered, leads found, run length and queue waits against the
-  week before.
+- **What a search's own rules cost it, now that every rejection carries a kind.**
+  A month of counts per kind per search is the first evidence of whether a rule
+  is set where its person thinks it is.
 - **Whether an empty first morning is normal.** The page now says it is. The one
   run that produced it had an inverted scope, so it is not yet evidence.
 - **The shape of a `prompt.js` step.** Each fragment is a named function now, so
