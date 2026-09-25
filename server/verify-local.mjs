@@ -3884,55 +3884,12 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
       { search: "SWE", url: skUrl("shouty"), company: "Acme", title: "SDE VI", reason: "dead", kind: "DEAD" }] } })).json?.kinds_coerced === undefined &&
     (await skRow(SK, "shouty"))?.kind === "dead");
 
-  // The operator backfill: it creates no row, so a typo is worth refusing.
-  const fill = (body) => req("POST", "/api/screened/kinds", { admin: true, body: { user: SK.name, ...body } });
-  const blankId = (await skRow(SK, "said-nothing")).id;
-  const setId = (await skRow(SK, "scope")).id;
-  const theirsId = (await req("POST", "/api/screened", { token: SK_B.token, body: { screened: [
-    { search: "SWE", url: skUrl("theirs"), company: "Acme", title: "SDE", reason: "out of scope" }] } })).status === 200
-    ? (await skRow(SK_B, "theirs")).id : -1;
-  check("the backfill needs the admin token",
-    (await req("POST", "/api/screened/kinds", { token: SK.token, body: { user: SK.name, rows: [] } })).status === 401);
-  const badKind = await fill({ rows: [{ id: blankId, kind: "too-junior" }] });
-  check("it refuses a kind outside the list, naming the row, and writes nothing",
-    badKind.status === 400 && badKind.json?.field === "kind" && /too-junior/.test(badKind.json?.error || "") &&
-    (await skRow(SK, "said-nothing"))?.kind === "", JSON.stringify(badKind.json));
-  const dry = await fill({ dryRun: true, rows: [
-    { id: blankId, kind: "wrong-level" }, { id: setId, kind: "dead" }, { id: theirsId, kind: "dead" }] });
-  check("a dry run answers per row - what would be set, what is already set, what isn't this account's",
-    dry.json?.set === 1 && dry.json?.skipped === 1 && dry.json?.unknown === 1 &&
-    dry.json?.rows?.find((r) => r.id === blankId)?.outcome === "would set" &&
-    dry.json?.rows?.find((r) => r.id === setId)?.was === "out-of-scope" &&
-    dry.json?.rows?.find((r) => r.id === theirsId)?.outcome === "unknown", JSON.stringify(dry.json));
-  check("and writes nothing", (await skRow(SK, "said-nothing"))?.kind === "");
-  const wrote = await fill({ rows: [{ id: blankId, kind: "wrong-level" }, { id: setId, kind: "dead" }] });
-  check("applying it fills only the row that had none, and says so per row",
-    wrote.json?.set === 1 && (await skRow(SK, "said-nothing"))?.kind === "wrong-level" &&
-    (await skRow(SK, "scope"))?.kind === "out-of-scope" &&
-    wrote.json?.rows?.find((r) => r.id === setId)?.outcome === "already set", JSON.stringify(wrote.json));
-  check("a re-run can't overwrite a kind someone has since corrected",
-    (await fill({ rows: [{ id: blankId, kind: "dead" }] })).json?.set === 0 &&
-    (await skRow(SK, "said-nothing"))?.kind === "wrong-level");
-  check("another account's row named in this account's fill is untouched",
-    (await skRow(SK_B, "theirs"))?.kind === "");
-
-  // A tool reading the page's view sees a fraction of the table and can't tell.
-  // A write that leaves rows unclassified has to say it means to.
-  await req("POST", "/api/screened", { token: SK.token, body: { search: "SWE", screened: [
-    { search: "SWE", url: skUrl("unseen-a"), company: "Acme", title: "A", reason: "no kind" },
-    { search: "SWE", url: skUrl("unseen-b"), company: "Acme", title: "B", reason: "no kind" }] } });
-  const partialId = (await skRow(SK, "unseen-a")).id;
-  const partial = await fill({ rows: [{ id: partialId, kind: "dead" }] });
-  check("a write that doesn't name every unclassified row is refused, saying how many it missed",
-    partial.status === 409 && partial.json?.missed >= 1 && partial.json?.unclassified > partial.json?.missed &&
-    Array.isArray(partial.json?.missedIds) && (await skRow(SK, "unseen-a"))?.kind === "",
-    JSON.stringify(partial.json));
-  const partialDry = await fill({ dryRun: true, rows: [{ id: partialId, kind: "dead" }] });
-  check("a dry run is never refused - seeing the gap is what it is for",
-    partialDry.status === 200 && partialDry.json?.missed >= 1, JSON.stringify(partialDry.json));
-  check("and a caller that means to leave the rest says so, and is allowed",
-    (await fill({ leaveRest: true, rows: [{ id: partialId, kind: "dead" }] })).status === 200 &&
-    (await skRow(SK, "unseen-a"))?.kind === "dead" && (await skRow(SK, "unseen-b"))?.kind === "");
+  // The backfill that filled kinds on rows screened before the column existed
+  // is retired: runs stamp a kind on write, so nothing is left to backfill, and
+  // an operator write path that outlives its job can change rows nobody
+  // reviewed.
+  check("the backfill route is gone",
+    (await req("POST", "/api/screened/kinds", { token: SK.token, body: { user: SK.name, rows: [] } })).status === 404);
 
   // A rejection is filed under the tab it was judged for. One search fills
   // several tabs, and a row filed under the root reads as though that tab's
