@@ -3995,9 +3995,17 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   // the predicate naming only the kind and who wrote it, and by these checks
   // proving a `found` date isn't what lets `was-lead` through.
   check("what arrives is settings-caused, lost, or set aside by hand - nothing else",
-    served.screened.every((r) => r.kind === "delisted" || r.added_by !== "run" ||
+    served.screened.every((r) => r.kind === "delisted" || r.added_by === "hand" ||
       ["out-of-scope", "wrong-level", "wrong-role", "contract", "pay-below-floor"].includes(r.kind)),
     JSON.stringify(served.screened.map((r) => [r.kind, r.added_by])));
+  // A row from before the author column was stamped is one nobody can
+  // attribute, and an unattributable dead link is still a dead link.
+  const unattributed = (await req("GET", "/api/data?screened=all", { token: SW })).json
+    .screened.filter((r) => !r.added_by);
+  check("a dead link nobody can attribute is withheld like any other",
+    unattributed.every((r) => !served.screened.some((s) => s.id === r.id) ||
+      ["out-of-scope", "wrong-level", "wrong-role", "contract", "pay-below-floor", "delisted"].includes(r.kind)),
+    JSON.stringify(unattributed.map((r) => [r.kind, r.added_by])));
   // A tenth kind has to be put on one side or the other, or these fail: the
   // next person decides rather than inheriting whichever default the code has.
   const { SCREENED_KINDS, SCREENED_BY_RULES, SCREENED_NOT_BY_RULES } = await import("./src/validate.js");

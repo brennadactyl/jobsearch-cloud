@@ -415,7 +415,12 @@ export class Db {
     // never really a posting this person had. What arrives is what their
     // settings turned down, what they lost (`delisted`), and what they set
     // aside themselves - the rest stays in the table as the runs' memory.
-    const theirs = `(kind = 'delisted' OR added_by <> 'run')`;
+    //
+    // `added_by = 'hand'` exactly, not "anything but a run": a row from before
+    // that column was stamped ('') is one nobody can attribute, and a dead link
+    // nobody can attribute is still a dead link. A row a person really did set
+    // aside says so, because every such row since has carried `hand`.
+    const theirs = `(kind = 'delisted' OR added_by = 'hand')`;
     const sent = `(${theirs} OR kind IN (${BY_RULES_PLACEHOLDERS}))`;
     const [res, olderRow, perSearch] = await Promise.all([
       this.d1
