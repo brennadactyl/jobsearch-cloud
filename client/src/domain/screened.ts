@@ -154,6 +154,39 @@ export function countsByKind(rows: readonly Screened[]): { kind: string; label: 
   }));
 }
 
+/** How a row's group is said on the page: its kind's label, or the raw kind if the page can't name it. */
+export function groupLabel(row: Screened): string {
+  const group = groupOf(row);
+  return SCREENED_KINDS.find((k) => k.kind === group)?.label ?? row.kind;
+}
+
+/**
+ * The columns the list can be sorted by, and what each reads from a row. The
+ * date sorts newest first and the rest read alphabetically, which is why the
+ * default direction differs: "newest" is what someone wants of a date and
+ * "A first" is what they want of a name.
+ */
+export const SCREENED_SORTS: readonly { key: string; header: string; of: (row: Screened) => string; newestFirst?: true }[] = [
+  { key: "date", header: "Set aside", of: (r) => r.date, newestFirst: true },
+  { key: "posting", header: "Posting", of: (r) => `${r.company} ${r.title}`.trim().toLowerCase() },
+  { key: "where", header: "Where", of: (r) => r.location.toLowerCase() },
+  { key: "why", header: "Why", of: (r) => groupLabel(r).toLowerCase() },
+  { key: "reason", header: "In its words", of: (r) => r.reason.toLowerCase() },
+];
+
+/**
+ * The rows in the order asked for, ties broken by id so a re-render can't
+ * reshuffle rows a sort doesn't distinguish - two postings set aside the same
+ * day for the same reason keep the order they were written in.
+ */
+export function sortScreened(rows: readonly Screened[], key: string, descending: boolean): Screened[] {
+  const sort = SCREENED_SORTS.find((s) => s.key === key) ?? SCREENED_SORTS[0];
+  const order = descending ? -1 : 1;
+  return rows
+    .slice()
+    .sort((a, b) => order * (sort.of(a).localeCompare(sort.of(b)) || a.id - b.id));
+}
+
 /** How many rows each search has, by its key. A search with none is absent, not zero. */
 export function countsBySearch(rows: readonly Screened[]): Record<string, number> {
   const counts: Record<string, number> = {};

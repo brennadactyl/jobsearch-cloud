@@ -183,6 +183,32 @@ describe("the screened tab", () => {
     expect(screen.queryByText(/Taken down after you saw it/)).toBeNull();
   });
 
+  it("sorts by any column, and says which one it is sorted by", async () => {
+    await openTab();
+    const header = (name: string) => screen.getByRole("button", { name }).closest("th")!;
+    const firstCompany = () => within(rows()[0]).getAllByRole("cell")[1].textContent;
+    // It opens newest first, which is the date column descending.
+    expect(header("Set aside")).toHaveAttribute("aria-sort", "descending");
+
+    await userEvent.click(screen.getByRole("button", { name: "Posting" }));
+    expect(header("Posting")).toHaveAttribute("aria-sort", "ascending");
+    expect(header("Set aside")).toHaveAttribute("aria-sort", "none");
+    const up = firstCompany();
+    expect(window.location.search).toContain("sort=posting");
+
+    // A second click on the same column turns it round.
+    await userEvent.click(screen.getByRole("button", { name: "Posting" }));
+    expect(header("Posting")).toHaveAttribute("aria-sort", "descending");
+    expect(firstCompany()).not.toBe(up);
+  });
+
+  it("sorts the Why column by the kind, so like reasons sit together", async () => {
+    await openTab();
+    await userEvent.click(screen.getByRole("button", { name: "Why" }));
+    const whys = rows().map((r) => within(r).getAllByRole("cell")[3].textContent);
+    expect(whys).toEqual([...whys].sort((a, b) => (a ?? "").localeCompare(b ?? "")));
+  });
+
   it("offers no export, since what a run passed over is not a record of your own search", async () => {
     await openTab();
     expect(screen.queryByRole("button", { name: /Export/ })).toBeNull();
@@ -226,7 +252,7 @@ describe("the screened tab", () => {
     // What she took off her own board is reachable as its own group.
     await userEvent.click(screen.getByRole("button", { name: /You removed it/ }));
     expect(rows()).toHaveLength(1);
-    expect(screen.getByText("you removed this")).toBeInTheDocument();
+    expect(within(rows()[0]).getByText("You removed it")).toBeInTheDocument();
   });
 
   it("counts postings rather than rows, since one job re-listed is two rows", async () => {
@@ -244,12 +270,13 @@ describe("the screened tab", () => {
     expect(countsByKind(blank)[0].postings).toBe(2);
   });
 
-  it("marks a posting the person removed themselves, which no run decided", async () => {
+  it("says in the Why column when a posting was the person's own decision", async () => {
     await openTab();
     const mine = screen.getByText("not for me").closest("tr")!;
-    expect(within(mine).getByText("you removed this")).toBeInTheDocument();
-    // A run's row carries no such mark.
-    expect(within(screen.getByText(/outside the US/).closest("tr")!).queryByText("you removed this")).toBeNull();
+    expect(within(mine).getByText("You removed it")).toBeInTheDocument();
+    // A run's row says which rule of theirs did it, in the same column.
+    const byRule = screen.getByText(/outside the US/).closest("tr")!;
+    expect(within(byRule).getByText("Outside your locations")).toBeInTheDocument();
   });
 
   it("won't say a search turned nothing away when its record predates the kinds", async () => {
