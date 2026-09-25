@@ -49,6 +49,47 @@ export function screenedWithin(rows: readonly Screened[], days: number, now: num
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 }
 
+/**
+ * The kinds of rejection, in the order the run decides between them
+ * (SCREENED_KINDS in server/src/validate.js), and how each is said on the page.
+ * The order is the answer to "what is this rule costing me": a posting that was
+ * the wrong level anyway is counted there rather than against the pay floor, so
+ * what is left under the floor is what the floor alone cost.
+ */
+export const SCREENED_KINDS: readonly { kind: string; label: string }[] = [
+  { kind: "delisted", label: "Taken down after you saw it" },
+  { kind: "dead", label: "Already gone when it was read" },
+  { kind: "duplicate", label: "The same posting again" },
+  { kind: "out-of-scope", label: "Outside what you're looking for" },
+  { kind: "wrong-level", label: "Wrong level for you" },
+  { kind: "wrong-role", label: "Not the kind of role" },
+  { kind: "contract", label: "Contract, not permanent" },
+  { kind: "pay-below-floor", label: "Below the pay you'd take" },
+  { kind: "other", label: "Something else" },
+  { kind: "", label: "Not sorted yet" },
+];
+
+/**
+ * How many postings each kind holds, counted by url: a posting re-listed under
+ * a new url is two rows and two postings, and nothing here guesses that two
+ * spellings of a company and a title are one job. Kinds with none are left out.
+ */
+export function countsByKind(rows: readonly Screened[]): { kind: string; label: string; postings: number }[] {
+  const urls = new Map<string, Set<string>>();
+  for (const row of rows) {
+    // A row with no url is its own posting: there is nothing to match it on.
+    const key = row.url || `#${row.id}`;
+    const seen = urls.get(row.kind) ?? new Set<string>();
+    seen.add(key);
+    urls.set(row.kind, seen);
+  }
+  return SCREENED_KINDS.filter(({ kind }) => urls.has(kind)).map(({ kind, label }) => ({
+    kind,
+    label,
+    postings: urls.get(kind)!.size,
+  }));
+}
+
 /** How many rows each search has, by its key. A search with none is absent, not zero. */
 export function countsBySearch(rows: readonly Screened[]): Record<string, number> {
   const counts: Record<string, number> = {};

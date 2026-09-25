@@ -12,6 +12,7 @@ import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
 import { screenedColumns } from "./domain/export";
 import { NOW, data as fixture } from "./domain/fixture";
+import { countsByKind } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
 async function openTab(data: TrackerData = fixture) {
@@ -159,6 +160,44 @@ describe("the screened tab", () => {
     expect(cell(byRun, "Set aside by")).toBe("a run");
     expect(cell(byHand, "Set aside by")).toBe("you");
     expect(cell(byRun, "Search")).toBe("Alpha roles");
+  });
+
+  it("counts what each kind of rule set aside, and narrows to one", async () => {
+    await openTab();
+    const kinds = () =>
+      [...document.querySelectorAll(".screened-kind")].map((b) => b.textContent?.replace(/\s+/g, " ").trim());
+    // In the order a run decides between them, so the pay floor's count is what
+    // the floor alone cost rather than everything it would also have caught.
+    expect(kinds()).toEqual([
+      "1Outside what you're looking for",
+      "1Wrong level for you",
+      "1Not the kind of role",
+      "1Contract, not permanent",
+      "1Not sorted yet",
+    ]);
+
+    await userEvent.click(screen.getByRole("button", { name: /Wrong level for you/ }));
+    expect(rows()).toHaveLength(1);
+    expect(screen.getByText(/above target level/)).toBeInTheDocument();
+    expect(window.location.search).toContain("kind=wrong-level");
+
+    await userEvent.click(screen.getByRole("button", { name: "Show every reason" }));
+    expect(rows()).toHaveLength(5);
+  });
+
+  it("counts postings rather than rows, since one job re-listed is two rows", async () => {
+    const twice = [
+      { ...fixture.screened[0], id: 90, url: "https://example.com/same", kind: "wrong-level" },
+      { ...fixture.screened[0], id: 91, url: "https://example.com/same", kind: "wrong-level" },
+      { ...fixture.screened[0], id: 92, url: "https://example.com/other", kind: "wrong-level" },
+    ];
+    expect(countsByKind(twice)).toEqual([{ kind: "wrong-level", label: "Wrong level for you", postings: 2 }]);
+    // A row with no url is its own posting: there is nothing to match it on.
+    const blank = [
+      { ...fixture.screened[0], id: 93, url: "", kind: "dead" },
+      { ...fixture.screened[0], id: 94, url: "", kind: "dead" },
+    ];
+    expect(countsByKind(blank)[0].postings).toBe(2);
   });
 
   it("marks a posting the person removed themselves, which no run decided", async () => {
