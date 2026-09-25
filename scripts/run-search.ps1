@@ -566,6 +566,12 @@ $shim = "#!/bin/sh`n" +
     (Join-Path $cwd "tracker"), $shim, (New-Object System.Text.UTF8Encoding($false)))
 Log "helper:           tracker.ps1 + tracker -> $cwd"
 
+# Where tracker.ps1 files what it says, read back when the job ends. A run
+# directory is remade each run, but the fallback working directory is not, so
+# last night's file goes before this run writes to it.
+$noticeFile = Join-Path $cwd "tracker-notices.log"
+if (Test-Path $noticeFile) { Remove-Item -Force $noticeFile }
+
 # The CLI runs as one headless `claude -p` turn with nobody to read an "I'll
 # report back" reply. If the model backgrounds any part of the work (a Bash
 # run_in_background call, or a subagent), the CLI's background-task wait
@@ -654,6 +660,19 @@ Remove-Job $job -Force
 Log "----- claude output -----"
 if ($output) { $output | Out-String | Out-File -Append -Encoding utf8 -FilePath $logFile }
 Log "----- end output -----"
+
+# What the helper said, in the order it said it. `claude -p` prints only the
+# model's final message, so every line tracker.ps1 wrote during the run - the
+# per-command counts, what it refused, what the tracker coerced - is otherwise
+# lost with the CLI's transcript. Read whatever is there, including after a job
+# that failed: a run that died mid-sync is the case these lines explain.
+if (Test-Path $noticeFile) {
+    Log "----- tracker notices -----"
+    foreach ($line in @(Get-Content $noticeFile -ErrorAction SilentlyContinue)) { Log "  $line" }
+    Log "----- end notices -----"
+} else {
+    Log "tracker notices:  none - the helper wrote nothing this run"
+}
 
 $exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
 
