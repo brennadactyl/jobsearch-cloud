@@ -132,6 +132,10 @@ export const screened: Screened[] = [
   // Removed from the board by the person, not decided by a run.
   { id: 35, search: "beta", url: "https://example.com/35", company: "Yarrow", title: "PM, Platform", location: "Ogdenville", reason: "not for me", kind: "", date: daysAgo(2), added_by: "hand", found: daysAgo(12) },
   { id: 36, search: "alpha", url: "https://example.com/36", company: "Zephyr", title: "Backend Engineer", location: "Springfield", reason: "states $120k-$150k, below the floor set for this search", kind: "pay-below-floor", date: daysAgo(50), added_by: "run", found: "" },
+  // A lead of this person's that went away. It lives in the same table so no
+  // run finds it again, but no rule rejected it, so the Screened tab leaves it
+  // out.
+  { id: 37, search: "alpha", url: "https://example.com/37", company: "Ash", title: "Senior Engineer", location: "Springfield", reason: "posting taken down", kind: "delisted", date: daysAgo(5), added_by: "run", found: daysAgo(20) },
 ];
 
 export const data: TrackerData = {

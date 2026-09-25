@@ -40,11 +40,19 @@ export function windowStart(days: number, now: number): string {
   return days ? isoDay(new Date(now - (days - 1) * 86_400_000)) : "";
 }
 
-/** The rows a window holds, newest first, and the newest of a day in the order they were written. */
+/**
+ * A posting a search passed over. A delisted row is not one of these: it was a
+ * lead on the person's own board that later went away, which the table records
+ * so no run finds it again, and reading it here as something a rule rejected
+ * says the wrong thing about it.
+ */
+const isRejection = (row: Screened) => row.kind !== "delisted";
+
+/** The rejections a window holds, newest first, and the newest of a day in the order they were written. */
 export function screenedWithin(rows: readonly Screened[], days: number, now: number): Screened[] {
   const start = windowStart(days, now);
   return rows
-    .filter((r) => r.date >= start)
+    .filter((r) => isRejection(r) && r.date >= start)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 }
@@ -57,9 +65,6 @@ export function screenedWithin(rows: readonly Screened[], days: number, now: num
  * what is left under the floor is what the floor alone cost.
  */
 export const SCREENED_KINDS: readonly { kind: string; label: string }[] = [
-  // The two "it's gone" kinds are told apart by when, which is the only thing
-  // that distinguishes them and the thing neither word says on its own.
-  { kind: "delisted", label: "Taken down after you saw it" },
   { kind: "dead", label: "Gone before you saw it" },
   { kind: "duplicate", label: "Already seen" },
   // Where, what and how senior are three different rejections, so each names

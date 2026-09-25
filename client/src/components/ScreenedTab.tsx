@@ -32,6 +32,9 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const setSearch = (next: string) => narrow({ search: next, kind: null });
 
   const tracks = buildTracks(data.tracks);
+  // Everything a search passed over, ever: the emptiest state below is about
+  // having no rejections at all, and a delisted lead isn't one.
+  const everRejected = screenedWithin(data.screened, 0, now);
   const inWindow = screenedWithin(data.screened, days, now);
   const counts = countsBySearch(inWindow);
   const ofSearch = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
@@ -65,7 +68,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
         </label>
       </div>
 
-      {data.screened.length > 0 && (
+      {everRejected.length > 0 && (
         <p className="screened-sum">
           <strong className="mono">{rows.length}</strong> set aside, against <strong className="mono">{kept}</strong>{" "}
           kept{search && ` by ${nameOf(search)}`}, {SCREENED_WINDOWS.find((w) => w.days === days)?.label}.
@@ -143,7 +146,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
 
       {rows.length === 0 ? (
         <p className="empty">
-          {data.screened.length === 0
+          {everRejected.length === 0
             ? "Nothing has been set aside yet. A run records each posting it looks at and doesn't keep, with its reason."
             : "Nothing was set aside in this window."}
         </p>
