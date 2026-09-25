@@ -291,6 +291,10 @@ doc, and a finding says whether anything was built on the wrong line.
   rather than copied into the page: the composed pay clause first, since a floor
   is the rule most easily contradicted by their own words. A copy in the page was
   ruled out for being a second wording of one rule.
+- The page decides whether removed postings can be counted by checking whether
+  any screened row carries a `found` value, so a change in what the server sends
+  can leave the flag reading true over incomplete data. The server should say
+  whether it counts them rather than the page inferring it.
 - The run record counts leads added, screened and swept per day, so two runs
   of one search on the same day are counted together in the nightly run report.
 
