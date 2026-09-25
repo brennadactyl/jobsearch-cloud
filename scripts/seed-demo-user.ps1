@@ -28,14 +28,16 @@
   <DataDir>\deployment.json.
 
 .PARAMETER DataDir
-  The private data folder whose deployment.json fills in whichever of the two
+  The private data folder whose deployment.json fills in whichever of the values
   above is still missing (see private.example/README.md). Defaults to
   JOB_SEARCH_DATA_DIR, then <repo>\private.
 
 .PARAMETER Password
-  The demo account's password, 12+ characters. Omitted, one is generated and
-  printed at the end. A password that already signs in changes no credential;
-  any other, including a generated one, resets the account's password.
+  The demo account's password, 12+ characters. Defaults to demo_password in
+  <DataDir>\deployment.json; with neither, one is generated and printed at the
+  end. A password that already signs in changes no credential; any other,
+  including a generated one, resets the account's password - so record it in
+  deployment.json if you don't want a re-seed to change it.
 
 .PARAMETER DataFile
   The invented data to load. Defaults to demo-user.json next to this script.
@@ -86,9 +88,10 @@ if (-not $DataFile) {
 # --------------------------------------------------------------- preflight --
 
 # The operator's machine already records the deployment in deployment.json, as
-# new-invite.ps1 reads it, so the URL and token come from there unless passed
-# in. Only a value still missing is read, and the token is never printed.
-if (-not $TrackerUrl -or -not $AdminToken) {
+# new-invite.ps1 reads it, so the URL, token and demo password come from there
+# unless passed in. Only a value still missing is read, and neither the token
+# nor the password is ever printed.
+if (-not $TrackerUrl -or -not $AdminToken -or -not $Password) {
     if (-not $DataDir) {
         $DataDir = if ($env:JOB_SEARCH_DATA_DIR) { $env:JOB_SEARCH_DATA_DIR }
                    elseif ($scriptDir) { Join-Path $scriptDir "..\private" }
@@ -99,6 +102,11 @@ if (-not $TrackerUrl -or -not $AdminToken) {
         $deployment = Get-Content -Raw -Path $deploymentFile | ConvertFrom-Json
         if (-not $TrackerUrl) { $TrackerUrl = $deployment.url }
         if (-not $AdminToken) { $AdminToken = $deployment.admin_token }
+        # Every write here goes through a session as the demo account - no admin
+        # route can write another account's config or rows - so the seed needs a
+        # password it knows. Recording it here is what keeps a re-seed from
+        # inventing one and resetting the account's password as a side effect.
+        if (-not $Password) { $Password = $deployment.demo_password }
     }
 }
 
@@ -126,6 +134,7 @@ if ($Password) {
         exit 1
     }
 } else {
+    $generatedPassword = $true
     # No look-alike characters (0/O, 1/l/I): the password is read off the screen.
     $alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789".ToCharArray()
     $bytes = New-Object byte[] 24
@@ -561,11 +570,20 @@ Say "Done. The demo account is ready."
 Say ""
 Say "  User id:  $userId"
 Say "  Name:     $demoName"
-Say "  Password: $Password"
+Say ""
+if ($generatedPassword) {
+    # Printed only when this run invented it, which is also the only time this
+    # run changed it. A password that came from -Password or deployment.json is
+    # the one the account already had, and printing it would spread it around.
+    Say "  Password: $Password   (new - this run set it)"
+    Say ""
+    Say "The password is not stored anywhere. Note it down, or put it in"
+    Say "deployment.json as demo_password so a re-seed stops changing it."
+} else {
+    Say "  Password: unchanged"
+}
 Say ""
 Say "Sign in at the tracker page with that name and password."
-Say "The password is not stored anywhere - note it down now, or re-run this"
-Say "script with -Password to set one of your own."
 Say ""
 if ($notOurs.Count -eq 0) {
     Say "This account is marked as a demo, so the server will never mint it a"
