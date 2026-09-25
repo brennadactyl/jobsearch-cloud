@@ -18,8 +18,9 @@ export const SCREENED_WINDOW_DAYS = 90;
  * `{ user, updated, leads[], applications[], screened[], screened_window,
  * screened_counts, tracks[], settings }`.
  *
- * Two rules about screened rows, answering different questions - the next
- * reader will take them for one rule, and they are not.
+ * Three sets of screened rows, answering three questions. A reader who takes
+ * any two of them for one will be wrong about the other, so all three are
+ * written here even though only the first two are this route's.
  *
  * **What is sent**: "was this ever a posting of theirs?" A row that records
  * something the person once had is sent whatever its kind - one carrying a
@@ -35,6 +36,13 @@ export const SCREENED_WINDOW_DAYS = 90;
  * set in validate.js SCREENED_BY_RULES. A search with no such row is absent
  * rather than 0: nothing was counted for it, which is not the same as a month
  * in which it turned nothing away.
+ *
+ * **What is shown**: "did this person choose this, or does it just explain a
+ * night?" That set is the page's, not this route's - the settings-caused kinds
+ * plus what someone removed from their own board by hand, which is the only
+ * record of that. `delisted`, `dead` and `duplicate` travel as lead history
+ * and are not displayed. Stated here because a row arriving is not a row shown,
+ * and the next person to read this file will assume it is.
  *
  * `screened_window` is `{ days, older }`, and `older` follows the first rule,
  * since it describes the rows not sent.

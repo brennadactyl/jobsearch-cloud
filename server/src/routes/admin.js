@@ -125,9 +125,11 @@ export async function handleCleanUpCompanies({ request, env }) {
 
 /**
  * POST /api/screened/kinds - requires the ADMIN_TOKEN secret as Bearer. Body
- * `{ user, rows: [{id, kind}], dryRun? }` -> `{ dryRun, set, skipped, unknown,
- * rows: [{id, was, now, outcome}] }`; 400 without a user or for a kind outside
- * the list (naming the row), 404 for an unknown user.
+ * `{ user, rows: [{id, kind}], dryRun?, leaveRest? }` -> `{ dryRun, set,
+ * skipped, unknown, unclassified, missed, missedIds, rows: [{id, was, now,
+ * outcome}] }`; 400 without a user or for a kind outside the list (naming the
+ * row), 404 for an unknown user, 409 for a write that would leave rows
+ * unclassified without saying so (see below).
  *
  * Fills in the kind on rows screened before the column existed
  * (migrations/0027_screened_kind.sql). Which kind each row was is read from its
@@ -145,6 +147,16 @@ export async function handleCleanUpCompanies({ request, env }) {
  * is still empty, so a re-run after a partial write can't overwrite a value
  * someone has since corrected. `dryRun` reports the same rows and writes
  * nothing.
+ *
+ * **It refuses a write that doesn't name every unclassified row**, with a 409
+ * saying how many it missed and some of their ids, unless the caller sends
+ * `leaveRest: true`. A tool that read `GET /api/data` instead of
+ * `?screened=all` sees only what the page is served, so it classifies a
+ * fraction of the table, reports success and leaves the rest - a partial read
+ * quietly becoming a partial write. Declining to judge a row is legitimate and
+ * `leaveRest` is how a caller says so; not knowing a row exists is not, and
+ * only the caller can tell those apart. `dryRun` is never refused: seeing the
+ * gap is exactly what a dry run is for.
  *
  * Admin-only, and meant to be retired once the backfill is done: an operator
  * write path that outlives its job is a way to change rows nobody reviewed.
@@ -170,6 +182,27 @@ export async function handleSetScreenedKinds({ request, env }) {
   }
 
   const db = new Db(env.DB, user.id);
-  const result = await db.setScreenedKinds(rows, body.dryRun === true);
-  return json({ dryRun: body.dryRun === true, ...result });
+  const dryRun = body.dryRun === true;
+  const result = await db.setScreenedKinds(rows, dryRun, body.leaveRest === true);
+
+  // A tool that read the page's view instead of `?screened=all` sees a
+  // fraction of the table and cannot tell: it would classify what it saw,
+  // report success, and leave the rest - which is how a partial read quietly
+  // becomes a partial write. So a write that would leave rows unclassified is
+  // refused unless the caller says it means to, and the refusal says how many
+  // and which. Declining to judge a row is legitimate; not knowing it exists
+  // is not, and only the caller can tell the two apart.
+  if (result.refused) {
+    return json(
+      {
+        error: `${result.missed} of this account's ${result.unclassified} unclassified rows aren't in this request - `
+          + "read GET /api/data?screened=all rather than the page's view, or send leaveRest: true to classify only these",
+        missed: result.missed,
+        unclassified: result.unclassified,
+        missedIds: result.missedIds,
+      },
+      409
+    );
+  }
+  return json({ dryRun, ...result });
 }
