@@ -383,15 +383,13 @@ export class Db {
    * Two rules here, and they answer different questions. The next reader will
    * assume they are the same one; they are not.
    *
-   * **What is sent** answers "was this ever a posting of theirs?". A row that
-   * records something the person once had stays on the wire whatever its kind -
-   * anything carrying a `found` date, anything `delisted`, anything a person
-   * added by hand - because the page counts those as the leads they were: a
-   * week's found postings are its leads plus the screened rows that were leads
-   * and went away. Withhold them and every past week's count drops with nothing
-   * saying why. What is withheld is a run's rejection of a posting nobody ever
-   * had, whose kind isn't settings-caused: `dead`, `duplicate`, and rows no one
-   * has classified.
+   * **What is sent** answers "is this a posting they had, or a rule of theirs
+   * at work?". Their settings' rejections, what they lost (`delisted`) and what
+   * they set aside by hand all arrive. A run's dead link or duplicate never
+   * does, in a list or in a count, and not even when it was once a lead: a
+   * posting that turned out to be dead was never really theirs. The page counts
+   * a week's found postings from the rows it holds, so withholding those is
+   * what makes its numbers describe postings that existed.
    *
    * **What is counted** answers "did their own settings reject it?", which is
    * the narrower set in validate.js SCREENED_BY_RULES. `counts` is that, per
@@ -412,8 +410,13 @@ export class Db {
         .all();
       return { rows: all.results, older: 0, counts: {} };
     }
-    const everHad = `(found <> '' OR kind = 'delisted' OR added_by <> 'run')`;
-    const sent = `(${everHad} OR kind IN (${BY_RULES_PLACEHOLDERS}))`;
+    // A posting that turned out to be a dead link or a duplicate is never
+    // shown, in a list or in a count, even when it was once a lead: it was
+    // never really a posting this person had. What arrives is what their
+    // settings turned down, what they lost (`delisted`), and what they set
+    // aside themselves - the rest stays in the table as the runs' memory.
+    const theirs = `(kind = 'delisted' OR added_by <> 'run')`;
+    const sent = `(${theirs} OR kind IN (${BY_RULES_PLACEHOLDERS}))`;
     const [res, olderRow, perSearch] = await Promise.all([
       this.d1
         .prepare(`SELECT * FROM screened WHERE user_id = ? AND ${sent} AND date >= ? ORDER BY id`)

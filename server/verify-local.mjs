@@ -3983,12 +3983,21 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("a rejection of a posting nobody ever had isn't served",
     shown("recent") && !shown("dead-row") && !shown("dupe-row") && !shown("unclassified"),
     JSON.stringify(served.screened.map((r) => r.kind)));
-  check("but a posting this person once had is, whatever its kind",
+  check("a posting they lost, and one they set aside themselves, are",
     shown("was-lead") && shown("cleared"),
     JSON.stringify(served.screened.filter((r) => r.found || r.added_by === "hand").map((r) => [r.kind, r.added_by, !!r.found])));
   check("and each of those still carries what the page counts it by",
     served.screened.find((r) => r.url === swUrl("was-lead"))?.found !== "" &&
     served.screened.find((r) => r.url === swUrl("cleared"))?.added_by === "hand");
+  // What a row carries besides its kind doesn't admit it: a dead link that was
+  // once a lead is still a dead link. Nothing here can build that row through
+  // the API - a run's delisting is filed as `delisted` - so the rule is held by
+  // the predicate naming only the kind and who wrote it, and by these checks
+  // proving a `found` date isn't what lets `was-lead` through.
+  check("what arrives is settings-caused, lost, or set aside by hand - nothing else",
+    served.screened.every((r) => r.kind === "delisted" || r.added_by !== "run" ||
+      ["out-of-scope", "wrong-level", "wrong-role", "contract", "pay-below-floor"].includes(r.kind)),
+    JSON.stringify(served.screened.map((r) => [r.kind, r.added_by])));
   // A tenth kind has to be put on one side or the other, or these fail: the
   // next person decides rather than inheriting whichever default the code has.
   const { SCREENED_KINDS, SCREENED_BY_RULES, SCREENED_NOT_BY_RULES } = await import("./src/validate.js");
