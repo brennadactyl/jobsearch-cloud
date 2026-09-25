@@ -143,7 +143,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
       )}
       {kind !== null && (
         <p className="screened-narrowed">
-          Showing {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind}.{" "}
+          Showing: {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind}.{" "}
           <button type="button" className="linkish" onClick={() => narrow({ kind: null })}>
             Show every reason
           </button>

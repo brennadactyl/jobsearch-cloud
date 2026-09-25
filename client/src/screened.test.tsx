@@ -169,14 +169,14 @@ describe("the screened tab", () => {
     // In the order a run decides between them, so the pay floor's count is what
     // the floor alone cost rather than everything it would also have caught.
     expect(kinds()).toEqual([
-      "1Outside what you're looking for",
-      "1Wrong level for you",
-      "1Not the kind of role",
-      "1Contract, not permanent",
-      "1Not sorted yet",
+      "1Outside your locations",
+      "1Not your level",
+      "1Different kind of work",
+      "1Contract or temporary",
+      "1Not grouped",
     ]);
 
-    await userEvent.click(screen.getByRole("button", { name: /Wrong level for you/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Not your level/ }));
     expect(rows()).toHaveLength(1);
     expect(screen.getByText(/above target level/)).toBeInTheDocument();
     expect(window.location.search).toContain("kind=wrong-level");
@@ -191,7 +191,7 @@ describe("the screened tab", () => {
       { ...fixture.screened[0], id: 91, url: "https://example.com/same", kind: "wrong-level" },
       { ...fixture.screened[0], id: 92, url: "https://example.com/other", kind: "wrong-level" },
     ];
-    expect(countsByKind(twice)).toEqual([{ kind: "wrong-level", label: "Wrong level for you", postings: 2 }]);
+    expect(countsByKind(twice)).toEqual([{ kind: "wrong-level", label: "Not your level", postings: 2 }]);
     // A row with no url is its own posting: there is nothing to match it on.
     const blank = [
       { ...fixture.screened[0], id: 93, url: "", kind: "dead" },

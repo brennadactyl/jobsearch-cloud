@@ -57,16 +57,22 @@ export function screenedWithin(rows: readonly Screened[], days: number, now: num
  * what is left under the floor is what the floor alone cost.
  */
 export const SCREENED_KINDS: readonly { kind: string; label: string }[] = [
+  // The two "it's gone" kinds are told apart by when, which is the only thing
+  // that distinguishes them and the thing neither word says on its own.
   { kind: "delisted", label: "Taken down after you saw it" },
-  { kind: "dead", label: "Already gone when it was read" },
-  { kind: "duplicate", label: "The same posting again" },
-  { kind: "out-of-scope", label: "Outside what you're looking for" },
-  { kind: "wrong-level", label: "Wrong level for you" },
-  { kind: "wrong-role", label: "Not the kind of role" },
-  { kind: "contract", label: "Contract, not permanent" },
-  { kind: "pay-below-floor", label: "Below the pay you'd take" },
-  { kind: "other", label: "Something else" },
-  { kind: "", label: "Not sorted yet" },
+  { kind: "dead", label: "Gone before you saw it" },
+  { kind: "duplicate", label: "Already seen" },
+  // Where, what and how senior are three different rejections, so each names
+  // its own dimension: "out of scope" left someone asking which one it meant.
+  { kind: "out-of-scope", label: "Outside your locations" },
+  { kind: "wrong-level", label: "Not your level" },
+  { kind: "wrong-role", label: "Different kind of work" },
+  { kind: "contract", label: "Contract or temporary" },
+  { kind: "pay-below-floor", label: "Below your pay floor" },
+  { kind: "other", label: "Other" },
+  // Never classified, which is not a verdict: these rows predate the kinds, or
+  // are postings the person took off their own board.
+  { kind: "", label: "Not grouped" },
 ];
 
 /**
