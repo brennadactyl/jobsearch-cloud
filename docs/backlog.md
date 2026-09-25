@@ -153,10 +153,10 @@ doc, and a finding says whether anything was built on the wrong line.
   `/api/dedup/<key>`, scoped to tonight's companies and the last few days, and
   every `POST /api/leads` and `/api/screened` is deduped server-side against the
   whole table whatever the caller has seen.
-  **The export keeps meaning what it says:** its "everything this tab holds"
-  option asks the server for the full set rather than the window, since someone
-  exporting to a spreadsheet wants their whole record. Client Comrade owns the
-  wording, Backend Buddy the parameter.
+  **No export on this tab.** The leads and applications exports are someone's
+  record of their own search; what a run passed over isn't, and the page saying
+  how many older rows are kept is enough. A full-record download belongs to the
+  "download my data" item, not here.
   Moving screened rows to a blob store keyed by user and day, so a lifecycle rule
   could expire them, was considered and rejected: dedupe asks "have we ever seen
   this URL?", which is random access over all history, and splitting one live
