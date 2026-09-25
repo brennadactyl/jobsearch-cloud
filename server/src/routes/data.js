@@ -22,11 +22,11 @@ export const SCREENED_WINDOW_DAYS = 90;
  * `{ days, older }` - how many older rows are kept but not sent, so a page can
  * say so rather than implying they are gone.
  *
- * **`?screened=all` serves every row**, with `days: 0`. An export offering
- * "everything this tab holds" has to be able to keep that promise: someone
- * taking their record to a spreadsheet wants all of it, and a person who cannot
- * get their own data out of a hosted service has a worse problem than a long
- * tab.
+ * **`?screened=all` serves every row**, with `days: 0`. The window hides rows
+ * the person still owns, and this is how they can be asked for: without it, the
+ * only way to read what fell outside is an operator and a backup, which is not
+ * a thing anyone should need to get their own record. It is the API's answer to
+ * "give me all of it" whether or not a page happens to call it today.
  */
 export async function handleGetData({ db, user, url }) {
   const since = url?.searchParams.get("screened") === "all" ? "" : dateDaysAgo(SCREENED_WINDOW_DAYS);
