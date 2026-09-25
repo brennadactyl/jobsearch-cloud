@@ -217,6 +217,7 @@ Say ""
 $loginBody = @{ name = $demoName; password = $Password; label = "demo-seed" }
 $session = Invoke-Api -Method POST -Path "/api/login" -Body $loginBody -AllowFailure
 $passwordWasReset = $false
+$accountCreated = $false
 
 if ($session) {
     $userId = $session.user.id
@@ -228,12 +229,13 @@ if ($session) {
     }
     $userId = $account.id
     if ($account.created) {
+        $accountCreated = $true
         Say "Created account $demoName ($userId)."
     } else {
         # The name existed and the password didn't match, so this was a reset:
         # the one change already made if the safeguards below refuse the account.
         $passwordWasReset = $true
-        Say "Account $demoName ($userId) already existed - its password has been reset to the one below."
+        Say "Account $demoName ($userId) already existed - its password has been reset; the summary below says to what."
     }
     $session = Invoke-Api -Method POST -Path "/api/login" -What "Signing in as $demoName" -Body $loginBody
 }
@@ -571,16 +573,20 @@ Say ""
 Say "  User id:  $userId"
 Say "  Name:     $demoName"
 Say ""
+# What this run did to the credential, in the line that reports it. A password
+# the run invented is printed because nothing else records it; one it was given
+# is not, since whoever passed it already has it and printing spreads it; and a
+# sign-in that worked first time changed nothing at all.
+$whatHappened = if ($accountCreated) { "set on the new account" }
+                elseif ($passwordWasReset) { "reset to the one this run was given" }
+                else { "unchanged - the account already had the one this run was given" }
 if ($generatedPassword) {
-    # Printed only when this run invented it, which is also the only time this
-    # run changed it. A password that came from -Password or deployment.json is
-    # the one the account already had, and printing it would spread it around.
-    Say "  Password: $Password   (new - this run set it)"
+    Say "  Password: $Password   ($(if ($accountCreated) { 'new account' } else { 'this run reset it to this' }))"
     Say ""
     Say "The password is not stored anywhere. Note it down, or put it in"
     Say "deployment.json as demo_password so a re-seed stops changing it."
 } else {
-    Say "  Password: unchanged"
+    Say "  Password: $whatHappened"
 }
 Say ""
 Say "Sign in at the tracker page with that name and password."
