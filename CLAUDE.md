@@ -86,7 +86,15 @@ role.
   three a change is in, and "shipped" means deployed - or pulled, for a script
   - never merged.
 - **Other sessions push to main all the time.** Fetch before building on main,
-  and coordinate before editing a file another session owns or is changing.
+  and coordinate before editing a file another session owns or is changing. A
+  soft reset onto a moved `origin/main` reverts their commits: rebase instead,
+  and read `git show --stat` before pushing.
+- **A squash-merged branch keeps its original commits,** so `git branch -d`
+  calls it unmerged and a diff against main shows every change since. Neither
+  says whether its work landed:
+  `gh pr list --state merged --json headRefName` does. A branch whose name is
+  in that list is merged work; anything else is unmerged, an open PR, or a
+  branch that never had one, and is looked at on its own.
 - **Production data is written only through the API.** Never write production
   D1 by hand; the `block-remote-d1-writes` hook enforces it. Read it through the
   API, or load the newest local backup into `node:sqlite`; note the backup's
