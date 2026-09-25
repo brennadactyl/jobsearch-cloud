@@ -11,6 +11,7 @@ import {
   countsByKind,
   countsBySearch,
   groupOf,
+  HAND,
   keptWithin,
   SCREENED_KINDS,
   screenedWithin,
@@ -49,6 +50,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const kinds = countsByKind(ofSearch);
   const rows = kind === null ? ofSearch : ofSearch.filter((r) => groupOf(r) === kind);
   const kept = keptWithin(data.leads, days, now, search);
+  const byHand = rows.filter((r) => groupOf(r) === HAND).length;
   const nameOf = (key: string) => tracks[key]?.label || key;
 
   return (
@@ -76,10 +78,27 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
         </label>
       </div>
 
+      {/* What this person's settings cost, which is the server's count and never
+          the length of what the page happens to hold: the list also carries
+          postings they removed themselves, and a number derived from it would
+          answer a different question than the Overview's. Only per search,
+          since that is the only count on the wire. */}
+      {search !== ALL && data.screened_counts[search] !== undefined && (
+        <p className="screened-claim">
+          {nameOf(search)}&rsquo;s settings have turned away{" "}
+          <strong className="mono">{data.screened_counts[search]}</strong>{" "}
+          {data.screened_counts[search] === 1 ? "posting" : "postings"} in all.
+        </p>
+      )}
+
       {everRejected.length > 0 && (
         <p className="screened-sum">
-          <strong className="mono">{rows.length}</strong> set aside, against <strong className="mono">{kept}</strong>{" "}
-          kept{search && ` by ${nameOf(search)}`}, {SCREENED_WINDOWS.find((w) => w.days === days)?.label}.
+          Showing <strong className="mono">{rows.length}</strong> from{" "}
+          {SCREENED_WINDOWS.find((w) => w.days === days)?.label}, against <strong className="mono">{kept}</strong> kept
+          {search && ` by ${nameOf(search)}`}
+          {/* The gap between this list and the count above, named rather than
+              left for someone to work out by counting rows. */}
+          {byHand > 0 && `, including ${byHand} you removed yourself`}.
           {/* A page showing part of the record has to say so, or a window reads
               as a purge. Nothing is deleted, and the rows outside it are still
               working: they are what stops a run finding those postings again. */}
