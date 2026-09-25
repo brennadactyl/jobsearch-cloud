@@ -231,6 +231,16 @@ doc, and a finding says whether anything was built on the wrong line.
   password length is the only defence. `server/README.md` says so in its own
   security notes.
 - **Tokens never expire.** Revoking means deleting a `sessions` row by hand.
+- **"Download all my data", in My account.** One action that hands a person
+  everything the service holds about them: their settings and every search's
+  configuration, their leads, applications and screened rows whatever their age,
+  their run history, and the documents they uploaded. It belongs beside the
+  password and the rest of the account, not on a tab, because it is about the
+  account rather than about one search. `?screened=all` already answers for the
+  rows the page's window hides; the rest is deciding the shape of the file - one
+  archive, or a JSON file plus the documents - and whether it is built on the
+  spot or prepared and offered as a download. It is also half of the privacy
+  posture below, the half a person invokes themselves.
 - **A privacy posture for strangers.** Whoever administers the Cloudflare
   account can read every account's rows in D1. Honest for friends; with
   strangers' resumes it needs a retention policy and a deletion path a person
