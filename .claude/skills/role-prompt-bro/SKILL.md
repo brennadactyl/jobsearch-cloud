@@ -53,7 +53,8 @@ follows and who owns what.
 
 ## Gates
 
-Needs the user's go in this session:
+Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
+it, and the user merges it. Needs the user's go, typed in this session:
 
 - any live write to a search's config or doc, and adding companies to the
   shared list (after checking the route returns real postings);
