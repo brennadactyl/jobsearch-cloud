@@ -137,6 +137,9 @@ export const screened: Screened[] = [
   // A lead of this person's that went away. It lives in the same table so no
   // run finds it again, but no rule rejected it, so the Screened tab leaves it
   // out.
+  // A posting found dead, and one already seen: both arrive because they record
+  // postings that were once hers, and neither is something her settings rejected.
+  { id: 38, search: "alpha", url: "https://example.com/38", company: "Birch", title: "Engineer", location: "Springfield", reason: "the posting page returned a closed-req notice", kind: "dead", date: daysAgo(2), added_by: "run", found: daysAgo(15) },
   { id: 37, search: "alpha", url: "https://example.com/37", company: "Ash", title: "Senior Engineer", location: "Springfield", reason: "posting taken down", kind: "delisted", date: daysAgo(5), added_by: "run", found: daysAgo(20) },
 ];
 

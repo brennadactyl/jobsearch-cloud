@@ -11,7 +11,7 @@ import App from "./App";
 import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
 import { NOW, data as fixture } from "./domain/fixture";
-import { countsByKind } from "./domain/screened";
+import { countsByKind, screenedWithin } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
 async function openTab(data: TrackerData = fixture) {
@@ -138,6 +138,39 @@ describe("the screened tab", () => {
     expect(window.location.pathname).toBe("/t/alpha");
     expect(window.location.search).toContain(`drill=found-day%3Aalpha%3A${fixture.tracks[0].last_run.on}`);
     expect(screen.getByText(/still on your board/)).toBeInTheDocument();
+  });
+
+  it("leaves out a posting that was hers and went away, whatever ended it", async () => {
+    await openTab();
+    // A dead posting and a duplicate arrive because they record postings she
+    // once had; neither is something her settings rejected, so neither belongs
+    // on a tab about what her rules cost.
+    expect(screen.queryByRole("link", { name: "Birch" })).toBeNull();
+    expect(screen.queryByText(/Gone before you saw it/)).toBeNull();
+    expect(screen.queryByText(/Already seen/)).toBeNull();
+  });
+
+  it("shows a kind it has never heard of, and counts it where it shows it", () => {
+    // A rule someone's settings caused is what they came here to see, and
+    // silence is the worse way for this page to be wrong about a new kind. It
+    // has to be counted too: a row in the list that the table below it omits
+    // makes both numbers untrustworthy.
+    const odd = [
+      { ...fixture.screened[0], id: 95, kind: "relocation-required" },
+      { ...fixture.screened[0], id: 96, url: "https://example.com/96", kind: "out-of-scope" },
+    ];
+    const shown = screenedWithin(odd, 0, NOW);
+    expect(shown).toHaveLength(2);
+    expect(countsByKind(shown).reduce((n, k) => n + k.postings, 0)).toBe(2);
+    expect(countsByKind(shown).find((k) => k.kind === "")?.label).toBe("Not grouped");
+  });
+
+  it("leaves out the catch-all kind, which the count leaves out too", () => {
+    // `other` is a rejection none of the named kinds describes, so nobody can
+    // say a setting caused it (SCREENED_NOT_BY_RULES in server/src/validate.js).
+    // A list wider than the number above it is how someone stops trusting both.
+    const catchAll = [{ ...fixture.screened[0], id: 97, kind: "other", added_by: "run" }];
+    expect(screenedWithin(catchAll, 0, NOW)).toHaveLength(0);
   });
 
   it("leaves out a lead that was taken down, which no rule rejected", async () => {
