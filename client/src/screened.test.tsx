@@ -96,7 +96,7 @@ describe("the screened tab", () => {
 
     // Alpha's stamp says what its last run kept and what it set aside; the
     // second is the way in.
-    const alpha = screen.getAllByRole("link", { name: "5 screened out" })[0];
+    const alpha = screen.getAllByRole("link", { name: "3 screened out" })[0];
     await userEvent.click(alpha);
     await screen.findByRole("heading", { name: "What your searches set aside" });
     expect(window.location.search).toBe("?search=alpha");
@@ -194,6 +194,44 @@ describe("the screened tab", () => {
     expect(within(mine).getByText("you removed this")).toBeInTheDocument();
     // A run's row carries no such mark.
     expect(within(screen.getByText(/outside the US/).closest("tr")!).queryByText("you removed this")).toBeNull();
+  });
+
+  it("won't say a search turned nothing away when its record predates the kinds", async () => {
+    // Beta has no count of its own: its rejections were written before a run
+    // said which rule caused each one, so "nothing" would be a claim about
+    // months nobody can speak for.
+    const noCount: TrackerData = { ...fixture, screened_counts: { alpha: 4 }, screened: [] };
+    vi.spyOn(client, "getData").mockResolvedValue(noCount);
+    window.history.pushState({}, "", "/screened?search=beta");
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <App />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { name: "What your searches set aside" });
+    expect(screen.getByText(/No record of what this search turned away/)).toBeInTheDocument();
+  });
+
+  it("says nothing about screening on a night that recorded no such count", async () => {
+    const older: TrackerData = {
+      ...fixture,
+      tracks: fixture.tracks.map((t) =>
+        t.key === "alpha" ? { ...t, last_run: { ...t.last_run, screened_by_rules: null } } : t,
+      ),
+    };
+    vi.spyOn(client, "getData").mockResolvedValue(older);
+    window.history.pushState({}, "", "/t/alpha");
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <App />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { name: "Fixture Search" });
+    const stamp = document.querySelector(".runstamp")!;
+    expect(stamp).toHaveTextContent(/3 new/);
+    expect(stamp).not.toHaveTextContent(/screened out/);
   });
 
   it("says so when a search has set nothing aside at all", async () => {

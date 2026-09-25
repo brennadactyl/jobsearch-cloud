@@ -145,11 +145,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
       )}
 
       {rows.length === 0 ? (
-        <p className="empty">
-          {everRejected.length === 0
-            ? "Nothing has been set aside yet. A run records each posting it looks at and doesn't keep, with its reason."
-            : "Nothing was set aside in this window."}
-        </p>
+        <p className="empty">{emptyLine(data, search, everRejected.length)}</p>
       ) : (
         <div className="card grid-wrap screened-grid">
           <table>
@@ -171,6 +167,22 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
       )}
     </div>
   );
+}
+
+/**
+ * What an empty list means, which is three different things. A search with no
+ * count at all has a record that predates a run saying which kind each rejection
+ * was: its rows exist and can't be attributed, so saying it turned nothing away
+ * would be a claim about months nobody can speak for.
+ */
+function emptyLine(data: TrackerData, search: string, everRejected: number): string {
+  if (search && data.screened_counts[search] === undefined) {
+    return "No record of what this search turned away: its rejections were written before a run said which rule caused each one.";
+  }
+  if (everRejected === 0) {
+    return "Nothing has been set aside yet. A run records each posting your settings turn away, with its reason.";
+  }
+  return "Nothing was set aside in this window.";
 }
 
 function Row({ row, search }: { row: Screened; search: string }) {

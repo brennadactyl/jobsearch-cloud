@@ -58,8 +58,17 @@ export function RunStamp({ track, settings }: { track: Track | undefined; settin
         // the board, the other to what it set aside.
         <span className="runstamp-counts">
           <Link className="runstamp-found" to={pathForFound(track.key, run.on)}>{`${run.leads_added} new`}</Link>
-          {", "}
-          <Link className="runstamp-screened" to={pathForSearch(track.key)}>{`${run.screened_added} screened out`}</Link>
+          {/* What this person's own settings turned away, which is the number
+              worth reading; a night that recorded no such count says nothing
+              here rather than a zero it can't stand behind. */}
+          {run.screened_by_rules != null && (
+            <>
+              {", "}
+              <Link className="runstamp-screened" to={pathForSearch(track.key)}>
+                {`${run.screened_by_rules} screened out`}
+              </Link>
+            </>
+          )}
           {run.delisted > 0 && `, ${run.delisted} taken down`}
         </span>
       )}

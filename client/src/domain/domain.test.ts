@@ -157,13 +157,22 @@ describe("runSummary", () => {
   it("says both counts of a day that found nothing, rather than going blank or vague", () => {
     // "found nothing new" read the same for a thin night and for one whose
     // rules set everything aside, which are different nights.
-    const run = { at: new Date(NOW).toISOString(), on: "", status: "ok", leads_added: 0, screened_added: 0, delisted: 0, note: "" };
+    const run = { at: new Date(NOW).toISOString(), on: "", status: "ok", leads_added: 0, screened_added: 0, screened_by_rules: 0, delisted: 0, note: "" };
     expect(runSummary(run)).toBe("0 new, 0 screened out");
-    expect(runSummary({ ...run, screened_added: 26 })).toBe("0 new, 26 screened out");
+    expect(runSummary({ ...run, screened_added: 26, screened_by_rules: 26 })).toBe("0 new, 26 screened out");
   });
 
-  it("counts from the run record, not from the rows", () => {
-    expect(runSummary(trackList[0].last_run)).toBe("3 new, 5 screened out");
+  it("counts what this person's rules turned away, not every rejection", () => {
+    // Five rejections, three of them caused by a setting; the rest were a dead
+    // link and a duplicate, which no rule of theirs produced.
+    expect(runSummary(trackList[0].last_run)).toBe("3 new, 3 screened out");
+  });
+
+  it("says nothing about screening for a night that recorded no such count", () => {
+    // Not the same as a night whose rules turned nothing away, and a zero here
+    // would be a number nobody can stand behind.
+    const run = { ...trackList[0].last_run, screened_by_rules: null };
+    expect(runSummary(run)).toBe("3 new");
   });
 });
 

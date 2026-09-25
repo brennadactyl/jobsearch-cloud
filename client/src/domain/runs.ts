@@ -38,7 +38,11 @@ export function runState(track: RunTrack | null | undefined, settings: Settings)
 export function runSummary(run: LastRun | null | undefined): string {
   if (!run || !run.at) return "";
   if (run.status === "error") return run.note || "the run reported an error";
-  const bits = [`${run.leads_added} new`, `${run.screened_added} screened out`];
+  const bits = [`${run.leads_added} new`];
+  // A night with no count of its own says nothing about screening rather than
+  // claiming a zero: it recorded rejections without recording which were the
+  // person's own rules.
+  if (run.screened_by_rules != null) bits.push(`${run.screened_by_rules} screened out`);
   // Only the run record counts these: the delisted rows were deleted.
   if (run.delisted) bits.push(`${run.delisted} taken down`);
   return bits.join(", ");
