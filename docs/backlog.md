@@ -44,10 +44,12 @@ doc, and a finding says whether anything was built on the wrong line.
   **The server decides which kinds count**, in one place, and the Overview, each
   search tab's run stamp and the Screened tab all read that. A rule this is the
   whole point of should not be re-derived by three callers.
-  The rows themselves stay readable - a dead posting is still worth seeing on the
-  Screened tab - so this is what is counted, and what the tab shows by default,
-  not what is stored. Backend Buddy for the filter, Client Comrade for the three
-  places it shows.
+  **The uncounted kinds aren't shown either.** A dead link or a duplicate tells
+  a person nothing they can act on, so the route doesn't serve them and the tab
+  has no view of them: no chip, no toggle, nothing to expand. They stay stored,
+  because that is what stops a run finding the same posting again - the change is
+  what leaves the server, not what it keeps. Backend Buddy for the filter, Client
+  Comrade for the three places it shows.
 - **Team skills and tools** - approved from every role's workflow review. In
   order: commit the proof tools under `tools/` (comment-only checks, one prompt
   snapshot, the tracker helper rig, the doc link checker and diagram generator)
