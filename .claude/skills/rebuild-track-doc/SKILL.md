@@ -24,6 +24,12 @@ Save locally, outside the repo:
   (`GET /api/config`);
 - the shared company list (`GET /api/coverage/<key>?all=1`).
 
+Ask each route for everything it can serve - `?all=1` above is that - and write
+down what each answer held: the doc's byte count, the list's `total`, the track's
+tab keys. A route's default may be a narrower view than the table behind it, so a
+count that shrinks between two reads is the view moving rather than the data, and
+a saved count is what tells the two apart afterwards.
+
 ## 2. Draft section by section
 
 - **`## Candidate Profile`** - resume content only, plus a best-fit sentence.
