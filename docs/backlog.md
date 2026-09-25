@@ -32,35 +32,6 @@ doc, and a finding says whether anything was built on the wrong line.
 
 ## Next
 
-- **Count only what a person's own settings screened out.** "26 screened out"
-  today counts every rejection, and most of them are facts about the posting
-  rather than anything someone chose: a dead link, a duplicate, a lead that was
-  taken down. A count that mixes the two can't answer the question it exists for
-  - what are my rules costing me - and it makes a quiet night look busy.
-  So the counted kinds are the ones a person can change: `out-of-scope`,
-  `wrong-level`, `wrong-role`, `contract`, `pay-below-floor`. Not counted:
-  `dead`, `duplicate`, `delisted`, and the rows with no kind, which are older
-  rows nobody classified and so can't be claimed either way.
-  **The server decides which kinds count**, in one place, and the Overview, each
-  search tab's run stamp and the Screened tab all read that. A rule this is the
-  whole point of should not be re-derived by three callers.
-  **The uncounted kinds aren't shown either.** A dead link or a duplicate tells
-  a person nothing they can act on, so the tab has no view of them: no chip, no
-  toggle, nothing to expand.
-  **`dead`, `duplicate` and unclassified run-written rows never leave the
-  server**, in a list or in a number, even when such a row carries a `found`
-  date. The Overview's found-and-removed history stops counting them and some
-  past weeks read lower; that is the cost of the rule, taken knowingly. A row a
-  person removed by hand still travels and still shows - it is the only record of
-  what they took off their own board - and `delisted` travels without being shown.
-  The tab shows what a person's own settings rejected, plus what they removed
-  themselves. An unrecognised kind is shown rather than hidden, so a new settings
-  rule can't disappear silently.
-  No stored weekly aggregate and no second count: a fact the rows already hold
-  gets read from the rows. Revisit only if screened rows are ever purged.
-  Every row stays stored either way - that is what stops a run finding the same
-  posting again. Backend Buddy for the filter, Client Comrade for the three places
-  it shows.
 - **Team skills and tools** - approved from every role's workflow review. In
   order: commit the proof tools under `tools/` (comment-only checks, one prompt
   snapshot, the tracker helper rig, the doc link checker and diagram generator)
@@ -89,13 +60,6 @@ doc, and a finding says whether anything was built on the wrong line.
   It covers every search, and it hides that company's existing leads too. The
   person is told what it did and can undo it, and removing the chip in the
   panel is the other way back.
-- **[A pay floor on each search](search-fields-plan.md)** - the rest of that
-  plan. The roles line and the two fit rules are live in the panel; the floor is
-  the part that needs two stored values, a migration, and the clauses the prompt
-  composes in step 7. A posting stays when its range reaches the amount or states
-  none, and is screened only when its whole range sits below it. Prompt Bro has
-  read the two searches that state a pay rule today, so their numbers can be set
-  once the field exists.
 - **Split a track doc into what is composed and what is accumulated.** One file
   holds both the parts generated from config and what the runs earn over weeks -
   companies tried, delisting guards, notes on a careers site - and its only
@@ -169,87 +133,6 @@ doc, and a finding says whether anything was built on the wrong line.
   there, in the onboarding run's validation, and in the account panel's picker.
   Owner: Prompt Bro, with Backend Buddy for the route.
 
-- **Show the page 90 days of screened postings, and keep the rest.** The table
-  grows about 4,900 rows a year per search - nothing for one person, gigabytes at
-  a few hundred - and a rejection a season old is clutter on the tab. So
-  `GET /api/data` returns the last 90 days plus a count of what is older, and the
-  page says those are kept rather than gone. Nothing is deleted.
-  Deleting was the first shape and it is worse: it needed carve-outs for a
-  delisting and for hand-added rows, it made "90 days" mean 90 days of active
-  searching, and a purged posting still listed would be fetched and screened again
-  on a later night. Windowing costs none of that.
-  It is safe because no run reads that route: dedupe comes from
-  `/api/dedup/<key>`, scoped to tonight's companies and the last few days, and
-  every `POST /api/leads` and `/api/screened` is deduped server-side against the
-  whole table whatever the caller has seen.
-  **No export on this tab.** The leads and applications exports are someone's
-  record of their own search; what a run passed over isn't, and the page saying
-  how many older rows are kept is enough. A full-record download belongs to the
-  "download my data" item, not here.
-  **`?screened=all` stays, unused**, as the one way the API can answer for rows
-  older than the window. Without it, reading them means an operator and a backup,
-  which is the state the privacy posture is supposed to leave. It is the first
-  piece of that download, not a leftover of the cancelled export - say so where
-  it lives, since an unused parameter is the kind of thing a later reader removes.
-  Moving screened rows to a blob store keyed by user and day, so a lifecycle rule
-  could expire them, was considered and rejected: dedupe asks "have we ever seen
-  this URL?", which is random access over all history, and splitting one live
-  dataset across two stores to buy an expiry rule gives up what D1 is for. If
-  storage ever binds, archive whole accounts instead. Owner: Backend Buddy.
-- **A screened row can't say which tab it belongs to**, so a search that fills
-  several files all of them under its root: on one account 824 screened rows sit
-  on the root tab against 131 across the other three, while its leads spread 37 /
-  125 / 245 / 68. Nothing is misjudged - the row carries the only key it can, and
-  the tab's label then reads as the verdict, so a healthcare company appears filed
-  under a games tab. A lead already names its tab (`search` per row in
-  `tracker.ps1`); a screened row takes the run's own key. Give it the same field,
-  checked against that search's own tabs and falling back to the root, and the
-  Screened tab's per-tab filter starts telling the truth. Rides with the kind
-  below: same route, same helper, same prompt step.
-- **Record which kind of reason screened a posting**, from a fixed list, beside
-  the sentence a run already writes. The Screened tab lists what a search set
-  aside, and every run stamp now gives both counts, so a thin night reads
-  differently from a rule setting everything aside. What can't be answered is
-  "what is this rule costing me?": each reason is a sentence about one posting
-  and no two are worded alike, so 33 rows in 30 days on one account are read one
-  at a time. A stored kind makes them countable, and the grouped artboard of the
-  [Screened postings mockup](https://claude.ai/artifact/EfsFEW2tDuUfEeBUAGJUYy)
-  is a day's work once it exists. **It counts by url**, which is the only key the
-  data has: rows and urls match today, kind for kind. A job re-posted under a new
-  url counts twice, and the page must not guess at company-plus-title to merge
-  them - that splits two real openings sharing a title and still misses a re-post
-  whose title moved a word. If those counts ever matter, the run says a posting is
-  a re-post, the way it now says which kind. It is a field a run reports, so the
-  column and
-  route, `tracker.ps1` and the prompt step go together - Backend Buddy and Prompt
-  Bro, then Client Comrade for the grouping.
-  The list, from counting every screened row on the five live searches:
-  `delisted`, `dead`, `duplicate`, `out-of-scope`, `wrong-level`, `wrong-role`,
-  `contract`, `pay-below-floor`, `other`. A third of rows cite two reasons, so the
-  run picks by a fixed precedence in that order - first one that applies - and the
-  sentence keeps saying everything. `contract` is in from the start although no
-  current search excludes contract work, because adding a kind later means
-  backfilling again.
-  **`pay-below-floor` is last of the real kinds** so that its count answers the
-  question a floor raises: what is this number costing me? A posting that was the
-  wrong level anyway would still be screened at any floor, so counting it against
-  the floor invites someone to lower a number and gain nothing. What is left under
-  `pay-below-floor` is the postings a person would otherwise have seen. The same
-  reasoning puts the facts first: a dead or out-of-scope posting was never judged
-  on fit at all.
-  **`delisted` is its own kind, not `dead`:** a posting found already gone was
-  never anyone's, while a delisted one was a lead on a person's board and then
-  vanished, which is the only screened row that records something lost. It is
-  also the row the 30-day purge keeps, so the distinction has to be stored rather
-  than inferred from a reason string.
-  **The path that can lose a row forgives; the path that can't refuses.**
-  `POST /api/screened` stores an unknown kind as `other` and reports the value,
-  since refusing loses the only record stopping tomorrow's run re-finding that
-  posting. The operator backfill refuses a kind outside the list and writes
-  nothing, and writes only rows whose kind is still empty.
-  A delisting is stored as `dead` and also carries the exact reason
-  `posting taken down`, which `countRunActivity` splits on. Once the backfill has
-  run, that split reads the kind and the string stops being load-bearing.
 
 ## Worth doing, unscheduled
 
