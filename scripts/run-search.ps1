@@ -330,7 +330,7 @@ function Send-RunLog {
 # the only place it shows.
 function Stop-PausedRun($sentence, $pausedSince) {
     Log "paused:           $sentence"
-    Log "run record:       status=paused since=$pausedSince"
+    Log "run outcome:      status=paused since=$pausedSince"
     Log "       Nothing was searched and no run was recorded. This task will go the next time setup-scheduler.ps1 runs; until then this search logs this every night."
     if (Get-Command Exit-RunLock -ErrorAction SilentlyContinue) { Exit-RunLock }
     Send-RunLog
@@ -742,7 +742,10 @@ if ($exitCode -eq 0) {
         }
     }
 }
-Log "run record:       $recordSummary"
+# What this run amounted to, for a person and for run-report.ps1. It is not the
+# run record: that is the `search_runs` row the run writes itself, and a paused
+# or unfinished run reaches this line having written none.
+Log "run outcome:      $recordSummary"
 
 # ---- Write back what the run edited. --------------------------------------
 #
