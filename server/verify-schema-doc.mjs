@@ -154,9 +154,17 @@ if (prose.includes("**There are no foreign keys.**")) {
 }
 
 console.log("\n== conventions ==");
-if (prose.includes("Every column outside a primary key is `NOT NULL`")) {
+{
+  // The rule and its exceptions are checked together: a column allowed to be
+  // NULL has to be named in the doc, and a column the doc names has to be one.
+  // Otherwise the next nullable column either breaks a rule nobody restated or
+  // quietly switches the check off by rewording the sentence.
+  const start = "- Every column outside a primary key is `NOT NULL`";
+  const chunk = chunkStarting(start);
   const nullable = allCols.filter((c) => c.pk === 0 && !c.notnull).map((c) => c.ref);
-  check("every column outside a primary key is NOT NULL", nullable.length === 0, `nullable: ${nullable.join(", ")}`);
+  if (!chunk) check("the NOT NULL rule", false, notFound(start));
+  else check("the columns allowed to be NULL are the ones the doc names",
+    sameSet(refsIn(chunk), nullable), vs(sorted(refsIn(chunk)), sorted(nullable)));
 }
 {
   const start = "- Columns with no default";

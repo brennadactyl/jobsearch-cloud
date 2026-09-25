@@ -160,7 +160,11 @@
 import { normalize as normalizeCompany } from "./exclude.js";
 import { searchRootKey, searchRootOf } from "./tracks.js";
 import { canonicalUrl } from "./url.js";
-import { today } from "./validate.js";
+import { SCREENED_BY_RULES, today } from "./validate.js";
+
+// The placeholders for SCREENED_BY_RULES in a SQL IN list, built from the list
+// itself so the two can never fall out of step.
+const BY_RULES_PLACEHOLDERS = SCREENED_BY_RULES.map(() => "?").join(", ");
 
 // The route modules validate against these same lists, so validation and
 // storage share one definition.
@@ -376,8 +380,29 @@ export class Db {
    * rows older than the window still do their work - every write is deduped
    * against the whole table by dropKnownUrls, whatever a reader has seen.
    *
-   * @param {string} since YYYY-MM-DD, or "" for every row
-   * @returns {Promise<{rows: Object[], older: number}>}
+   * Two rules here, and they answer different questions. The next reader will
+   * assume they are the same one; they are not.
+   *
+   * **What is sent** answers "was this ever a posting of theirs?". A row that
+   * records something the person once had stays on the wire whatever its kind -
+   * anything carrying a `found` date, anything `delisted`, anything a person
+   * added by hand - because the page counts those as the leads they were: a
+   * week's found postings are its leads plus the screened rows that were leads
+   * and went away. Withhold them and every past week's count drops with nothing
+   * saying why. What is withheld is a run's rejection of a posting nobody ever
+   * had, whose kind isn't settings-caused: `dead`, `duplicate`, and rows no one
+   * has classified.
+   *
+   * **What is counted** answers "did their own settings reject it?", which is
+   * the narrower set in validate.js SCREENED_BY_RULES. `counts` is that, per
+   * search, over the whole table rather than the window - a reader summing what
+   * it was sent would be summing the window, and would be summing the wider
+   * question besides.
+   *
+   * `older` follows the first rule, since it describes the rows not sent.
+   *
+   * @param {string} since YYYY-MM-DD, or "" for every row of every kind
+   * @returns {Promise<{rows: Object[], older: number, counts: Record<string, number>}>}
    */
   async getAllScreened(since) {
     if (!since) {
@@ -385,19 +410,32 @@ export class Db {
         .prepare("SELECT * FROM screened WHERE user_id = ? ORDER BY id")
         .bind(this.userId)
         .all();
-      return { rows: all.results, older: 0 };
+      return { rows: all.results, older: 0, counts: {} };
     }
-    const [res, olderRow] = await Promise.all([
+    const everHad = `(found <> '' OR kind = 'delisted' OR added_by <> 'run')`;
+    const sent = `(${everHad} OR kind IN (${BY_RULES_PLACEHOLDERS}))`;
+    const [res, olderRow, perSearch] = await Promise.all([
       this.d1
-        .prepare("SELECT * FROM screened WHERE user_id = ? AND date >= ? ORDER BY id")
-        .bind(this.userId, since)
+        .prepare(`SELECT * FROM screened WHERE user_id = ? AND ${sent} AND date >= ? ORDER BY id`)
+        .bind(this.userId, ...SCREENED_BY_RULES, since)
         .all(),
       this.d1
-        .prepare("SELECT COUNT(*) AS n FROM screened WHERE user_id = ? AND date < ?")
-        .bind(this.userId, since)
+        .prepare(`SELECT COUNT(*) AS n FROM screened WHERE user_id = ? AND ${sent} AND date < ?`)
+        .bind(this.userId, ...SCREENED_BY_RULES, since)
         .first(),
+      this.d1
+        .prepare(
+          `SELECT search, COUNT(*) AS n FROM screened
+            WHERE user_id = ? AND kind IN (${BY_RULES_PLACEHOLDERS}) GROUP BY search`
+        )
+        .bind(this.userId, ...SCREENED_BY_RULES)
+        .all(),
     ]);
-    return { rows: res.results, older: olderRow?.n || 0 };
+    return {
+      rows: res.results,
+      older: olderRow?.n || 0,
+      counts: Object.fromEntries(perSearch.results.map((r) => [r.search, r.n])),
+    };
   }
 
   /**
@@ -1125,15 +1163,19 @@ export class Db {
         .prepare("SELECT COUNT(*) AS leadsAdded FROM leads WHERE user_id = ? AND search = ? AND found = ?")
         .bind(this.userId, key, on)
         .first(),
-      // One query, so both sums agree on what "not delisted" means.
+      // One query, so the three sums agree about a night. A delisting is told
+      // by its kind, which /api/delist stamps and no run can send: the reason
+      // text still reads `posting taken down` on the row, but a fact stored
+      // once is a fact that cannot disagree with itself.
       this.d1
         .prepare(
-          `SELECT SUM(CASE WHEN reason = ? THEN 1 ELSE 0 END) AS delisted,
-                  SUM(CASE WHEN reason <> ? THEN 1 ELSE 0 END) AS screenedAdded
+          `SELECT SUM(CASE WHEN kind = 'delisted' THEN 1 ELSE 0 END) AS delisted,
+                  SUM(CASE WHEN kind <> 'delisted' THEN 1 ELSE 0 END) AS screenedAdded,
+                  SUM(CASE WHEN kind IN (${BY_RULES_PLACEHOLDERS}) THEN 1 ELSE 0 END) AS screenedByRules
              FROM screened
             WHERE user_id = ? AND search = ? AND date = ? AND added_by = 'run'`
         )
-        .bind(DELISTED_REASON, DELISTED_REASON, this.userId, key, on)
+        .bind(...SCREENED_BY_RULES, this.userId, key, on)
         .first(),
       // company_sweeps keeps only each company's latest sweep, so this counts
       // the companies whose latest sweep is this run's - which is every company
@@ -1147,6 +1189,7 @@ export class Db {
     return {
       leadsAdded: leads?.leadsAdded || 0,
       screenedAdded: screened?.screenedAdded || 0,
+      screenedByRules: screened?.screenedByRules || 0,
       delisted: screened?.delisted || 0,
       swept: swept?.swept || 0,
     };
@@ -1177,19 +1220,22 @@ export class Db {
     if (!runs.length) return [];
     const stmt = this.d1.prepare(
       `INSERT INTO search_runs
-         (user_id, track_key, last_run_at, last_run_on, status, leads_added, screened_added, delisted, swept, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (user_id, track_key, last_run_at, last_run_on, status, leads_added, screened_added, screened_by_rules, delisted, swept, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, track_key) DO UPDATE SET
          last_run_at = excluded.last_run_at, last_run_on = excluded.last_run_on,
          status = excluded.status, leads_added = excluded.leads_added,
-         screened_added = excluded.screened_added, delisted = excluded.delisted,
+         screened_added = excluded.screened_added,
+         screened_by_rules = excluded.screened_by_rules, delisted = excluded.delisted,
          swept = excluded.swept, note = excluded.note`
     );
     await this.d1.batch(
       runs.map((r) =>
         stmt.bind(
           this.userId, r.key, r.at, r.on, r.status,
-          r.leadsAdded, r.screenedAdded, r.delisted, r.swept, r.note
+          // A number, 0 included, for every run recorded from now on; NULL is
+          // only what a night before the column carries (migrations/0028).
+          r.leadsAdded, r.screenedAdded, Number(r.screenedByRules) || 0, r.delisted, r.swept, r.note
         )
       )
     );

@@ -228,8 +228,10 @@ await req("POST", "/api/screened", { token: A_TOK, body: { screened: [{ search: 
 const bScreened = await req("POST", "/api/screened", { token: B_TOK, body: { screened: [{ search: "SWE", url: screenedUrl, reason: "out of scope" }] } });
 check("screened items dedup per user, not globally", bScreened.json.added === 1, JSON.stringify(bScreened.json));
 
-const aData = await req("GET", "/api/data", { token: A_TOK });
-const bData = await req("GET", "/api/data", { token: B_TOK });
+// The full set, since what follows checks what is stored for each account -
+// the page-facing feed serves only the kinds a person's settings caused.
+const aData = await req("GET", "/api/data?screened=all", { token: A_TOK });
+const bData = await req("GET", "/api/data?screened=all", { token: B_TOK });
 // Counted by this run's own url rather than by table size, so a re-run
 // against a database that still holds the last run's fixtures still means
 // something.
@@ -1380,7 +1382,7 @@ check("same for screened - one bad key, nothing filed",
   (await req("POST", "/api/screened", { token: A_TOK, body: { screened: [
     { search: "SWE", url: mixedScreenUrl, reason: "wrong level" },
     { search: "GHOST", url: `${mixedScreenUrl}-b`, reason: "wrong level" }] } })).status === 404 &&
-  !(await req("GET", "/api/data", { token: A_TOK })).json.screened.some((s) => s.url === mixedScreenUrl));
+  !(await req("GET", "/api/data?screened=all", { token: A_TOK })).json.screened.some((s) => s.url === mixedScreenUrl));
 
 // A fed key must keep working. It is a track row like any other, and a
 // branched run files into the tab it feeds by name - a check that only allowed
@@ -1396,7 +1398,7 @@ const fedScreened = await req("POST", "/api/screened", { token: A_TOK, body: { s
 check("and by /api/screened",
   fedScreened.status === 200 && fedScreened.json.added === 1, fedScreened.text.slice(0, 140));
 check("the row is filed under the tab it was judged for, LEAD, not its feed root",
-  (await req("GET", "/api/data", { token: A_TOK })).json.screened
+  (await req("GET", "/api/data?screened=all", { token: A_TOK })).json.screened
     .find((s) => s.url === fedScreenUrl)?.search === "LEAD");
 
 // Another user's track key is an unconfigured key here, which is the property
@@ -1578,7 +1580,7 @@ check("no ids is refused",
 const rmOne = await req("POST", "/api/delete-leads",
   { token: rmTok, body: { ids: [rmLeads[0].id, rmLeads[1].id], reason: "outside target locations" } });
 check("removing two leads reports both", rmOne.status === 200 && rmOne.json.removed === 2, rmOne.text.slice(0, 140));
-const afterRm = await req("GET", "/api/data", { token: rmTok });
+const afterRm = await req("GET", "/api/data?screened=all", { token: rmTok });
 check("the removed leads are gone from the board",
   !afterRm.json.leads.some((l) => l.id === rmLeads[0].id || l.id === rmLeads[1].id));
 check("each removal left a screened row carrying the caller's reason",
@@ -1609,7 +1611,7 @@ await req("POST", "/api/leads", { token: rmTok, body: { leads: [
   { search: rmTrack, company: "Sentinel Co", title: "Engineer", location: "Austin, TX", url: rmSentUrl }] } });
 const rmSent = (await req("GET", "/api/data", { token: rmTok })).json.leads.find((l) => l.url === rmSentUrl);
 await req("POST", "/api/delete-leads", { token: rmTok, body: { ids: [rmSent.id], reason: "Posting Taken Down" } });
-const rmSentRow = (await req("GET", "/api/data", { token: rmTok })).json.screened.find((sc) => sc.url === rmSentUrl);
+const rmSentRow = (await req("GET", "/api/data?screened=all", { token: rmTok })).json.screened.find((sc) => sc.url === rmSentUrl);
 check("a reason equal to the delisting marker is rewritten, not stored as typed",
   rmSentRow && rmSentRow.reason === "removed by hand", JSON.stringify(rmSentRow));
 
@@ -1622,7 +1624,7 @@ check("one user cannot remove another's lead",
 check("B's lead is still there afterwards",
   (await req("GET", "/api/data", { token: B_TOK })).json.leads.some((l) => l.id === bTargets.id));
 check("and no screened row was invented in B's data",
-  !(await req("GET", "/api/data", { token: B_TOK })).json.screened.some((sc) => sc.reason === "should not work"));
+  !(await req("GET", "/api/data?screened=all", { token: B_TOK })).json.screened.some((sc) => sc.reason === "should not work"));
 
 console.log("\n== a person's pruning is not the search's work ==");
 // Run counts derive from rows, and a person removing a posting writes a
@@ -1652,7 +1654,7 @@ check("nor in its delisted count",
 // `added_by` must be a closed set: every write path sets it explicitly, so ''
 // means exactly "written before the column existed" and nothing else. A new ''
 // appearing is a code path that forgot, and the column stops meaning anything.
-const attrRows = (await req("GET", "/api/data", { token: B_TOK })).json.screened
+const attrRows = (await req("GET", "/api/data?screened=all", { token: B_TOK })).json.screened
   .filter((s) => s.url.startsWith(`https://attr.example.com/jobs/${aStamp}`));
 check("both write paths stamp added_by - '' stays a closed historical set",
   attrRows.length === 2 && attrRows.every((s) => s.added_by === "run" || s.added_by === "hand"),
@@ -1692,7 +1694,7 @@ const attrDelisted = (await req("POST", "/api/runs", { token: B_TOK, body: { sea
 check("a delisting reported by the search still counts as delisted",
   attrDelisted.delisted === attrBase.delisted + 1,
   JSON.stringify({ before: attrBase.delisted, after: attrDelisted.delisted }));
-const delRow = (await req("GET", "/api/data", { token: B_TOK })).json.screened.find((s) => s.url === delUrl);
+const delRow = (await req("GET", "/api/data?screened=all", { token: B_TOK })).json.screened.find((s) => s.url === delUrl);
 check("a delisted lead's screened row keeps its found date",
   !!delRow && delRow.found === attrDay, JSON.stringify(delRow && { found: delRow.found }));
 
@@ -3852,7 +3854,7 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   };
   const SK = await skUser("a"), SK_B = await skUser("b");
   const skUrl = (n) => `https://example.com/kinds/${skRun.toString(36)}/${n}`;
-  const skRows = async (who) => (await req("GET", "/api/data", { token: who.token })).json.screened;
+  const skRows = async (who) => (await req("GET", "/api/data?screened=all", { token: who.token })).json.screened;
   const skRow = async (who, n) => (await skRows(who)).find((r) => r.url === skUrl(n));
 
   const sent = await req("POST", "/api/screened", { token: SK.token, body: { screened: [
@@ -3983,6 +3985,68 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   await screen(swUrl("old"), day(120));
   await screen(swUrl("ancient"), day(400));
 
+  // What a person's own settings turned down is what the page is served; a
+  // dead link, a duplicate and a delisting are facts about a posting.
+  await screen(swUrl("dead"), day(1));
+  await req("POST", "/api/screened", { token: SW, body: { search: "SWE", on: day(1), screened: [
+    { search: "SWE", url: swUrl("dead-row"), company: "Acme", title: "SDE", reason: "gone", kind: "dead" },
+    { search: "SWE", url: swUrl("dupe-row"), company: "Acme", title: "SDE", reason: "same posting", kind: "duplicate" },
+    { search: "SWE", url: swUrl("unclassified"), company: "Acme", title: "SDE", reason: "no kind sent" }] } });
+  // A lead that went away, and one someone cleared off their board: both are
+  // postings this person once had, and the page counts them as the leads they
+  // were.
+  await req("POST", "/api/leads", { token: SW, body: { on: day(3), leads: [
+    { search: "SWE", company: "Acme", title: "Staff", location: "Remote", url: swUrl("was-lead") },
+    { search: "SWE", company: "Acme", title: "Principal", location: "Remote", url: swUrl("cleared") }] } });
+  const idOf = async (n) =>
+    (await req("GET", "/api/data", { token: SW })).json.leads.find((l) => l.url === swUrl(n))?.id;
+  await req("POST", "/api/delist", { token: SW, body: { search: "SWE", on: day(2), urls: [swUrl("was-lead")] } });
+  await req("POST", "/api/delete-leads", { token: SW, body: { ids: [await idOf("cleared")], reason: "not for me" } });
+
+  const served = (await req("GET", "/api/data", { token: SW })).json;
+  const shown = (n) => served.screened.some((r) => r.url === swUrl(n));
+  check("a rejection of a posting nobody ever had isn't served",
+    shown("recent") && !shown("dead-row") && !shown("dupe-row") && !shown("unclassified"),
+    JSON.stringify(served.screened.map((r) => r.kind)));
+  check("but a posting this person once had is, whatever its kind",
+    shown("was-lead") && shown("cleared"),
+    JSON.stringify(served.screened.filter((r) => r.found || r.added_by === "hand").map((r) => [r.kind, r.added_by, !!r.found])));
+  check("and each of those still carries what the page counts it by",
+    served.screened.find((r) => r.url === swUrl("was-lead"))?.found !== "" &&
+    served.screened.find((r) => r.url === swUrl("cleared"))?.added_by === "hand");
+  // A tenth kind has to be put on one side or the other, or these fail: the
+  // next person decides rather than inheriting whichever default the code has.
+  const { SCREENED_KINDS, SCREENED_BY_RULES, SCREENED_NOT_BY_RULES } = await import("./src/validate.js");
+  check("every kind is either counted or not, with none missed and none on both sides",
+    [...SCREENED_BY_RULES, ...SCREENED_NOT_BY_RULES].sort().join() === [...SCREENED_KINDS].sort().join() &&
+    !SCREENED_BY_RULES.some((k) => SCREENED_NOT_BY_RULES.includes(k)),
+    JSON.stringify([SCREENED_BY_RULES, SCREENED_NOT_BY_RULES]));
+  check("asking for everything still serves the kinds the page isn't shown",
+    (await req("GET", "/api/data?screened=all", { token: SW })).json.screened.some((r) => r.kind === "dead"));
+  // The count answers the narrower question, so it is not the size of what was
+  // sent: the wire carries postings this person once had as well.
+  const all = (await req("GET", "/api/data?screened=all", { token: SW })).json;
+  const byRules = all.screened.filter((r) => ["out-of-scope", "wrong-level", "wrong-role", "contract", "pay-below-floor"].includes(r.kind));
+  check("the count is every settings-caused row for that search, window or not",
+    served.screened_counts?.SWE === byRules.length,
+    JSON.stringify([served.screened_counts, byRules.length]));
+  check("a search with nothing counted is absent rather than 0",
+    !Object.values(served.screened_counts || {}).includes(0));
+
+  // The run stamp keeps the two apart: a night whose rules turned nothing away
+  // counts 0, and a night nobody counted that way says nothing at all.
+  const swRunToday = await req("POST", "/api/runs", { token: SW, body: { search: "SWE", status: "ok", on: day(0) } });
+  check("a run records how many of its rejections were the person's own rules",
+    swRunToday.status === 200 && typeof swRunToday.json?.run?.screened_by_rules === "number",
+    JSON.stringify(swRunToday.json?.run));
+  const quietName = `Quiet ${swRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name: quietName, password: "quiet-long-password" } });
+  const QUIET = (await req("POST", "/api/login", { body: { name: quietName, password: "quiet-long-password" } })).json.token;
+  await req("POST", "/api/config", { token: QUIET, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+  const swQuiet = await req("POST", "/api/runs", { token: QUIET, body: { search: "SWE", status: "ok", on: day(0) } });
+  check("and 0 is a real answer, for a night whose rules turned nothing away",
+    swQuiet.status === 200 && swQuiet.json?.run?.screened_by_rules === 0, JSON.stringify(swQuiet.json?.run));
+
   const windowed = (await req("GET", "/api/data", { token: SW })).json;
   const has = (data, n) => data.screened.some((r) => r.url === swUrl(n));
   check("the page gets the last 90 days, and is told how many older rows are kept",
@@ -3991,7 +4055,7 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     JSON.stringify([windowed.screened.length, windowed.screened_window]));
   const everything = (await req("GET", "/api/data?screened=all", { token: SW })).json;
   check("and an export can ask for every row, so \"everything this tab holds\" stays true",
-    has(everything, "old") && has(everything, "ancient") && everything.screened.length === 4 &&
+    has(everything, "old") && has(everything, "ancient") && everything.screened.length > windowed.screened.length &&
     everything.screened_window?.days === 0 && everything.screened_window?.older === 0,
     JSON.stringify(everything.screened_window));
   // The point of keeping them: a posting screened outside the window is still

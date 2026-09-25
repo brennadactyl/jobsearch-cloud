@@ -1,0 +1,26 @@
+-- search_runs.screened_by_rules: how many of a night's rejections were the
+-- person's own settings turning a posting down.
+--
+-- `screened_added` counts every posting a run recorded as screened, which
+-- includes dead links and duplicates - facts about the posting, not choices
+-- anyone made. A night that met twenty dead links and rejected nothing reads as
+-- a busy night, and the number can't answer the question it exists for: how
+-- much did my settings turn away.
+--
+--   screened_by_rules  the count over the kinds in src/validate.js
+--                      SCREENED_BY_RULES, as db.countRunActivity computes it.
+--
+-- A second column rather than a change of meaning: `screened_added` is stored
+-- per run, so redefining it would restate every night already recorded - a
+-- stamp reading "26 screened out" would quietly become a different number, with
+-- nothing to say why. The two are written together from one query, so they
+-- cannot disagree about a night.
+--
+-- Every existing run row is NULL, and this is the one column in the schema that
+-- allows it (docs/schema.md, "Conventions"). Those nights turned postings away
+-- and nobody recorded which were rules: that is not the same fact as a night
+-- whose rules turned nothing away, which is a real night and counts 0. A stamp
+-- reading "0 screened out" for a night that screened twenty-six would be the
+-- page stating something nobody knows.
+
+ALTER TABLE search_runs ADD COLUMN screened_by_rules INTEGER;

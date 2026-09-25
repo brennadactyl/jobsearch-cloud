@@ -168,6 +168,26 @@ export const SCREENED_KINDS = [
 ];
 export const KIND_WHEN_UNKNOWN = "other";
 
+// Which kinds are a person's own settings turning a posting down, rather than a
+// fact about the posting. This is the whole of "26 screened out": a night that
+// met a dead link and a duplicate did not screen anything out, and counting
+// those makes a quiet night read as a busy one. `dead`, `duplicate` and
+// `delisted` are facts; a row with no kind is nobody's claim either way.
+//
+// One list, read by every count and by what GET /api/data serves, so no caller
+// re-derives it (routes/data.js, db.countRunActivity). verify-local checks that
+// every kind is on exactly one side of this, so a tenth kind fails the checks
+// until someone decides which it is rather than inheriting a default.
+export const SCREENED_BY_RULES = [
+  "out-of-scope", "wrong-level", "wrong-role", "contract", "pay-below-floor",
+];
+// The rest, named rather than inferred, so the two lists can be checked against
+// SCREENED_KINDS. `other` sits here because it is a rejection none of the named
+// kinds describes: nobody can say it was a person's settings that caused it,
+// and a count that exists to answer "what did my settings turn away" should not
+// include a row we cannot attribute.
+export const SCREENED_NOT_BY_RULES = ["delisted", "dead", "duplicate", "other"];
+
 /**
  * The kind to store for what a caller sent, and whether it had to be changed.
  * "" stays "" - a row nobody has classified is not the same as one classified

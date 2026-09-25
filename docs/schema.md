@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0027_screened_kind.sql` applied in order. This is the
+`0001_schema.sql` through `0028_run_screened_by_rules.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -125,6 +125,7 @@ erDiagram
         INTEGER delisted
         TEXT note
         INTEGER swept
+        INTEGER screened_by_rules
     }
     leads {
         INTEGER id PK
@@ -249,8 +250,10 @@ erDiagram
 
 These hold across every table, so the per-table notes below leave them out.
 
-- Every column outside a primary key is `NOT NULL`. Unset is `''` for text and
-  `0` for integers, never `NULL`.
+- Every column outside a primary key is `NOT NULL`, except
+  `search_runs.screened_by_rules`. Unset is `''` for text and `0` for
+  integers; `NULL` is used only where "no answer" and "the answer is zero" are
+  different facts, which is why that one column allows it.
 - Columns with no default, which every insert must supply: `users.name`,
   `sessions.user_id`, `tracks.label`, `leads.user_id`, `leads.search`,
   `leads.found`, `leads.company`, `leads.title`, `leads.url`, `leads.verified`,
@@ -336,6 +339,17 @@ run only, not a history. Written by `POST /api/runs`.
   local `YYYY-MM-DD`.
 - `status` is `ok` or `error`, and `''` before any run.
 - `leads_added`, `screened_added` and `delisted` count that run's work.
+- `screened_by_rules` is `NULL` for a run recorded before the column existed -
+  that night turned postings away and nobody recorded which were rules - and a
+  number, `0` included, for every run since. A night that rejected twenty-six
+  postings, none of them by a rule, is a real night and reads `0`; conflating
+  the two would have a stamp say "0 screened out" for a night that screened
+  twenty-six. It counts only the rejections a person's own settings caused
+  (the kinds in `server/src/validate.js` `SCREENED_BY_RULES`), where
+  `screened_added` counts every rejection including dead links and duplicates.
+  Two numbers rather than one redefined: `screened_added` is stored per run, so
+  changing what it counts would restate nights already recorded. A run from
+  before this reads 0, since the kinds it would need were not stored then.
 - `swept` is how many companies the search covered that date, counted from its
   `company_sweeps` rows. A tab another search fills records none of its own, so
   it reads 0 and the search that ran carries the number.

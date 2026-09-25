@@ -16,11 +16,28 @@ export const SCREENED_WINDOW_DAYS = 90;
 /**
  * GET /api/data - requires a Bearer token ->
  * `{ user, updated, leads[], applications[], screened[], screened_window,
- * tracks[], settings }`.
+ * screened_counts, tracks[], settings }`.
  *
- * `screened` holds the last SCREENED_WINDOW_DAYS days, and `screened_window` is
- * `{ days, older }` - how many older rows are kept but not sent, so a page can
- * say so rather than implying they are gone.
+ * Two rules about screened rows, answering different questions - the next
+ * reader will take them for one rule, and they are not.
+ *
+ * **What is sent**: "was this ever a posting of theirs?" A row that records
+ * something the person once had is sent whatever its kind - one carrying a
+ * `found` date, a `delisted` one, one a person added by hand - because the page
+ * counts a week's found postings as its leads plus the screened rows that were
+ * leads and went away. Withholding them would drop every past week's count with
+ * nothing saying why. Withheld is a run's rejection of a posting nobody ever
+ * had, whose kind isn't settings-caused: `dead`, `duplicate`, unclassified.
+ *
+ * **What is counted**: "did their own settings reject it?" That is
+ * `screened_counts`, `{ <search>: <count> }` over the whole table rather than
+ * the window, for the periods a window can't answer for, and over the narrower
+ * set in validate.js SCREENED_BY_RULES. A search with no such row is absent
+ * rather than 0: nothing was counted for it, which is not the same as a month
+ * in which it turned nothing away.
+ *
+ * `screened_window` is `{ days, older }`, and `older` follows the first rule,
+ * since it describes the rows not sent.
  *
  * **`?screened=all` serves every row**, with `days: 0`. The window hides rows
  * the person still owns, and this is how they can be asked for: without it, the
@@ -49,6 +66,7 @@ export async function handleGetData({ db, user, url }) {
     applications,
     screened,
     screened_window: { days: since ? SCREENED_WINDOW_DAYS : 0, older: screenedRows.older },
+    screened_counts: screenedRows.counts,
     tracks: config.tracks,
     settings: config.settings,
   });
