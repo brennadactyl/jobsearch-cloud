@@ -38,6 +38,17 @@ role.
   API, or load the newest local backup into `node:sqlite`; note the backup's
   time, since anything written after it is missing, and take a fresh backup when
   the answer must be current. If no route does what is needed, build one.
+- **A maintenance pass reads the complete view, never the one the page reads.**
+  A route built for a person's page answers the page's question, not "what is
+  in the table", and which question it answers can change. A one-off backfill or
+  audit built on one works from whatever the page happens to show that week, and
+  reports a correct-looking count of the rows it never saw. Today
+  `GET /api/data` is one: its screened rows answer "was this ever a posting of
+  theirs?", within a window, while `?screened=all` asks what is in the table.
+  Ask each route for everything it can serve, or read a backup, write down what
+  each answer held,
+  and stop when a count moves between two reads - that is the view moving, and
+  the saved count is what tells it from the data.
 - **The repo is public.** No account ids, tokens, passwords, resumes or anyone's
   search details in code, tests, docs or commit messages.
 - **Times are US Pacific,** labelled PT, and the system stays on Pacific: runs
