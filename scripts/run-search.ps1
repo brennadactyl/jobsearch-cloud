@@ -322,16 +322,17 @@ function Send-RunLog {
     }
 }
 
-# A paused search is not a failed one. Its task shouldn't exist - the next
-# scheduler run removes it - so this exits 0 and records nothing: a run row
-# would talk over the tab's Paused state, and a red Last Run Result for an
-# expected state teaches people to ignore red. The log carries the word
-# "paused" and the date so a leftover task is findable by grep, since that is
-# the only place it shows.
+# A paused search is not a failed one. Its task stays registered and stops
+# itself here every night - nothing unregisters a task, so the server alone
+# decides whether a search is paused, on every machine. So this exits 0 and
+# records nothing: a run row would talk over the tab's Paused state, and a red
+# Last Run Result for an expected state teaches people to ignore red. The log
+# carries the word "paused" and the date, which is the only place a paused night
+# shows.
 function Stop-PausedRun($sentence, $pausedSince) {
     Log "paused:           $sentence"
     Log "run outcome:      status=paused since=$pausedSince"
-    Log "       Nothing was searched and no run was recorded. This task will go the next time setup-scheduler.ps1 runs; until then this search logs this every night."
+    Log "       Nothing was searched and no run was recorded. A paused search logs this and stops every night; it searches again the night after it is resumed."
     if (Get-Command Exit-RunLock -ErrorAction SilentlyContinue) { Exit-RunLock }
     Send-RunLog
     Log "finished $Task - paused, nothing to do"
@@ -565,6 +566,12 @@ $shim = "#!/bin/sh`n" +
     (Join-Path $cwd "tracker"), $shim, (New-Object System.Text.UTF8Encoding($false)))
 Log "helper:           tracker.ps1 + tracker -> $cwd"
 
+# Where tracker.ps1 files what it says, read back when the job ends. A run
+# directory is remade each run, but the fallback working directory is not, so
+# last night's file goes before this run writes to it.
+$noticeFile = Join-Path $cwd "tracker-notices.log"
+if (Test-Path $noticeFile) { Remove-Item -Force $noticeFile }
+
 # The CLI runs as one headless `claude -p` turn with nobody to read an "I'll
 # report back" reply. If the model backgrounds any part of the work (a Bash
 # run_in_background call, or a subagent), the CLI's background-task wait
@@ -653,6 +660,19 @@ Remove-Job $job -Force
 Log "----- claude output -----"
 if ($output) { $output | Out-String | Out-File -Append -Encoding utf8 -FilePath $logFile }
 Log "----- end output -----"
+
+# What the helper said, in the order it said it. `claude -p` prints only the
+# model's final message, so every line tracker.ps1 wrote during the run - the
+# per-command counts, what it refused, what the tracker coerced - is otherwise
+# lost with the CLI's transcript. Read whatever is there, including after a job
+# that failed: a run that died mid-sync is the case these lines explain.
+if (Test-Path $noticeFile) {
+    Log "----- tracker notices -----"
+    foreach ($line in @(Get-Content $noticeFile -ErrorAction SilentlyContinue)) { Log "  $line" }
+    Log "----- end notices -----"
+} else {
+    Log "tracker notices:  none - the helper wrote nothing this run"
+}
 
 $exitCode = if ($jobState -eq "Completed") { 0 } else { 1 }
 

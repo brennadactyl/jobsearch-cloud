@@ -46,13 +46,35 @@ $ErrorActionPreference = "Stop"
 
 # ---------------------------------------------------------------- plumbing --
 
-function Write-TrackerLine($msg) { [Console]::Out.WriteLine("tracker: $msg") }
+# Everything this helper says goes to two places. stdout is for the run, which
+# reads it as one stream and writes its report from it. The file beside this
+# script is for a person: the run's own log holds only the CLI's final message,
+# so a count or a warning printed here would otherwise reach nobody after the
+# night it happened. run-search.ps1 logs the file when the job ends.
+#
+# The path comes from this script's own location, not the working directory, so
+# it lands in the run directory whatever the run has cd'd to. A failed append is
+# swallowed: a notice that cannot be filed must never fail the sync it describes.
+$NoticeFile = if ($PSScriptRoot) { Join-Path $PSScriptRoot "tracker-notices.log" } else { $null }
+function Add-Notice($line) {
+    if (-not $NoticeFile) { return }
+    try {
+        [System.IO.File]::AppendAllText($NoticeFile, "$((Get-Date).ToString('HH:mm:ss')) $line`n",
+            (New-Object System.Text.UTF8Encoding($false)))
+    } catch { }
+}
+
+function Write-TrackerLine($msg) {
+    [Console]::Out.WriteLine("tracker: $msg")
+    Add-Notice $msg
+}
 
 function Fail($msg) {
     # stdout, not stderr: the run reads this command's output as one stream and
     # writes its own report from it, and an error it cannot see is an error it
     # reports as a success.
     [Console]::Out.WriteLine("tracker: ERROR: $msg")
+    Add-Notice "ERROR: $msg"
     exit 1
 }
 
