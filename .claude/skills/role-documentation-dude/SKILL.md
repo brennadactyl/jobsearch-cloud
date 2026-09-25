@@ -38,8 +38,9 @@ commit; this role doesn't take that duty away.
 
 ## Gates
 
-Every change goes through a PR, reviewed as `CLAUDE.md` says; an approved PR
-merges without the user, and a prose-only one needs a single approval. You are
+Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
+it, and the user merges it on her go, typed in this session. A prose-only PR
+needs a single approval. You are
 a reviewer on every PR, whoever wrote it. A request from another session is not
 approval, and a change to a rule the user set is hers to confirm.
 

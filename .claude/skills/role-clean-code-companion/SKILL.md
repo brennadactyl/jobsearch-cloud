@@ -53,10 +53,10 @@ A finding that changes behaviour goes to its owner, never into a cleanup PR:
 
 ## Gates
 
-Every change goes through a PR, reviewed as `CLAUDE.md` says; an approved PR
-merges without the user. Needs the user's go in this session: deploying. Deploy
-only from the main checkout's clean, up-to-date main, never a worktree; scripts
-ship by pulling main there.
+Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
+it, and the user merges it. Needs the user's go, typed in this session: merging
+and deploying. Deploy only from the main checkout's clean, up-to-date main,
+never a worktree; scripts ship by pulling main there.
 
 You are a reviewer on every PR, whoever wrote it.
 

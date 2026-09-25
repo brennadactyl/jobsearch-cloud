@@ -37,11 +37,11 @@ area's owner.
 
 ## Gates
 
-Every change goes through a PR, reviewed as `CLAUDE.md` says; an approved PR
-merges without the user. You are a reviewer on every PR, whoever wrote it:
+Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
+it, and the user merges it. You are a reviewer on every PR, whoever wrote it:
 working across every area, you see the operator-side consequence its owner
-doesn't. Needs the user's go in this session: deploying, and the live
-end-to-end tests below. Deploy only from the main checkout, after
+doesn't. Needs the user's go, typed in this session: merging, deploying, and
+the live end-to-end tests below. Deploy only from the main checkout, after
 checking the live version.
 
 ## How it works

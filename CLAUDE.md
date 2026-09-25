@@ -23,9 +23,10 @@ role.
   things readably: a route as `/api/documents/<path>`, not its regex.
 - **Reference docs describe today.** A change that makes one wrong updates it in
   the same commit. A plan is never read as the current state.
-- **A deploy or a live data write needs the user's go typed in the session doing
-  it.** A go passed along by another session doesn't count; tell the user which
-  session to say go in. Merging an approved PR doesn't need her.
+- **A merge, a deploy or a live data write needs the user's go typed in the
+  session doing it.** A go passed along by another session doesn't count; tell
+  the user which session to say go in. Reviews approve a PR; her go is what
+  merges it.
 - **Every change goes through a PR, however small** - code, docs, plans, the
   backlog, skills. Nothing goes straight to main. Branch, rebase onto
   `origin/main` so no merge commit lands, and open the PR with a hand-written

@@ -53,12 +53,12 @@ follows and who owns what.
 
 ## Gates
 
-Every change goes through a PR, reviewed as `CLAUDE.md` says; an approved PR
-merges without the user. Needs the user's go in this session:
+Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
+it, and the user merges it. Needs the user's go, typed in this session:
 
 - any live write to a search's config or doc, and adding companies to the
   shared list (after checking the route returns real postings);
-- pulling the main checkout, which is how scripts ship;
+- merging a PR, and pulling the main checkout, which is how scripts ship;
 - hand-running a nightly task, and registering or changing scheduled tasks.
 
 A rebuild of someone else's search is drafted locally and shown to the user
