@@ -32,6 +32,22 @@ doc, and a finding says whether anything was built on the wrong line.
 
 ## Next
 
+- **Count only what a person's own settings screened out.** "26 screened out"
+  today counts every rejection, and most of them are facts about the posting
+  rather than anything someone chose: a dead link, a duplicate, a lead that was
+  taken down. A count that mixes the two can't answer the question it exists for
+  - what are my rules costing me - and it makes a quiet night look busy.
+  So the counted kinds are the ones a person can change: `out-of-scope`,
+  `wrong-level`, `wrong-role`, `contract`, `pay-below-floor`. Not counted:
+  `dead`, `duplicate`, `delisted`, and the rows with no kind, which are older
+  rows nobody classified and so can't be claimed either way.
+  **The server decides which kinds count**, in one place, and the Overview, each
+  search tab's run stamp and the Screened tab all read that. A rule this is the
+  whole point of should not be re-derived by three callers.
+  The rows themselves stay readable - a dead posting is still worth seeing on the
+  Screened tab - so this is what is counted, and what the tab shows by default,
+  not what is stored. Backend Buddy for the filter, Client Comrade for the three
+  places it shows.
 - **Team skills and tools** - approved from every role's workflow review. In
   order: commit the proof tools under `tools/` (comment-only checks, one prompt
   snapshot, the tracker helper rig, the doc link checker and diagram generator)
