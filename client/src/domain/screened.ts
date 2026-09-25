@@ -41,12 +41,20 @@ export function windowStart(days: number, now: number): string {
 }
 
 /**
- * A posting a search passed over. A delisted row is not one of these: it was a
- * lead on the person's own board that later went away, which the table records
- * so no run finds it again, and reading it here as something a rule rejected
- * says the wrong thing about it.
+ * Whether this tab is about a row: one a person's own settings rejected, or one
+ * they removed themselves. Everything else arrives because it records a posting
+ * that was once theirs - a delisted lead, a posting found dead after they had
+ * it - and reading those here as something a rule rejected says the wrong thing
+ * about them.
+ *
+ * A kind this page has never heard of is shown rather than hidden: a new rule
+ * someone's settings caused is exactly what they came here to see, and silence
+ * would be the worse way to be wrong.
  */
-const isRejection = (row: Screened) => row.kind !== "delisted";
+function isRejection(row: Screened): boolean {
+  const known = SCREENED_KINDS.find((k) => k.kind === groupOf(row));
+  return known ? known.mine === true : true;
+}
 
 /** The rejections a window holds, newest first, and the newest of a day in the order they were written. */
 export function screenedWithin(rows: readonly Screened[], days: number, now: number): Screened[] {
@@ -67,23 +75,28 @@ export function screenedWithin(rows: readonly Screened[], days: number, now: num
 /** The group for a posting someone removed themselves; no kind, because no rule made it. */
 export const HAND = "hand";
 
-export const SCREENED_KINDS: readonly { kind: string; label: string }[] = [
+export const SCREENED_KINDS: readonly { kind: string; label: string; mine?: true }[] = [
+  // `mine` is what this tab shows: a rejection someone's own settings caused,
+  // or their own hand. The rest arrive because they record a posting that was
+  // once theirs - which is what keeps the Overview's found-and-removed history
+  // whole - and are none of this tab's business.
+  { kind: "delisted", label: "Taken down after you saw it" },
   { kind: "dead", label: "Gone before you saw it" },
   { kind: "duplicate", label: "Already seen" },
   // Where, what and how senior are three different rejections, so each names
   // its own dimension: "out of scope" left someone asking which one it meant.
-  { kind: "out-of-scope", label: "Outside your locations" },
-  { kind: "wrong-level", label: "Not your level" },
-  { kind: "wrong-role", label: "Different kind of work" },
-  { kind: "contract", label: "Contract or temporary" },
-  { kind: "pay-below-floor", label: "Below your pay floor" },
-  { kind: "other", label: "Other" },
+  { kind: "out-of-scope", label: "Outside your locations", mine: true },
+  { kind: "wrong-level", label: "Not your level", mine: true },
+  { kind: "wrong-role", label: "Different kind of work", mine: true },
+  { kind: "contract", label: "Contract or temporary", mine: true },
+  { kind: "pay-below-floor", label: "Below your pay floor", mine: true },
+  { kind: "other", label: "Other", mine: true },
   // A posting the person took off their own board. It has no kind because no
   // rule produced it, but it isn't unclassified either - it is the one thing
   // here they decided themselves, and the only record of having done so.
-  { kind: HAND, label: "You removed it" },
-  // Never classified: written before a run said which rule caused each
-  // rejection. Not a verdict, and not something to call theirs.
+  { kind: HAND, label: "You removed it", mine: true },
+  // Never classified, and not written by them either: rows from before a run
+  // said which rule caused each rejection, and rows whose author is unknown.
   { kind: "", label: "Not grouped" },
 ];
 

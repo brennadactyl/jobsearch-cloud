@@ -11,7 +11,7 @@ import App from "./App";
 import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
 import { NOW, data as fixture } from "./domain/fixture";
-import { countsByKind } from "./domain/screened";
+import { countsByKind, screenedWithin } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
 async function openTab(data: TrackerData = fixture) {
@@ -138,6 +138,23 @@ describe("the screened tab", () => {
     expect(window.location.pathname).toBe("/t/alpha");
     expect(window.location.search).toContain(`drill=found-day%3Aalpha%3A${fixture.tracks[0].last_run.on}`);
     expect(screen.getByText(/still on your board/)).toBeInTheDocument();
+  });
+
+  it("leaves out a posting that was hers and went away, whatever ended it", async () => {
+    await openTab();
+    // A dead posting and a duplicate arrive because they record postings she
+    // once had; neither is something her settings rejected, so neither belongs
+    // on a tab about what her rules cost.
+    expect(screen.queryByRole("link", { name: "Birch" })).toBeNull();
+    expect(screen.queryByText(/Gone before you saw it/)).toBeNull();
+    expect(screen.queryByText(/Already seen/)).toBeNull();
+  });
+
+  it("shows a kind it has never heard of rather than hiding it", () => {
+    // A rule someone's settings caused is what they came here to see, and
+    // silence is the worse way for this page to be wrong about a new kind.
+    const odd = [{ ...fixture.screened[0], id: 95, kind: "relocation-required" }];
+    expect(screenedWithin(odd, 0, NOW)).toHaveLength(1);
   });
 
   it("leaves out a lead that was taken down, which no rule rejected", async () => {
