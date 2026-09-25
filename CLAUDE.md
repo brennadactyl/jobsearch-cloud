@@ -54,6 +54,13 @@ role.
   or not, and approve explicitly. "LGTM" is not a review, and neither is
   approving a diff nobody read. Nobody approves their own PR, and the author
   merges only once the required approvals are in.
+- **An approval is a comment on the PR** naming the reviewer's role, the
+  verdict and what it ran. Every session pushes as the same GitHub account, so
+  `gh pr review --approve` and `--request-changes` are refused on our own PRs:
+  the merge gate is ours to honour, not GitHub's to enforce. Don't go looking
+  for a button. The PR body carries a checklist of who has reviewed and what
+  they ran, kept current as reviews land, because with no approve state to read
+  it is the only place a PR's state is legible.
 - **A prose-only PR needs one approval,** from any reviewer. It still gets a
   real review: what drops is the number of readers, not the reading. A change
   qualifies when every file it touches is prose by path - a `.md` under
