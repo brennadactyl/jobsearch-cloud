@@ -3916,6 +3916,24 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("another account's row named in this account's fill is untouched",
     (await skRow(SK_B, "theirs"))?.kind === "");
 
+  // A tool reading the page's view sees a fraction of the table and can't tell.
+  // A write that leaves rows unclassified has to say it means to.
+  await req("POST", "/api/screened", { token: SK.token, body: { search: "SWE", screened: [
+    { search: "SWE", url: skUrl("unseen-a"), company: "Acme", title: "A", reason: "no kind" },
+    { search: "SWE", url: skUrl("unseen-b"), company: "Acme", title: "B", reason: "no kind" }] } });
+  const partialId = (await skRow(SK, "unseen-a")).id;
+  const partial = await fill({ rows: [{ id: partialId, kind: "dead" }] });
+  check("a write that doesn't name every unclassified row is refused, saying how many it missed",
+    partial.status === 409 && partial.json?.missed >= 1 && partial.json?.unclassified > partial.json?.missed &&
+    Array.isArray(partial.json?.missedIds) && (await skRow(SK, "unseen-a"))?.kind === "",
+    JSON.stringify(partial.json));
+  const partialDry = await fill({ dryRun: true, rows: [{ id: partialId, kind: "dead" }] });
+  check("a dry run is never refused - seeing the gap is what it is for",
+    partialDry.status === 200 && partialDry.json?.missed >= 1, JSON.stringify(partialDry.json));
+  check("and a caller that means to leave the rest says so, and is allowed",
+    (await fill({ leaveRest: true, rows: [{ id: partialId, kind: "dead" }] })).status === 200 &&
+    (await skRow(SK, "unseen-a"))?.kind === "dead" && (await skRow(SK, "unseen-b"))?.kind === "");
+
   // A rejection is filed under the tab it was judged for. One search fills
   // several tabs, and a row filed under the root reads as though that tab's
   // search rejected it.
