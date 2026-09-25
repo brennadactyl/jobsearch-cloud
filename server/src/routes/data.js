@@ -22,13 +22,12 @@ export const SCREENED_WINDOW_DAYS = 90;
  * any two of them for one will be wrong about the other, so all three are
  * written here even though only the first two are this route's.
  *
- * **What is sent**: "was this ever a posting of theirs?" A row that records
- * something the person once had is sent whatever its kind - one carrying a
- * `found` date, a `delisted` one, one a person added by hand - because the page
- * counts a week's found postings as its leads plus the screened rows that were
- * leads and went away. Withholding them would drop every past week's count with
- * nothing saying why. Withheld is a run's rejection of a posting nobody ever
- * had, whose kind isn't settings-caused: `dead`, `duplicate`, unclassified.
+ * **What is sent**: "is this a posting they had, or a rule of theirs at work?"
+ * Their settings' rejections, what they lost (`delisted`) and what they set
+ * aside by hand. A run's dead link or duplicate never arrives - not in a list,
+ * not in a count, and not even when it was once a lead, because a posting that
+ * turned out to be dead was never really theirs. Those rows stay in the table
+ * as the runs' memory: what a screened row is for happens on the way in.
  *
  * **What is counted**: "did their own settings reject it?" That is
  * `screened_counts`, `{ <search>: <count> }` over the whole table rather than

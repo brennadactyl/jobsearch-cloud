@@ -153,6 +153,11 @@ export function searchProseError(field, value, max) {
 // isn't here is not refused - the row is what stops the next night re-finding a
 // posting this one rejected, and no grouping nicety is worth losing that.
 //
+// A bulk write on someone's behalf should refuse instead, wherever one lands
+// next: it creates no rows, so a refusal loses nothing, while coercing would
+// file a typo under the catch-all and call it classified. Forgive where a
+// refusal would lose data, refuse where it can't.
+//
 // The catch-all should stay near-empty, and that is how this list is judged: it
 // was derived from what nights actually write rather than guessed at, so a
 // rising count there means the kinds have drifted from the work - either the
@@ -200,19 +205,6 @@ export function storedKind(sent) {
   if (!value) return { kind: "", coercedFrom: "" };
   if (SCREENED_KINDS.includes(value)) return { kind: value, coercedFrom: "" };
   return { kind: KIND_WHEN_UNKNOWN, coercedFrom: typeof sent === "string" ? sent : String(sent) };
-}
-
-/**
- * The refusal for a kind an operator sent that isn't one of the list, or "".
- * It quotes what was sent: the operator is classifying rows in bulk from a
- * file, and "which value was wrong" is the thing they have to go and fix.
- */
-export function screenedKindError(field, value) {
-  if (typeof value !== "string" || !SCREENED_KINDS.includes(value)) {
-    const sent = typeof value === "string" ? `"${value}"` : `${field} of ${typeof value}`;
-    return `${sent} is not a kind - one of ${SCREENED_KINDS.join(", ")}`;
-  }
-  return "";
 }
 
 // The lowest pay worth showing (docs/search-fields-plan.md): the amount as the

@@ -27,7 +27,7 @@ import {
   handleLogout,
   handleUpsertUser,
 } from "./accounts.js";
-import { handleCleanUpCompanies, handlePurgeSearch, handleSetScreenedKinds } from "./admin.js";
+import { handleCleanUpCompanies, handlePurgeSearch } from "./admin.js";
 import {
   handleDeleteApplication,
   handleGetAutofillQueue,
@@ -111,9 +111,6 @@ export const ADMIN_ROUTES = [
   // Merging duplicate companies and renaming acquired ones, on the list every
   // account shares.
   ["POST", "/api/companies/cleanup", handleCleanUpCompanies],
-  // Classifying screened rows written before `kind` existed, for the account
-  // named in the body. Retired once that backfill is done.
-  ["POST", "/api/screened/kinds", handleSetScreenedKinds],
 ];
 
 /**

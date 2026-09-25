@@ -383,15 +383,13 @@ export class Db {
    * Two rules here, and they answer different questions. The next reader will
    * assume they are the same one; they are not.
    *
-   * **What is sent** answers "was this ever a posting of theirs?". A row that
-   * records something the person once had stays on the wire whatever its kind -
-   * anything carrying a `found` date, anything `delisted`, anything a person
-   * added by hand - because the page counts those as the leads they were: a
-   * week's found postings are its leads plus the screened rows that were leads
-   * and went away. Withhold them and every past week's count drops with nothing
-   * saying why. What is withheld is a run's rejection of a posting nobody ever
-   * had, whose kind isn't settings-caused: `dead`, `duplicate`, and rows no one
-   * has classified.
+   * **What is sent** answers "is this a posting they had, or a rule of theirs
+   * at work?". Their settings' rejections, what they lost (`delisted`) and what
+   * they set aside by hand all arrive. A run's dead link or duplicate never
+   * does, in a list or in a count, and not even when it was once a lead: a
+   * posting that turned out to be dead was never really theirs. The page counts
+   * a week's found postings from the rows it holds, so withholding those is
+   * what makes its numbers describe postings that existed.
    *
    * **What is counted** answers "did their own settings reject it?", which is
    * the narrower set in validate.js SCREENED_BY_RULES. `counts` is that, per
@@ -412,8 +410,13 @@ export class Db {
         .all();
       return { rows: all.results, older: 0, counts: {} };
     }
-    const everHad = `(found <> '' OR kind = 'delisted' OR added_by <> 'run')`;
-    const sent = `(${everHad} OR kind IN (${BY_RULES_PLACEHOLDERS}))`;
+    // A posting that turned out to be a dead link or a duplicate is never
+    // shown, in a list or in a count, even when it was once a lead: it was
+    // never really a posting this person had. What arrives is what their
+    // settings turned down, what they lost (`delisted`), and what they set
+    // aside themselves - the rest stays in the table as the runs' memory.
+    const theirs = `(kind = 'delisted' OR added_by <> 'run')`;
+    const sent = `(${theirs} OR kind IN (${BY_RULES_PLACEHOLDERS}))`;
     const [res, olderRow, perSearch] = await Promise.all([
       this.d1
         .prepare(`SELECT * FROM screened WHERE user_id = ? AND ${sent} AND date >= ? ORDER BY id`)
@@ -1538,74 +1541,6 @@ export class Db {
     );
     const results = await this.d1.batch(batch);
     return { added: results.reduce((n, r) => n + (r.meta.changes || 0), 0), duplicates };
-  }
-
-  /**
-   * Fill in the kind on this user's screened rows that have none
-   * (routes/admin.js handleSetScreenedKinds). Rows written before the column
-   * existed carry '', and what each one was is a judgement someone makes from
-   * its `reason` - so this stores decisions already taken rather than applying
-   * a rule of its own.
-   *
-   * Answers per row rather than in totals: an id that isn't this user's
-   * screened row, one already classified, and one filled in are three different
-   * outcomes, and a total hides which. A row that already has a kind is left as
-   * it is, so a re-run after a partial write can't overwrite a value someone
-   * has since corrected.
-   *
-   * @param {Array<{id: number, kind: string}>} rows kinds already checked against the list
-   * @param {boolean} dryRun report what would happen, write nothing
-   * @returns {Promise<{rows: Array<{id: number, was: string, now: string, outcome: string}>, set: number, skipped: number, unknown: number}>}
-   */
-  async setScreenedKinds(rows, dryRun, leaveRest) {
-    const stored = new Map();
-    const ids = rows.map((r) => r.id);
-    // Every row of this account that still has no kind, so the route can tell
-    // a caller that classified what it could from one that only saw part of
-    // the table. A tool reading the page's view sees a fraction of the rows
-    // and cannot know it.
-    const unclassified = await this.d1
-      .prepare("SELECT id FROM screened WHERE user_id = ? AND kind = ''")
-      .bind(this.userId)
-      .all();
-    for (let i = 0; i < ids.length; i += ID_CHUNK) {
-      const chunk = ids.slice(i, i + ID_CHUNK);
-      const found = await this.d1
-        .prepare(`SELECT id, kind FROM screened WHERE user_id = ? AND id IN (${chunk.map(() => "?").join(",")})`)
-        .bind(this.userId, ...chunk)
-        .all();
-      for (const row of found.results) stored.set(row.id, row.kind);
-    }
-
-    // Decided before anything is written: a refusal that arrives after the
-    // write is a report, not a guard.
-    const named = new Set(ids);
-    const missed = unclassified.results.map((r) => r.id).filter((id) => !named.has(id));
-    const refused = !dryRun && missed.length > 0 && leaveRest !== true;
-
-    const answer = rows.map((r) => {
-      if (!stored.has(r.id)) return { id: r.id, was: "", now: "", outcome: "unknown" };
-      const was = stored.get(r.id);
-      if (was) return { id: r.id, was, now: was, outcome: "already set" };
-      return { id: r.id, was: "", now: r.kind, outcome: dryRun || refused ? "would set" : "set" };
-    });
-    const fill = refused ? [] : answer.filter((r) => r.outcome === "set");
-    if (fill.length) {
-      const stmt = this.d1.prepare("UPDATE screened SET kind = ? WHERE id = ? AND user_id = ? AND kind = ''");
-      await this.d1.batch(fill.map((r) => stmt.bind(r.now, r.id, this.userId)));
-    }
-    return {
-      refused,
-      rows: answer,
-      set: answer.filter((r) => r.outcome === "set" || r.outcome === "would set").length,
-      skipped: answer.filter((r) => r.outcome === "already set").length,
-      unknown: answer.filter((r) => r.outcome === "unknown").length,
-      unclassified: unclassified.results.length,
-      // The ones this call leaves without a kind: either rows the caller
-      // deliberately declined to judge, or rows it never saw.
-      missed: missed.length,
-      missedIds: missed.slice(0, 20),
-    };
   }
 
   /**
