@@ -5,7 +5,7 @@
  * The column lists are the one definition of what a file contains. Headers are
  * the page's own labels from ./constants, so a rename reaches the file too.
  */
-import type { Application, Lead, Settings, Track } from "../api/schema";
+import type { Application, Lead, Screened, Settings, Track } from "../api/schema";
 import { APP_ROLE_FIELDS, LABELS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "./constants";
 import { tierOf } from "./geo";
 
@@ -53,6 +53,24 @@ export function applicationColumns(settings: Settings): Column<Application>[] {
     ...STAGE_HISTORY_FIELDS.map(([name, label]) => field<Application>(name, label)),
     ...APP_ROLE_FIELDS.map(([name, label]) => field<Application>(name, label)),
     field("notes", LABELS.notes),
+  ];
+}
+
+/**
+ * What a search set aside. The reason is the sentence its run wrote, kept whole
+ * and unread, and the file says which of the two kinds of row it is: a run's
+ * decision, or a posting the person took off their own board.
+ */
+export function screenedColumns(tracks: Record<string, Track>): Column<Screened>[] {
+  return [
+    { header: LABELS.search, value: (r) => tracks[r.search]?.label || r.search },
+    field("date", LABELS.setAside),
+    field("company", LABELS.company),
+    field("title", LABELS.role),
+    field("location", LABELS.location),
+    field("reason", LABELS.why),
+    { header: LABELS.setAsideBy, value: (r) => (r.added_by === "hand" ? "you" : "a run") },
+    field("url", LABELS.url),
   ];
 }
 

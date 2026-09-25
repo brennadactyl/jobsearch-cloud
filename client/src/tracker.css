@@ -399,6 +399,7 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .screened-window select{width:auto}
 .screened-sum{margin:0 0 12px;font-size:14px;color:var(--ink2)}
 .screened-searches{margin:0 0 12px}
+.screened-older{color:var(--ink3)}
 .screened-grid .screened-date{color:var(--ink2);font-size:13px;white-space:nowrap}
 .screened-grid .screened-where{color:var(--ink2);font-size:13px;max-width:200px}
 .screened-role{color:var(--ink2);font-size:13px}

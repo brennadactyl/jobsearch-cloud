@@ -4,12 +4,13 @@
  * counts reasons - the page never reads them.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
+import { screenedColumns } from "./domain/export";
 import { NOW, data as fixture } from "./domain/fixture";
 import { clearPrefs } from "./ui/prefs";
 
@@ -120,6 +121,44 @@ describe("the screened tab", () => {
     expect(window.location.pathname).toBe("/t/alpha");
     expect(window.location.search).toContain(`drill=found-day%3Aalpha%3A${fixture.tracks[0].last_run.on}`);
     expect(screen.getByText(/still on your board/)).toBeInTheDocument();
+  });
+
+  it("exports the whole record, asking the server for what the page doesn't hold", async () => {
+    const all = vi.spyOn(client, "getAllScreened").mockResolvedValue(fixture.screened);
+    await openTab();
+    await userEvent.click(screen.getByRole("button", { name: /Export/ }));
+    const menu = screen.getByRole("menu", { name: "Export" });
+    // The count is the window's; "everything" carries none, because the page
+    // doesn't know how much is stored until the server answers.
+    expect(within(menu).getByRole("menuitem", { name: "Export 5 shown" })).toBeInTheDocument();
+
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Export everything" }));
+    expect(all).toHaveBeenCalledTimes(1);
+  });
+
+  it("says how many postings are kept outside the window, since nothing is deleted", async () => {
+    await openTab({ ...fixture, screened_window: { days: 90, older: 412 } });
+    expect(screen.getByText(/412 older postings aren't shown here/)).toBeInTheDocument();
+    expect(screen.getByText(/Export everything includes them/)).toBeInTheDocument();
+
+    // A server with no window sends nothing older, and the line stays away.
+    cleanup();
+    await openTab();
+    expect(screen.queryByText(/older postings aren't shown/)).toBeNull();
+  });
+
+  it("writes the run's own sentence and who set each posting aside", () => {
+    const columns = screenedColumns({ alpha: fixture.tracks[0], beta: fixture.tracks[1] });
+    expect(columns.map((c) => c.header)).toEqual([
+      "Search", "Set aside", "Company", "Role", "Location", "Why", "Set aside by", "Posting URL",
+    ]);
+    const byRun = fixture.screened.find((r) => r.added_by === "run")!;
+    const byHand = fixture.screened.find((r) => r.added_by === "hand")!;
+    const cell = (row: typeof byRun, header: string) => columns.find((c) => c.header === header)!.value(row);
+    expect(cell(byRun, "Why")).toBe(byRun.reason);
+    expect(cell(byRun, "Set aside by")).toBe("a run");
+    expect(cell(byHand, "Set aside by")).toBe("you");
+    expect(cell(byRun, "Search")).toBe("Alpha roles");
   });
 
   it("marks a posting the person removed themselves, which no run decided", async () => {
