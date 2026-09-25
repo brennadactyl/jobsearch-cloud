@@ -47,14 +47,17 @@ doc, and a finding says whether anything was built on the wrong line.
   **The uncounted kinds aren't shown either.** A dead link or a duplicate tells
   a person nothing they can act on, so the tab has no view of them: no chip, no
   toggle, nothing to expand.
-  **Two questions, two rules, each stated once.** The wire asks whether a row
-  records a posting someone once had - a `found` date, `delisted`, added by hand -
-  and those always travel, because the Overview counts them as postings found and
-  later lost. Only a run's rejection of a posting nobody ever had is withheld.
-  The tab asks whether a person's own settings rejected it, and shows only those.
-  Filtering the wire by kind alone would drop every past week's found count with
-  nothing saying why, zero the "removed" figure, and leave the page's
-  removed-are-counted flag reading true over incomplete data.
+  **`dead`, `duplicate` and unclassified run-written rows never leave the
+  server**, in a list or in a number, even when such a row carries a `found`
+  date. The Overview's found-and-removed history stops counting them and some
+  past weeks read lower; that is the cost of the rule, taken knowingly. A row a
+  person removed by hand still travels and still shows - it is the only record of
+  what they took off their own board - and `delisted` travels without being shown.
+  The tab shows what a person's own settings rejected, plus what they removed
+  themselves. An unrecognised kind is shown rather than hidden, so a new settings
+  rule can't disappear silently.
+  No stored weekly aggregate and no second count: a fact the rows already hold
+  gets read from the rows. Revisit only if screened rows are ever purged.
   Every row stays stored either way - that is what stops a run finding the same
   posting again. Backend Buddy for the filter, Client Comrade for the three places
   it shows.
