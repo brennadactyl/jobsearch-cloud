@@ -99,8 +99,10 @@ describe("which searches pay off", () => {
     const alpha = within(table).getByRole("link", { name: "Alpha roles" }).closest("tr")!;
     const found = alpha.querySelectorAll("td")[1].firstElementChild!;
     expect(found.tagName).toBe("SPAN");
-    // Alpha: Acme New, Bolt Reviewing, Cog Applied, Dyn Not a fit; nothing removed.
-    expect(found).toHaveAttribute("aria-label", "4 found: 2 open · 1 not a fit · 1 moved to Applications · 0 removed");
+    // Alpha: Acme New, Bolt Reviewing, Cog Applied, Dyn Not a fit, plus Ash,
+    // found and later taken down. A delisted posting was found, so it counts
+    // here even though the Screened tab leaves it out.
+    expect(found).toHaveAttribute("aria-label", "5 found: 2 open · 1 not a fit · 1 moved to Applications · 1 removed");
     const open = alpha.querySelectorAll("td")[2].querySelector("a")!;
     expect(open).toHaveAttribute("href", "/t/alpha");
   });

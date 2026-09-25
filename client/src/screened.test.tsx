@@ -123,6 +123,16 @@ describe("the screened tab", () => {
     expect(screen.getByText(/still on your board/)).toBeInTheDocument();
   });
 
+  it("leaves out a lead that was taken down, which no rule rejected", async () => {
+    await openTab();
+    // The fixture's delisted row is inside the window and would otherwise be
+    // the second row down.
+    expect(screen.queryByText("posting taken down")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ash" })).toBeNull();
+    expect(screen.getByText(/set aside, against/)).toHaveTextContent("5 set aside");
+    expect(screen.queryByText(/Taken down after you saw it/)).toBeNull();
+  });
+
   it("offers no export, since what a run passed over is not a record of your own search", async () => {
     await openTab();
     expect(screen.queryByRole("button", { name: /Export/ })).toBeNull();
