@@ -33,10 +33,19 @@ role.
   `gh pr merge <n> --squash` and a hand-written subject and body, never
   GitHub's default list of commits; the repo allows only squash merges and
   deletes a branch once merged.
-- **Who reviews:** Clean Code Companion and Documentation Dude on every PR,
-  plus the area's owner when they aren't the author, plus anyone whose area the
-  change reaches - a prompt or runner change wants Prompt Bro, a client change
-  Client Comrade, a script Fullstack Friend.
+- **Who reviews:** Clean Code Companion, Documentation Dude and Fullstack
+  Friend on every PR, plus the area's owner when they aren't the author, plus
+  anyone whose area the change reaches - a prompt or runner change wants Prompt
+  Bro, a client change Client Comrade. Fullstack Friend works across every area
+  and sees the operator-side consequence the area's owner doesn't. An author is
+  never one of their own required reviewers: when one of the three writes the
+  PR, the area's owner takes that slot.
+- **When a required reviewer's session isn't running,** say so in the PR and
+  wait for it if the change can wait. If it can't, the remaining required
+  reviewers may approve and merge, and the PR names who was missing and why it
+  couldn't wait. The absent reviewer reads it afterwards, and anything they
+  find is an ordinary follow-up PR. This never applies to `CLAUDE.md` or
+  `.claude/skills/**`, which wait for the full set however long that takes.
 - **A review reads the diff and says something specific.** Run the checks the
   change claims to pass and say what they printed, name each finding blocking
   or not, and approve explicitly. "LGTM" is not a review, and neither is
@@ -54,6 +63,12 @@ role.
   it ride along.
 - **A broken nightly run is the one exception:** one approval merges the fix,
   and the PR says why it took the short path.
+- **A merge is not a ship.** Merging needs no go, deploying does, so a merged
+  `server/` or `prompt.js` change can sit on main reaching no nightly run, and
+  a merged `client/` change can sit unseen. `scripts/` goes the other way: it
+  is live the moment the main checkout is pulled, with no deploy at all.
+  Whoever merges says which of the three a change is in, and "shipped" means
+  deployed - or pulled, for a script - never merged.
 - **Other sessions push to main all the time.** Fetch before building on main,
   and coordinate before editing a file another session owns or is changing.
 - **Production data is written only through the API.** Never write production
