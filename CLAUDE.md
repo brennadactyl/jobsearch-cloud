@@ -91,10 +91,14 @@ role.
   and read `git show --stat` before pushing.
 - **A squash-merged branch keeps its original commits,** so `git branch -d`
   calls it unmerged and a diff against main shows every change since. Neither
-  says whether its work landed:
-  `gh pr list --state merged --json headRefName` does. A branch whose name is
-  in that list is merged work; anything else is unmerged, an open PR, or a
-  branch that never had one, and is looked at on its own.
+  says whether its work landed. Clearing local branches goes in this order:
+  `git rev-list --count origin/main..<branch>` of 0 means the branch holds
+  nothing main lacks, so delete it; non-zero but the name is in
+  `gh pr list --state merged --json headRefName` means the work landed as a
+  squash, so delete it; non-zero with no merged PR means read it before
+  deciding, because that bucket holds unmerged work, closed PRs and branches
+  nobody opened one for, and from outside they look alike. Skip anything
+  `git branch --list` marks `+`, which another worktree has checked out.
 - **Production data is written only through the API.** Never write production
   D1 by hand; the `block-remote-d1-writes` hook enforces it. Read it through the
   API, or load the newest local backup into `node:sqlite`; note the backup's
