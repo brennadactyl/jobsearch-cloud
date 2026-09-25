@@ -235,10 +235,17 @@ export async function handleAddScreened({ request, db }) {
   const groupOf = (key) => new Set(feedGroupKeys(tracks, searchRootKey(tracks, key)));
   const batchGroup = batchKey ? groupOf(batchKey) : null;
   const tabsFallback = {};
+  let namedATab = 0;
   const filed = allowed.map((item) => {
     const group = batchGroup || groupOf(item.search);
     const root = searchRootKey(tracks, batchKey || item.search);
-    if (group.has(item.search)) return { ...item, search: item.search };
+    if (group.has(item.search)) {
+      // Counted only when the tab is one this search fills: a key from another
+      // group is a fallback, already counted as one, and counting it here too
+      // would read as the run naming tabs correctly.
+      if (item.search !== root) namedATab++;
+      return { ...item, search: item.search };
+    }
     tabsFallback[item.search] = (tabsFallback[item.search] || 0) + 1;
     return { ...item, search: root };
   });
@@ -247,6 +254,15 @@ export async function handleAddScreened({ request, db }) {
   const reply = { added, duplicates, excluded };
   if (Object.keys(coerced).length) reply.kinds_coerced = coerced;
   if (Object.keys(tabsFallback).length) reply.tabs_filed_at_root = tabsFallback;
+  // How many rows said which tab they were judged for. A fallback count alone
+  // can't show the failure worth seeing: a run that stopped naming tabs reports
+  // no fallbacks, exactly like a night where every row named its own tab. Only
+  // for a search that fills more than one tab - naming nothing is the whole
+  // truth for a search with a single tab.
+  if (batchGroup && batchGroup.size > 1) {
+    reply.tabs_named = namedATab;
+    reply.tabs_of = filed.length;
+  }
   return json(reply);
 }
 

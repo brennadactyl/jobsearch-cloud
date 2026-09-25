@@ -367,12 +367,37 @@ export class Db {
   }
 
   /** @returns {Promise<ScreenedItem[]>} */
-  async getAllScreened() {
-    const res = await this.d1
-      .prepare("SELECT * FROM screened WHERE user_id = ? ORDER BY id")
-      .bind(this.userId)
-      .all();
-    return res.results;
+  /**
+   * This user's screened rows, from `since` onwards, and how many are older.
+   *
+   * The page reads a window rather than the table (routes/data.js): a search
+   * screens dozens of postings a night, and a tab nobody can scroll is the
+   * thing that made deleting them look necessary. Nothing is deleted, so the
+   * rows older than the window still do their work - every write is deduped
+   * against the whole table by dropKnownUrls, whatever a reader has seen.
+   *
+   * @param {string} since YYYY-MM-DD, or "" for every row
+   * @returns {Promise<{rows: Object[], older: number}>}
+   */
+  async getAllScreened(since) {
+    if (!since) {
+      const all = await this.d1
+        .prepare("SELECT * FROM screened WHERE user_id = ? ORDER BY id")
+        .bind(this.userId)
+        .all();
+      return { rows: all.results, older: 0 };
+    }
+    const [res, olderRow] = await Promise.all([
+      this.d1
+        .prepare("SELECT * FROM screened WHERE user_id = ? AND date >= ? ORDER BY id")
+        .bind(this.userId, since)
+        .all(),
+      this.d1
+        .prepare("SELECT COUNT(*) AS n FROM screened WHERE user_id = ? AND date < ?")
+        .bind(this.userId, since)
+        .first(),
+    ]);
+    return { rows: res.results, older: olderRow?.n || 0 };
   }
 
   /**
