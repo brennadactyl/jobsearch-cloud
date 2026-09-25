@@ -28,6 +28,8 @@ leads-area-noranked|noranked|leads leads-area.json
 screened|ok|screened screened.json
 screened-empty|ok|screened empty.json
 screened-kinds|ok|screened screened-kinds.json
+screened-drift|drift|screened screened-kinds.json
+screened-tabs|tabs|screened screened-kinds.json
 verified|ok|verified urls.json
 verified-wrapped|ok|verified urls-wrapped.json
 delist|ok|delist urls.json

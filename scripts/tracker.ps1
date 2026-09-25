@@ -545,11 +545,24 @@ function Invoke-ScreenedCommand {
     }
     if ($send.Count -eq 0) { Write-TrackerLine "screened: nothing to send (refused=$($script:Refused))"; exit 0 }
     $res = Invoke-Tracker "POST" "/api/screened" @{ search = $Search; on = $Today; screened = @($send) }
-    Write-TrackerLine "screened: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) kinds_coerced=$($script:KindsCoerced) on=$Today"
+    # How many rows said which tab they were judged for, of how many were filed:
+    # a search that fills several tabs is sent both, and one that fills none is
+    # sent neither, since naming nothing is the whole truth there. Printed
+    # plainly rather than warned about - a night soon after a prompt change
+    # reads low while the run learns the step, which is context, not an alarm.
+    $tabs = if ($null -ne $res.tabs_of) { " tabs_named=$($res.tabs_named) tabs_of=$($res.tabs_of)" } else { "" }
+    Write-TrackerLine "screened: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) kinds_coerced=$($script:KindsCoerced)$tabs on=$Today"
     # Every kind sent was checked above, so the route coercing one means the
     # two copies of the list have drifted apart.
     foreach ($sent in @($res.kinds_coerced.PSObject.Properties | Where-Object { $_ })) {
         Write-TrackerLine "WARNING: the tracker stored '$($sent.Name)' as 'other' $($sent.Value) time(s) - its list of kinds and this one have drifted apart"
+    }
+    # A key naming a track this search doesn't fill is filed at the group's root
+    # instead, so the rejection is kept and reads under a search that did the
+    # judging. It means the prompt or the config named someone else's tab, which
+    # is a fault to fix rather than a note to skim.
+    foreach ($sent in @($res.tabs_filed_at_root.PSObject.Properties | Where-Object { $_ })) {
+        Write-TrackerLine "WARNING: '$($sent.Name)' is not a tab this search fills - $($sent.Value) row(s) filed at the root instead"
     }
 }
 

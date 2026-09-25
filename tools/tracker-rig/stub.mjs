@@ -5,8 +5,9 @@
 //
 // Usage: node stub.mjs <port> <logFile>
 // A URL looks like /<version>/<scenario>/api/...; the scenario picks a canned
-// failure (retry: one 500 then success; e400; e503; unscoped; mixed) or the
-// normal response.
+// failure or reply shape (retry: one 500 then success; e400; e503; unscoped;
+// mixed; noranked; drift: a kind the route coerced; tabs: the tab counts a
+// multi-tab search gets back) or the normal response.
 import http from "node:http"; import fs from "node:fs";
 const log = process.argv[3]; const hits = {};
 const J = (res, code, obj) => { res.writeHead(code, {"content-type":"application/json; charset=utf-8"}); res.end(typeof obj==="string"?obj:JSON.stringify(obj)); };
@@ -29,7 +30,9 @@ http.createServer((req, res) => {
     if (path === "/api/coverage/SWE") return J(res, 200, {batch:3,cursor:40,total:300,companies:[{company:"Acme",board:"greenhouse",note:" slow "},{company:"Béta Co"},{company:"Gamma",note:"x"}]});
     if (path.startsWith("/api/coverage/SWE?all=1")) return J(res, 200, {companies:[{company:"Initech (Globex)",aliases:["Initrode","Initech Corp."]},{company:"Acme"}]});
     if (path === "/api/leads") return J(res, 200, {added:2,duplicates:1,excluded:0});
-    if (path === "/api/screened") return J(res, 200, {added:2,duplicates:1,excluded:0,...(scen==="drift"?{kinds_coerced:{"wrong domain":1}}:{})});
+    if (path === "/api/screened") return J(res, 200, {added:2,duplicates:1,excluded:0,
+      ...(scen==="drift"?{kinds_coerced:{"wrong domain":1}}:{}),
+      ...(scen==="tabs"?{tabs_named:1,tabs_of:3,tabs_filed_at_root:{"organic-search-management":1}}:{})});
     if (path === "/api/verified") return J(res, 200, {stamped:2,unmatched:1,unmatchedUrls:["https://nope/1"]});
     if (path === "/api/delist") return J(res, 200, {removed:1,kept:1,unmatched:2,unmatchedUrls:["https://nope/1","https://nope/2"]});
     if (path === "/api/coverage") return J(res, 200, {recorded:3,added:1,withheld:1,excluded:0,cursor:43});
