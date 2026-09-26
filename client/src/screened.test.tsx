@@ -266,6 +266,59 @@ describe("the screened tab", () => {
     expect(rows()).toHaveLength(4);
   });
 
+  it("keeps the view it was read from when a caption leads to a setting", async () => {
+    await openTab();
+    await userEvent.click(screen.getByRole("button", { name: /Level/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Set aside" }));
+
+    // The caption adds the section to the view; it doesn't replace it. Closing
+    // the panel only takes `account` back out, so anything the click discarded
+    // would be gone for good - and a person reading one search's rejections
+    // would come back to all of them.
+    const href = screen.getAllByRole("link", { name: "what this search looks for" })[0].getAttribute("href")!;
+    const query = new URLSearchParams(href.slice(href.indexOf("?")));
+    expect(query.get("account")).toBe("searches");
+    expect(query.get("kind")).toBe("wrong-level");
+    expect(query.get("sort")).toBe("date");
+    expect(query.get("dir")).toBe("asc");
+  });
+
+  it("opens the Searches section on the search the captions are about", async () => {
+    // Beta is the second search, so opening on it can't be the default.
+    const alsoBeta = { ...fixture.screened[3], id: 96, kind: "pay-below-floor" };
+    await openTab({ ...fixture, screened: [...fixture.screened, alsoBeta] });
+    await userEvent.click(screen.getByRole("button", { name: /^Beta roles/ }));
+    await userEvent.click(screen.getByRole("link", { name: "what rules a posting out" }));
+
+    // Arriving at whichever search comes first answers a question nobody asked.
+    const panel = await screen.findByRole("dialog", { name: "My account" });
+    expect(within(panel).getByRole("tab", { name: "Beta roles", selected: true })).toBeInTheDocument();
+  });
+
+  it("heads a narrowed list with the count that was clicked, not its rows", async () => {
+    // One job under one url twice: two rows, one posting. The bar says one, so
+    // the heading has to as well.
+    const twice = [
+      { ...fixture.screened[1], id: 90, url: "https://example.com/same" },
+      { ...fixture.screened[1], id: 91, url: "https://example.com/same" },
+    ];
+    await openTab({ ...fixture, screened: [...fixture.screened, ...twice] });
+    await userEvent.click(screen.getByRole("button", { name: /Level/ }));
+
+    expect(screen.getByText(/Level . all 2 postings/)).toBeInTheDocument();
+    expect(rows()).toHaveLength(3);
+  });
+
+  it("says a rule it can't name is unnamed, not that nobody set it", async () => {
+    // A kind newer than this page is shown rather than hidden, because a new
+    // rule of theirs is exactly what the tab is for. Saying "nothing you set"
+    // beside it would contradict the reason it is on screen at all.
+    const unknown = { ...fixture.screened[1], id: 95, kind: "shift-work" };
+    await openTab({ ...fixture, screened: [...fixture.screened, unknown] });
+
+    expect(screen.getByText("a rule this page can't name yet")).toBeInTheDocument();
+  });
+
   it("says where a kind nobody set comes from, without offering a setting", () => {
     // "Gone before you saw it" is a fact about a posting; there is no rule of
     // theirs behind it, and a link would promise one.

@@ -167,6 +167,9 @@ export default function Shell({
         // A page that says a rule cost someone twenty postings should be able
         // to take them to the rule, so the panel opens at a section by URL.
         section={askedSection}
+        // The search the view is about, which the Screened tab keeps in the
+        // URL: a caption about one search's settings should open on that one.
+        search={params.get("search")}
         name={data.user.name}
         tracks={data.tracks}
         settings={data.settings}

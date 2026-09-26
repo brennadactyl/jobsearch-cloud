@@ -41,6 +41,16 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
     setParams(set, { replace: true });
   };
   const setSearch = (next: string) => narrow({ search: next, kind: null });
+  // Where a caption leads: this view as it stands, plus the section to open.
+  // An absolute `?account=...` would replace the query instead of adding to
+  // it, so someone reading one search's rejections would come back to all of
+  // them - and closing the panel, which only removes `account`, would put
+  // back a view the click had already thrown away.
+  const settingHref = (section: string) => {
+    const to = new URLSearchParams(params);
+    to.set("account", section);
+    return `?${to}`;
+  };
 
   const tracks = buildTracks(data.tracks);
   // Everything a search passed over, ever: the emptiest state below is about
@@ -173,7 +183,17 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
                     doesn't like is only useful if the setting that made it is
                     one step away. */}
                 <span className="screened-kind-set">
-                  {set ? <Link to={`?account=${set.section}`}>{set.says}</Link> : "nothing you set"}
+                  {set ? (
+                    <Link to={settingHref(set.section)}>{set.says}</Link>
+                  ) : (
+                    /* Only the ungrouped bucket reaches this: every kind the
+                       tab names and shows has a setting behind it. These are
+                       rules newer than this page, shown rather than hidden,
+                       and there is nothing to point at until it learns the
+                       name - so it says that, not that nothing of theirs
+                       caused it. */
+                    "a rule this page can't name yet"
+                  )}
                 </span>
               </div>
             );
@@ -182,8 +202,13 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
       )}
       {kind !== null && (
         <p className="screened-narrowed">
+          {/* The count the person just clicked, which is postings, not rows: a
+              job re-listed under two urls is one posting and two rows, and a
+              heading saying 3 over a bar saying 2 makes a liar of one of them.
+              Named, so it doesn't read as a count of what is below it. */}
           <strong>
-            {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind} &mdash; all {rows.length}
+            {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind} &mdash; all{" "}
+            {kinds.find((k) => k.kind === kind)?.postings ?? 0} postings
           </strong>{" "}
           <button type="button" className="linkish" onClick={() => narrow({ kind: null })}>
             Show every reason

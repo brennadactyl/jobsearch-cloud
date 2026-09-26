@@ -44,6 +44,8 @@ type Props = {
   settings: Settings;
   /** The section to open on, for a link that is about one setting; null opens where it always does. */
   section?: string | null;
+  /** Which search the Searches section opens on; anything else opens on the first. */
+  search?: string | null;
   onClose: () => void;
 };
 
@@ -84,7 +86,7 @@ const countFields = (searches: Readonly<Record<string, SearchEdit>>) =>
 const isPlaceKey = (field: string | null): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
 const isGeneralKey = (field: string | null): field is GeneralKey => GENERAL_KEYS.some((k) => k === field);
 
-function AccountDialog({ name, tracks, settings, section, onClose }: Omit<Props, "open">) {
+function AccountDialog({ name, tracks, settings, section, search, onClose }: Omit<Props, "open">) {
   const qc = useQueryClient();
   const stored = Object.fromEntries(PLACE_KEYS.map((k) => [k, settings[k]])) as Places;
 
@@ -102,8 +104,12 @@ function AccountDialog({ name, tracks, settings, section, onClose }: Omit<Props,
   const [draft, setDraft] = useState<Partial<Places>>({});
   const [general, setGeneral] = useState<Partial<General>>({});
   const [searchDraft, setSearchDraft] = useState<SearchDraft>({});
-  // Which search the Searches section is showing; "" means its first.
-  const [shownSearch, setShownSearch] = useState("");
+  // Which search the Searches section is showing; "" means its first. A link
+  // about one search's settings opens on that search: arriving at a different
+  // one reads as the wrong answer to what was just clicked.
+  const [shownSearch, setShownSearch] = useState(() =>
+    tracks.some((t) => t.key === search) ? search! : "",
+  );
   const [resumeSentence, setResumeSentence] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
