@@ -39,7 +39,9 @@ holds the rules every session follows and who owns what.
 `docs/**` goes straight to main, plans and the backlog included: push them
 there with no PR and no approval - fetch and rebase first, so no merge commit
 lands. Anything else is a PR, reviewed as `CLAUDE.md` says. Reviews approve a
-PR; the user merges it. Needs the user's go, typed in this session:
+PR; the user merges it. You are the last-resort reviewer: a PR comes to you
+when its area's owner and Fullstack Friend are both the author. Needs the
+user's go, typed in this session:
 merging, and any live write. Never relay a go: when work is ready to ship,
 tell the user which session to say go in.
 

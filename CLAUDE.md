@@ -51,8 +51,9 @@ role.
   anything under `.claude/` take two, because a wrong line there is followed
   rather than read, and they wait for both however long that takes. A PR waits
   for its reviewer, whose session may not be running: there is no shortcut
-  past a reading, and a change nobody has read doesn't merge. Push a branch
-  freely: the gate is the merge, not the push.
+  past a reading, and a change nobody has read doesn't merge. The one
+  exception is a broken nightly run, below. Push a branch freely: the gate is
+  the merge, not the push.
 - **Changes to `CLAUDE.md` and the skills are collected and go as one PR,**
   unless something in them is wrong now. A rule PR costs two readers and a
   round of fixes, and rules written separately contradict each other in ways
