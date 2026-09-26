@@ -40,10 +40,18 @@ The page asks for a **name and password** and posts them once to
 sent only to `VITE_API_BASE`; the password is never stored or sent again. Each
 browser signs in once.
 
-**"Signed in as ..."** (in the header) opens the dialog that changes your own
-password. It asks for the current password as well as the session, and can sign
-out your other browsers without touching the credential your scheduled search
-holds. See [`../server/README.md`](../server/README.md#changing-your-own-password).
+**My account** (in the header) opens a panel with a section apiece: General
+(the page's title, pronouns, the companies to avoid, and the password),
+Locations, Resumes and Searches. Changing the password asks for the current
+one as well as the session, and can sign out your other browsers without
+touching the credential your scheduled search holds. See
+[`../server/README.md`](../server/README.md#changing-your-own-password).
+
+The panel is a link target as well as a button: `?account=<section>` — one of
+`general`, `locations`, `resumes` or `searches` — opens it there, and closing
+it takes the parameter back out, so Back never lands on a page holding a
+dialog. That is how the Screened tab sends someone from a count to the setting
+that produced it.
 
 **Log out** (in the header) revokes that token on the server and clears the
 view preferences. It leaves that person's other sessions alone, including the
