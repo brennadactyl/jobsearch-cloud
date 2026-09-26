@@ -36,8 +36,8 @@ You own the tracker page. Other sessions work in parallel and push to main;
 Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
 it, and the user merges it, with `--squash` and a hand-written title and body.
 Needs the user's go, typed in this session: merging and deploying; a go relayed
-by another session doesn't count. The client ships only after any server change it
-depends on is live.
+by another session doesn't count. The client ships only after any server change
+it depends on is live.
 
 ## How it works
 

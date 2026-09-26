@@ -58,7 +58,8 @@ it, and the user merges it. Needs the user's go, typed in this session: merging
 and deploying. Deploy only from the main checkout's clean, up-to-date main,
 never a worktree; scripts ship by pulling main there.
 
-You are a reviewer on every PR, whoever wrote it.
+You are the second reader on `CLAUDE.md` and anything under `.claude/`. Other
+PRs come to you only as their area's owner.
 
 ## How it works
 

@@ -28,56 +28,53 @@ role.
   session doesn't count; tell the user which session to say go in. Reviews
   approve a PR; her go is what merges it. The pull is in that list because it
   is what ships `scripts/`: merging one and pulling it are two goes, not one.
-- **Every change goes through a PR, however small** - code, docs, plans,
-  skills. Branch, rebase onto `origin/main` so no merge commit lands, and open
+- **Every change goes through a PR, however small** - code, skills, `CLAUDE.md`.
+  Branch, rebase onto `origin/main` so no merge commit lands, and open
   the PR with a hand-written title and body saying what it does and what you
   checked. On her go it is merged with `gh pr merge <n> --squash` and a
   hand-written subject and body, never GitHub's default list of commits; the
   repo allows only squash merges and deletes a branch once merged. Nothing else
   goes straight to main.
-- **`docs/backlog.md` is the exception,** and the product session pushes it
-  straight to main, with no PR and no approval. It is a running list of intent,
-  owned by one session, that changes several times a day and that nothing
-  executes: no run reads it, and no teammate follows it as an instruction,
-  though every session reads it when starting fresh. A wrong line there
-  misleads a reader who can check; a wrong line in `CLAUDE.md` or a skill is
-  followed. That is what makes it unlike those, which wait for the full set
-  of reviewers however long that takes. The exception is the backlog alone - a
-  plan is a PR like anything else, and another file wanting the same treatment
-  is a change to this rule, not an application of it.
-- **Who reviews:** Clean Code Companion, Documentation Dude and Fullstack
-  Friend on every PR, plus the area's owner when they aren't the author, plus
-  anyone whose area the change reaches - a prompt or runner change wants Prompt
-  Bro, a client change Client Comrade. Fullstack Friend works across every area
-  and sees the operator-side consequence the area's owner doesn't. An author is
-  never one of their own required reviewers: when one of the three writes the
-  PR, the area's owner takes that slot, and when the author is the area's owner
-  too, Product Partner takes it - it owns no code area, so it is always free to
-  stand in, and the count stays at three readers.
-- **When a required reviewer's session isn't running,** say so in the PR and
-  wait for it if the change can wait. If it can't, the remaining required
-  reviewers may approve, and the PR names who was missing and why it couldn't
-  wait. The absent reviewer reads it afterwards, and anything they find is an
-  ordinary follow-up PR. This never applies to `CLAUDE.md` or anything under
-  `.claude/`, which wait for the full set however long that takes. Push a
-  branch freely: the gate is the merge, not the push.
-- **A review reads the diff and says something specific.** Run the checks the
-  change claims to pass and say what they printed, name each finding blocking
-  or not, and approve explicitly. "LGTM" is not a review, and neither is
-  approving a diff nobody read. Nobody approves their own PR, and a PR goes to
-  the user for merging only once the required approvals are in.
+- **`docs/**` is the exception,** and goes straight to main with no PR and no
+  approval: the reference docs, the plans and the backlog alike. Nothing under
+  `docs/` is executed - no run reads it, and no teammate follows it as an
+  instruction - so a wrong line there misleads a reader who can check, while a
+  wrong line in `CLAUDE.md` or a skill is followed. That is what makes those
+  two different, and why they take two reviewers. The exception is `docs/`
+  alone: another path wanting the same treatment is a change to this rule, not
+  an application of it. Where a doc has a check, the author runs it and says so
+  in the commit - `server/verify-schema-doc.mjs` for `docs/schema.md`,
+  `tools/docs/check-links.mjs` for every link. What made review worth having
+  there was the check, not the second reader.
+- **Who reviews: the area's owner,** or Fullstack Friend when the owner is the
+  author, or Product Partner when that fails too. One reviewer. `CLAUDE.md` and
+  anything under `.claude/` take two, because a wrong line there is followed
+  rather than read, and they wait for both however long that takes. A PR waits
+  for its reviewer, whose session may not be running: there is no shortcut
+  past a reading, and a change nobody has read doesn't merge. The one
+  exception is a broken nightly run, below. Push a branch freely: the gate is
+  the merge, not the push.
+- **Changes to `CLAUDE.md` and the skills are collected and go as one PR,**
+  unless something in them is wrong now. A rule PR costs two readers and a
+  round of fixes, and rules written separately contradict each other in ways
+  one diff would have shown.
+- **A review reads the diff and says something specific,** in about three
+  lines. Run the checks the change claims to pass and say what they printed,
+  name each finding blocking or not, and approve explicitly. "LGTM" is not a
+  review, and neither is approving a diff nobody read. Nobody approves their
+  own PR, and a PR goes to the user for merging once its approval is in.
+  Findings go once: the author fixes them and takes it to her, and the reviewer
+  reads again only if it named something blocking.
 - **An approval is a comment on the PR** naming the reviewer's role, the
   verdict and what it ran. Every session pushes as the same GitHub account, so
   `gh pr review --approve` and `--request-changes` are refused on our own PRs:
-  whether the approvals are in is ours to honour, not GitHub's to enforce.
-  Don't go looking for a button. The PR body carries a checklist of who has
-  reviewed and what they ran, kept current as reviews land, because with no
-  approve state to read it is the only place a PR's state is legible.
-- **A broken nightly run is the one exception:** its fix goes to the user with
-  whichever approvals it has. The PR names the failed run - its date and what
-  it reported - so "broken" is evidence rather than the author's word, and the
-  reviewers who hadn't read it read it afterwards. The short path defers a
-  review; it doesn't skip one.
+  whether the approval is in is ours to honour, not GitHub's to enforce. Don't
+  go looking for a button. The PR body says what the change does and what the
+  author checked.
+- **A broken nightly run is the one exception:** its fix goes to the user
+  unreviewed. The PR names the failed run - its date and what it reported - so
+  "broken" is evidence rather than the author's word, and the reviewer reads it
+  afterwards. The short path defers a review; it doesn't skip one.
 - **A merge is not a ship.** A merge puts a change on main; a deploy is what
   makes it live. So a merged `server/` or `prompt.js` change can sit on main
   reaching no nightly run, and a merged `client/` change can sit unseen.
@@ -86,7 +83,25 @@ role.
   three a change is in, and "shipped" means deployed - or pulled, for a script
   - never merged.
 - **Other sessions push to main all the time.** Fetch before building on main,
-  and coordinate before editing a file another session owns or is changing.
+  and coordinate before editing a file another session owns or is changing. A
+  soft reset onto a moved `origin/main` reverts their commits: rebase instead,
+  and read `git show --stat` before pushing.
+- **A squash-merged branch keeps its original commits,** so `git branch -d`
+  calls it unmerged, and a diff against main shows every change main has taken
+  since, merged or not. Neither says whether the branch's work landed: git is
+  answering "is this commit an ancestor", correctly, and the squash is what
+  makes that the wrong question. Clearing local branches goes in this order:
+  `git rev-list --count origin/main..<branch>` of 0 means the branch holds
+  nothing main lacks, so delete it; non-zero but the name is in
+  `gh pr list --state merged --limit 300 --json headRefName` means the work
+  landed as a squash, so delete it; non-zero with no merged PR means read it
+  before deciding, because that bucket holds unmerged work, closed PRs and
+  branches nobody opened one for, and from outside they look alike. Pass
+  `--limit 300`: the default is 30, which reads as though every older branch
+  never merged. A name can be used twice, so that list says a name merged, not
+  that this branch did - for a branch you didn't just create, check its last
+  commit is older than that PR's `mergedAt` before deleting. Skip anything
+  `git branch --list` marks `+`, which another worktree has checked out.
 - **Production data is written only through the API.** Never write production
   D1 by hand; the `block-remote-d1-writes` hook enforces it. Read it through the
   API, or load the newest local backup into `node:sqlite`; note the backup's
