@@ -11,7 +11,7 @@ import App from "./App";
 import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
 import { NOW, data as fixture } from "./domain/fixture";
-import { countsByKind, screenedWithin } from "./domain/screened";
+import { countsByKind, SCREENED_KINDS, screenedWithin } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
 async function openTab(data: TrackerData = fixture) {
@@ -235,7 +235,7 @@ describe("the screened tab", () => {
   it("counts what each kind of rule set aside, and narrows to one", async () => {
     await openTab();
     const kinds = () =>
-      [...document.querySelectorAll(".screened-kind")].map((b) => b.textContent?.replace(/\s+/g, " ").trim());
+      [...document.querySelectorAll(".screened-kind-pick")].map((b) => b.textContent?.replace(/\s+/g, " ").trim());
     // In the order a run decides between them, so the pay floor's count is what
     // the floor alone cost rather than everything it would also have caught.
     expect(kinds()).toEqual(["1Location", "1Level", "1Bad fit", "1Contract"]);
@@ -247,6 +247,90 @@ describe("the screened tab", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Show every reason" }));
     expect(rows()).toHaveLength(4);
+  });
+
+  it("leads from a count to the setting that made it", async () => {
+    await openTab();
+    // A number someone doesn't like is only useful if the rule behind it is one
+    // step away, so each kind says where it is set and takes them there.
+    const locations = screen.getByRole("link", { name: "where you'd work" });
+    expect(locations.getAttribute("href")).toContain("account=locations");
+
+    await userEvent.click(locations);
+    const panel = await screen.findByRole("dialog", { name: "My account" });
+    expect(within(panel).getByRole("region", { name: "Locations" })).toBeInTheDocument();
+
+    // Closing it leaves the tab as it was, without the section in the URL.
+    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(window.location.search).not.toContain("account=");
+    expect(rows()).toHaveLength(4);
+  });
+
+  it("keeps the view it was read from when a caption leads to a setting", async () => {
+    await openTab();
+    await userEvent.click(screen.getByRole("button", { name: /Level/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Set aside" }));
+
+    // The caption adds the section to the view; it doesn't replace it. Closing
+    // the panel only takes `account` back out, so anything the click discarded
+    // would be gone for good - and a person reading one search's rejections
+    // would come back to all of them.
+    const href = screen.getAllByRole("link", { name: "what this search looks for" })[0].getAttribute("href")!;
+    const query = new URLSearchParams(href.slice(href.indexOf("?")));
+    expect(query.get("account")).toBe("searches");
+    expect(query.get("kind")).toBe("wrong-level");
+    expect(query.get("sort")).toBe("date");
+    expect(query.get("dir")).toBe("asc");
+  });
+
+  it("opens the Searches section on the search the captions are about", async () => {
+    // Beta is the second search, so opening on it can't be the default.
+    const alsoBeta = { ...fixture.screened[3], id: 96, kind: "pay-below-floor" };
+    await openTab({ ...fixture, screened: [...fixture.screened, alsoBeta] });
+    await userEvent.click(screen.getByRole("button", { name: /^Beta roles/ }));
+    await userEvent.click(screen.getByRole("link", { name: "what rules a posting out" }));
+
+    // Arriving at whichever search comes first answers a question nobody asked.
+    const panel = await screen.findByRole("dialog", { name: "My account" });
+    expect(within(panel).getByRole("tab", { name: "Beta roles", selected: true })).toBeInTheDocument();
+  });
+
+  it("heads a narrowed list with the count that was clicked, not its rows", async () => {
+    // One job under one url twice: two rows, one posting. The bar says one, so
+    // the heading has to as well.
+    const twice = [
+      { ...fixture.screened[1], id: 90, url: "https://example.com/same" },
+      { ...fixture.screened[1], id: 91, url: "https://example.com/same" },
+    ];
+    await openTab({ ...fixture, screened: [...fixture.screened, ...twice] });
+    await userEvent.click(screen.getByRole("button", { name: /Level/ }));
+
+    expect(screen.getByText(/Level . all 2 postings/)).toBeInTheDocument();
+    expect(rows()).toHaveLength(3);
+
+    // One is one posting, which is the common case and the one a plural-by-
+    // default heading gets wrong.
+    await userEvent.click(screen.getByRole("button", { name: "Show every reason" }));
+    await userEvent.click(screen.getByRole("button", { name: /Location/ }));
+    expect(screen.getByText(/Location . all 1 posting$/)).toBeInTheDocument();
+  });
+
+  it("says a rule it can't name is unnamed, not that nobody set it", async () => {
+    // A kind newer than this page is shown rather than hidden, because a new
+    // rule of theirs is exactly what the tab is for. Saying "nothing you set"
+    // beside it would contradict the reason it is on screen at all.
+    const unknown = { ...fixture.screened[1], id: 95, kind: "shift-work" };
+    await openTab({ ...fixture, screened: [...fixture.screened, unknown] });
+
+    expect(screen.getByText("a rule this page can't name yet")).toBeInTheDocument();
+  });
+
+  it("says where a kind nobody set comes from, without offering a setting", () => {
+    // "Gone before you saw it" is a fact about a posting; there is no rule of
+    // theirs behind it, and a link would promise one.
+    const facts = SCREENED_KINDS.filter((k) => !k.mine);
+    expect(facts.every((k) => k.set === undefined)).toBe(true);
+    expect(SCREENED_KINDS.filter((k) => k.mine).every((k) => k.set !== undefined)).toBe(true);
   });
 
   it("counts postings rather than rows, since one job re-listed is two rows", async () => {

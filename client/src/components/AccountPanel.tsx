@@ -37,7 +37,17 @@ import LocationsSection from "./LocationsSection";
 import ResumeSection from "./ResumeSection";
 import SearchesSection from "./SearchesSection";
 
-type Props = { open: boolean; name: string; tracks: readonly Track[]; settings: Settings; onClose: () => void };
+type Props = {
+  open: boolean;
+  name: string;
+  tracks: readonly Track[];
+  settings: Settings;
+  /** The section to open on, for a link that is about one setting; null opens where it always does. */
+  section?: string | null;
+  /** Which search the Searches section opens on; anything else opens on the first. */
+  search?: string | null;
+  onClose: () => void;
+};
 
 export default function AccountPanel({ open, ...props }: Props) {
   // Mounts per opening, so nothing typed or chosen in one visit is still there in the next.
@@ -76,7 +86,7 @@ const countFields = (searches: Readonly<Record<string, SearchEdit>>) =>
 const isPlaceKey = (field: string | null): field is PlaceKey => PLACE_KEYS.some((k) => k === field);
 const isGeneralKey = (field: string | null): field is GeneralKey => GENERAL_KEYS.some((k) => k === field);
 
-function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">) {
+function AccountDialog({ name, tracks, settings, section, search, onClose }: Omit<Props, "open">) {
   const qc = useQueryClient();
   const stored = Object.fromEntries(PLACE_KEYS.map((k) => [k, settings[k]])) as Places;
 
@@ -86,13 +96,20 @@ function AccountDialog({ name, tracks, settings, onClose }: Omit<Props, "open">)
     excluded_companies: settings.excluded_companies,
   };
 
-  const [open, setOpen] = useState<SectionKey>("general");
+  // A section asked for by a link that is about one setting; anything else
+  // opens on General, including a name nothing here has.
+  const asked = SECTIONS.find((s) => s.key === section)?.key;
+  const [open, setOpen] = useState<SectionKey>(asked ?? "general");
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Partial<Places>>({});
   const [general, setGeneral] = useState<Partial<General>>({});
   const [searchDraft, setSearchDraft] = useState<SearchDraft>({});
-  // Which search the Searches section is showing; "" means its first.
-  const [shownSearch, setShownSearch] = useState("");
+  // Which search the Searches section is showing; "" means its first. A link
+  // about one search's settings opens on that search: arriving at a different
+  // one reads as the wrong answer to what was just clicked.
+  const [shownSearch, setShownSearch] = useState(() =>
+    tracks.some((t) => t.key === search) ? search! : "",
+  );
   const [resumeSentence, setResumeSentence] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);

@@ -4,7 +4,7 @@
  * nothing here groups or judges a reason (docs/backlog.md).
  */
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { Screened, TrackerData } from "../api/schema";
 import { safeUrl } from "../domain/format";
 import {
@@ -41,6 +41,16 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
     setParams(set, { replace: true });
   };
   const setSearch = (next: string) => narrow({ search: next, kind: null });
+  // Where a caption leads: this view as it stands, plus the section to open.
+  // An absolute `?account=...` would replace the query instead of adding to
+  // it, so someone reading one search's rejections would come back to all of
+  // them - and closing the panel, which only removes `account`, would put
+  // back a view the click had already thrown away.
+  const settingHref = (section: string) => {
+    const to = new URLSearchParams(params);
+    to.set("account", section);
+    return `?${to}`;
+  };
 
   const tracks = buildTracks(data.tracks);
   // Everything a search passed over, ever: the emptiest state below is about
@@ -64,6 +74,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
     narrow({ sort: key, dir: flip ? "desc" : "asc" });
   };
   const rows = sortScreened(chosen, sortKey, descending);
+  const narrowedCount = kinds.find((k) => k.kind === kind)?.postings ?? 0;
   const nameOf = (key: string) => tracks[key]?.label || key;
 
   return (
@@ -154,28 +165,52 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
           {kinds.map((k) => {
             const share = Math.round((k.postings / Math.max(...kinds.map((x) => x.postings))) * 100);
             const chosen = kind === k.kind;
+            const set = SCREENED_KINDS.find((s) => s.kind === k.kind)?.set;
             return (
-              <button
-                key={k.kind || "unsorted"}
-                type="button"
-                className={chosen ? "screened-kind chosen" : "screened-kind"}
-                aria-pressed={chosen}
-                onClick={() => narrow({ kind: chosen ? null : k.kind || "" })}
-                disabled={chosen ? false : undefined}
-              >
-                <span className="mono screened-kind-n">{k.postings}</span>
-                <span className="screened-kind-label">{k.label}</span>
-                <span className="screened-kind-bar">
-                  <span style={{ width: `${share}%` }} />
+              <div key={k.kind || "unsorted"} className={chosen ? "screened-kind chosen" : "screened-kind"}>
+                <button
+                  type="button"
+                  className="screened-kind-pick"
+                  aria-pressed={chosen}
+                  onClick={() => narrow({ kind: chosen ? null : k.kind || "" })}
+                >
+                  <span className="mono screened-kind-n">{k.postings}</span>
+                  <span className="screened-kind-label">{k.label}</span>
+                  <span className="screened-kind-bar">
+                    <span style={{ width: `${share}%` }} />
+                  </span>
+                </button>
+                {/* Where the rule behind this count lives. A number someone
+                    doesn't like is only useful if the setting that made it is
+                    one step away. */}
+                <span className="screened-kind-set">
+                  {set ? (
+                    <Link to={settingHref(set.section)}>{set.says}</Link>
+                  ) : (
+                    /* Only the ungrouped bucket reaches this: every kind the
+                       tab names and shows has a setting behind it. These are
+                       rules newer than this page, shown rather than hidden,
+                       and there is nothing to point at until it learns the
+                       name - so it says that, not that nothing of theirs
+                       caused it. */
+                    "a rule this page can't name yet"
+                  )}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
       )}
       {kind !== null && (
         <p className="screened-narrowed">
-          Showing: {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind}.{" "}
+          {/* The count the person just clicked, which is postings, not rows: a
+              job re-listed under two urls is one posting and two rows, and a
+              heading saying 3 over a bar saying 2 makes a liar of one of them.
+              Named, so it doesn't read as a count of what is below it. */}
+          <strong>
+            {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind} &mdash; all {narrowedCount}{" "}
+            {narrowedCount === 1 ? "posting" : "postings"}
+          </strong>{" "}
           <button type="button" className="linkish" onClick={() => narrow({ kind: null })}>
             Show every reason
           </button>
