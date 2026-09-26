@@ -11,7 +11,7 @@ import App from "./App";
 import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
 import { NOW, data as fixture } from "./domain/fixture";
-import { countsByKind, screenedWithin } from "./domain/screened";
+import { countsByKind, SCREENED_KINDS, screenedWithin } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
 async function openTab(data: TrackerData = fixture) {
@@ -235,7 +235,7 @@ describe("the screened tab", () => {
   it("counts what each kind of rule set aside, and narrows to one", async () => {
     await openTab();
     const kinds = () =>
-      [...document.querySelectorAll(".screened-kind")].map((b) => b.textContent?.replace(/\s+/g, " ").trim());
+      [...document.querySelectorAll(".screened-kind-pick")].map((b) => b.textContent?.replace(/\s+/g, " ").trim());
     // In the order a run decides between them, so the pay floor's count is what
     // the floor alone cost rather than everything it would also have caught.
     expect(kinds()).toEqual(["1Location", "1Level", "1Bad fit", "1Contract"]);
@@ -247,6 +247,31 @@ describe("the screened tab", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Show every reason" }));
     expect(rows()).toHaveLength(4);
+  });
+
+  it("leads from a count to the setting that made it", async () => {
+    await openTab();
+    // A number someone doesn't like is only useful if the rule behind it is one
+    // step away, so each kind says where it is set and takes them there.
+    const locations = screen.getByRole("link", { name: "where you'd work" });
+    expect(locations.getAttribute("href")).toContain("account=locations");
+
+    await userEvent.click(locations);
+    const panel = await screen.findByRole("dialog", { name: "My account" });
+    expect(within(panel).getByRole("region", { name: "Locations" })).toBeInTheDocument();
+
+    // Closing it leaves the tab as it was, without the section in the URL.
+    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(window.location.search).not.toContain("account=");
+    expect(rows()).toHaveLength(4);
+  });
+
+  it("says where a kind nobody set comes from, without offering a setting", () => {
+    // "Gone before you saw it" is a fact about a posting; there is no rule of
+    // theirs behind it, and a link would promise one.
+    const facts = SCREENED_KINDS.filter((k) => !k.mine);
+    expect(facts.every((k) => k.set === undefined)).toBe(true);
+    expect(SCREENED_KINDS.filter((k) => k.mine).every((k) => k.set !== undefined)).toBe(true);
   });
 
   it("counts postings rather than rows, since one job re-listed is two rows", async () => {

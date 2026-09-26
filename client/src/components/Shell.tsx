@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS } from "../domain/constants";
 import { pausedDay } from "../domain/runs";
@@ -46,6 +46,16 @@ export default function Shell({
   const location = useLocation();
   const save = useSaved();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [params, setParams] = useSearchParams();
+  // `?account=<section>` opens My account on that section, so a link can lead
+  // to the setting it is about. Closing takes it back out of the URL, leaving
+  // the tab's own view behind.
+  const askedSection = params.get("account");
+  const closeAsked = () => {
+    const next = new URLSearchParams(params);
+    next.delete("account");
+    setParams(next, { replace: true });
+  };
   const [theme, toggleTheme] = useTheme();
   const pinned = usePinnedLayout(isOverview);
   useWheelAnywhere();
@@ -153,11 +163,17 @@ export default function Shell({
         </main>
       </div>
       <AccountPanel
-        open={accountOpen}
+        open={accountOpen || askedSection !== null}
+        // A page that says a rule cost someone twenty postings should be able
+        // to take them to the rule, so the panel opens at a section by URL.
+        section={askedSection}
         name={data.user.name}
         tracks={data.tracks}
         settings={data.settings}
-        onClose={() => setAccountOpen(false)}
+        onClose={() => {
+          setAccountOpen(false);
+          if (askedSection !== null) closeAsked();
+        }}
       />
     </div>
   );

@@ -4,7 +4,7 @@
  * nothing here groups or judges a reason (docs/backlog.md).
  */
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { Screened, TrackerData } from "../api/schema";
 import { safeUrl } from "../domain/format";
 import {
@@ -154,28 +154,37 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
           {kinds.map((k) => {
             const share = Math.round((k.postings / Math.max(...kinds.map((x) => x.postings))) * 100);
             const chosen = kind === k.kind;
+            const set = SCREENED_KINDS.find((s) => s.kind === k.kind)?.set;
             return (
-              <button
-                key={k.kind || "unsorted"}
-                type="button"
-                className={chosen ? "screened-kind chosen" : "screened-kind"}
-                aria-pressed={chosen}
-                onClick={() => narrow({ kind: chosen ? null : k.kind || "" })}
-                disabled={chosen ? false : undefined}
-              >
-                <span className="mono screened-kind-n">{k.postings}</span>
-                <span className="screened-kind-label">{k.label}</span>
-                <span className="screened-kind-bar">
-                  <span style={{ width: `${share}%` }} />
+              <div key={k.kind || "unsorted"} className={chosen ? "screened-kind chosen" : "screened-kind"}>
+                <button
+                  type="button"
+                  className="screened-kind-pick"
+                  aria-pressed={chosen}
+                  onClick={() => narrow({ kind: chosen ? null : k.kind || "" })}
+                >
+                  <span className="mono screened-kind-n">{k.postings}</span>
+                  <span className="screened-kind-label">{k.label}</span>
+                  <span className="screened-kind-bar">
+                    <span style={{ width: `${share}%` }} />
+                  </span>
+                </button>
+                {/* Where the rule behind this count lives. A number someone
+                    doesn't like is only useful if the setting that made it is
+                    one step away. */}
+                <span className="screened-kind-set">
+                  {set ? <Link to={`?account=${set.section}`}>{set.says}</Link> : "nothing you set"}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
       )}
       {kind !== null && (
         <p className="screened-narrowed">
-          Showing: {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind}.{" "}
+          <strong>
+            {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind} &mdash; all {rows.length}
+          </strong>{" "}
           <button type="button" className="linkish" onClick={() => narrow({ kind: null })}>
             Show every reason
           </button>

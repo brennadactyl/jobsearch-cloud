@@ -90,18 +90,27 @@ export const HAND = "hand";
  * plus HAND. Nothing checks the two against each other, so a kind added there
  * has to be added here: the tab asks the same question as the server's count,
  * and the two drifting apart is a list that disagrees with the number above it.
+ *
+ * `set` says where the rule behind a kind lives, so a count someone doesn't
+ * like leads to the setting that caused it rather than leaving them to guess
+ * which of their answers did this.
  */
-export const SCREENED_KINDS: readonly { kind: string; label: string; mine?: true }[] = [
+export const SCREENED_KINDS: readonly {
+  kind: string;
+  label: string;
+  mine?: true;
+  set?: { says: string; section: "locations" | "searches" };
+}[] = [
   { kind: "delisted", label: "Taken down after you saw it" },
   { kind: "dead", label: "Gone before you saw it" },
   { kind: "duplicate", label: "Already seen" },
   // Where, what and how senior are three different rejections, so each names
   // its own dimension: "out of scope" left someone asking which one it meant.
-  { kind: "out-of-scope", label: "Location", mine: true },
-  { kind: "wrong-level", label: "Level", mine: true },
-  { kind: "wrong-role", label: "Bad fit", mine: true },
-  { kind: "contract", label: "Contract", mine: true },
-  { kind: "pay-below-floor", label: "Pay", mine: true },
+  { kind: "out-of-scope", label: "Location", mine: true, set: { says: "where you'd work", section: "locations" } },
+  { kind: "wrong-level", label: "Level", mine: true, set: { says: "what this search looks for", section: "searches" } },
+  { kind: "wrong-role", label: "Bad fit", mine: true, set: { says: "what this search looks for", section: "searches" } },
+  { kind: "contract", label: "Contract", mine: true, set: { says: "what rules a posting out", section: "searches" } },
+  { kind: "pay-below-floor", label: "Pay", mine: true, set: { says: "your pay floor", section: "searches" } },
   // Not theirs, though it is tempting: a rejection none of the named kinds
   // describes cannot be attributed to a setting, which is why the server leaves
   // it out of the count (SCREENED_NOT_BY_RULES in server/src/validate.js). The
