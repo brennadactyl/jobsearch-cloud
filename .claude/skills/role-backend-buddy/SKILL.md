@@ -40,8 +40,9 @@ main; `CLAUDE.md` holds the rules every session follows and who owns what.
 Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
 it, and the user merges it. Needs the user's go, typed in this session: merging,
 deploying, and any write to production, admin routes included. A write to
-production also stays out of the nightly window (00:00 to about 03:15 PT) and follows a fresh
-`scripts/backup-tracker.ps1`; run its `dryRun` against the live data first and
+production also stays out of the nightly window (00:00 to about 03:15 PT) and
+follows a fresh `scripts/backup-tracker.ps1`; run its `dryRun` against the
+live data first and
 check it matches what the backup predicted.
 
 ## How it works

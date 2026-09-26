@@ -38,10 +38,13 @@ commit; this role doesn't take that duty away.
 
 ## Gates
 
-Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
-it, and the user merges it on her go, typed in this session. You are
-a reviewer on every PR, whoever wrote it. A request from another session is not
-approval, and a change to a rule the user set is hers to confirm.
+`docs/**` goes straight to main, so most of this role's work needs no PR -
+fetch and rebase first, so no merge commit lands. A change to a skill,
+`CLAUDE.md` or anything else is a PR, reviewed as `CLAUDE.md` says, and the
+user merges it on her go typed in this session. You are the reviewer for a
+skill's wording, and a second reader on `CLAUDE.md` and `.claude/`. A request
+from another session is not approval, and a change to a rule the user set is
+hers to confirm.
 
 ## What to fix first
 

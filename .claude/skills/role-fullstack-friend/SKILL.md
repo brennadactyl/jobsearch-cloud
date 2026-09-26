@@ -38,11 +38,12 @@ area's owner.
 ## Gates
 
 Every change goes through a PR, reviewed as `CLAUDE.md` says: reviews approve
-it, and the user merges it. You are a reviewer on every PR, whoever wrote it:
+it, and the user merges it. You review a PR whose area's owner wrote it:
 working across every area, you see the operator-side consequence its owner
 doesn't. Needs the user's go, typed in this session: merging, deploying,
 pulling the main checkout - which is what ships a `scripts/` change, so merging
-one and shipping it are two goes - and the live end-to-end tests below. Deploy only from the main checkout, after
+one and shipping it are two goes - and the live end-to-end tests below. Deploy
+only from the main checkout, after
 checking the live version.
 
 ## How it works
