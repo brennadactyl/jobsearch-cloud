@@ -90,14 +90,20 @@ role.
   soft reset onto a moved `origin/main` reverts their commits: rebase instead,
   and read `git show --stat` before pushing.
 - **A squash-merged branch keeps its original commits,** so `git branch -d`
-  calls it unmerged and a diff against main shows every change since. Neither
-  says whether its work landed. Clearing local branches goes in this order:
+  calls it unmerged, and a diff against main shows every change main has taken
+  since, merged or not. Neither says whether the branch's work landed: git is
+  answering "is this commit an ancestor", correctly, and the squash is what
+  makes that the wrong question. Clearing local branches goes in this order:
   `git rev-list --count origin/main..<branch>` of 0 means the branch holds
   nothing main lacks, so delete it; non-zero but the name is in
-  `gh pr list --state merged --json headRefName` means the work landed as a
-  squash, so delete it; non-zero with no merged PR means read it before
-  deciding, because that bucket holds unmerged work, closed PRs and branches
-  nobody opened one for, and from outside they look alike. Skip anything
+  `gh pr list --state merged --limit 300 --json headRefName` means the work
+  landed as a squash, so delete it; non-zero with no merged PR means read it
+  before deciding, because that bucket holds unmerged work, closed PRs and
+  branches nobody opened one for, and from outside they look alike. Pass
+  `--limit 300`: the default is 30, which reads as though every older branch
+  never merged. A name can be used twice, so that list says a name merged, not
+  that this branch did - for a branch you didn't just create, check its last
+  commit is older than that PR's `mergedAt` before deleting. Skip anything
   `git branch --list` marks `+`, which another worktree has checked out.
 - **Production data is written only through the API.** Never write production
   D1 by hand; the `block-remote-d1-writes` hook enforces it. Read it through the
