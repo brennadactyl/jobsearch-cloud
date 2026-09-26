@@ -307,6 +307,12 @@ describe("the screened tab", () => {
 
     expect(screen.getByText(/Level . all 2 postings/)).toBeInTheDocument();
     expect(rows()).toHaveLength(3);
+
+    // One is one posting, which is the common case and the one a plural-by-
+    // default heading gets wrong.
+    await userEvent.click(screen.getByRole("button", { name: "Show every reason" }));
+    await userEvent.click(screen.getByRole("button", { name: /Location/ }));
+    expect(screen.getByText(/Location . all 1 posting$/)).toBeInTheDocument();
   });
 
   it("says a rule it can't name is unnamed, not that nobody set it", async () => {

@@ -74,6 +74,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
     narrow({ sort: key, dir: flip ? "desc" : "asc" });
   };
   const rows = sortScreened(chosen, sortKey, descending);
+  const narrowedCount = kinds.find((k) => k.kind === kind)?.postings ?? 0;
   const nameOf = (key: string) => tracks[key]?.label || key;
 
   return (
@@ -207,8 +208,8 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
               heading saying 3 over a bar saying 2 makes a liar of one of them.
               Named, so it doesn't read as a count of what is below it. */}
           <strong>
-            {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind} &mdash; all{" "}
-            {kinds.find((k) => k.kind === kind)?.postings ?? 0} postings
+            {SCREENED_KINDS.find((k) => k.kind === kind)?.label ?? kind} &mdash; all {narrowedCount}{" "}
+            {narrowedCount === 1 ? "posting" : "postings"}
           </strong>{" "}
           <button type="button" className="linkish" onClick={() => narrow({ kind: null })}>
             Show every reason
