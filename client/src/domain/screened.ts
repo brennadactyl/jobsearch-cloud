@@ -41,11 +41,12 @@ export function windowStart(days: number, now: number): string {
 }
 
 /**
- * Whether this tab is about a row: one a person's own settings rejected, or one
- * they removed themselves. Everything else arrives because it records a posting
- * that was once theirs - a delisted lead, a posting found dead after they had
- * it - and reading those here as something a rule rejected says the wrong thing
- * about them.
+ * Whether this tab is about a row: one a person's own settings rejected.
+ * Everything else arrives because it records a posting that was once theirs - a
+ * delisted lead, a posting they took off their own board - and reading those
+ * here as something a rule rejected says the wrong thing about them. A decision
+ * someone made themselves is one they already know about; what this tab is for
+ * is what their settings cost them without their seeing it.
  *
  * A kind this page has never heard of is shown rather than hidden: a new rule
  * someone's settings caused is exactly what they came here to see, and silence
@@ -54,7 +55,7 @@ export function windowStart(days: number, now: number): string {
  * bucket is not one of theirs.
  */
 function isOwnRejection(row: Screened): boolean {
-  if (row.added_by === "hand") return true;
+  if (row.added_by === "hand") return false;
   const known = SCREENED_KINDS.find((k) => k.kind === row.kind);
   return known ? known.mine === true : true;
 }
@@ -96,11 +97,11 @@ export const SCREENED_KINDS: readonly { kind: string; label: string; mine?: true
   { kind: "duplicate", label: "Already seen" },
   // Where, what and how senior are three different rejections, so each names
   // its own dimension: "out of scope" left someone asking which one it meant.
-  { kind: "out-of-scope", label: "Outside your locations", mine: true },
-  { kind: "wrong-level", label: "Not your level", mine: true },
-  { kind: "wrong-role", label: "Different kind of work", mine: true },
-  { kind: "contract", label: "Contract or temporary", mine: true },
-  { kind: "pay-below-floor", label: "Below your pay floor", mine: true },
+  { kind: "out-of-scope", label: "Location", mine: true },
+  { kind: "wrong-level", label: "Level", mine: true },
+  { kind: "wrong-role", label: "Bad fit", mine: true },
+  { kind: "contract", label: "Contract", mine: true },
+  { kind: "pay-below-floor", label: "Pay", mine: true },
   // Not theirs, though it is tempting: a rejection none of the named kinds
   // describes cannot be attributed to a setting, which is why the server leaves
   // it out of the count (SCREENED_NOT_BY_RULES in server/src/validate.js). The
@@ -110,9 +111,10 @@ export const SCREENED_KINDS: readonly { kind: string; label: string; mine?: true
   // adding one rather than for showing the catch-all.
   { kind: "other", label: "Other" },
   // A posting the person took off their own board. It has no kind because no
-  // rule produced it, but it isn't unclassified either - it is the one thing
-  // here they decided themselves, and the only record of having done so.
-  { kind: HAND, label: "You removed it", mine: true },
+  // rule produced it, and it isn't shown here: this tab is what their settings
+  // cost them, and a decision they made themselves is one they already know
+  // about. The row still arrives, and still stops a run finding it again.
+  { kind: HAND, label: "You removed it" },
   // Never classified, and not written by them either: rows from before a run
   // said which rule caused each rejection, and rows whose author is unknown.
   { kind: "", label: "Not grouped" },
@@ -152,6 +154,41 @@ export function countsByKind(rows: readonly Screened[]): { kind: string; label: 
     label,
     postings: urls.get(kind)!.size,
   }));
+}
+
+/** How a row's group is said on the page. A kind the page can't name groups as "Not grouped". */
+export function groupLabel(row: Screened): string {
+  const group = groupOf(row);
+  return SCREENED_KINDS.find((k) => k.kind === group)?.label ?? "";
+}
+
+/**
+ * The columns the list can be sorted by, and what each reads from a row. The
+ * date sorts newest first and the rest read alphabetically, which is why the
+ * default direction differs: "newest" is what someone wants of a date and
+ * "A first" is what they want of a name.
+ *
+ * Why reads a row's position in SCREENED_KINDS rather than its label, so
+ * sorting by it puts the groups in the order the counts above the list use. The
+ * two views agreeing matters more than either being alphabetical.
+ */
+export const SCREENED_SORTS: readonly { key: string; header: string; of: (row: Screened) => string; newestFirst?: true }[] = [
+  { key: "date", header: "Set aside", of: (r) => r.date, newestFirst: true },
+  { key: "posting", header: "Posting", of: (r) => `${r.company} ${r.title}`.trim().toLowerCase() },
+  { key: "where", header: "Where", of: (r) => r.location.toLowerCase() },
+  { key: "why", header: "Why", of: (r) => String(SCREENED_KINDS.findIndex((k) => k.kind === groupOf(r))).padStart(2, "0") },
+  { key: "reason", header: "In its words", of: (r) => r.reason.toLowerCase() },
+];
+
+/**
+ * The rows in the order asked for. Ties break by id outside the direction, so
+ * two rows a sort can't separate keep the order they were written in whichever
+ * way the column points, and a re-render can't reshuffle them.
+ */
+export function sortScreened(rows: readonly Screened[], key: string, descending: boolean): Screened[] {
+  const sort = SCREENED_SORTS.find((s) => s.key === key) ?? SCREENED_SORTS[0];
+  const order = descending ? -1 : 1;
+  return rows.slice().sort((a, b) => order * sort.of(a).localeCompare(sort.of(b)) || a.id - b.id);
 }
 
 /** How many rows each search has, by its key. A search with none is absent, not zero. */

@@ -10,12 +10,14 @@ import { safeUrl } from "../domain/format";
 import {
   countsByKind,
   countsBySearch,
+  groupLabel,
   groupOf,
-  HAND,
   keptWithin,
   SCREENED_KINDS,
+  SCREENED_SORTS,
   screenedWithin,
   SCREENED_WINDOWS,
+  sortScreened,
 } from "../domain/screened";
 import { buildTracks } from "../domain/tabs";
 
@@ -30,7 +32,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const [params, setParams] = useSearchParams();
   const search = params.get("search") ?? ALL;
   const kind = params.get("kind");
-  const narrow = (next: { search?: string; kind?: string | null }) => {
+  const narrow = (next: Partial<Record<"search" | "kind" | "sort" | "dir", string | null>>) => {
     const set = new URLSearchParams(params);
     for (const [key, value] of Object.entries(next)) {
       if (value) set.set(key, value);
@@ -48,9 +50,20 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const counts = countsBySearch(inWindow);
   const ofSearch = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
   const kinds = countsByKind(ofSearch);
-  const rows = kind === null ? ofSearch : ofSearch.filter((r) => groupOf(r) === kind);
+  const chosen = kind === null ? ofSearch : ofSearch.filter((r) => groupOf(r) === kind);
   const kept = keptWithin(data.leads, days, now, search);
-  const byHand = rows.filter((r) => groupOf(r) === HAND).length;
+  // Which column orders the list, in the URL with the rest of the view. A
+  // column's first click sorts it the way someone means it: newest first of a
+  // date, A first of a name.
+  const column = SCREENED_SORTS.find((s) => s.key === params.get("sort")) ?? SCREENED_SORTS[0];
+  const sortKey = column.key;
+  const descending = params.get("dir") ? params.get("dir") === "desc" : column.newestFirst === true;
+  const sortBy = (key: string) => {
+    const next = SCREENED_SORTS.find((s) => s.key === key)!;
+    const flip = key === sortKey ? !descending : next.newestFirst === true;
+    narrow({ sort: key, dir: flip ? "desc" : "asc" });
+  };
+  const rows = sortScreened(chosen, sortKey, descending);
   const nameOf = (key: string) => tracks[key]?.label || key;
 
   return (
@@ -95,10 +108,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
         <p className="screened-sum">
           Showing <strong className="mono">{rows.length}</strong> from{" "}
           {SCREENED_WINDOWS.find((w) => w.days === days)?.label}, against <strong className="mono">{kept}</strong> kept
-          {search && ` by ${nameOf(search)}`}
-          {/* The gap between this list and the count above, named rather than
-              left for someone to work out by counting rows. */}
-          {byHand > 0 && `, including ${byHand} you removed yourself`}.
+          {search && ` by ${nameOf(search)}`}.
           {/* A page showing part of the record has to say so, or a window reads
               as a purge. Nothing is deleted, and the rows outside it are still
               working: they are what stops a run finding those postings again. */}
@@ -135,9 +145,8 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
         </div>
       )}
 
-      {/* What the rules cost, by the kind a run filed each rejection under -
-          and what this person turned away themselves, which is a group of its
-          own rather than an unclassified one. Never by reading the sentences,
+      {/* What the rules cost, by the kind a run filed each rejection under.
+          Never by reading the sentences,
           which are one per posting and no two alike. Counted by posting: a job
           re-listed under a new url is two. */}
       {kinds.length > 1 && (
@@ -180,10 +189,25 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
           <table>
             <thead>
               <tr>
-                <th scope="col">Set aside</th>
-                <th scope="col">Posting</th>
-                <th scope="col">Where</th>
-                <th scope="col">Why</th>
+                {SCREENED_SORTS.map((col) => {
+                  const on = col.key === sortKey;
+                  return (
+                    <th
+                      key={col.key}
+                      scope="col"
+                      // What the column is sorted by, said to a screen reader as
+                      // well as drawn, since the arrow alone says it to nobody else.
+                      aria-sort={on ? (descending ? "descending" : "ascending") : "none"}
+                    >
+                      <button type="button" className="screened-sort" onClick={() => sortBy(col.key)}>
+                        {col.header}
+                        <span aria-hidden="true" className="screened-caret">
+                          {on ? (descending ? "▾" : "▴") : ""}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -233,12 +257,11 @@ function Row({ row, search }: { row: Screened; search: string }) {
         </div>
       </td>
       <td className="screened-where">{row.location}</td>
-      <td>
-        {row.reason}
-        {/* A posting the person took off their own board sits in the same table
-            as a run's decisions, and shouldn't read as one. */}
-        {row.added_by === "hand" && <span className="screened-hand">you removed this</span>}
-      </td>
+      {/* The kind, which is what the groups above count and what this column
+          sorts by; the sentence beside it is about this posting alone. A row the
+          person removed themselves says so here rather than needing a tag. */}
+      <td className="screened-why">{groupLabel(row)}</td>
+      <td className="screened-words">{row.reason}</td>
     </tr>
   );
 }

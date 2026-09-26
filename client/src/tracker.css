@@ -417,11 +417,21 @@ input.dh-loc-in{width:auto;max-width:calc(100% + 8px);font-size:12.5px;color:var
 .linkish{appearance:none;border:0;background:none;font:inherit;font-size:13px;color:var(--accent);cursor:pointer;padding:0}
 .linkish:hover{text-decoration:underline}
 .screened-grid .screened-date{color:var(--ink2);font-size:13px;white-space:nowrap}
-.screened-grid .screened-where{color:var(--ink2);font-size:13px;max-width:200px}
+/* A location has a natural longest - a city, a state, a country - and is worth
+   the width: cut narrower it wraps to several lines beside a one-line row. */
+.screened-grid .screened-where{color:var(--ink2);font-size:13px;max-width:220px}
+.screened-grid .screened-why{font-size:13px;white-space:nowrap}
+.screened-grid .screened-words{color:var(--ink2);font-size:13.5px}
+/* A header that sorts: the whole cell is the control, and it reads as a header
+   rather than as a button sitting in one. */
+.screened-grid th{padding:0}
+.screened-sort{appearance:none;border:0;background:none;cursor:pointer;font:inherit;color:inherit;
+  display:flex;align-items:center;gap:5px;width:100%;padding:11px 12px;text-align:left}
+.screened-sort:hover{color:var(--ink2)}
+.screened-grid th[aria-sort]:not([aria-sort=none]) .screened-sort{color:var(--ink)}
+.screened-caret{font-size:10px;line-height:1}
 .screened-role{color:var(--ink2);font-size:13px}
 .screened-search{color:var(--ink3)}
-.screened-hand{display:inline-block;margin-left:8px;font-size:11px;letter-spacing:.03em;
-  padding:1px 8px;border-radius:99px;background:var(--surface2);color:var(--ink3);white-space:nowrap}
 .empty{padding:44px 22px;text-align:center;color:var(--ink3)}
 .empty strong{display:block;color:var(--ink2);font-weight:600;margin-bottom:5px;font-size:15px}
 
