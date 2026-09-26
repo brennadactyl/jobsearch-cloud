@@ -42,12 +42,19 @@ role.
   wrong line in `CLAUDE.md` or a skill is followed. That is what makes those
   two different, and why they take two reviewers. The exception is `docs/`
   alone: another path wanting the same treatment is a change to this rule, not
-  an application of it.
+  an application of it. Where a doc has a check, the author runs it and says so
+  in the commit - `server/verify-schema-doc.mjs` for `docs/schema.md`,
+  `tools/docs/check-links.mjs` for every link. What made review worth having
+  there was the check, not the second reader.
 - **Who reviews: the area's owner,** or Fullstack Friend when the owner is the
   author, or Product Partner when that fails too. One reviewer. `CLAUDE.md` and
   anything under `.claude/` take two, because a wrong line there is followed
   rather than read, and they wait for both however long that takes. Push a
   branch freely: the gate is the merge, not the push.
+- **Changes to `CLAUDE.md` and the skills are collected and go as one PR,**
+  unless something in them is wrong now. A rule PR costs two readers and a
+  round of fixes, and rules written separately contradict each other in ways
+  one diff would have shown.
 - **A review reads the diff and says something specific,** in about three
   lines. Run the checks the change claims to pass and say what they printed,
   name each finding blocking or not, and approve explicitly. "LGTM" is not a
