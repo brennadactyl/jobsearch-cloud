@@ -12,13 +12,15 @@ import {
   countsBySearch,
   groupLabel,
   groupOf,
-  keptWithin,
+  keptFrom,
+  latestRunDay,
   SCREENED_KINDS,
   SCREENED_SORTS,
-  screenedWithin,
+  screenedFrom,
   SCREENED_WINDOW_DEFAULT,
   SCREENED_WINDOWS,
   sortScreened,
+  windowStart,
 } from "../domain/screened";
 import { buildTracks } from "../domain/tabs";
 
@@ -56,13 +58,17 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const tracks = buildTracks(data.tracks);
   // Everything a search passed over, ever: the emptiest state below is about
   // having no rejections at all, and a delisted lead isn't one.
-  const everRejected = screenedWithin(data.screened, 0, now);
-  const inWindow = screenedWithin(data.screened, days, now);
+  const everRejected = screenedFrom(data.screened, "");
+  // One day for the whole comparison: what was set aside and what was kept are
+  // two halves of one sentence, and a window worked out twice can give them
+  // different days.
+  const from = windowStart(days, now, latestRunDay(data.tracks));
+  const inWindow = screenedFrom(data.screened, from);
   const counts = countsBySearch(inWindow);
   const ofSearch = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
   const kinds = countsByKind(ofSearch);
   const chosen = kind === null ? ofSearch : ofSearch.filter((r) => groupOf(r) === kind);
-  const kept = keptWithin(data.leads, days, now, search);
+  const kept = keptFrom(data.leads, from, search);
   // Which column orders the list, in the URL with the rest of the view. A
   // column's first click sorts it the way someone means it: newest first of a
   // date, A first of a name.

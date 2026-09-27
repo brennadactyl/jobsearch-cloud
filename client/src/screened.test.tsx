@@ -16,7 +16,7 @@ import {
   SCREENED_KINDS,
   SCREENED_WINDOW_DEFAULT,
   SCREENED_WINDOWS,
-  screenedWithin,
+  screenedFrom,
 } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
@@ -169,7 +169,7 @@ describe("the screened tab", () => {
       { ...fixture.screened[0], id: 95, kind: "relocation-required" },
       { ...fixture.screened[0], id: 96, url: "https://example.com/96", kind: "out-of-scope" },
     ];
-    const shown = screenedWithin(odd, 0, NOW);
+    const shown = screenedFrom(odd, "");
     expect(shown).toHaveLength(2);
     expect(countsByKind(shown).reduce((n, k) => n + k.postings, 0)).toBe(2);
     expect(countsByKind(shown).find((k) => k.kind === "")?.label).toBe("Not grouped");
@@ -180,7 +180,7 @@ describe("the screened tab", () => {
     // say a setting caused it (SCREENED_NOT_BY_RULES in server/src/validate.js).
     // A list wider than the number above it is how someone stops trusting both.
     const catchAll = [{ ...fixture.screened[0], id: 97, kind: "other", added_by: "run" }];
-    expect(screenedWithin(catchAll, 0, NOW)).toHaveLength(0);
+    expect(screenedFrom(catchAll, "")).toHaveLength(0);
   });
 
   it("leaves out a lead that was taken down, which no rule rejected", async () => {
@@ -350,6 +350,35 @@ describe("the screened tab", () => {
     expect(sumLine()).toHaveTextContent("Showing 1 from today");
     expect(rows()).toHaveLength(1);
     expect(within(rows()[0]).getByRole("link", { name: "Cedar" })).toBeInTheDocument();
+  });
+
+  it("takes today from the runs' day, not from the clock of whoever is reading", async () => {
+    // A row carries the day its run stamped it. Read from east of the runs, the
+    // reader's day turns over first, and a window taken from their clock would
+    // find today empty with last night's rows sitting a day behind them. Here
+    // the newest run is the day before the reader's, which is that same gap.
+    const ran = daysAgo(1);
+    const tracks = fixture.tracks.map((t) => ({ ...t, last_run: { ...t.last_run, on: ran } }));
+    const lastNight = { ...fixture.screened[1], id: 98, date: ran, company: "Cedar" };
+    await openTab({ ...fixture, tracks, screened: [...fixture.screened, lastNight] });
+
+    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
+    // Taken from the reader's clock this window starts a day later and holds
+    // nothing. Taken from the run, it holds that run's day - every row of it,
+    // not only the one this test added.
+    expect(screen.getByText("Cedar")).toBeInTheDocument();
+    expect(rows().map((r) => within(r).getByText(ran))).toHaveLength(rows().length);
+  });
+
+  it("falls back to the reader's day when no run has stamped one", async () => {
+    // Nothing to take a day from is not a reason to show everything: an empty
+    // start would let every row there is through the shortest window there is.
+    const tracks = fixture.tracks.map((t) => ({ ...t, last_run: { ...t.last_run, on: "" } }));
+    await openTab({ ...fixture, tracks });
+
+    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
+    expect(document.querySelector(".screened-grid")).toBeNull();
+    expect(screen.getByText("Nothing was set aside in this window.")).toBeInTheDocument();
   });
 
   it("says where a kind nobody set comes from, without offering a setting", () => {

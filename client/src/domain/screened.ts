@@ -5,7 +5,7 @@
  * page shows each as written and counts only what it can count: rows, searches
  * and dates.
  */
-import type { Lead, Screened } from "../api/schema";
+import type { Lead, Screened, Track } from "../api/schema";
 import { isoDay } from "./format";
 
 /**
@@ -29,8 +29,13 @@ export function pathForSearch(search: string): string {
  * these rows ran once, last night or this morning, and "what did that one do"
  * is a question the other windows can't answer.
  */
-export const SCREENED_WINDOWS: readonly { days: number; label: string; opensOn?: true }[] = [
-  { days: 1, label: "today" },
+export const SCREENED_WINDOWS: readonly {
+  days: number;
+  label: string;
+  opensOn?: true;
+  fromRun?: true;
+}[] = [
+  { days: 1, label: "today", fromRun: true },
   { days: 7, label: "the last 7 days" },
   { days: 30, label: "the last 30 days", opensOn: true },
   { days: 90, label: "the last 90 days" },
@@ -45,12 +50,32 @@ export const SCREENED_WINDOWS: readonly { days: number; label: string; opensOn?:
  */
 export const SCREENED_WINDOW_DEFAULT = SCREENED_WINDOWS.find((w) => w.opensOn)!.days;
 
+/** The window that takes its day from the runs rather than from the reader. */
+const RUN_DAY_WINDOW = SCREENED_WINDOWS.find((w) => w.fromRun)!.days;
+
+/**
+ * The newest day a run stamped, across every search, or "" before any has run.
+ * A bare date, compared as one: these are the runs' own local days, and the
+ * page has no business turning them into instants.
+ */
+export function latestRunDay(tracks: readonly Track[]): string {
+  return tracks.reduce((newest, t) => (t.last_run.on > newest ? t.last_run.on : newest), "");
+}
+
 /**
  * The earliest date a window includes, or "" for all of them. Compared as bare
  * dates, never as instants: `date` is the run's own local day, and giving it a
  * time would move it a day west of UTC.
+ *
+ * The one-day window is the runs' day, not the reader's. A row carries the day
+ * the run stamped it, so a reader east of the runs would find "today" empty
+ * from their own early hours, with the night's rows sitting a day behind them.
+ * Taking the day from the newest run makes the window mean the same thing to
+ * everyone reading it. The longer windows count back from the reader's own day,
+ * where a day either side doesn't change what is in them.
  */
-export function windowStart(days: number, now: number): string {
+export function windowStart(days: number, now: number, runDay = ""): string {
+  if (days === RUN_DAY_WINDOW) return runDay || isoDay(new Date(now));
   return days ? isoDay(new Date(now - (days - 1) * 86_400_000)) : "";
 }
 
@@ -74,9 +99,15 @@ function isOwnRejection(row: Screened): boolean {
   return known ? known.mine === true : true;
 }
 
-/** The rejections a window holds, newest first, and the newest of a day in the order they were written. */
-export function screenedWithin(rows: readonly Screened[], days: number, now: number): Screened[] {
-  const start = windowStart(days, now);
+/**
+ * The rejections from `start` onwards, newest first, and the newest of a day in
+ * the order they were written. "" is everything.
+ *
+ * Takes the day rather than the window, so the count beside the list and the
+ * list itself are one window: worked out twice, one of them can be told to
+ * count from the reader's day while the other counts from the runs'.
+ */
+export function screenedFrom(rows: readonly Screened[], start: string): Screened[] {
   return rows
     .filter((r) => isOwnRejection(r) && r.date >= start)
     .slice()
@@ -227,7 +258,6 @@ export function countsBySearch(rows: readonly Screened[]): Record<string, number
  * since still counts as kept. Narrowed to one search when the list is, or the
  * two halves of the comparison would be counting different searches.
  */
-export function keptWithin(leads: readonly Lead[], days: number, now: number, search = ""): number {
-  const start = windowStart(days, now);
+export function keptFrom(leads: readonly Lead[], start: string, search = ""): number {
   return leads.filter((l) => l.found >= start && (!search || l.search === search)).length;
 }
