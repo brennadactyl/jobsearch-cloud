@@ -11,7 +11,13 @@ import App from "./App";
 import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
 import { NOW, daysAgo, data as fixture } from "./domain/fixture";
-import { countsByKind, SCREENED_KINDS, screenedWithin } from "./domain/screened";
+import {
+  countsByKind,
+  SCREENED_KINDS,
+  SCREENED_WINDOW_DEFAULT,
+  SCREENED_WINDOWS,
+  screenedWithin,
+} from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
 async function openTab(data: TrackerData = fixture) {
@@ -323,6 +329,15 @@ describe("the screened tab", () => {
     await openTab({ ...fixture, screened: [...fixture.screened, unknown] });
 
     expect(screen.getByText("a rule this page can't name yet")).toBeInTheDocument();
+  });
+
+  it("opens on a window the select actually offers", () => {
+    // The default and the list are one thing, not two kept in step by hand: a
+    // default the list doesn't hold leaves the select on a value no option
+    // matches, and the sentence above it reading "from undefined".
+    const opens = SCREENED_WINDOWS.filter((w) => w.opensOn);
+    expect(opens).toHaveLength(1);
+    expect(opens[0].days).toBe(SCREENED_WINDOW_DEFAULT);
   });
 
   it("narrows to today, which is the one window a night's own run fills", async () => {

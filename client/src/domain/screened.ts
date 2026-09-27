@@ -29,16 +29,21 @@ export function pathForSearch(search: string): string {
  * these rows ran once, last night or this morning, and "what did that one do"
  * is a question the other windows can't answer.
  */
-export const SCREENED_WINDOWS: readonly { days: number; label: string }[] = [
+export const SCREENED_WINDOWS: readonly { days: number; label: string; opensOn?: true }[] = [
   { days: 1, label: "today" },
   { days: 7, label: "the last 7 days" },
-  { days: 30, label: "the last 30 days" },
+  { days: 30, label: "the last 30 days", opensOn: true },
   { days: 90, label: "the last 90 days" },
   { days: 0, label: "everything" },
 ];
 
-/** What the list opens on: long enough that a first look is rarely empty. */
-export const SCREENED_WINDOW_DEFAULT = 30;
+/**
+ * What the list opens on: long enough that a first look is rarely empty. Marked
+ * on the window itself rather than written out beside it, because a default the
+ * list doesn't contain leaves the select holding a value no option matches, and
+ * says so nowhere.
+ */
+export const SCREENED_WINDOW_DEFAULT = SCREENED_WINDOWS.find((w) => w.opensOn)!.days;
 
 /**
  * The earliest date a window includes, or "" for all of them. Compared as bare
