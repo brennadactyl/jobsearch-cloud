@@ -365,10 +365,13 @@ describe("the screened tab", () => {
     const tonight = { ...fixture.screened[1], id: 97, date: daysAgo(0), company: "Cedar" };
     await openTab({ ...fixture, screened: [...fixture.screened, tonight] }, "1");
 
+    // The fixture's own newest rejection is on that day too, so this is what
+    // the run did, not what this test added to it.
     expect(screen.getByRole("combobox")).toHaveValue("1");
-    expect(sumLine()).toHaveTextContent("Showing 1 from today");
-    expect(rows()).toHaveLength(1);
-    expect(within(rows()[0]).getByRole("link", { name: "Cedar" })).toBeInTheDocument();
+    expect(sumLine()).toHaveTextContent("Showing 2 from today");
+    expect(rows()).toHaveLength(2);
+    expect(screen.getByText("Cedar")).toBeInTheDocument();
+    expect(rows().every((r) => within(r).queryByText(daysAgo(0)) !== null)).toBe(true);
   });
 
   it("takes today from the runs' day, not from the clock of whoever is reading", async () => {
@@ -381,11 +384,13 @@ describe("the screened tab", () => {
     const lastNight = { ...fixture.screened[1], id: 98, date: ran, company: "Cedar" };
     await openTab({ ...fixture, tracks, screened: [...fixture.screened, lastNight] }, "1");
 
-    // Taken from the reader's clock this window starts a day later and holds
-    // nothing. Taken from the run, it holds that run's day - every row of it,
-    // not only the one this test added.
+    // Taken from the reader's clock this window starts a day later and misses
+    // the run entirely. Taken from the run, it starts on that run's day and
+    // nothing older than it gets in.
     expect(screen.getByText("Cedar")).toBeInTheDocument();
-    expect(rows().map((r) => within(r).getByText(ran))).toHaveLength(rows().length);
+    const dates = rows().map((r) => within(r).getByText(/^\d{4}-\d{2}-\d{2}$/).textContent!);
+    expect(dates).toContain(ran);
+    expect(dates.every((d) => d >= ran)).toBe(true);
   });
 
   it("falls back to the reader's day when no run has stamped one", async () => {
@@ -394,8 +399,49 @@ describe("the screened tab", () => {
     const tracks = fixture.tracks.map((t) => ({ ...t, last_run: { ...t.last_run, on: "" } }));
     await openTab({ ...fixture, tracks }, "1");
 
-    expect(document.querySelector(".screened-grid")).toBeNull();
+    // The reader's own day, which holds the one row dated there - not every row
+    // in the tracker, which is what an empty start would have let through.
+    expect(rows()).toHaveLength(1);
+    expect(within(rows()[0]).getByText(daysAgo(0))).toBeInTheDocument();
+  });
+
+  it("opens a stopped search's stamp on that search's own last run", async () => {
+    // The searches don't run as one. A task that stops without the search being
+    // paused leaves a stamp claiming what its last run set aside, while the
+    // others keep running and carry the newest day. Read against theirs, that
+    // search's own rows are outside the window its own stamp links to - a link
+    // stating a number and opening a view that contradicts it.
+    const stopped = daysAgo(3);
+    // Alpha's task stopped three nights ago; every other search ran last night,
+    // so the newest day across them is theirs and not alpha's.
+    const tracks = fixture.tracks.map((t) => ({
+      ...t,
+      last_run: { ...t.last_run, on: t.key === "alpha" ? stopped : daysAgo(0) },
+    }));
+    const itsRows = [
+      { ...fixture.screened[1], id: 80, search: "alpha", date: stopped, company: "Cedar" },
+      { ...fixture.screened[1], id: 81, search: "alpha", date: stopped, company: "Larch", url: "https://example.com/81" },
+    ];
+    await openTab({ ...fixture, tracks, screened: [...fixture.screened, ...itsRows] }, "1");
+
+    await userEvent.click(screen.getByRole("button", { name: /^Alpha roles/ }));
+    expect(screen.getByText("Cedar")).toBeInTheDocument();
+    expect(screen.getByText("Larch")).toBeInTheDocument();
+  });
+
+  it("keeps the way back to every search when the window holds nothing", async () => {
+    // The tab opens on one day and that day can be empty. A chip row built from
+    // the window disappears with it, taking "All searches" and leaving someone
+    // who arrived from a run stamp narrowed to one search with no way out of it.
+    // The newest run turned nothing away, which is a night like any other.
+    const screened = fixture.screened.filter((r) => r.date !== daysAgo(0));
+    await openTab({ ...fixture, screened }, "1");
+
     expect(screen.getByText("Nothing was set aside in this window.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^All searches/ })).toBeInTheDocument();
+    // Counted by the window, so a search with nothing in it reads zero rather
+    // than going missing.
+    expect(screen.getByRole("button", { name: "Alpha roles 0" })).toBeInTheDocument();
   });
 
   it("says where a kind nobody set comes from, without offering a setting", () => {

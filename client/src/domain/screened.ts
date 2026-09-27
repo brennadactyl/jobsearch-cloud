@@ -59,12 +59,22 @@ export const SCREENED_WINDOW_DEFAULT = SCREENED_WINDOWS.find((w) => w.opensOn)!.
 const RUN_DAY_WINDOW = SCREENED_WINDOWS.find((w) => w.fromRun)!.days;
 
 /**
- * The newest day a run stamped, across every search, or "" before any has run.
- * A bare date, compared as one: these are the runs' own local days, and the
- * page has no business turning them into instants.
+ * The newest day a run stamped, or "" before any has run. A bare date, compared
+ * as one: these are the runs' own local days, and the page has no business
+ * turning them into instants.
+ *
+ * Of the search in view when there is one, because the searches don't run as
+ * one. A search whose task has stopped without being paused keeps a stamp
+ * claiming what its last run set aside, and the newest day across all of them
+ * belongs to the searches still running: read against that, the stopped
+ * search's own rows are outside the window its own stamp links to. A search
+ * with no day of its own - one fed by another, or one that has never run -
+ * falls back to the newest there is, which is the best the page can say.
  */
-export function latestRunDay(tracks: readonly Track[]): string {
-  return tracks.reduce((newest, t) => (t.last_run.on > newest ? t.last_run.on : newest), "");
+export function latestRunDay(tracks: readonly Track[], search = ""): string {
+  const newest = tracks.reduce((day, t) => (t.last_run.on > day ? t.last_run.on : day), "");
+  const mine = search ? tracks.find((t) => t.key === search)?.last_run.on : "";
+  return mine || newest;
 }
 
 /**
