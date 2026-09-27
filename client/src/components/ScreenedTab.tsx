@@ -16,6 +16,7 @@ import {
   SCREENED_KINDS,
   SCREENED_SORTS,
   screenedWithin,
+  SCREENED_WINDOW_DEFAULT,
   SCREENED_WINDOWS,
   sortScreened,
 } from "../domain/screened";
@@ -24,7 +25,7 @@ import { buildTracks } from "../domain/tabs";
 const ALL = "";
 
 export default function ScreenedTab({ data }: { data: TrackerData }) {
-  const [days, setDays] = useState(SCREENED_WINDOWS[1].days);
+  const [days, setDays] = useState(SCREENED_WINDOW_DEFAULT);
   // Read once per opening: a window that moved under someone mid-read would
   // drop a row between one glance and the next.
   const [now] = useState(() => Date.now());

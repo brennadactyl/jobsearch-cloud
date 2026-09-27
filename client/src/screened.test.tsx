@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import * as client from "./api/client";
 import type { TrackerData } from "./api/schema";
-import { NOW, data as fixture } from "./domain/fixture";
+import { NOW, daysAgo, data as fixture } from "./domain/fixture";
 import { countsByKind, SCREENED_KINDS, screenedWithin } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
@@ -323,6 +323,18 @@ describe("the screened tab", () => {
     await openTab({ ...fixture, screened: [...fixture.screened, unknown] });
 
     expect(screen.getByText("a rule this page can't name yet")).toBeInTheDocument();
+  });
+
+  it("narrows to today, which is the one window a night's own run fills", async () => {
+    // The shortest window counts its own day: a run stamps its rows with its
+    // local date, so "today" is that run's work and nobody else's.
+    const tonight = { ...fixture.screened[1], id: 97, date: daysAgo(0), company: "Cedar" };
+    await openTab({ ...fixture, screened: [...fixture.screened, tonight] });
+
+    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
+    expect(sumLine()).toHaveTextContent("Showing 1 from today");
+    expect(rows()).toHaveLength(1);
+    expect(within(rows()[0]).getByRole("link", { name: "Cedar" })).toBeInTheDocument();
   });
 
   it("says where a kind nobody set comes from, without offering a setting", () => {
