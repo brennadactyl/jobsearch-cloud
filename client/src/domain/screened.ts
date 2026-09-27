@@ -5,7 +5,7 @@
  * page shows each as written and counts only what it can count: rows, searches
  * and dates.
  */
-import type { Lead, Screened } from "../api/schema";
+import type { Lead, Screened, Track } from "../api/schema";
 import { isoDay } from "./format";
 
 /**
