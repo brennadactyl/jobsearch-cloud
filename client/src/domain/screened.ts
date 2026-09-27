@@ -35,18 +35,23 @@ export const SCREENED_WINDOWS: readonly {
   opensOn?: true;
   fromRun?: true;
 }[] = [
-  { days: 1, label: "today", fromRun: true },
+  { days: 1, label: "today", fromRun: true, opensOn: true },
   { days: 7, label: "the last 7 days" },
-  { days: 30, label: "the last 30 days", opensOn: true },
+  { days: 30, label: "the last 30 days" },
   { days: 90, label: "the last 90 days" },
   { days: 0, label: "everything" },
 ];
 
 /**
- * What the list opens on: long enough that a first look is rarely empty. Marked
- * on the window itself rather than written out beside it, because a default the
- * list doesn't contain leaves the select holding a value no option matches, and
- * says so nowhere.
+ * What the list opens on: the newest run's work, which is the question this tab
+ * is usually opened with. It can open on nothing - a run that turned nothing
+ * away has an empty day, and so does a tracker whose runs have stopped - and
+ * that is the true answer to what the newest run set aside, with every longer
+ * window one choice away.
+ *
+ * Marked on the window itself rather than written out beside it, because a
+ * default the list doesn't contain leaves the select holding a value no option
+ * matches, and says so nowhere.
  */
 export const SCREENED_WINDOW_DEFAULT = SCREENED_WINDOWS.find((w) => w.opensOn)!.days;
 

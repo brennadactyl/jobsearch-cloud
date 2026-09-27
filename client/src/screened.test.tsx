@@ -20,7 +20,13 @@ import {
 } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
-async function openTab(data: TrackerData = fixture) {
+/**
+ * Opens the tab, then widens to 30 days. The page opens on the newest run's
+ * day, which holds one of the fixture's rows, so a test about anything else -
+ * sorting, the kinds, the captions - asks for the window its rows are in.
+ * `showing` of "1" leaves the window where the page itself put it.
+ */
+async function openTab(data: TrackerData = fixture, showing = "30") {
   vi.spyOn(client, "getData").mockResolvedValue(data);
   window.history.pushState({}, "", "/screened");
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -29,7 +35,11 @@ async function openTab(data: TrackerData = fixture) {
       <App />
     </QueryClientProvider>,
   );
-  return screen.findByRole("heading", { name: "What your searches set aside" });
+  const heading = await screen.findByRole("heading", { name: "What your searches set aside" });
+  if (showing !== String(SCREENED_WINDOW_DEFAULT)) {
+    await userEvent.selectOptions(screen.getByRole("combobox"), showing);
+  }
+  return heading;
 }
 
 const rows = () => within(document.querySelector(".screened-grid")!).getAllByRole("row").slice(1);
@@ -126,6 +136,14 @@ describe("the screened tab", () => {
     const alpha = screen.getAllByRole("link", { name: "3 screened out" })[0];
     await userEvent.click(alpha);
     await screen.findByRole("heading", { name: "What your searches set aside" });
+    expect(window.location.search).toBe("?search=alpha");
+
+    // The tab opens on the newest run's day, where a real run's rows are the
+    // ones the stamp just counted. The fixture's sit further back than its own
+    // stamp, so this asks for the month to see what the link narrowed to. The
+    // search rides in the URL across the change, which is the point of it
+    // being there.
+    await userEvent.selectOptions(screen.getByRole("combobox"), "30");
     expect(window.location.search).toBe("?search=alpha");
     expect(screen.getByRole("button", { name: /Alpha roles/ })).toHaveAttribute("aria-pressed", "true");
     expect(rows()).toHaveLength(3);
@@ -340,13 +358,14 @@ describe("the screened tab", () => {
     expect(opens[0].days).toBe(SCREENED_WINDOW_DEFAULT);
   });
 
-  it("narrows to today, which is the one window a night's own run fills", async () => {
-    // The shortest window counts its own day: a run stamps its rows with its
-    // local date, so "today" is that run's work and nobody else's.
+  it("opens on today, which is the newest run's work and the usual question", async () => {
+    // The tab opens on the shortest window there is: a run stamps its rows with
+    // its own local date, so today is that run's work and nobody else's, and
+    // every longer window is one choice away.
     const tonight = { ...fixture.screened[1], id: 97, date: daysAgo(0), company: "Cedar" };
-    await openTab({ ...fixture, screened: [...fixture.screened, tonight] });
+    await openTab({ ...fixture, screened: [...fixture.screened, tonight] }, "1");
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
+    expect(screen.getByRole("combobox")).toHaveValue("1");
     expect(sumLine()).toHaveTextContent("Showing 1 from today");
     expect(rows()).toHaveLength(1);
     expect(within(rows()[0]).getByRole("link", { name: "Cedar" })).toBeInTheDocument();
@@ -360,9 +379,8 @@ describe("the screened tab", () => {
     const ran = daysAgo(1);
     const tracks = fixture.tracks.map((t) => ({ ...t, last_run: { ...t.last_run, on: ran } }));
     const lastNight = { ...fixture.screened[1], id: 98, date: ran, company: "Cedar" };
-    await openTab({ ...fixture, tracks, screened: [...fixture.screened, lastNight] });
+    await openTab({ ...fixture, tracks, screened: [...fixture.screened, lastNight] }, "1");
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
     // Taken from the reader's clock this window starts a day later and holds
     // nothing. Taken from the run, it holds that run's day - every row of it,
     // not only the one this test added.
@@ -374,9 +392,8 @@ describe("the screened tab", () => {
     // Nothing to take a day from is not a reason to show everything: an empty
     // start would let every row there is through the shortest window there is.
     const tracks = fixture.tracks.map((t) => ({ ...t, last_run: { ...t.last_run, on: "" } }));
-    await openTab({ ...fixture, tracks });
+    await openTab({ ...fixture, tracks }, "1");
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
     expect(document.querySelector(".screened-grid")).toBeNull();
     expect(screen.getByText("Nothing was set aside in this window.")).toBeInTheDocument();
   });
