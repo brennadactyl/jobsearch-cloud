@@ -26,9 +26,9 @@ import { clearPrefs } from "./ui/prefs";
  * sorting, the kinds, the captions - asks for the window its rows are in.
  * `showing` of "1" leaves the window where the page itself put it.
  */
-async function openTab(data: TrackerData = fixture, showing = "30") {
+async function openTab(data: TrackerData = fixture, showing = "30", path = "/screened") {
   vi.spyOn(client, "getData").mockResolvedValue(data);
-  window.history.pushState({}, "", "/screened");
+  window.history.pushState({}, "", path);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
@@ -442,6 +442,23 @@ describe("the screened tab", () => {
     // Counted by the window, so a search with nothing in it reads zero rather
     // than going missing.
     expect(screen.getByRole("button", { name: "Alpha roles 0" })).toBeInTheDocument();
+  });
+
+  it("offers a way to clear a narrowing even when there is only one search", async () => {
+    // One search needs no row to choose between. Narrowed to it, though, the
+    // row is the only thing on screen that can clear the narrowing, and without
+    // it someone has to edit the address to get out of a view a link put them
+    // in.
+    const one = { ...fixture, screened: fixture.screened.filter((r) => r.search === "alpha") };
+    await openTab(one, "1", "/screened?search=alpha");
+    expect(screen.getByRole("button", { name: /^All searches/ })).toBeInTheDocument();
+  });
+
+  it("offers no way to clear a narrowing nobody made", async () => {
+    // One search and no narrowing: a row of one chip chooses between nothing.
+    const one = { ...fixture, screened: fixture.screened.filter((r) => r.search === "alpha") };
+    await openTab(one, "1");
+    expect(screen.queryByRole("button", { name: /^All searches/ })).toBeNull();
   });
 
   it("says where a kind nobody set comes from, without offering a setting", () => {

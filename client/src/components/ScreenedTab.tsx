@@ -147,8 +147,12 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
           nothing - the tab opens on one day - and a row that disappears when it
           is empty takes the way back to all of them with it. The counts are of
           the window, so a search with nothing in it reads zero rather than
-          going missing. */}
-      {searches.length > 1 && (
+          going missing.
+
+          One search needs no row to choose between, unless the view is narrowed
+          to it: a narrowing with nothing on screen to clear it is one someone
+          has to edit the address to leave. */}
+      {(searches.length > 1 || search !== ALL) && (
         <div className="chips screened-searches">
           <button type="button" className="chip" aria-pressed={search === ALL} onClick={() => setSearch(ALL)}>
             All searches <span className="mono">{inWindow.length}</span>
