@@ -1982,14 +1982,18 @@ export class Db {
     if (addedBy !== "run" && addedBy !== "hand") {
       throw new Error(`deleteLeadAndScreen: addedBy must be 'run' or 'hand', got ${JSON.stringify(addedBy)}`);
     }
-    // A hand removal carries no rules kind, and this is where that is true
-    // rather than merely the case. Such a row would be counted - the per-search
-    // count groups on `kind IN SCREENED_BY_RULES` with no `added_by` condition -
-    // and not shown, because the page drops every hand row before grouping. A
-    // number above a list, counting a row the list omits, is how someone stops
-    // trusting both. The two sets are disjoint because of this line; the lists
-    // themselves don't say so, and a caller is one argument away from crossing
-    // them.
+    // A screened row says either that the person removed it themselves
+    // (`added_by = 'hand'`) or which of their rules rejected it (`kind`). Never
+    // both: those are two different answers to "who decided this".
+    //
+    // A row claiming both would break the screened tab, and nothing there
+    // would point back here. The per-search count selects on `kind` alone, so
+    // it would count the row; the page hides every hand row before it lists
+    // anything, so the list would leave it out. The person sees a count larger
+    // than the rows underneath it.
+    //
+    // Nothing else stops this. `kind` is an argument like any other, and the
+    // caller on the next path along (routes/delisting.js) passes a real one.
     if (addedBy === "hand" && SCREENED_BY_RULES.includes(kind)) {
       throw new Error(`deleteLeadAndScreen: a hand removal cannot carry the rules kind ${JSON.stringify(kind)}`);
     }
