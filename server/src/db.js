@@ -1982,6 +1982,17 @@ export class Db {
     if (addedBy !== "run" && addedBy !== "hand") {
       throw new Error(`deleteLeadAndScreen: addedBy must be 'run' or 'hand', got ${JSON.stringify(addedBy)}`);
     }
+    // A hand removal carries no rules kind, and this is where that is true
+    // rather than merely the case. Such a row would be counted - the per-search
+    // count groups on `kind IN SCREENED_BY_RULES` with no `added_by` condition -
+    // and not shown, because the page drops every hand row before grouping. A
+    // number above a list, counting a row the list omits, is how someone stops
+    // trusting both. The two sets are disjoint because of this line; the lists
+    // themselves don't say so, and a caller is one argument away from crossing
+    // them.
+    if (addedBy === "hand" && SCREENED_BY_RULES.includes(kind)) {
+      throw new Error(`deleteLeadAndScreen: a hand removal cannot carry the rules kind ${JSON.stringify(kind)}`);
+    }
     const results = await this.d1.batch([
       this.d1
         .prepare(

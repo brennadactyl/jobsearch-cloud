@@ -50,6 +50,11 @@ export const SCREENED_WINDOW_DAYS = 90;
  * last of those is the shown set. `other` is not here - a run's `other` is in
  * neither set and never leaves the server at all.
  *
+ * That holds because the three are disjoint, and they are disjoint because a
+ * hand removal stores no rules kind - which db.js's deleteLeadAndScreen
+ * refuses rather than the lists forbidding it. A hand row carrying one would
+ * be counted and not shown, since the count groups on kind alone.
+ *
  * Stated here because a row arriving is not a row shown, and the next person
  * to read this file will assume it is. This route sends what the person owns;
  * which of it belongs on a page is a different question, answered in

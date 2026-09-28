@@ -23,6 +23,14 @@ const A = process.argv[2] || "http://127.0.0.1:8787";
 const ADMIN = process.argv[3] || "local-admin-token-for-testing";
 let pass = 0, fail = 0;
 
+// Spelled out rather than imported from src/validate.js: this file checks the
+// API from outside, and a check that imports the list it is checking against
+// agrees with the server by construction. If the two ever differ, that is the
+// finding.
+const SCREENED_BY_RULES_CHECK = [
+  "out-of-scope", "wrong-level", "wrong-role", "contract", "pay-below-floor",
+];
+
 // `raw`, `type`, `ifMatch` and `bytes` are for /api/documents, the one resource
 // whose body is not JSON in either direction (see src/routes/documents.js).
 const req = async (method, path, { token, body, admin, raw, type, ifMatch, bytes } = {}) => {
@@ -4082,6 +4090,20 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("a lead someone clears off their board carries no kind - it isn't a search's rejection",
     skHand.json?.added === 1 && (await skRow(SK, "not-for-me"))?.kind === "" &&
     (await skRow(SK, "not-for-me"))?.added_by === "hand", JSON.stringify(await skRow(SK, "not-for-me")));
+  // Why the kind has to stay empty, rather than a tidiness someone could
+  // undo: the per-search count groups on kind alone, with no `added_by`
+  // condition, while the page drops every hand row before grouping. A hand row
+  // carrying a rules kind would be counted and not shown - a number above a
+  // list, counting a row the list omits. db.js's deleteLeadAndScreen refuses
+  // that combination outright; this checks the property it protects, which is
+  // the part a caller could break from outside.
+  const handCounts = (await req("GET", "/api/data", { token: SK.token })).json.screened_counts || {};
+  const handRow = await skRow(SK, "not-for-me");
+  check("and is counted by nothing, so the number above the list can't outrun it",
+    (handCounts.SWE || 0) === (await req("GET", "/api/data?screened=all", { token: SK.token })).json.screened
+      .filter((s) => s.search === "SWE" && SCREENED_BY_RULES_CHECK.includes(s.kind)).length &&
+    !SCREENED_BY_RULES_CHECK.includes(handRow?.kind),
+    JSON.stringify({ counted: handCounts.SWE || 0, handKind: handRow?.kind }));
 }
 
 {
