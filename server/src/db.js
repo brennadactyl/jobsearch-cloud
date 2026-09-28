@@ -1982,6 +1982,21 @@ export class Db {
     if (addedBy !== "run" && addedBy !== "hand") {
       throw new Error(`deleteLeadAndScreen: addedBy must be 'run' or 'hand', got ${JSON.stringify(addedBy)}`);
     }
+    // A screened row says either that the person removed it themselves
+    // (`added_by = 'hand'`) or which of their rules rejected it (`kind`). Never
+    // both: those are two different answers to "who decided this".
+    //
+    // A row claiming both would break the screened tab, and nothing there
+    // would point back here. The per-search count selects on `kind` alone, so
+    // it would count the row; the page hides every hand row before it lists
+    // anything, so the list would leave it out. The person sees a count larger
+    // than the rows underneath it.
+    //
+    // Nothing else stops this. `kind` is an argument like any other, and the
+    // caller on the next path along (routes/delisting.js) passes a real one.
+    if (addedBy === "hand" && SCREENED_BY_RULES.includes(kind)) {
+      throw new Error(`deleteLeadAndScreen: a hand removal cannot carry the rules kind ${JSON.stringify(kind)}`);
+    }
     const results = await this.d1.batch([
       this.d1
         .prepare(

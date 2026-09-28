@@ -50,6 +50,10 @@ export const SCREENED_WINDOW_DAYS = 90;
  * last of those is the shown set. `other` is not here - a run's `other` is in
  * neither set and never leaves the server at all.
  *
+ * The three stay separate because a row someone removed by hand stores no
+ * kind. If one ever carried a rules kind it would be counted here and hidden
+ * by the page, so db.js's deleteLeadAndScreen refuses that combination.
+ *
  * Stated here because a row arriving is not a row shown, and the next person
  * to read this file will assume it is. This route sends what the person owns;
  * which of it belongs on a page is a different question, answered in
