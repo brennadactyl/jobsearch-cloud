@@ -275,32 +275,72 @@ on the machine rather than on the data: `setup-scheduler.ps1` registers Windows
 tasks there, `backup-tracker.ps1` writes files to its disk, `import-documents.ps1`
 reads a folder on it, and no browser reaches any of that.
 
-## Order of work
+## The work, a tab at a time
 
-1. **The flag and the credential** (Backend Buddy): `users.operator`, its
-   migration, `ADMIN_ROUTES` accepting an operator session while its handlers
-   keep `user: null` and `db: null`, and `GET /api/me` saying whether the caller
-   is one - it returns `{id, name}` today, so that field is real work.
-2. **Invites** (Client Comrade): the whole tab, and the first thing worth
-   having. Every route it needs exists, so step 1 is all that stands between
-   here and minting an invite from a phone.
-3. **The read routes** (Backend Buddy): Overview's counts, last night across
-   accounts, accounts with their setup state, and company-list coverage. One
-   route per panel rather than one that answers everything, reading through a
-   cross-account class of its own. Overview's numbers are computed server-side,
-   not summed by the page from rows it happens to hold - the page summing them
-   is how a count starts meaning the window rather than the question.
-4. **Those panels** (Client Comrade), Overview first, since it is where the area
-   opens and the others are what its numbers link to. Overview is built with its
-   charts: they cost little and the seven-night column is the one picture that
-   says something the rows can't. The chartless version is the fallback if that
-   turns out to be wrong, not a second design to maintain.
-5. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
-   a setup, which needs a way to put an intake back to `pending`; pause or
-   resume.
+Six chunks. Each one ends with something an operator can use, and each is
+reviewed, merged and deployed on its own: the area grows a tab at a time rather
+than arriving whole. A chunk's server half ships before its page half, so the
+page never sends what the server would refuse.
+
+1. **Getting in, and invites.** The operator flag and the credential change,
+   then the header entry and the whole Invites tab. Every route invites needs
+   already exists, so this chunk is the distance between here and minting an
+   invite from a phone. Detailed below.
+2. **Overview.** Its counts as one route, then the tab, charts included: the
+   seven-night column is the picture that says what the rows can't, and the
+   chartless board is the fallback rather than a second design. The navigation
+   row appears here, because this is where a second tab first exists.
+3. **Last night.** The four kinds of nothing, the comparison against the
+   previous night that makes an absence visible, and an operator-scoped way to
+   open a run's log - the logs are already in R2 and already served to their own
+   account.
+4. **Accounts, and a person's page.** The list, then everything about one
+   person in one place, with the actions that name them: pause, resume, and
+   retrying a setup, which needs a way to put an intake back to `pending`.
+5. **Companies.** The shared list, what is walled or dead, each search's cursor,
+   and adding a company with the facts that make it fetchable.
 6. **What a run will read**, on a person's page, and only after the person whose
    search it is can see their own. Built the other way round, the operator's copy
    becomes the tool, and the page that would have let someone check their own
    composed step never gets built - which is the failure that prompted this view
    in the first place.
+
+## Chunk one, in detail
+
+**Backend Buddy, first and alone** - nothing else can start until this is live:
+
+- `users.operator`, its migration, and `POST /api/users` able to set it, since
+  that is how the first operator exists on a database that has none.
+- The credential check: `ADMIN_ROUTES` accepts an operator's session as well as
+  `ADMIN_TOKEN`. Only the check changes - handlers keep `user: null` and
+  `db: null`, and the operator's identity arrives in a field of its own, for
+  attribution, never for scoping.
+- Operator sessions minted distinguishable from ordinary ones.
+- `GET /api/me` carrying whether the caller is an operator. It returns
+  `{id, name}` today, so this is a real addition.
+- `docs/schema.md` in the same change, since the column makes it wrong.
+- `verify-local` proving: an operator session reaches an admin route; an
+  ordinary session does not; an admin handler still has no `Db`; and the flag
+  cannot be set by a session, only by the token.
+
+**Client Comrade, once that is deployed:**
+
+- The Admin entry in the header, for an operator only, and the area as its own
+  route and its own chunk - the ordinary page's payload doesn't change.
+- An ordinary account sees nothing there: no disabled control, no explanation.
+- The Invites tab: mint with a note and a day count, the minted link on its own
+  screen, the list with revoke, cards at phone width and a table at desktop.
+- No navigation row yet. Invites is the only tab until chunk two.
+
+**Fullstack Friend reviews both**, since each is its area's owner writing in
+their own area. It also holds the operator-side question nobody else does: what
+this does to `new-invite.ps1`, which this chunk supersedes.
+
+**Nobody else has work in this chunk.** Prompt Bro's areas aren't touched;
+Documentation Dude's files aren't either, beyond the schema doc, which is
+Backend Buddy's to update in the same commit.
+
+**Done means:** Brenna signs in, sees Admin in the header, mints an invite from
+her phone and copies the link; an ordinary account signs in and sees no trace of
+it. Not "the routes work".
 
