@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0028_run_screened_by_rules.sql` applied in order. This is the
+`0001_schema.sql` through `0029_application_fit.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -195,6 +195,7 @@ erDiagram
         TEXT autofill
         TEXT autofill_note
         TEXT area
+        TEXT fit
     }
     meta {
         TEXT user_id PK, FK

@@ -278,8 +278,15 @@ console.log("\n== the overnight application fill ==");
 // trustworthy is that it never overwrites what the person typed, that it can't
 // reach another person's rows, and that every row it is handed leaves the
 // queue - a row that doesn't is one it re-reads every night forever.
+//
+// Every link below carries a per-run stamp, because pasting a link this person
+// already has now returns that row instead of making another (/api/update).
+// Fixed URLs would hand the second run the first run's filled rows and check
+// nothing. Base 36, so no run of 5+ digits turns the stamp into a posting id
+// and collapses these onto one canonical URL (src/url.js).
+const fillStamp = Date.now().toString(36);
 const urlApp = (await req("POST", "/api/update", { token: A_TOK, body: {
-  type: "application", company: "", title: "", location: "", link: "https://example.com/jobs/9911",
+  type: "application", company: "", title: "", location: "", link: `https://example.com/jobs/unread-${fillStamp}`,
 } })).json.application;
 check("a new application carries no fill state of its own",
   urlApp.autofill === "" && urlApp.autofill_note === "",
@@ -314,6 +321,20 @@ check("it wrote the fields that were empty",
   JSON.stringify(filled));
 check("it did not overwrite the one the person had typed",
   filled.title === "Staff Engineer", filled.title);
+// A fill reads the posting, which states what the job is and never what it
+// would mean for this reader. `fit` is a search's judgement of a person, so
+// the fill cannot write one even when a run sends it (migrations/0029). Sent
+// on a row that has not been read, beside a field that does land - otherwise
+// the read flag refuses the whole call and the check proves nothing.
+const fitApp = (await req("POST", "/api/update", { token: A_TOK, body: {
+  type: "application", link: `https://example.com/jobs/fit-${fillStamp}` } })).json.application;
+await req("POST", "/api/applications/autofill", { token: A_TOK, body: {
+  filled: [{ id: fitApp.id, company: "Vandelay", fit: "a great match for her background" }] } });
+const fitRow = (await req("GET", "/api/data", { token: A_TOK })).json.applications
+  .find((x) => x.id === fitApp.id);
+check("and the fill cannot write a fit, however it is asked",
+  fitRow.company === "Vandelay" && fitRow.fit === "",
+  JSON.stringify({ company: fitRow.company, fit: fitRow.fit }));
 check("the row is flagged read, and gone from the queue",
   filled.autofill === "filled" &&
   !(await req("GET", "/api/applications/pending", { token: A_TOK }))
@@ -324,7 +345,7 @@ check("reading it a second time changes nothing",
     filled: [{ id: urlApp.id, company: "Wrong" }] } })).json.unmatched.length === 1);
 
 const deadApp = (await req("POST", "/api/update", { token: A_TOK, body: {
-  type: "application", link: "https://example.com/jobs/gone" } })).json.application;
+  type: "application", link: `https://example.com/jobs/gone-${fillStamp}` } })).json.application;
 const failRes = await req("POST", "/api/applications/autofill", { token: A_TOK, body: {
   failed: [{ id: deadApp.id, reason: "posting has been taken down" }] } });
 check("a posting that couldn't be read is recorded with its reason", failRes.json.failed === 1);
@@ -344,7 +365,7 @@ check("and that row is done - not retried on later nights",
 // failure - the fields are real - and the note is what tells the person why
 // the row is still short.
 const partApp = (await req("POST", "/api/update", { token: A_TOK, body: {
-  type: "application", link: "https://example.com/jobs/jsonly" } })).json.application;
+  type: "application", link: `https://example.com/jobs/jsonly-${fillStamp}` } })).json.application;
 await req("POST", "/api/applications/autofill", { token: A_TOK, body: { filled: [{
   id: partApp.id, company: "Whatnot", title: "Engineering Manager",
   note: "the description needs JavaScript, so only the page metadata was readable" }] } });
@@ -359,7 +380,7 @@ check("a partial read keeps its fields, its note, and counts as read",
 // queue. Refusing it would be tidier and would put that row back in every queue
 // from then on, which is the one failure the flag exists to prevent.
 const emptyApp = (await req("POST", "/api/update", { token: A_TOK, body: {
-  type: "application", link: "https://example.com/jobs/blank" } })).json.application;
+  type: "application", link: `https://example.com/jobs/blank-${fillStamp}` } })).json.application;
 await req("POST", "/api/applications/autofill", { token: A_TOK, body: {
   filled: [{ id: emptyApp.id, company: "   " }] } });
 check("a read that found nothing still marks the row read",
@@ -398,6 +419,119 @@ check("the fill prompt is served as its own reserved key, not as a track",
 check("the fill run reads each account's ranked places and files an area from them, copied as written",
   fillPrompt.text.includes("settings.priority_locations") && fillPrompt.text.includes('"area":"..."') &&
   fillPrompt.text.includes("copied as written") && fillPrompt.text.includes("area_cleared"));
+
+console.log("\n== pasting a link for a posting already here ==");
+// Someone logging an application usually has the posting already: it is on
+// their board, or a run screened it out and they disagree. What is being
+// checked is that the posting ends up in one place rather than two, and that
+// what the database already knew about it comes along.
+const appsWithLink = async (token, link) =>
+  (await req("GET", "/api/data", { token })).json.applications
+    .filter((x) => String(x.link || "").includes(link));
+
+// Stamped per run for the reason the fill block gives: these links are the
+// thing under test, so a second run must arrive with none of them already here.
+const pasteStamp = Date.now().toString(36);
+const leadUrl = `https://example.com/jobs/already-a-lead-${pasteStamp}`;
+await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
+  { search: "SWE", company: "Hooli", title: "Staff Backend", location: "Remote (U.S.)", url: leadUrl,
+    fit: "close to the platform work she has been doing" }] } });
+const theLead = (await req("GET", "/api/data", { token: A_TOK })).json.leads.find((l) => l.url === leadUrl);
+// Pasted with a tracking param the stored row doesn't carry: an exact string
+// compare misses this, which is the whole reason the lookup is canonical.
+const fromLead = await req("POST", "/api/update", { token: A_TOK, body: {
+  type: "application", company: "", title: "", location: "", link: `${leadUrl}?utm_source=email` } });
+check("a link already on the board moves the lead instead of adding a second row",
+  fromLead.json.moved === "lead" && fromLead.json.existing === false,
+  JSON.stringify({ moved: fromLead.json.moved, existing: fromLead.json.existing }));
+check("the application it made is linked to that lead and carries what the lead knew",
+  fromLead.json.application.leadId === String(theLead.id) &&
+  fromLead.json.application.company === "Hooli" &&
+  fromLead.json.application.title === "Staff Backend" &&
+  fromLead.json.application.location === "Remote (U.S.)",
+  JSON.stringify(fromLead.json.application).slice(0, 160));
+// The one field a run writes about the person rather than the posting. The
+// application outlives the posting, and by the time someone is preparing for a
+// screen the lead may be gone (migrations/0029).
+check("and the sentence the search wrote about why it suited them",
+  fromLead.json.application.fit === "close to the platform work she has been doing",
+  fromLead.json.application.fit);
+const movedLead = (await req("GET", "/api/data", { token: A_TOK })).json.leads.find((l) => l.id === theLead.id);
+check("and the lead is Applied, so it leaves the leads tabs rather than sitting beside it",
+  movedLead.status === "Applied", movedLead.status);
+check("exactly one application exists for that posting",
+  (await appsWithLink(A_TOK, `already-a-lead-${pasteStamp}`)).length === 1);
+// The second paste is the common one: the page was open in another tab, or the
+// person forgot. It must not make a second row, and it must not look like a
+// fresh add to whoever is told about it.
+const second = await req("POST", "/api/update", { token: A_TOK, body: {
+  type: "application", link: leadUrl } });
+check("pasting it again returns the row that exists and writes nothing",
+  second.json.existing === true && second.json.moved === "" &&
+  second.json.application.id === fromLead.json.application.id &&
+  (await appsWithLink(A_TOK, `already-a-lead-${pasteStamp}`)).length === 1,
+  JSON.stringify({ moved: second.json.moved, existing: second.json.existing }));
+
+// The other half: a posting this person's own search turned away. Applying to
+// it is them overruling their rules, so the screened row becomes the
+// application rather than sitting alongside it.
+const rejectedUrl = `https://example.com/jobs/rules-said-no-${pasteStamp}`;
+await req("POST", "/api/screened", { token: A_TOK, body: { search: "SWE", screened: [
+  { search: "SWE", url: rejectedUrl, company: "Initech", title: "Principal Backend",
+    location: "Austin, TX", reason: "below the pay floor", kind: "pay-below-floor" }] } });
+const fromScreened = await req("POST", "/api/update", { token: A_TOK, body: {
+  type: "application", company: "", title: "", location: "", link: rejectedUrl } });
+check("a link their own search screened out becomes an application",
+  fromScreened.json.moved === "screened" && fromScreened.json.existing === false,
+  JSON.stringify({ moved: fromScreened.json.moved, existing: fromScreened.json.existing }));
+check("it carries what the run recorded, so the row isn't blank waiting on a fill",
+  fromScreened.json.application.company === "Initech" &&
+  fromScreened.json.application.title === "Principal Backend" &&
+  fromScreened.json.application.location === "Austin, TX",
+  JSON.stringify(fromScreened.json.application).slice(0, 160));
+// A screened row has no fit - the run rejected the posting rather than
+// judging it a match - so this one is blank, and blank is the truth.
+check("and no fit, because a rejected posting never got one",
+  fromScreened.json.application.fit === "", fromScreened.json.application.fit);
+check("and the screened row is gone - one posting, one place",
+  !(await req("GET", "/api/data?screened=all", { token: A_TOK })).json.screened
+    .some((s) => s.url === rejectedUrl));
+// A screened row is what stopped tomorrow's run re-finding the posting.
+// Deleting it is only safe because an application now does that job.
+const reReport = await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
+  { search: "SWE", company: "Initech", title: "Principal Backend", url: rejectedUrl }] } });
+check("a run re-reporting a posting that is now an application adds nothing",
+  reReport.json.added === 0 && reReport.json.duplicates === 1,
+  JSON.stringify(reReport.json));
+check("the same holds for a posting applied to from the board",
+  (await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
+    { search: "SWE", company: "Hooli", title: "Staff Backend", url: leadUrl }] } })).json.added === 0);
+
+// The lookup is one person's. B pasting a link A has must get B's own new row:
+// anything else would tell B that A has it.
+const bPaste = await req("POST", "/api/update", { token: B_TOK, body: {
+  type: "application", link: leadUrl } });
+check("B pasting a link A already has gets B's own new row, not A's",
+  bPaste.json.moved === "" && bPaste.json.existing === false &&
+  bPaste.json.application.leadId === "" &&
+  (await appsWithLink(B_TOK, `already-a-lead-${pasteStamp}`)).length === 1,
+  JSON.stringify({ moved: bPaste.json.moved, existing: bPaste.json.existing }));
+check("and A's rows are untouched by it",
+  (await appsWithLink(A_TOK, `already-a-lead-${pasteStamp}`)).length === 1 &&
+  (await req("GET", "/api/data", { token: A_TOK })).json.leads
+    .find((l) => l.id === theLead.id).status === "Applied");
+
+// A link nobody has, and no link at all, both still insert. The second is
+// ordinary: not every job applied to came from a posting anyone still holds.
+const fresh = await req("POST", "/api/update", { token: A_TOK, body: {
+  type: "application", link: `https://example.com/jobs/nobody-has-this-${pasteStamp}` } });
+check("a link matching nothing inserts as before",
+  fresh.json.moved === "" && fresh.json.existing === false && !!fresh.json.application.id);
+const noLink = await req("POST", "/api/update", { token: A_TOK, body: {
+  type: "application", company: "Told me over coffee" } });
+check("an application with no link is added, never matched against a blank one",
+  noLink.json.moved === "" && noLink.json.existing === false &&
+  noLink.json.application.company === "Told me over coffee");
 
 console.log("\n== dedup endpoint (what every scheduled run fetches) ==");
 const aDedup = await req("GET", "/api/dedup/SWE", { token: A_TOK });

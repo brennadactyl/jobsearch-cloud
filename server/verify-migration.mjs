@@ -627,5 +627,36 @@ VALUES ('u1', 'SWE', '2026-09-01T09:00:00.000Z', '2026-09-01', 'ok', 3, 26, 2, 4
   db.close();
 }
 
+console.log("\n== 0029 leaves every application without a fit, and every lead's intact ==");
+{
+  // Nothing is backfilled from the lead an application came from. `leadId`
+  // still points at one, so copying looks easy - but the lead is deleted when
+  // its posting goes away, so the rows this would reach are exactly the ones
+  // whose lead is still there, and a row would gain a sentence its neighbour
+  // can't. '' means no search judged this, which is true of every row here.
+  const STOP29 = MIGRATIONS.find((f) => f.startsWith("0029_"));
+  const db = migratedThrough(STOP29, `
+INSERT INTO users (id, name) VALUES ('u1', 'One');
+INSERT INTO leads (user_id, search, found, company, title, location, url, verified, fit, status, notes)
+VALUES ('u1', 'SWE', '2026-09-01', 'Acme', 'SDE', 'Remote', 'https://example.com/a', '2026-09-01',
+        'the platform work they describe is what she has been doing', 'Applied', '');
+INSERT INTO applications (user_id, leadId, company, title, dateApplied, status, notes)
+VALUES ('u1', '1', 'Acme', 'SDE', '2026-09-02', 'Applied', 'referred by a friend');
+INSERT INTO applications (user_id, leadId, company, title, dateApplied, status, notes)
+VALUES ('u1', '', 'Initech', 'Staff', '2026-09-03', 'Applied', '');
+`);
+  const apps = db.prepare("SELECT leadId, company, notes, fit FROM applications WHERE user_id = 'u1' ORDER BY id").all();
+  check("every existing application starts with no fit, with no NULLs to read around",
+    apps.length === 2 && apps.every((a) => a.fit === ""));
+  check("one made from a lead is not backfilled from it",
+    apps[0].leadId === "1" && apps[0].fit === "");
+  check("and every application keeps what it already had",
+    apps[0].company === "Acme" && apps[0].notes === "referred by a friend" && apps[1].company === "Initech");
+  check("the lead's own sentence is untouched",
+    db.prepare("SELECT fit FROM leads WHERE user_id = 'u1'").get().fit
+      === "the platform work they describe is what she has been doing");
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
