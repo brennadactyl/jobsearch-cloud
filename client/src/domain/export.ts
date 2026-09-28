@@ -51,6 +51,10 @@ export function applicationColumns(settings: Settings): Column<Application>[] {
     { header: LABELS.locationTier, value: (a) => tier(a, settings) },
     field("status", LABELS.status),
     ...STAGE_HISTORY_FIELDS.map(([name, label]) => field<Application>(name, label)),
+    // Where a lead's export carries it, so the two read the same way side by
+    // side. Empty for every application no search is behind, which is most of
+    // them - the column is worth its width for the ones preparing for a screen.
+    field("fit", LABELS.fit),
     ...APP_ROLE_FIELDS.map(([name, label]) => field<Application>(name, label)),
     field("notes", LABELS.notes),
   ];
