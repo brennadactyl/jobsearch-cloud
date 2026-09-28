@@ -183,7 +183,11 @@ function Format-OneLine($text) {
     return $one
 }
 
-function Invoke-Tracker($method, $path, $bodyObj) {
+# `-Optional` is for a read whose answer only improves what is sent: it returns
+# $null instead of ending the command, so a call the run's work doesn't depend on
+# can't take the work down with it. Every other call stays fatal, because a
+# helper that carried on past a failed write would report a success that isn't.
+function Invoke-Tracker($method, $path, $bodyObj, [switch]$Optional) {
     $uri = "$Base$path"
     $headers = @{ Authorization = "Bearer $Token" }
     # Encoded once, outside the retry loop, so every attempt sends identical
@@ -222,6 +226,10 @@ function Invoke-Tracker($method, $path, $bodyObj) {
                 # twenty seconds and a single failure are different problems.
                 $tries = ""
                 if ($attempt -gt 1) { $tries = " after $attempt attempts" }
+                if ($Optional) {
+                    Write-TrackerLine "$method $path failed ($status)$tries - carrying on without it: $(Format-OneLine $detail)"
+                    return $null
+                }
                 Fail "$method $path failed ($status)$tries`: $detail"
             }
             $wait = $RetryBackoff[[Math]::Min($attempt - 1, $RetryBackoff.Count - 1)]
@@ -422,12 +430,27 @@ function Invoke-KnownCommand {
 # The places this person ranked first, as entries an `area` has to equal:
 # `priority_locations` split on commas, each trimmed, empties dropped. The
 # leads route applies the same rule (docs/location-settings-plan.md, "Each lead
-# carries its area"); change both together. Read once, and only for a batch that
-# names an area somewhere.
+# carries its area"); change both together. Read once per run of this command.
 $script:RankedEntries = $null
+$script:RankedUnreadable = $false
 function Get-RankedEntries {
+    # `-Optional`: an unreadable config means "fill nothing", not the end of the
+    # command. The empty answer is deliberately not cached, so a later read that
+    # the work does depend on tries again rather than reading an empty list as
+    # "this person ranked nowhere" - which would clear every area a run sent.
+    param([switch]$Optional)
+    if ($Optional -and $script:RankedUnreadable) { return , @() }
     if ($null -eq $script:RankedEntries) {
-        $config = Invoke-Tracker "GET" "/api/config" $null
+        $config = Invoke-Tracker "GET" "/api/config" $null -Optional:$Optional
+        if ($null -eq $config) {
+            # Remembered as unreadable rather than as empty: the next optional
+            # caller asks nothing, so one failed read costs one set of retries
+            # and not one per row, while a caller that needs the list still
+            # tries - an empty list would read as "ranked nowhere" and clear
+            # every area a run sent.
+            $script:RankedUnreadable = $true
+            return , @()
+        }
         $ranked = $config.settings.priority_locations
         # Wrapped in @(): an `if` that yields an empty array assigns $null,
         # which would read the config again for every row.
@@ -473,10 +496,6 @@ $script:AreaCleared = 0
 $script:AreaFilled = 0
 function Invoke-LeadsCommand {
     $rows = Read-Rows $PositionalArg "leads"
-    # Whether this batch mentions an area at all, which is what decides whether
-    # the ranked list is read: a batch naming none is sent without it, so the
-    # write doesn't depend on a fetch it only wanted to fill a field in.
-    $namesAnArea = @($rows | Where-Object { Get-TrimmedField $_ "area" }).Count -gt 0
     $send = @()
     foreach ($inputRow in $rows) {
         $url = Get-TrimmedField $inputRow "url"
@@ -503,11 +522,11 @@ function Invoke-LeadsCommand {
         # "Remote (US)" and left the area out has already answered the question:
         # the same equality below, against the location. Only an exact entry
         # counts - several locations joined, or a city inside a wider entry, is
-        # a judgement, and step 9 is where that is made. Skipped entirely for a
-        # batch naming no area, so a leads write never dies on a config read it
-        # wanted only for this.
-        if (-not $area -and $namesAnArea -and $row.ContainsKey("location")) {
-            $entries = Get-RankedEntries
+        # a judgement, and step 9 is where that is made. The read is optional:
+        # a config this call can't fetch fills nothing and the leads still go,
+        # since a night's postings must not be lost to a field being tidied.
+        if (-not $area -and $row.ContainsKey("location")) {
+            $entries = Get-RankedEntries -Optional
             $area = @($entries | Where-Object { $_ -ieq $row["location"] }) | Select-Object -First 1
             if ($area) { $script:AreaFilled++ }
         }

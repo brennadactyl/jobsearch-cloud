@@ -7,7 +7,8 @@
 // A URL looks like /<version>/<scenario>/api/...; the scenario picks a canned
 // failure or reply shape (retry: one 500 then success; e400; e503; unscoped;
 // mixed; noranked; drift: a kind the route coerced; tabs: the tab counts a
-// multi-tab search gets back) or the normal response.
+// multi-tab search gets back; cfgdown: only /api/config fails, so an optional
+// read of it can be told from a tracker that is down) or the normal response.
 import http from "node:http"; import fs from "node:fs";
 const log = process.argv[3]; const hits = {};
 const J = (res, code, obj) => { res.writeHead(code, {"content-type":"application/json; charset=utf-8"}); res.end(typeof obj==="string"?obj:JSON.stringify(obj)); };
@@ -19,6 +20,7 @@ http.createServer((req, res) => {
     if (scen === "retry" && hits[key] === 1) return J(res, 500, "error code: 1101 <html>\n  <body>boom</body></html>");
     if (scen === "e400") return J(res, 400, {error:"bad request"});
     if (scen === "e503") return J(res, 503, {error:"no binding"});
+    if (path === "/api/config" && scen === "cfgdown") return J(res, 500, {error:"no config today"});
     if (path === "/api/config") return J(res, 200, {tracks:[{key:"SWE"},{key:"swe-ai",fed_by:"SWE"},{key:"swe-tech",fed_by:"SWE"},{key:"CPM"},null],settings:{priority_locations:scen==="noranked"?"":" Seattle area, Portland OR,, Remote US "}});
     if (path.startsWith("/api/dedup/")) {
       const k = path.split("/")[3].split("?")[0];

@@ -27,6 +27,8 @@ leads-area|ok|leads leads-area.json
 leads-area-noranked|noranked|leads leads-area.json
 leads-area-fill|ok|leads leads-area-fill.json
 leads-area-fill-noranked|noranked|leads leads-area-fill.json
+leads-area-fill-cfgdown|cfgdown|leads leads-area-fill.json
+leads-area-cfgdown|cfgdown|leads leads-area.json
 screened|ok|screened screened.json
 screened-empty|ok|screened empty.json
 screened-kinds|ok|screened screened-kinds.json
