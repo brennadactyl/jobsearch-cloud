@@ -503,9 +503,18 @@ const reReport = await req("POST", "/api/leads", { token: A_TOK, body: { leads: 
 check("a run re-reporting a posting that is now an application adds nothing",
   reReport.json.added === 0 && reReport.json.duplicates === 1,
   JSON.stringify(reReport.json));
-check("the same holds for a posting applied to from the board",
-  (await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
-    { search: "SWE", company: "Hooli", title: "Staff Backend", url: leadUrl }] } })).json.added === 0);
+// The commonest case, and the one no other row covers: a job someone found
+// themselves, typed in, and never had as a lead. Only the application says
+// this person has it. A moved lead would prove nothing here - its own row
+// stays on, as Applied, and the leads dedup catches the re-report without
+// any of this.
+const ownFind = `https://example.com/jobs/found-it-herself-${pasteStamp}`;
+await req("POST", "/api/update", { token: A_TOK, body: { type: "application", link: ownFind } });
+const reFind = await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
+  { search: "SWE", company: "Vandelay", title: "Staff Backend", url: ownFind }] } });
+check("a posting someone applied to by hand is not offered back as a new lead",
+  reFind.json.added === 0 && reFind.json.duplicates === 1,
+  JSON.stringify(reFind.json));
 
 // The lookup is one person's. B pasting a link A has must get B's own new row:
 // anything else would tell B that A has it.
