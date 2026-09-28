@@ -436,38 +436,31 @@ dropped.
 This makes a deletion recoverable, not impossible: wrangler's stored Cloudflare
 credential can still delete the database.
 
-## Things worth not relearning
+## When a search looks wrong
 
-**Verification is the whole game.** Every candidate URL must be fetched and
-confirmed to render a real job description - title plus
-responsibilities/qualifications. A search-engine snippet is a lead, not a
-finding. Watch especially for URLs that resolve to a company's *listing
-index* rather than the individual posting - the title text matches, so it
-looks right, and it isn't.
+A search that stopped running looks exactly like one that ran and found
+nothing, so each track's tab says which it was. Beside its name:
 
-**Per-company fetch notes in a track's baseline doc go stale.** Re-verify them
-rather than trusting them.
+| It says | What happened |
+|---|---|
+| Ran, with counts | It ran. Zero new is a real answer, not a failure. |
+| Ran, amber | Nothing has reported in within `stale_run_hours` (36 by default; raise it through `/api/config` if a search runs less often than daily). |
+| Ran, red | The last run reported an error, and says what it was. |
+| Paused | It won't run until it's resumed, and keeps everything it found. |
+| No run recorded yet | It has never run. A new search reads this until its first night. |
 
-**An amber dot on a track's tab means no run has reported in within
-`stale_run_hours`** (default 36; raise it via `/api/config` if searches run less
-often than daily). **A red dot means the last run reported an error.** Either
-way, check the scheduled task and `private\<user-id>\logs\<track>.log` - a
-search that stopped running looks like one that found nothing.
-
-**Reading a run's log:** every warning and error carries a tag in brackets
+Amber or red means read that search's log: `private\<user-id>\logs\<track>.log`.
+Every warning and error there carries a tag in brackets
 (`WARNING [run-note-failed]`), so `grep -E "ERROR|WARNING"` gives the night in
-a few lines, and searching the tag finds the code that wrote it. The last
-`run record:` line says whether the run reported itself to the tracker at all,
-which is the difference between a quiet night and a broken one.
+a few lines and the tag finds the code that wrote it. The last `run record:`
+line says whether the run reported itself to the tracker at all, which is the
+difference between a quiet night and a broken one.
 
-**Logging an application takes a URL.** Paste it on the Applications tab. One
-nightly task per machine (`JobSearch-Applications`, 06:30) reads each posting
-once and fills in company, role, location, work setup and posted comp - only
-into empty fields, so what you type wins. A row it couldn't fully read says so
-and isn't retried. Its log is `private\logs\applications.log`. See
+Amber with a healthy log usually means the task didn't fire: check it with
+`Get-ScheduledTaskInfo JobSearch-<id8>-<track>`.
+
+**Logging an application takes a URL.** Paste it on the Applications tab, and
+the 06:30 fill reads the posting and fills in the rest - only into empty
+fields, so what you type wins. A row it couldn't read says so on the page and
+isn't retried. Its log is `private\logs\applications.log`; the details are in
 [server/README.md](server/README.md#applications-added-as-nothing-but-a-url).
-
-**A convention changed in one track's doc doesn't reach the others.** Each
-`docs/tracked_<key>_postings.md` is self-contained; follow the
-[change-search-prompt](.claude/skills/change-search-prompt/) skill to update
-every track's doc.
