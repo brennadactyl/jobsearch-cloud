@@ -423,7 +423,31 @@ export default function Setup({
             // The one place the page states that preferred places are always
             // searched: a text match against this answer can't tell whether
             // Seattle is "US only", so no note names a place as outside it.
-            hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
+            // The first place question anyone meets, so it is the one that has
+            // to show what an entry looks like. Asking for "every area to
+            // cover" without an example invites an answer about scope in some
+            // other sense - the employers to cover, say - which is stored as
+            // typed, like any answer, and read as a place by every run after.
+            //
+            // No example here may contain a comma. A comma is what ends an
+            // entry (PlaceChips), so "Seattle, WA" typed in as written becomes
+            // two places, and the second is a bare state nothing will match -
+            // an instruction that produces the answer this hint exists to
+            // prevent. The rule is said out loud as well, because it is the
+            // one thing about this field nobody would guess.
+            //
+            // The examples show the shapes an entry takes, not a rule it has to
+            // obey. A run is told to read each entry as the place it names, so
+            // a country or a region is as good an answer as a city, and the
+            // last clause says so: someone who wants all of Canada should not
+            // read this and think their answer is malformed. The forms in
+            // location-forms.json are a different thing - how a run writes a
+            // lead's location - and their "not a bare country" is about a
+            // posting, not about what anyone here wants.
+            //
+            // Word for word what the account panel shows for this question:
+            // the two are meant to match, so a reword changes both.
+            hint="Every area the search should cover — name all of it, not only the part you'd prefer. One place per entry, and a comma starts the next: a city as Seattle WA; a remote role as Remote (US); a whole country or region if that's what you want. The places you rank below are always searched too."
           >
             <PlaceChips
               id={`${id}-scope`}
@@ -438,7 +462,7 @@ export default function Setup({
           <Field
             label={<label htmlFor={`${id}-first`}>{PLACE_QUESTIONS.priority_locations}</label>}
             problem={problems.locations_first}
-            hint="In order — the first is the one you want most, and the arrows move a place up or down. Use a city (add the state if the name is common, like Portland OR), or Remote with a country, like Remote US. Anywhere you don't name still shows up, just lower."
+            hint="In order — the first is the one you want most. The arrows move a place up or down. Anywhere you don't name still shows up, just lower."
           >
             <PlaceChips
               id={`${id}-first`}
