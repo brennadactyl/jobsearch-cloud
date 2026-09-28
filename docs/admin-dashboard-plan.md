@@ -19,14 +19,25 @@ an Admin area; nobody else sees it, and nothing new is typed into a browser.
 - **`ADMIN_TOKEN` stays what it is:** the machine key for scripts, and the way
   the first operator flag is set on a database that has none. A person's session
   never carries it.
-- **Every admin route gains a second way in:** an operator's session token. The
-  route list keeps its shape - `ADMIN_ROUTES` means "operator only" rather than
-  "token only" - so a route is never reachable by an ordinary session because
-  someone forgot which list it was in.
-- **An operator sees other people's rows**, which no other part of this system
-  allows: `ctx.db` is scoped to one user everywhere else. The operator reads go
-  through their own routes rather than by widening that scope, so the guarantee
-  the rest of the server rests on is untouched.
+- **Only the credential check changes.** `ADMIN_ROUTES` still means "operator
+  only" rather than "token only", and its handlers still receive `user: null`
+  and `db: null`. That absence is what protects them: with no `Db` to reach for,
+  a handler must name its subject, and a handler handed one would act on the
+  operator's own account while looking correct in review. The operator's identity
+  arrives in a field of its own, for attribution, and is never used for scoping.
+- **The principle, stated once:** a session route's `ctx.db` only ever sees its
+  caller; an admin route names its subject and builds a `Db` for it. Reaching
+  another account through a named subject is the existing pattern - `POST
+  /api/purge` and `POST /api/companies/cleanup` already do it - so this design
+  follows the rule rather than bending it.
+- **Cross-account reads get a class of their own**, constructed without a user,
+  never passed to a session route, as `CompanyList` already is. What must not
+  exist is a `Db` with an absent user id: depending on the statement it matches
+  nothing or everything, and which one shows up first in production.
+- **A browser can now reach admin routes, which today it cannot at all.** The
+  weaker credential defines the route, so operator sessions are minted
+  distinguishable from ordinary ones, and the destructive actions - deleting an
+  account, purging a search - need more than a resumed session.
 
 ## What it shows
 
@@ -52,17 +63,26 @@ gets - the locations, the roles line, the fit rules, the pay floor - as
 composed step still wrong; today that is only visible to whoever reads the
 prompt.
 
+That route is a session route, composed from the caller's own config, so this
+panel needs an operator route of its own rather than a credential change - and
+it is the one that reaches furthest into someone else's data: their locations,
+their roles line, their fit rules, in a form that can't be screenshotted into a
+PR or a doc. It comes last of the panels for both reasons. The same composed
+step shown to the person whose search it is, in their own account panel, is the
+fix for the failure that prompted it; this panel is the operator's copy of that,
+not a substitute for it.
+
 ## What it does
 
 The actions that are scripts today, each on a named account and each confirmed:
 
 | Action | Today |
 |---|---|
-| Mint an invite, and revoke one | `POST /api/invites`, by hand |
-| Retry a failed setup | nothing; the retry window expires |
-| Pause or resume a search | the person's own panel, or config |
-| Reset a password | `scripts/set-password.ps1` |
-| Delete an account | `DELETE /api/users/<id>` |
+| Mint an invite, list and revoke one | `POST`/`GET`/`POST /api/invites`, by hand - the routes exist, so this panel is only the credential change |
+| Retry a failed setup | nothing: `POST /api/intake/complete` takes `done` or `failed`, so no route puts an intake back to `pending`, and `RETRY_NIGHTS` expires it |
+| Pause or resume a search | the person's own panel, or `POST /api/config` |
+| Send a password-reset link | not built. `POST /api/users` resets by choosing a password, which this page won't do, so this row needs a new mechanism rather than a new caller |
+| Delete an account | `DELETE /api/users/<id>`, which already requires the name in the body |
 
 - **An invite is minted and read back on the page**, with its link ready to
   copy. Minting is the action an operator takes most, and the one most likely to
@@ -84,12 +104,23 @@ fixed by telling them, or by a change to the form that asked badly.
 
 ## Order of work
 
-1. **The flag and the route change** (Backend Buddy): `users.operator`, its
-   migration, admin routes accepting an operator session, and `GET /api/me`
-   saying whether the caller is one.
-2. **The read routes** (Backend Buddy): last night across accounts, accounts
-   with their setup state, and company-list coverage. One route per panel
-   rather than one that answers everything.
-3. **The page** (Client Comrade): the Admin area, the four panels, and invites.
-4. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
-   a setup, pause or resume, delete an account.
+1. **The flag and the credential** (Backend Buddy): `users.operator`, its
+   migration, `ADMIN_ROUTES` accepting an operator session while its handlers
+   keep `user: null` and `db: null`, and `GET /api/me` saying whether the caller
+   is one - it returns `{id, name}` today, so that field is real work.
+2. **Invites** (Client Comrade): the whole panel, and the first thing worth
+   having. Every route it needs exists, so step 1 is all that stands between
+   here and minting an invite from a phone.
+3. **The read routes** (Backend Buddy): last night across accounts, accounts
+   with their setup state, and company-list coverage. One route per panel rather
+   than one that answers everything, reading through a cross-account class of
+   its own.
+4. **Those three panels** (Client Comrade).
+5. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
+   a setup, which needs a way to put an intake back to `pending`; pause or
+   resume; delete an account.
+6. **What a run will read** (Backend Buddy, then Client Comrade): its own
+   operator route, last because it reaches furthest into someone else's data.
+
+A password-reset link is its own change, whenever it is wanted: nothing in this
+plan depends on it, and the dashboard resets no passwords until it exists.
