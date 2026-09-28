@@ -68,8 +68,36 @@ an Admin area; nothing new is typed into a browser.
 
 ## What it shows
 
-Four panels, each answering a question an operator asks today by reading logs or
-a backup.
+Five panels. Overview is where the area opens; the other four answer a question
+an operator asks today by reading logs or a backup.
+
+**Overview.** Two questions, in this order: is the system running, and is it
+serving anyone. Everything on it is a number an operator can act on, and each
+one links to the rows behind it.
+
+*Running:* searches that ran last night against searches that should have;
+searches that reported nothing, which is the one fault among the four kinds of
+nothing; nights missing over the last seven; the oldest backup age; setups
+pending or failed.
+
+*Serving:* leads added last night and over seven days; searches that have found
+nothing in seven days, which is the number that says a person's rules or their
+scope need a conversation; applications and their stage changes over seven days,
+since a search producing leads nobody applies to is a different failure from one
+producing none.
+
+*Standing:* accounts, searches running and paused, invites outstanding, the
+shared company list's size and how much of it each search has covered.
+
+- **Every number names its window**, because "leads added" over a night and over
+  a week are different claims and a dashboard is where they get conflated.
+- **A number that can't be acted on doesn't go on it.** Totals that only grow -
+  leads ever found, nights ever run - measure the age of the deployment rather
+  than its health.
+- **It is built from what the runs recorded**, so it inherits the limit the Last
+  night panel states: a run that died recorded nothing, and no count here can
+  tell that from a search that never ran. The missing-nights number is what
+  surfaces that, and it is the one an operator should look at first.
 
 **Last night.** One row per search across every account: what it added and
 screened, and which of four states it is in. A search whose task has stopped
@@ -209,19 +237,18 @@ reads a folder on it, and no browser reaches any of that.
    having. Every route it needs exists, so step 1 is all that stands between
    here and minting an invite from a phone. No mockup: a note, a day count, a
    link to copy, a list with revoke.
-3. **A mockup of the three read panels** (Client Comrade), before they are
-   built. They are dense cross-account tables and the area gets opened on a
-   phone, since that is where invites are wanted; "one row per search across
-   every account" is the hardest thing in the app to fit at that width.
-4. **The read routes** (Backend Buddy): last night across accounts, accounts
-   with their setup state, and company-list coverage. One route per panel rather
-   than one that answers everything, reading through a cross-account class of
-   its own.
-5. **Those three panels** (Client Comrade).
-6. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
+3. **The read routes** (Backend Buddy): Overview's counts, last night across
+   accounts, accounts with their setup state, and company-list coverage. One
+   route per panel rather than one that answers everything, reading through a
+   cross-account class of its own. Overview's numbers are computed server-side,
+   not summed by the page from rows it happens to hold - the page summing them
+   is how a count starts meaning the window rather than the question.
+4. **Those panels** (Client Comrade), Overview first, since it is where the area
+   opens and the others are what its numbers link to.
+5. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
    a setup, which needs a way to put an intake back to `pending`; pause or
    resume; delete an account.
-7. **What a run will read**, and only after the person whose search it is can
+6. **What a run will read**, and only after the person whose search it is can
    see their own. Built the other way round, the operator's copy becomes the
    tool, and the page that would have let someone check their own composed step
    never gets built - which is the failure that prompted this panel in the first
