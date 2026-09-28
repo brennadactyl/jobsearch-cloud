@@ -64,8 +64,10 @@ an Admin area; nothing new is typed into a browser.
   nothing or everything, and which one shows up first in production.
 - **A browser can now reach admin routes, which today it cannot at all.** The
   weaker credential defines the route, so operator sessions are minted
-  distinguishable from ordinary ones, and the destructive actions - deleting an
-  account, purging a search - need more than a resumed session.
+  distinguishable from ordinary ones. Deleting an account and purging a search
+  stay out of this page altogether: they are the two that can't be undone, and
+  an operator holding a phone is the worst place to offer them. They keep their
+  scripts and the admin token.
 
 ## What it shows
 
@@ -148,8 +150,8 @@ to fix it rather than offering an action it can't perform.
 searches, whose resume is unreadable and which searches are paused; invites sent,
 used and unused; intakes pending, failed, or waiting on a retry that will never
 come. Opening a person gives the rest: their searches and what each one will
-read, their resume, their setup, and the actions that name them - pause, resume,
-delete.
+read, their resume, their setup, and the actions that name them: pause and
+resume.
 
 **Everything about one person comes from one place.** So the composed step is
 not a panel of its own; it hangs off the person whose search it is. An operator
@@ -194,7 +196,6 @@ The actions that are scripts today, each on a named account and each confirmed:
 | Retry a failed setup | nothing: `POST /api/intake/complete` takes `done` or `failed`, so no route puts an intake back to `pending`, and `RETRY_NIGHTS` expires it |
 | Pause or resume a search | the person's own panel, or `POST /api/config` |
 | Send a password-reset link | not built. `POST /api/users` resets by choosing a password, which this page won't do, so this row needs a new mechanism rather than a new caller |
-| Delete an account | `DELETE /api/users/<id>`, which already requires the name in the body |
 | Add a company to the shared list | `POST /api/coverage` with a session, or the `add-target-company` skill; the operator path is new |
 
 - **An invite is minted and read back on the page**, with its link ready to
@@ -219,11 +220,8 @@ The actions that are scripts today, each on a named account and each confirmed:
   them is the search token in `tracker.json`, and revoking it stops that
   person's nightly runs until someone mints a new one and edits a file on the
   run machine.
-- **A destructive action shows how old the last backup is.** Deleting an account
-  from a phone without knowing whether there is a recent backup is the one way
-  this page can cost something that can't be got back.
-- **Deleting an account asks for its name typed back**, as the search reset
-  does, and says what will go.
+- **A destructive action shows how old the last backup is**, and names what it
+  will change before it runs.
 - **Adding a company writes to the list every account shares**, so it is the one
   action here that reaches everyone at once. It says so, and it records the same
   facts the `add-target-company` skill does - the board, the endpoint, the URL
@@ -239,6 +237,11 @@ Editing a person's searches, their locations or their documents. An operator
 fixing someone's config by hand is the thing the account panel exists to end,
 and a dashboard that can do it invites doing it. A bad answer someone typed is
 fixed by telling them, or by a change to the form that asked badly.
+
+**Deleting an account**, which stays a token-only route called deliberately.
+Every other action here is recoverable or repeatable; that one takes a person's
+whole record, and nothing about an operator's day is improved by being able to
+do it from a phone.
 
 **It replaces one script, `new-invite.ps1`.** The others stay, because they act
 on the machine rather than on the data: `setup-scheduler.ps1` registers Windows
@@ -265,7 +268,7 @@ reads a folder on it, and no browser reaches any of that.
    opens and the others are what its numbers link to.
 5. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
    a setup, which needs a way to put an intake back to `pending`; pause or
-   resume; delete an account.
+   resume.
 6. **What a run will read**, on a person's page, and only after the person whose
    search it is can see their own. Built the other way round, the operator's copy
    becomes the tool, and the page that would have let someone check their own
