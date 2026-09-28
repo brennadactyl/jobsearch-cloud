@@ -32,6 +32,20 @@ doc, and a finding says whether anything was built on the wrong line.
 
 ## Next
 
+- **[An operator's dashboard](admin-dashboard-plan.md)** - run health across
+  every account, who exists and what state their setup is in, the shared company
+  list, and the actions that are scripts today, minting an invite first among
+  them. An operator signs in as themselves, with a flag on the account; the
+  admin token stays the machine's. Planned, unbuilt.
+- **A setup answer can land in the wrong field and nothing says so.** One
+  signup's answer to the work-scope question held seven company names, which
+  were stored as places, so the night was told to search "at Amazon" as though
+  it were a city. Nothing refused it and nothing warned; it surfaced only because
+  someone read the composed step. Two halves: the form asks in a way that invites
+  the wrong answer, and nothing shows a person the sentence their answers
+  compose. The second is the general fix, and it is the same one the pay floor
+  wanted - the page shows the composed step a run reads, served from `prompt.js`
+  rather than restated.
 - **[One task asks what is due](dispatcher-plan.md)**, instead of one Windows
   task per search. The schedule is a copy of the config made when someone last
   ran `setup-scheduler.ps1`, and it drifts three ways: a new search with no
@@ -165,7 +179,16 @@ doc, and a finding says whether anything was built on the wrong line.
 - Show a person the rule their search actually follows, served from `prompt.js`
   rather than copied into the page: the composed pay clause first, since a floor
   is the rule most easily contradicted by their own words. A copy in the page was
-  ruled out for being a second wording of one rule.
+  ruled out for being a second wording of one rule. Now also the fix for an
+  answer landing in the wrong field, above.
+- The Screened tab's "today" is the newest run's day, so it moves when the
+  search in view changes: a search whose task has stopped shows its own last
+  day, and clicking back to all searches can read 0 one click after reading 4.
+  Each view counts one window correctly and the page names neither day. The
+  honest fix is naming the day instead of saying "today", which was decided
+  against twice in favour of the plain word, so this is evidence held rather
+  than a request to reopen - the instance that reopens it is someone actually
+  confused by it.
 - The page decides whether removed postings can be counted by checking whether
   any screened row carries a `found` value, so a change in what the server sends
   can leave the flag reading true over incomplete data. The server should say
