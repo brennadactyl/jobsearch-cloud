@@ -70,13 +70,21 @@ screened, and which of four states it is in. A search whose task has stopped
 reads differently from one that ran and found nothing - that distinction is the
 reason this panel exists.
 
-**Four states, and one of them is an absence.** A quiet night writes a row,
+**Four kinds of nothing, and only one is a fault.** A quiet night writes a row,
 `status=ok` with zeros. A stopped task writes nothing, so it shows as
 `last_run.at` unchanged from the night before - which means comparing against
 the previous night rather than reading one row. A paused search writes nothing
-either, and is told from a stopped one only by `paused_since` on the track. So:
-ran, ran and found nothing, paused, and didn't run. Every signal exists in the
-API today, in `last_run` and `paused_since`.
+either, and is told from a stopped one only by `paused_since` on the track. A
+search with no scheduled task has never written one at all. So: paused on
+purpose, ran and found nothing, reported nothing, and never ran. A search set up
+today is a fifth case that reads as neither - its first night hasn't come.
+
+**Silence is not a result, and must not look like one.** A night that found
+nothing has a time, a screened count and a log; a night that reported nothing
+has no time, and that absence is the whole of the evidence. So the second gets
+colour, a sentence rather than a dash, and the name of the script that can see
+what the page can't. Drawn as neighbours on a scale, the commonest row on the
+page teaches an operator to stop noticing the one worth acting on.
 
 **It shows recorded runs, and says so.** The server knows only what a run
 reported. A run that died before recording - the CLI unauthenticated, a document
@@ -123,7 +131,10 @@ That route is a session route, composed from the caller's own config, so this
 panel needs an operator route of its own rather than a credential change - and
 it is the one that reaches furthest into someone else's data: their locations,
 their roles line, their fit rules, in a form that can't be screenshotted into a
-PR or a doc. It comes last of the panels for both reasons. The same composed
+PR or a doc. **The panel says so on itself** - whose words these are, and not to
+copy them out - because it is the one screen in the app whose contents are
+someone else's and where the rule against putting real data in a public place
+is easiest to break while trying to be helpful. It comes last of the panels for both reasons. The same composed
 step shown to the person whose search it is, in their own account panel, is the
 fix for the failure that prompted it; this panel is the operator's copy of that,
 not a substitute for it.
