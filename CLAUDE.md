@@ -33,13 +33,15 @@ role.
   lets them ask her rather than what lets them begin. A plan's own order of work
   isn't a go at all. Same answer as the rule below, for the same reason: a relay
   is never the authority, whatever it is relaying.
-- **Everything short of building is handed out freely** - planning, design,
-  mockups, investigation, review, a draft to look at. A session may also ask
-  another for what its own work in flight needs: a decision, a route, a wording,
-  a check. That is collaboration rather than starting something, and waiting on
-  a go for it would stop the team working. Finishing what a change already owes
-  - the doc it makes wrong, the check it breaks - is part of that work rather
-  than new work, and a broken nightly run is its own exception below.
+- **Building is the change itself, a branch meant to merge.** Everything short
+  of that is handed out freely: planning, design, mockups, investigation,
+  review, a throwaway draft that answers a question. A session may also ask
+  another for what its own work in flight needs - a decision, a route, a
+  wording, a check - which is collaboration rather than starting something, and
+  waiting on a go for it would stop the team working. Finishing what a change
+  already owes, the doc it makes wrong or the check it breaks, is part of that
+  work rather than new work, and a broken nightly run is its own exception
+  below.
 - **A merge, a deploy, a pull of the main checkout or a live data write needs
   the user's go typed in the session doing it.** A go passed along by another
   session doesn't count; tell the user which session to say go in. Reviews
