@@ -13,8 +13,21 @@ the tracker) and `docs/schema.md`. The routes today are in
 ## Who gets in
 
 `users.operator`, a flag on the account, set by an operator through
-`POST /api/users`. An operator signs in the way anyone does and the page shows
-an Admin area; nobody else sees it, and nothing new is typed into a browser.
+`POST /api/users`. An operator signs in the way anyone does and the page offers
+an Admin area; nothing new is typed into a browser.
+
+- **It is its own route in the same app, reached from the header** beside My
+  account, not a tab. The tab strip is built from a person's own tracks and
+  means "my searches" throughout - the Overview counts them, the drills key off
+  them - so an Admin tab would be its first entry that isn't a track, and that
+  special case is where a trace leaks into the ordinary path. Sharing the app
+  keeps sign-in, theming, the save indicator and the API layer; a separate app
+  would copy all four and then drift.
+- **Hiding it is presentation, not a boundary.** The operator check on the
+  server is the gate. The panels' code ships to every browser and is readable
+  there, which costs nothing because the sensitive part is in the responses -
+  but it loads as its own chunk, so the page most people open carries none of
+  it.
 
 - **`ADMIN_TOKEN` stays what it is:** the machine key for scripts, and the way
   the first operator flag is set on a database that has none. A person's session
@@ -137,17 +150,25 @@ reads a folder on it, and no browser reaches any of that.
    is one - it returns `{id, name}` today, so that field is real work.
 2. **Invites** (Client Comrade): the whole panel, and the first thing worth
    having. Every route it needs exists, so step 1 is all that stands between
-   here and minting an invite from a phone.
-3. **The read routes** (Backend Buddy): last night across accounts, accounts
+   here and minting an invite from a phone. No mockup: a note, a day count, a
+   link to copy, a list with revoke.
+3. **A mockup of the three read panels** (Client Comrade), before they are
+   built. They are dense cross-account tables and the area gets opened on a
+   phone, since that is where invites are wanted; "one row per search across
+   every account" is the hardest thing in the app to fit at that width.
+4. **The read routes** (Backend Buddy): last night across accounts, accounts
    with their setup state, and company-list coverage. One route per panel rather
    than one that answers everything, reading through a cross-account class of
    its own.
-4. **Those three panels** (Client Comrade).
-5. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
+5. **Those three panels** (Client Comrade).
+6. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
    a setup, which needs a way to put an intake back to `pending`; pause or
    resume; delete an account.
-6. **What a run will read** (Backend Buddy, then Client Comrade): its own
-   operator route, last because it reaches furthest into someone else's data.
+7. **What a run will read**, and only after the person whose search it is can
+   see their own. Built the other way round, the operator's copy becomes the
+   tool, and the page that would have let someone check their own composed step
+   never gets built - which is the failure that prompted this panel in the first
+   place.
 
 A password-reset link is its own change, whenever it is wanted: nothing in this
 plan depends on it, and the dashboard resets no passwords until it exists.
