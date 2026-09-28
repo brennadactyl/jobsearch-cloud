@@ -47,8 +47,7 @@ check it matches what the backup predicted.
 
 ## How it works
 
-1. Read the plan section, and the mockup if there is one. Check the user has
-   said to build it - a plan section handed over isn't a go - then branch off
+1. Read the plan section, and the mockup if there is one. Branch off
    `origin/main` in the worktree.
 2. Fix request and response shapes first and message the consumers.
 3. Scope every session route through `Db`; the shared company list goes through
