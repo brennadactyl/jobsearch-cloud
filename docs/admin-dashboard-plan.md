@@ -80,19 +80,41 @@ a fifth tab.
 serving anyone. Everything on it is a number an operator can act on, and each
 one links to the rows behind it.
 
-*Running:* searches that ran last night against searches that should have;
-searches that reported nothing, which is the one fault among the four kinds of
-nothing; nights missing over the last seven; the oldest backup age; setups
-pending or failed.
+**Running** - is the system working:
 
-*Serving:* leads added last night and over seven days; searches that have found
-nothing in seven days, which is the number that says a person's rules or their
-scope need a conversation; applications and their stage changes over seven days,
-since a search producing leads nobody applies to is a different failure from one
-producing none.
+| Number | What it counts | Opens |
+|---|---|---|
+| Ran last night | searches whose `last_run.on` is last night, over searches not paused and written up | Last night |
+| Reported nothing | not paused, written up, and `last_run.on` older than last night: the one fault among the four kinds of nothing | Last night, those rows |
+| Nights missed, 7 days | for each search, nights in the last seven with no run recorded, summed | Last night |
+| Setups waiting | intakes `pending` past their retry window, and `failed` | Accounts |
+| Searches with no task | written up, not paused, and never a run recorded | Accounts |
 
-*Standing:* accounts, searches running and paused, invites outstanding, the
-shared company list's size and how much of it each search has covered.
+**Serving** - is it worth anyone's while:
+
+| Number | What it counts | Opens |
+|---|---|---|
+| Leads found last night | `last_run.leads_added` summed | Last night |
+| Leads found, 7 days | leads whose `found` is in the last seven days | the leads |
+| Searches finding nothing, 7 days | running searches with no lead in seven days - the number that says a person's rules or their scope need a conversation, not that anything is broken | Accounts |
+| Screened by someone's own rules, 7 days | screened rows in the settings-caused kinds | the Screened rows |
+| Applications moved, 7 days | applications whose stage changed in the last seven days, against applications made: a search producing leads nobody applies to fails differently from one producing none | Accounts |
+
+**Standing** - what there is:
+
+| Number | What it counts | Opens |
+|---|---|---|
+| People | accounts, demo excluded | Accounts |
+| Searches | running, and paused | Accounts |
+| Invites outstanding | minted, not used, not revoked, not expired | Invites |
+| Companies | rows on the shared list | Companies |
+| Least covered search | the search whose `sweep_cursor` has moved least in seven days | Companies |
+
+**Backup age isn't here**, though it belongs on a page like this: nothing
+records a backup in the database. `backup-tracker.ps1` writes files to the run
+machine's disk, so the page could only know what a backup reports to it, and no
+route takes that report. Until one does, the number would be a guess dressed as
+a fact.
 
 - **Every number names its window**, because "leads added" over a night and over
   a week are different claims and a dashboard is where they get conflated.
@@ -211,8 +233,9 @@ The actions that are scripts today, each on a named account and each confirmed:
   save an operator pasting a link into the conversation they are already having.
   If it is ever wanted, the phone's own share sheet is the version that adds no
   service and stores nothing.
-- **A destructive action shows how old the last backup is**, and names what it
-  will change before it runs.
+- **An action names what it will change before it runs.** The two that can't be
+  undone - deleting an account, purging a search - aren't here, so nothing on
+  this page needs a backup taken first.
 - **Adding a company writes to the list every account shares**, so it is the one
   action here that reaches everyone at once. It says so, and it records the same
   facts the `add-target-company` skill does - the board, the endpoint, the URL
