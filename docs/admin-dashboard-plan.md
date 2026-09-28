@@ -11,10 +11,11 @@ the tracker) and `docs/schema.md`. The routes today are in
 [account-settings-plan.md](account-settings-plan.md).
 
 Screens: [Operator area](https://claude.ai/artifact/HpPc5T8egLhjm8aghhXMeW),
-approved - the operator's header and an ordinary one, invites at phone and
-desktop width with their first-run and minted states, each reading panel at
-phone width, one of them widened, a first look at an account with no history,
-and the composed step with its three refusals.
+approved - the operator's header and an ordinary one; invites at phone and
+desktop width with their first-run and minted states; last night, accounts, a
+person's own page and the company list, with a first look at an account that has
+no history; adding a company; and the composed step in each of its three
+refusals.
 
 **The area shows only what exists.** No navigation row until there is a second
 panel to switch to, and each panel appears as it is built. A single chip is a
@@ -68,8 +69,10 @@ an Admin area; nothing new is typed into a browser.
 
 ## What it shows
 
-Five panels. Overview is where the area opens; the other four answer a question
-an operator asks today by reading logs or a backup.
+Four tabs. Overview is where the area opens; Last night, Accounts and the
+company list answer a question an operator asks today by reading logs or a
+backup. Everything about one person is reached through that person, not through
+a fifth tab.
 
 **Overview.** Two questions, in this order: is the system running, and is it
 serving anyone. Everything on it is a number an operator can act on, and each
@@ -141,13 +144,21 @@ no scheduled task until `setup-scheduler.ps1` runs on the PC that runs the
 searches, and no browser reaches that. The panel says what is missing and where
 to fix it rather than offering an action it can't perform.
 
-**Accounts.** Each person, their searches, whose resume is unreadable, and which
-searches are paused. Invites sent, used and unused. Intakes pending, failed, or
-waiting on a retry that will never come.
+**Accounts, and a page for each person.** The list gives every person, their
+searches, whose resume is unreadable and which searches are paused; invites sent,
+used and unused; intakes pending, failed, or waiting on a retry that will never
+come. Opening a person gives the rest: their searches and what each one will
+read, their resume, their setup, and the actions that name them - pause, resume,
+delete.
 
-**The company list.** How much of it each search has covered, where its cursor
-is, and which companies are walled, dead or newly discovered. The list is shared
-across accounts, so this is the one panel that isn't per person.
+**Everything about one person comes from one place.** So the composed step is
+not a panel of its own; it hangs off the person whose search it is. An operator
+looking at someone reaches everything about them without going back to a tab
+strip and choosing a different lens on the same person.
+
+**The company list.** The list itself: what is on it, which companies are walled
+or dead, what discovery added, and where each search's cursor sits. It is shared
+across accounts, so it is the one panel that isn't per person.
 
 **What a run will read.** For one search, the composed step a night actually
 gets - the locations, the roles line, the fit rules, the pay floor - as
@@ -168,10 +179,10 @@ their roles line, their fit rules, in a form that can't be screenshotted into a
 PR or a doc. **The panel says so on itself** - whose words these are, and not to
 copy them out - because it is the one screen in the app whose contents are
 someone else's and where the rule against putting real data in a public place
-is easiest to break while trying to be helpful. It comes last of the panels for both reasons. The same composed
-step shown to the person whose search it is, in their own account panel, is the
-fix for the failure that prompted it; this panel is the operator's copy of that,
-not a substitute for it.
+is easiest to break while trying to be helpful. It is built last for both
+reasons. The same composed step shown to the person whose search it is, in their
+own account panel, is the fix for the failure that prompted it; this view is the
+operator's copy of that, not a substitute for it.
 
 ## What it does
 
@@ -248,11 +259,11 @@ reads a folder on it, and no browser reaches any of that.
 5. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
    a setup, which needs a way to put an intake back to `pending`; pause or
    resume; delete an account.
-6. **What a run will read**, and only after the person whose search it is can
-   see their own. Built the other way round, the operator's copy becomes the
-   tool, and the page that would have let someone check their own composed step
-   never gets built - which is the failure that prompted this panel in the first
-   place.
+6. **What a run will read**, on a person's page, and only after the person whose
+   search it is can see their own. Built the other way round, the operator's copy
+   becomes the tool, and the page that would have let someone check their own
+   composed step never gets built - which is the failure that prompted this view
+   in the first place.
 
 A password-reset link is its own change, whenever it is wanted: nothing in this
 plan depends on it, and the dashboard resets no passwords until it exists.
