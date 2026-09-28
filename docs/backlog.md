@@ -164,6 +164,14 @@ doc, and a finding says whether anything was built on the wrong line.
 
 ## Small
 
+- `users.demo` is declared `INTEGER` and `users.admin` `BOOLEAN`, two spellings
+  for the same two values sitting next to each other in one table, which
+  `docs/schema.md` then has to show differently while calling them the same.
+  SQLite stores both identically, so this is legibility, not correctness - and
+  the fix is a table rebuild, since an applied migration is never rewritten and
+  a column's declared type can't be altered in place. Worth doing when `users`
+  is being rebuilt for another reason, or deliberately with
+  `verify-migration.mjs` covering it; not the quick win it looks.
 - The page's `--good` and `--crit` are a red and green four ΔE apart under
   deuteranopia, so a reader with it can't separate them. Fine wherever colour
   sits beside an icon and words, which is most of the page; the work is finding

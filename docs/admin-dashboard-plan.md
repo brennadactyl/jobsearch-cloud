@@ -24,7 +24,7 @@ page can't keep.
 
 ## Who gets in
 
-`users.operator`, a flag on the account, set by an operator through
+`users.admin`, a flag on the account, set by an operator through
 `POST /api/users`. An operator signs in the way anyone does and the page offers
 an Admin area; nothing new is typed into a browser.
 
@@ -327,7 +327,7 @@ page never sends what the server would refuse.
 
 **Backend Buddy, first and alone** - nothing else can start until this is live:
 
-- `users.operator`, its migration, and `POST /api/users` able to set it, since
+- `users.admin`, its migration, and `POST /api/users` able to set it, since
   that is how the first operator exists on a database that has none.
 - The credential check: `ADMIN_ROUTES` accepts an operator's session as well as
   `ADMIN_TOKEN`. Only the check changes - handlers keep `user: null` and
@@ -340,7 +340,7 @@ page never sends what the server would refuse.
   reader to treat it as a cheap operator check undoes the rule below. Say so
   where `sessions.label` is defined.
 - **The flag is read on the request, not baked into the session.** Clearing
-  `users.operator` ends that person's reach into every admin route at once, on
+  `users.admin` ends that person's reach into every admin route at once, on
   every device, and leaves their ordinary session working. That is how the
   credential is taken back: sessions here are long-lived and a password change
   deliberately doesn't revoke them, so a credential that lived in the session
