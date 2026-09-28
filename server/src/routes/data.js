@@ -41,17 +41,26 @@ export const SCREENED_WINDOW_DAYS = 90;
  * set exactly - SCREENED_BY_RULES and nothing else - which is deliberate: a
  * list wider than the number above it is how someone stops trusting both.
  *
- * So the rows sent but not shown are `delisted`, `other`, and what someone set
- * aside by hand. The last is the one worth naming, because sending it looks
- * like intending to display it: the tab is for what a rule decided, and a
+ * So exactly two things are sent and not shown: `delisted`, and what someone
+ * set aside by hand. The second is worth naming, because sending it looks
+ * like intending to display it - the tab is for what a rule decided, and a
  * decision they made themselves is one they already know about. It is sent
- * anyway - it is the only record that they made it.
+ * anyway, as the only record that they made it. Nothing else can be on this
+ * list: the sent set above is delisted, hand, and SCREENED_BY_RULES, and the
+ * last of those is the shown set. `other` is not here - a run's `other` is in
+ * neither set and never leaves the server at all.
  *
  * Stated here because a row arriving is not a row shown, and the next person
  * to read this file will assume it is. This route sends what the person owns;
  * which of it belongs on a page is a different question, answered in
  * client/src/domain/screened.ts and changed there without telling this file.
- * Treat this paragraph as the likeliest of the three to have gone stale.
+ *
+ * What would break "shown is the counted set exactly" is a kind added to that
+ * file's list without `mine`, which shows a row the count doesn't count. A
+ * kind added to SCREENED_BY_RULES here does not: the page shows a kind it
+ * doesn't recognise, so it is counted and shown together. So the direction to
+ * check is client-first, and this paragraph is the likeliest of the three to
+ * have gone stale.
  *
  * `screened_window` is `{ days, older }`, and `older` follows the first rule,
  * since it describes the rows not sent.
