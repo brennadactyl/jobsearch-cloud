@@ -88,7 +88,6 @@ one links to the rows behind it.
 |---|---|---|
 | Ran last night | searches whose `last_run.on` is last night, over searches not paused and written up | Last night |
 | Reported nothing | not paused, written up, and `last_run.on` older than last night: the one fault among the four kinds of nothing | Last night, those rows |
-| Longest silence | the most days since any running search last recorded a run, and which search | Last night |
 | Setups waiting | intakes `pending` past their retry window, and `failed` | Accounts |
 | Searches with no task | written up, not paused, and never a run recorded | Accounts |
 
@@ -110,16 +109,15 @@ one links to the rows behind it.
 | Searches | running, and paused | Accounts |
 | Invites outstanding | minted, not used, not revoked, not expired | Invites |
 | Companies | rows on the shared list | Companies |
-| Least covered search | the running search with the fewest companies swept in seven days, counted from `company_sweeps.last_swept` | Companies |
 
-**Every number here is computable from what is stored today.** `search_runs`
-holds one row per search - the last run, not a history - and `company_sweeps`
-holds the present, not its movement. So the page asks about the present instead
-of about change: how long a search has been silent rather than how many nights
-it missed, and how many companies it swept in a week rather than how far its
-cursor travelled. The questions about change want a run history, which is a
-table nobody has asked for and a migration nobody needs yet; if one ever
-arrives, these numbers get sharper and the page doesn't change shape.
+**Every number here is computable from what is stored today**, and the two that
+weren't are gone rather than approximated. `search_runs` holds one row per
+search and `company_sweeps` holds the present, so nights missed over a week and
+cursor movement can't be counted; the near-enough versions - longest silence,
+fewest companies swept - answered a question the rows beside them already
+answer, and a dashboard earns nothing by saying the same thing twice in weaker
+words. Whether a search has stopped is "reported nothing"; coverage is the
+Companies tab.
 
 **Backup age isn't here**, though it belongs on a page like this: nothing
 records a backup in the database. `backup-tracker.ps1` writes files to the run
