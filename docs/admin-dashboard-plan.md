@@ -126,7 +126,10 @@ a fact.
 - **It is built from what the runs recorded**, so it inherits the limit the Last
   night panel states: a run that died recorded nothing, and no count here can
   tell that from a search that never ran. The missing-nights number is what
-  surfaces that, and it is the one an operator should look at first.
+  surfaces that, and it is the one an operator should look at first. **The page
+  says as much where it counts them** - a number that can't tell a death from an
+  absence says so rather than implying it can, and points at `run-report.ps1`,
+  which reads the logs on the machine and can.
 - **Running and serving are one screen, in that order**, and it scrolls. Two
   tabs would turn one question - is this fine - into two checks, and the second
   is the one nobody does.
@@ -318,6 +321,12 @@ page never sends what the server would refuse.
   `db: null`, and the operator's identity arrives in a field of its own, for
   attribution, never for scoping.
 - Operator sessions minted distinguishable from ordinary ones.
+- **The flag is read on the request, not baked into the session.** Clearing
+  `users.operator` ends that person's reach into every admin route at once, on
+  every device, and leaves their ordinary session working. That is how the
+  credential is taken back: sessions here are long-lived and a password change
+  deliberately doesn't revoke them, so a credential that lived in the session
+  would be one nothing could withdraw.
 - `GET /api/me` carrying whether the caller is an operator. It returns
   `{id, name}` today, so this is a real addition.
 - `docs/schema.md` in the same change, since the column makes it wrong.
