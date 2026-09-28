@@ -20,16 +20,26 @@ import {
 } from "./domain/screened";
 import { clearPrefs } from "./ui/prefs";
 
-async function openTab(data: TrackerData = fixture) {
+/**
+ * Opens the tab, then widens to 30 days. The page opens on the newest run's
+ * day, which holds one of the fixture's rows, so a test about anything else -
+ * sorting, the kinds, the captions - asks for the window its rows are in.
+ * `showing` of "1" leaves the window where the page itself put it.
+ */
+async function openTab(data: TrackerData = fixture, showing = "30", path = "/screened") {
   vi.spyOn(client, "getData").mockResolvedValue(data);
-  window.history.pushState({}, "", "/screened");
+  window.history.pushState({}, "", path);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
       <App />
     </QueryClientProvider>,
   );
-  return screen.findByRole("heading", { name: "What your searches set aside" });
+  const heading = await screen.findByRole("heading", { name: "What your searches set aside" });
+  if (showing !== String(SCREENED_WINDOW_DEFAULT)) {
+    await userEvent.selectOptions(screen.getByRole("combobox"), showing);
+  }
+  return heading;
 }
 
 const rows = () => within(document.querySelector(".screened-grid")!).getAllByRole("row").slice(1);
@@ -126,6 +136,14 @@ describe("the screened tab", () => {
     const alpha = screen.getAllByRole("link", { name: "3 screened out" })[0];
     await userEvent.click(alpha);
     await screen.findByRole("heading", { name: "What your searches set aside" });
+    expect(window.location.search).toBe("?search=alpha");
+
+    // The tab opens on the newest run's day, where a real run's rows are the
+    // ones the stamp just counted. The fixture's sit further back than its own
+    // stamp, so this asks for the month to see what the link narrowed to. The
+    // search rides in the URL across the change, which is the point of it
+    // being there.
+    await userEvent.selectOptions(screen.getByRole("combobox"), "30");
     expect(window.location.search).toBe("?search=alpha");
     expect(screen.getByRole("button", { name: /Alpha roles/ })).toHaveAttribute("aria-pressed", "true");
     expect(rows()).toHaveLength(3);
@@ -340,16 +358,20 @@ describe("the screened tab", () => {
     expect(opens[0].days).toBe(SCREENED_WINDOW_DEFAULT);
   });
 
-  it("narrows to today, which is the one window a night's own run fills", async () => {
-    // The shortest window counts its own day: a run stamps its rows with its
-    // local date, so "today" is that run's work and nobody else's.
+  it("opens on today, which is the newest run's work and the usual question", async () => {
+    // The tab opens on the shortest window there is: a run stamps its rows with
+    // its own local date, so today is that run's work and nobody else's, and
+    // every longer window is one choice away.
     const tonight = { ...fixture.screened[1], id: 97, date: daysAgo(0), company: "Cedar" };
-    await openTab({ ...fixture, screened: [...fixture.screened, tonight] });
+    await openTab({ ...fixture, screened: [...fixture.screened, tonight] }, "1");
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
-    expect(sumLine()).toHaveTextContent("Showing 1 from today");
-    expect(rows()).toHaveLength(1);
-    expect(within(rows()[0]).getByRole("link", { name: "Cedar" })).toBeInTheDocument();
+    // The fixture's own newest rejection is on that day too, so this is what
+    // the run did, not what this test added to it.
+    expect(screen.getByRole("combobox")).toHaveValue("1");
+    expect(sumLine()).toHaveTextContent("Showing 2 from today");
+    expect(rows()).toHaveLength(2);
+    expect(screen.getByText("Cedar")).toBeInTheDocument();
+    expect(rows().every((r) => within(r).queryByText(daysAgo(0)) !== null)).toBe(true);
   });
 
   it("takes today from the runs' day, not from the clock of whoever is reading", async () => {
@@ -360,25 +382,83 @@ describe("the screened tab", () => {
     const ran = daysAgo(1);
     const tracks = fixture.tracks.map((t) => ({ ...t, last_run: { ...t.last_run, on: ran } }));
     const lastNight = { ...fixture.screened[1], id: 98, date: ran, company: "Cedar" };
-    await openTab({ ...fixture, tracks, screened: [...fixture.screened, lastNight] });
+    await openTab({ ...fixture, tracks, screened: [...fixture.screened, lastNight] }, "1");
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
-    // Taken from the reader's clock this window starts a day later and holds
-    // nothing. Taken from the run, it holds that run's day - every row of it,
-    // not only the one this test added.
+    // Taken from the reader's clock this window starts a day later and misses
+    // the run entirely. Taken from the run, it starts on that run's day and
+    // nothing older than it gets in.
     expect(screen.getByText("Cedar")).toBeInTheDocument();
-    expect(rows().map((r) => within(r).getByText(ran))).toHaveLength(rows().length);
+    const dates = rows().map((r) => within(r).getByText(/^\d{4}-\d{2}-\d{2}$/).textContent!);
+    expect(dates).toContain(ran);
+    expect(dates.every((d) => d >= ran)).toBe(true);
   });
 
   it("falls back to the reader's day when no run has stamped one", async () => {
     // Nothing to take a day from is not a reason to show everything: an empty
     // start would let every row there is through the shortest window there is.
     const tracks = fixture.tracks.map((t) => ({ ...t, last_run: { ...t.last_run, on: "" } }));
-    await openTab({ ...fixture, tracks });
+    await openTab({ ...fixture, tracks }, "1");
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
-    expect(document.querySelector(".screened-grid")).toBeNull();
+    // The reader's own day, which holds the one row dated there - not every row
+    // in the tracker, which is what an empty start would have let through.
+    expect(rows()).toHaveLength(1);
+    expect(within(rows()[0]).getByText(daysAgo(0))).toBeInTheDocument();
+  });
+
+  it("opens a stopped search's stamp on that search's own last run", async () => {
+    // The searches don't run as one. A task that stops without the search being
+    // paused leaves a stamp claiming what its last run set aside, while the
+    // others keep running and carry the newest day. Read against theirs, that
+    // search's own rows are outside the window its own stamp links to - a link
+    // stating a number and opening a view that contradicts it.
+    const stopped = daysAgo(3);
+    // Alpha's task stopped three nights ago; every other search ran last night,
+    // so the newest day across them is theirs and not alpha's.
+    const tracks = fixture.tracks.map((t) => ({
+      ...t,
+      last_run: { ...t.last_run, on: t.key === "alpha" ? stopped : daysAgo(0) },
+    }));
+    const itsRows = [
+      { ...fixture.screened[1], id: 80, search: "alpha", date: stopped, company: "Cedar" },
+      { ...fixture.screened[1], id: 81, search: "alpha", date: stopped, company: "Larch", url: "https://example.com/81" },
+    ];
+    await openTab({ ...fixture, tracks, screened: [...fixture.screened, ...itsRows] }, "1");
+
+    await userEvent.click(screen.getByRole("button", { name: /^Alpha roles/ }));
+    expect(screen.getByText("Cedar")).toBeInTheDocument();
+    expect(screen.getByText("Larch")).toBeInTheDocument();
+  });
+
+  it("keeps the way back to every search when the window holds nothing", async () => {
+    // The tab opens on one day and that day can be empty. A chip row built from
+    // the window disappears with it, taking "All searches" and leaving someone
+    // who arrived from a run stamp narrowed to one search with no way out of it.
+    // The newest run turned nothing away, which is a night like any other.
+    const screened = fixture.screened.filter((r) => r.date !== daysAgo(0));
+    await openTab({ ...fixture, screened }, "1");
+
     expect(screen.getByText("Nothing was set aside in this window.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^All searches/ })).toBeInTheDocument();
+    // Counted by the window, so a search with nothing in it reads zero rather
+    // than going missing.
+    expect(screen.getByRole("button", { name: "Alpha roles 0" })).toBeInTheDocument();
+  });
+
+  it("offers a way to clear a narrowing even when there is only one search", async () => {
+    // One search needs no row to choose between. Narrowed to it, though, the
+    // row is the only thing on screen that can clear the narrowing, and without
+    // it someone has to edit the address to get out of a view a link put them
+    // in.
+    const one = { ...fixture, screened: fixture.screened.filter((r) => r.search === "alpha") };
+    await openTab(one, "1", "/screened?search=alpha");
+    expect(screen.getByRole("button", { name: /^All searches/ })).toBeInTheDocument();
+  });
+
+  it("offers no way to clear a narrowing nobody made", async () => {
+    // One search and no narrowing: a row of one chip chooses between nothing.
+    const one = { ...fixture, screened: fixture.screened.filter((r) => r.search === "alpha") };
+    await openTab(one, "1");
+    expect(screen.queryByRole("button", { name: /^All searches/ })).toBeNull();
   });
 
   it("says where a kind nobody set comes from, without offering a setting", () => {

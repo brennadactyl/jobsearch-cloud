@@ -35,18 +35,23 @@ export const SCREENED_WINDOWS: readonly {
   opensOn?: true;
   fromRun?: true;
 }[] = [
-  { days: 1, label: "today", fromRun: true },
+  { days: 1, label: "today", fromRun: true, opensOn: true },
   { days: 7, label: "the last 7 days" },
-  { days: 30, label: "the last 30 days", opensOn: true },
+  { days: 30, label: "the last 30 days" },
   { days: 90, label: "the last 90 days" },
   { days: 0, label: "everything" },
 ];
 
 /**
- * What the list opens on: long enough that a first look is rarely empty. Marked
- * on the window itself rather than written out beside it, because a default the
- * list doesn't contain leaves the select holding a value no option matches, and
- * says so nowhere.
+ * What the list opens on: the newest run's work, which is the question this tab
+ * is usually opened with. It can open on nothing - a run that turned nothing
+ * away has an empty day, and so does a tracker whose runs have stopped - and
+ * that is the true answer to what the newest run set aside, with every longer
+ * window one choice away.
+ *
+ * Marked on the window itself rather than written out beside it, because a
+ * default the list doesn't contain leaves the select holding a value no option
+ * matches, and says so nowhere.
  */
 export const SCREENED_WINDOW_DEFAULT = SCREENED_WINDOWS.find((w) => w.opensOn)!.days;
 
@@ -54,12 +59,22 @@ export const SCREENED_WINDOW_DEFAULT = SCREENED_WINDOWS.find((w) => w.opensOn)!.
 const RUN_DAY_WINDOW = SCREENED_WINDOWS.find((w) => w.fromRun)!.days;
 
 /**
- * The newest day a run stamped, across every search, or "" before any has run.
- * A bare date, compared as one: these are the runs' own local days, and the
- * page has no business turning them into instants.
+ * The newest day a run stamped, or "" before any has run. A bare date, compared
+ * as one: these are the runs' own local days, and the page has no business
+ * turning them into instants.
+ *
+ * Of the search in view when there is one, because the searches don't run as
+ * one. A search whose task has stopped without being paused keeps a stamp
+ * claiming what its last run set aside, and the newest day across all of them
+ * belongs to the searches still running: read against that, the stopped
+ * search's own rows are outside the window its own stamp links to. A search
+ * with no day of its own - one fed by another, or one that has never run -
+ * falls back to the newest there is, which is the best the page can say.
  */
-export function latestRunDay(tracks: readonly Track[]): string {
-  return tracks.reduce((newest, t) => (t.last_run.on > newest ? t.last_run.on : newest), "");
+export function latestRunDay(tracks: readonly Track[], search = ""): string {
+  const newest = tracks.reduce((day, t) => (t.last_run.on > day ? t.last_run.on : day), "");
+  const mine = search ? tracks.find((t) => t.key === search)?.last_run.on : "";
+  return mine || newest;
 }
 
 /**

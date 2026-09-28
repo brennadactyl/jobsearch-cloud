@@ -127,7 +127,11 @@ export const applications: Application[] = [
  * would make the page look like it can group them.
  */
 export const screened: Screened[] = [
-  { id: 31, search: "alpha", url: "https://example.com/31", company: "Umber", title: "Staff Engineer", location: "Berlin, Germany", reason: "outside the US, with no remote option stated", kind: "out-of-scope", date: daysAgo(1), added_by: "run", found: "" },
+  // Dated alpha's own last run, so the window the Screened tab opens on holds
+  // something. A fixture whose newest rejection predates its newest run is a
+  // state no run produces, and it would make every test of that tab widen the
+  // window first and prove nothing about what someone opening it sees.
+  { id: 31, search: "alpha", url: "https://example.com/31", company: "Umber", title: "Staff Engineer", location: "Berlin, Germany", reason: "outside the US, with no remote option stated", kind: "out-of-scope", date: daysAgo(0), added_by: "run", found: "" },
   { id: 32, search: "alpha", url: "https://example.com/32", company: "Vela", title: "Principal Engineer", location: "Springfield", reason: "above target level - principal, twelve years required", kind: "wrong-level", date: daysAgo(3), added_by: "run", found: "" },
   { id: 33, search: "alpha", url: "https://example.com/33", company: "Wick", title: "Support Engineer", location: "Remote", reason: "support queue rather than an engineering role", kind: "wrong-role", date: daysAgo(9), added_by: "run", found: "" },
   { id: 34, search: "beta", url: "https://example.com/34", company: "Xeno", title: "PM, Growth", location: "Shelbyville", reason: "six-month contract, not a permanent role", kind: "contract", date: daysAgo(4), added_by: "run", found: "" },

@@ -62,7 +62,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   // One day for the whole comparison: what was set aside and what was kept are
   // two halves of one sentence, and a window worked out twice can give them
   // different days.
-  const from = windowStart(days, now, latestRunDay(data.tracks));
+  const from = windowStart(days, now, latestRunDay(data.tracks, search));
   const inWindow = screenedFrom(data.screened, from);
   const counts = countsBySearch(inWindow);
   const ofSearch = search === ALL ? inWindow : inWindow.filter((r) => r.search === search);
@@ -83,6 +83,7 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const rows = sortScreened(chosen, sortKey, descending);
   const narrowedCount = kinds.find((k) => k.kind === kind)?.postings ?? 0;
   const nameOf = (key: string) => tracks[key]?.label || key;
+  const searches = Object.keys(countsBySearch(everRejected)).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
 
   return (
     <div className="screened">
@@ -141,25 +142,32 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
         </p>
       )}
 
-      {/* Only worth the row when there is more than one search to choose between. */}
-      {Object.keys(counts).length > 1 && (
+      {/* Which searches there are to choose between, taken from everything they
+          have ever set aside rather than from the window: the window can hold
+          nothing - the tab opens on one day - and a row that disappears when it
+          is empty takes the way back to all of them with it. The counts are of
+          the window, so a search with nothing in it reads zero rather than
+          going missing.
+
+          One search needs no row to choose between, unless the view is narrowed
+          to it: a narrowing with nothing on screen to clear it is one someone
+          has to edit the address to leave. */}
+      {(searches.length > 1 || search !== ALL) && (
         <div className="chips screened-searches">
           <button type="button" className="chip" aria-pressed={search === ALL} onClick={() => setSearch(ALL)}>
             All searches <span className="mono">{inWindow.length}</span>
           </button>
-          {Object.entries(counts)
-            .sort(([a], [b]) => nameOf(a).localeCompare(nameOf(b)))
-            .map(([key, n]) => (
-              <button
-                key={key}
-                type="button"
-                className="chip"
-                aria-pressed={search === key}
-                onClick={() => setSearch(key)}
-              >
-                {nameOf(key)} <span className="mono">{n}</span>
-              </button>
-            ))}
+          {searches.map((key) => (
+            <button
+              key={key}
+              type="button"
+              className="chip"
+              aria-pressed={search === key}
+              onClick={() => setSearch(key)}
+            >
+              {nameOf(key)} <span className="mono">{counts[key] ?? 0}</span>
+            </button>
+          ))}
         </div>
       )}
 
