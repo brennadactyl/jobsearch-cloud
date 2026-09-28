@@ -282,26 +282,26 @@ reviewed, merged and deployed on its own: the area grows a tab at a time rather
 than arriving whole. A chunk's server half ships before its page half, so the
 page never sends what the server would refuse.
 
-1. **Getting in.** The operator flag, the credential change, and the header
-   entry that only an operator sees. Detailed below.
-2. **Overview.** Its counts as one route, then the tab, charts included: the
-   seven-night column is the picture that says what the rows can't, and the
-   chartless board is the fallback rather than a second design. This is the
-   area's first screen, so chunk one's entry leads here.
-3. **Invites.** The tab: mint, the link on its own screen, the list with
+1. **Getting in, and Overview.** The operator flag, the credential change, the
+   header entry only an operator sees, and the screen it leads to: Overview's
+   counts as one route, then the tab, charts included. The seven-night column is
+   the picture that says what the rows can't, and the chartless board is the
+   fallback rather than a second design. One chunk, so the entry never leads
+   somewhere empty. Detailed below.
+2. **Invites.** The tab: mint, the link on its own screen, the list with
    revoke. Every route it needs already exists, so it is page work alone. The
    navigation row appears here, because this is where a second tab first
    exists.
-4. **Last night.** The four kinds of nothing, the comparison against the
+3. **Last night.** The four kinds of nothing, the comparison against the
    previous night that makes an absence visible, and an operator-scoped way to
    open a run's log - the logs are already in R2 and already served to their own
    account.
-5. **Accounts, and a person's page.** The list, then everything about one
+4. **Accounts, and a person's page.** The list, then everything about one
    person in one place, with the actions that name them: pause, resume, and
    retrying a setup, which needs a way to put an intake back to `pending`.
-6. **Companies.** The shared list, what is walled or dead, each search's cursor,
+5. **Companies.** The shared list, what is walled or dead, each search's cursor,
    and adding a company with the facts that make it fetchable.
-7. **What a run will read**, on a person's page, and only after the person whose
+6. **What a run will read**, on a person's page, and only after the person whose
    search it is can see their own. Built the other way round, the operator's copy
    becomes the tool, and the page that would have let someone check their own
    composed step never gets built - which is the failure that prompted this view
@@ -324,28 +324,31 @@ page never sends what the server would refuse.
 - `verify-local` proving: an operator session reaches an admin route; an
   ordinary session does not; an admin handler still has no `Db`; and the flag
   cannot be set by a session, only by the token.
+- **Overview's counts as one route**, computed server-side over the whole table
+  rather than summed by the page from rows it happens to hold, each one as the
+  Overview tables define it. It reads through a cross-account class of its own,
+  never a `Db` without a user.
 
 **Client Comrade, once that is deployed:**
 
 - The Admin entry in the header, for an operator only, and the area as its own
   route and its own chunk - the ordinary page's payload doesn't change.
 - An ordinary account sees nothing there: no disabled control, no explanation.
-- No navigation row: there is one screen until chunk three.
-
-**The entry leads somewhere empty until Overview lands**, which is the cost of
-this order. So the area's first screen names what is coming rather than
-apologising, and the page half of this chunk deploys with chunk two if that
-reads badly to the person using it. The server half deploys as soon as it is
-done either way: nothing else can start until it is live.
+- **Overview**, the area's only screen in this chunk: running then serving, one
+  scroll, with its charts. No navigation row until invites lands.
+- Each number opens the rows behind it. Until the panels those rows live in
+  exist, a number that has nowhere to go says its figure and doesn't pretend to
+  be a link.
 
 **Fullstack Friend reviews both**, since each is its area's owner writing in
 their own area. It also holds the operator-side question nobody else does: what
-this eventually does to `new-invite.ps1`, which chunk three supersedes.
+this eventually does to `new-invite.ps1`, which chunk two supersedes.
 
 **Nobody else has work in this chunk.** Prompt Bro's areas aren't touched;
 Documentation Dude's files aren't either, beyond the schema doc, which is
 Backend Buddy's to update in the same commit.
 
-**Done means:** an operator signs in and reaches the area from the header, and
-an ordinary account signs in and sees no trace of it. Not "the routes work".
+**Done means:** an operator signs in, reaches the area from the header, and
+reads last night's state across every account from a phone; an ordinary account
+signs in and sees no trace of it. Not "the routes work".
 
