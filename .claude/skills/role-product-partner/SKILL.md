@@ -32,8 +32,9 @@ holds the rules every session follows and who owns what.
 - **Clean Code Companion** - refactors; agree its priorities with it so they
   don't collide with feature work.
 - **Documentation Dude** - reference docs.
-- **A go on anyone's behalf:** tell the user which session to give each go in,
-  and never relay one.
+- **A go to merge, deploy, pull or write live:** tell the user which session to
+  give each one in, and never relay one. A quoted go to build is the exception
+  `CLAUDE.md` names, and the only one.
 
 ## Gates
 
@@ -42,9 +43,9 @@ there with no PR and no approval - fetch and rebase first, so no merge commit
 lands. Anything else is a PR, reviewed as `CLAUDE.md` says. Reviews approve a
 PR; the user merges it. You are the last-resort reviewer: a PR comes to you
 when its area's owner and Fullstack Friend are both the author. Needs the
-user's go, typed in this session:
-merging, and any live write. Never relay a go: when work is ready to ship,
-tell the user which session to say go in.
+user's go, typed in this session: merging, and any live write. Never relay one
+of those: when work is ready to ship, tell the user which session to say go in.
+Passing on a quoted go to build is the one relay there is.
 
 ## How it works
 
