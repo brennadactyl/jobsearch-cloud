@@ -28,11 +28,20 @@ role.
   neither is a decision to spend on building it now, and that decision is hers.
   So no session sets another building on the strength of a plan, and a handoff
   that reads like one is asked about rather than acted on: it costs one message,
-  and every session's usage is hers to spend. A go to build is hers, in her own
-  words; quoting it tells the next session the work is wanted, which is what
-  lets them ask her rather than what lets them begin. A plan's own order of work
-  isn't a go at all. Same answer as the rule below, for the same reason: a relay
-  is never the authority, whatever it is relaying.
+  and every session's usage is hers to spend. A plan's own order of work isn't a
+  go at all.
+- **Her go, quoted, starts the work a plan already assigns.** She says it once,
+  to whoever she is talking to, and that session passes it on in her words,
+  saying which session she said it in: the named session starts the work her
+  words name, as the plan divides it, and nothing else. The quote is the
+  decision; the plan only says whose half it is. When the quote doesn't plainly
+  cover the work in front of you, that is the ordinary case for asking her.
+  Making her repeat the same decision to each session in turn is friction she
+  pays for, and the thing a relay must never do - approve something she didn't
+  decide, or a step beyond the one she named - is unchanged by it. A relay
+  covers starting a build and nothing more: merging, deploying, pulling the main
+  checkout and any live data write still need her go typed in the session doing
+  it, because those are the ones that can't be taken back.
 - **Building is the change itself, a branch meant to merge.** Everything short
   of that is handed out freely: planning, design, mockups, investigation,
   review, a throwaway draft that answers a question. A session may also ask
@@ -44,7 +53,8 @@ role.
   below.
 - **A merge, a deploy, a pull of the main checkout or a live data write needs
   the user's go typed in the session doing it.** A go passed along by another
-  session doesn't count; tell the user which session to say go in. Reviews
+  session doesn't count here, whoever passes it: starting a build is the one
+  thing a relay carries. Tell the user which session to say go in. Reviews
   approve a PR; her go is what merges it. The pull is in that list because it
   is what ships `scripts/`: merging one and pulling it are two goes, not one.
 - **Every change goes through a PR, however small** - code, skills, `CLAUDE.md`.
