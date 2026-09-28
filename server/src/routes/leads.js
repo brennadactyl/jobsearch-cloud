@@ -88,6 +88,46 @@ export async function handleAddLeads({ request, db }) {
 }
 
 /**
+ * What a lead carries into the application it becomes.
+ *
+ * Two paths reach it - a person marking a lead Applied, and a person pasting
+ * a link they already have as a lead (./update.js) - and the two must produce
+ * the same row, or which route someone happened to use decides what their
+ * application knows. The lead's own `url` becomes the application's `link`,
+ * not whatever the caller typed, so the row keeps the posting's address as it
+ * was found.
+ *
+ * `dateApplied` is today: the lead is being applied to now. Nothing else here
+ * is defaulted, because everything else is the lead's.
+ *
+ * `fit` comes across for the reason migrations/0029 gives: it is the run's
+ * sentence on why this posting was worth their evening, and the application is
+ * the row that outlives the posting. Only a lead has one, so an application
+ * made any other way keeps ''.
+ *
+ * @param {import("../db.js").Lead} lead
+ * @returns {Partial<import("../db.js").Application>}
+ */
+export function applicationFromLead(lead) {
+  return {
+    leadId: String(lead.id),
+    company: lead.company,
+    title: lead.title,
+    location: lead.location || "",
+    area: lead.area || "",
+    dateApplied: today(),
+    status: "Applied",
+    notes: lead.notes || "",
+    fit: lead.fit || "",
+    link: lead.url || "",
+    referral: lead.referral || "",
+    comp: lead.comp || "",
+    team: lead.team || "",
+    setup: lead.setup || "",
+  };
+}
+
+/**
  * POST /api/leads/:id/status - requires a Bearer token. Body `{ status }` ->
  * `{ lead, application }`; 400 for a status not in LEAD_STATUS, 404 for an
  * unknown lead.
@@ -114,23 +154,7 @@ export async function handleSetLeadStatus({ request, db, params }) {
   const { lead: updatedLead, application: newApp } = await db.setLeadStatusAndMaybeCreateApplication(
     id,
     body.status,
-    willCreateApp
-      ? {
-          leadId: String(id),
-          company: lead.company,
-          title: lead.title,
-          location: lead.location || "",
-          area: lead.area || "",
-          dateApplied: today(),
-          status: "Applied",
-          notes: lead.notes || "",
-          link: lead.url || "",
-          referral: lead.referral || "",
-          comp: lead.comp || "",
-          team: lead.team || "",
-          setup: lead.setup || "",
-        }
-      : null
+    willCreateApp ? applicationFromLead(lead) : null
   );
   await db.touchUpdated();
 

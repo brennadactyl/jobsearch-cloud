@@ -13,14 +13,21 @@
 import { json, readJson } from "../http.js";
 import { isoDate, storedArea, unknownTrack } from "../validate.js";
 import { removeDelistedLead } from "./delisting.js";
+import { applicationFromLead } from "./leads.js";
 
 /**
  * POST /api/update - requires a Bearer token. Body
- * `{ type: "lead"|"application", ... }` -> `{ ok, lead }` or
- * `{ ok, application }`; 400 for an unknown type or a `delistedOn` that isn't
- * YYYY-MM-DD, 404 for an unknown lead, application or destination track, 409
- * when the destination tab already holds the lead's url. A lead with
- * `delistedOn` answers as ./delisting.js's removeDelistedLead.
+ * `{ type: "lead"|"application", ... }` -> `{ ok, lead }`, or
+ * `{ ok, application, moved, existing }` for an application; 400 for an
+ * unknown type or a `delistedOn` that isn't YYYY-MM-DD, 404 for an unknown
+ * lead, application or destination track, 409 when the destination tab
+ * already holds the lead's url. A lead with `delistedOn` answers as
+ * ./delisting.js's removeDelistedLead.
+ *
+ * An application without an `id` is a new one, and its `link` may be a posting
+ * this person already has - see createApplication below. `moved` and
+ * `existing` describe what happened to it and are always present on that
+ * answer; an update by `id` carries neither.
  */
 export async function handleUpdate({ request, db }) {
   const body = await readJson(request);
@@ -72,15 +79,94 @@ export async function handleUpdate({ request, db }) {
       if (!app) return json({ error: "application not found" }, 404);
       await db.touchUpdated();
       return json({ ok: true, application: app });
-    } else {
-      // An area on a new row is kept only if it is one of the person's ranked
-      // entries, as everywhere else (validate.js storedArea).
-      const area = body.area === undefined ? "" : storedArea(body.area, (await db.getTracksAndSettings()).settings.priority_locations);
-      const app = await db.insertApplication({ ...body, area });
-      await db.touchUpdated();
-      return json({ ok: true, application: app });
     }
+    return createApplication(db, body);
   }
 
   return json({ error: "unknown update type" }, 400);
+}
+
+/**
+ * Creating an application from a link, which is usually a posting this person
+ * already has somewhere: on the board as a lead, or in `screened` because a
+ * run's rules turned it away and they disagree. So the posting is looked up
+ * first (db.findPostingByUrl, canonical URL) and moved where one lands,
+ * rather than added a second time.
+ *
+ * Moving beats inserting for a reason beyond the duplicate row. The row that
+ * is already here knows the company, the title and the location; a fresh one
+ * knows a link, and waits a night for the fill to read what this database
+ * already had. What the caller sent still wins over it, since a person typing
+ * a company is correcting what is stored, not repeating it.
+ *
+ * `moved` says which table the row came from, `existing` that there was
+ * already an application and nothing was created - a caller with no row of its
+ * own to show otherwise can't tell the three apart, and they don't mean the
+ * same thing to whoever pasted the link.
+ *
+ * A link that matches nothing, or no link at all, inserts as before. Adding an
+ * application with no link is ordinary: not every job applied to came from a
+ * posting someone still has.
+ */
+async function createApplication(db, body) {
+  const found = await db.findPostingByUrl(body.link);
+
+  // Already an application: hand back the row they already have. Nothing is
+  // written, so the page's "last updated" doesn't move for a no-op.
+  if (found?.where === "application") {
+    return json({
+      ok: true,
+      application: await db.getApplication(found.row.id),
+      moved: "",
+      existing: true,
+    });
+  }
+
+  // On the board as a lead: this is the same move as marking it Applied, so it
+  // goes through the same fields and the same transaction. The lead keeps its
+  // row, linked by leadId, and leaves every leads tab because it is Applied -
+  // which is what stops the posting showing twice.
+  if (found?.where === "lead") {
+    const lead = await db.getLead(found.row.id);
+    // Gone between the lookup and here, or already applied to: fall through
+    // rather than move a row that isn't there or create a second application
+    // for one lead.
+    if (lead) {
+      const already = await db.getApplicationByLeadId(lead.id);
+      if (already) {
+        return json({ ok: true, application: already, moved: "", existing: true });
+      }
+      const { application } = await db.setLeadStatusAndMaybeCreateApplication(
+        lead.id,
+        "Applied",
+        applicationFromLead(lead)
+      );
+      await db.touchUpdated();
+      return json({ ok: true, application, moved: "lead", existing: false });
+    }
+  }
+
+  // An area on a new row is kept only if it is one of the person's ranked
+  // entries, as everywhere else (validate.js storedArea).
+  const area = body.area === undefined ? "" : storedArea(body.area, (await db.getTracksAndSettings()).settings.priority_locations);
+
+  // Screened: a posting the person is overruling their own search about. The
+  // screened row carries what the run saw, so the application starts with a
+  // company and a title instead of a blank row and a night's wait.
+  if (found?.where === "screened") {
+    const row = found.row;
+    const application = await db.applyFromScreened(row.id, {
+      ...body,
+      area,
+      company: body.company || row.company || "",
+      title: body.title || row.title || "",
+      location: body.location || row.location || "",
+    });
+    await db.touchUpdated();
+    return json({ ok: true, application, moved: "screened", existing: false });
+  }
+
+  const app = await db.insertApplication({ ...body, area });
+  await db.touchUpdated();
+  return json({ ok: true, application: app, moved: "", existing: false });
 }

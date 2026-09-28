@@ -1,0 +1,27 @@
+-- applications.fit: the sentence the search wrote about why this posting
+-- suited the person, kept when a lead becomes an application.
+--
+-- `fit` is the one thing a run writes that is about this person rather than
+-- about the posting: a line of prose saying what made it worth their evening.
+-- A lead has carried it since the first schema, and until now the application
+-- made from that lead did not - the row that outlives the posting dropped the
+-- one field explaining why it was ever opened. By the time someone is
+-- preparing for a screen, the posting may be gone and the lead with it, and
+-- that sentence is what they wanted back.
+--
+--   fit   the lead's `fit`, copied when the application is made from one.
+--         '' on every other application, and on every row written before this.
+--
+-- '' is not a gap waiting to be filled. Only a lead has a fit: an application
+-- someone types in by hand never had a search's judgement behind it, and the
+-- overnight fill (routes/applications.js) reads a posting, which states what
+-- the job is and never what it would mean for this reader. Nothing infers one
+-- later, so a blank here reads as "no search judged this", which is true.
+--
+-- Copied, not referenced. `leadId` already points at the lead, but a lead is
+-- deleted when its posting goes away (routes/delisting.js keeps the
+-- application and takes the lead), so a reference would empty itself exactly
+-- when the sentence is most wanted. The person may also edit it afterwards, at
+-- which point it is their account of the job and not the run's.
+
+ALTER TABLE applications ADD COLUMN fit TEXT NOT NULL DEFAULT '';

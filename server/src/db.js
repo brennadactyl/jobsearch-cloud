@@ -59,6 +59,9 @@
  * @property {string} dateApplied - YYYY-MM-DD
  * @property {string} status - one of APP_STATUS in routes/applications.js
  * @property {string} notes
+ * @property {string} fit - the search's sentence on why this posting suited them,
+ *   copied from the lead this was made from; '' when it wasn't made from one
+ *   (migrations/0029)
  * @property {string} team
  * @property {string} setup
  * @property {string} source
@@ -291,7 +294,7 @@ export const DEFAULT_SETTINGS = {
 // setLeadStatusAndMaybeCreateApplication) share this one list, so a new field
 // can't reach only one of them.
 const APPLICATION_COLS = [
-  "leadId", "company", "title", "location", "area", "dateApplied", "status", "notes",
+  "leadId", "company", "title", "location", "area", "dateApplied", "status", "notes", "fit",
   ...EXTRA_FIELDS, ...APP_STAGE_DATE_FIELDS, "autofill", "autofill_note",
 ];
 
@@ -1281,7 +1284,8 @@ export class Db {
    * sibling tab the next night would read as new and be added twice.
    *
    * Two independent tracks with the same posting still get a row each; a feed
-   * group is one search with several outputs.
+   * group is one search with several outputs. An application is the exception
+   * and excludes its posting from all of them - see below.
    *
    * Rows accepted earlier in the same batch join the set, which catches one
    * payload naming a posting twice.
@@ -1310,7 +1314,7 @@ export class Db {
 
     const seen = new Map([...roots].map((r) => [r, new Set()]));
     const placeholders = groupKeys.map(() => "?").join(", ");
-    const [leads, screened] = await Promise.all([
+    const [leads, screened, applications] = await Promise.all([
       this.d1
         .prepare(`SELECT search, url FROM leads WHERE user_id = ? AND search IN (${placeholders})`)
         .bind(this.userId, ...groupKeys)
@@ -1319,9 +1323,22 @@ export class Db {
         .prepare(`SELECT search, url FROM screened WHERE user_id = ? AND search IN (${placeholders})`)
         .bind(this.userId, ...groupKeys)
         .all(),
+      this.d1
+        .prepare("SELECT link FROM applications WHERE user_id = ? AND link <> ''")
+        .bind(this.userId)
+        .all(),
     ]);
     for (const row of [...leads.results, ...screened.results]) {
       seen.get(root(row.search))?.add(canonicalUrl(row.url));
+    }
+    // An application excludes its posting from every group, not one. It is
+    // filed under no track - `applications` has no `search` - and a job already
+    // applied to is not a new lead in any tab, whichever search turns it up.
+    // That is the one place this differs from a lead, which two independent
+    // searches may each hold; a person applies once.
+    for (const row of applications.results) {
+      const key = canonicalUrl(row.link);
+      if (key) for (const set of seen.values()) set.add(key);
     }
 
     const fresh = [];
@@ -1659,7 +1676,7 @@ export class Db {
    * @returns {Promise<Application|null>}
    */
   async updateApplication(id, patch) {
-    const fields = ["company", "title", "location", "dateApplied", "status", "notes", "leadId", ...EXTRA_FIELDS, ...APP_STAGE_DATE_FIELDS];
+    const fields = ["company", "title", "location", "dateApplied", "status", "notes", "fit", "leadId", ...EXTRA_FIELDS, ...APP_STAGE_DATE_FIELDS];
     const changed = await this.#patchRow("applications", fields, id, patch);
     return changed ? this.getApplication(id) : null;
   }
@@ -1819,6 +1836,90 @@ export class Db {
   }
 
   // ------------------------------------------------------- composite --
+
+  /**
+   * What this person already has for a posting, matched by canonical URL
+   * (./url.js).
+   *
+   * A posting typed into the applications box is often already here - on the
+   * board as a lead, or in `screened` because a run's rules turned it away and
+   * the person disagrees. Inserting blind puts one job on the page twice, in
+   * two rows that know nothing about each other, and the second one arrives
+   * empty because nothing carries the first one's company and title across.
+   *
+   * Matched in JS rather than SQL, for the reason getLeadsForUrlMatch gives: a
+   * link someone pastes from a posting rarely carries the tracking params the
+   * row was stored with, and a raw string compare would miss it.
+   *
+   * The order is precedence, not search order. An application wins whenever
+   * one exists, because it is the row being asked for and the least
+   * recoverable row here (routes/applications.js). A lead and a screened row
+   * never hold one posting at once - deleteLeadAndScreen replaces the one with
+   * the other - so between those two the order only settles a database already
+   * inconsistent, and the lead is the row a person can see. Oldest first
+   * within a table, since `applications` has no uniqueness of its own and may
+   * already hold two rows for a posting.
+   *
+   * @param {string} url
+   * @returns {Promise<{where: 'application'|'lead'|'screened', row: Object}|null>}
+   */
+  async findPostingByUrl(url) {
+    const key = canonicalUrl(url);
+    // A blank or unparseable link identifies no posting, so it matches nothing
+    // rather than matching every other row that also has none.
+    if (!key) return null;
+
+    const [apps, leads, screened] = await Promise.all([
+      this.d1
+        .prepare("SELECT id, link FROM applications WHERE user_id = ? AND link <> '' ORDER BY id")
+        .bind(this.userId)
+        .all(),
+      this.d1
+        .prepare("SELECT id, url FROM leads WHERE user_id = ? ORDER BY id")
+        .bind(this.userId)
+        .all(),
+      this.d1
+        .prepare(
+          `SELECT id, search, url, company, title, location, date, found
+             FROM screened WHERE user_id = ? ORDER BY id`
+        )
+        .bind(this.userId)
+        .all(),
+    ]);
+
+    const match = (rows, col) => rows.results.find((r) => canonicalUrl(r[col]) === key);
+    const app = match(apps, "link");
+    if (app) return { where: "application", row: app };
+    const lead = match(leads, "url");
+    if (lead) return { where: "lead", row: lead };
+    const screenedRow = match(screened, "url");
+    if (screenedRow) return { where: "screened", row: screenedRow };
+    return null;
+  }
+
+  /**
+   * Turns a screened row into an application, in one D1 batch (transaction).
+   *
+   * The screened row is deleted rather than kept. It exists to tell future
+   * runs to skip the URL, and an application does that job now that
+   * dropKnownUrls reads applications too; leaving it would also show the
+   * person one posting in two places, which is the thing this path is for.
+   * Both halves land together: the insert alone leaves a row saying the
+   * posting was rejected, and the delete alone loses it entirely.
+   *
+   * @param {number|string} screenedId
+   * @param {Partial<Application>} fields
+   * @returns {Promise<Application>}
+   */
+  async applyFromScreened(screenedId, fields) {
+    const results = await this.d1.batch([
+      this.#applicationInsert(fields),
+      this.d1
+        .prepare("DELETE FROM screened WHERE id = ? AND user_id = ?")
+        .bind(screenedId, this.userId),
+    ]);
+    return this.getApplication(results[0].meta.last_row_id);
+  }
 
   /**
    * Sets a lead's status and optionally inserts an application, in one D1
