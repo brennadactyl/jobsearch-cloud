@@ -10,10 +10,16 @@ the tracker) and `docs/schema.md`. The routes today are in
 [`server/README.md`](../server/README.md); the account panel is
 [account-settings-plan.md](account-settings-plan.md).
 
-Screens: [Operator area, entry and invites](https://claude.ai/artifact/HpPc5T8egLhjm8aghhXMeW),
+Screens: [Operator area](https://claude.ai/artifact/HpPc5T8egLhjm8aghhXMeW),
 approved - the operator's header and an ordinary one, invites at phone and
-desktop width, the first-run state, and the minted link. The read panels are
-drawn next.
+desktop width with their first-run and minted states, each reading panel at
+phone width, one of them widened, a first look at an account with no history,
+and the composed step with its three refusals.
+
+**The area shows only what exists.** No navigation row until there is a second
+panel to switch to, and each panel appears as it is built. A single chip is a
+tab bar with one tab, and a chip for a panel that isn't there is a promise the
+page can't keep.
 
 ## Who gets in
 
@@ -159,6 +165,12 @@ The actions that are scripts today, each on a named account and each confirmed:
   can't undo. The list below is cards at phone width and a table at desktop -
   the same four facts either way, not a second design. First run keeps the form
   and puts the empty state under it rather than replacing it.
+- **The link is copied, not sent.** There is no email anywhere in this system -
+  an invite row holds a note, not an address - so sending would mean a mail
+  provider, its deliverability and a stored address for everyone invited, to
+  save an operator pasting a link into the conversation they are already having.
+  If it is ever wanted, the phone's own share sheet is the version that adds no
+  service and stores nothing.
 - **A password is never typed into this page.** Reset means minting a
   single-use link the person sets their own password with, not choosing one for
   them. If that link doesn't exist yet, the dashboard doesn't reset passwords.
