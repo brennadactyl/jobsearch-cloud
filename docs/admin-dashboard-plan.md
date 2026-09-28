@@ -45,9 +45,23 @@ Four panels, each answering a question an operator asks today by reading logs or
 a backup.
 
 **Last night.** One row per search across every account: ran, paused, failed or
-never ran, what it added and screened, and how long it took. A search whose task
-has stopped reads differently from one that ran and found nothing - that
-distinction is the reason this panel exists.
+never ran, and what it added and screened. A search whose task has stopped reads
+differently from one that ran and found nothing - that distinction is the reason
+this panel exists.
+
+**It shows recorded runs, and says so.** The server knows only what a run
+reported. A run that died before recording - the CLI unauthenticated, a document
+over the limit, the write-back refused, the machine asleep - reported nothing,
+so from here it is indistinguishable from a search that never ran, which is the
+distinction above. Queue wait, elapsed time and the runner's own problem tags
+live in logs on the machine that ran them. So the panel names what it can't see
+and points at `run-report.ps1` for the rest, until a route serves a run's log -
+which is its own change, not a detail of this one.
+
+**"Never ran" needs a machine, not a button.** A search added through config has
+no scheduled task until `setup-scheduler.ps1` runs on the PC that runs the
+searches, and no browser reaches that. The panel says what is missing and where
+to fix it rather than offering an action it can't perform.
 
 **Accounts.** Each person, their searches, whose resume is unreadable, and which
 searches are paused. Invites sent, used and unused. Intakes pending, failed, or
@@ -90,6 +104,14 @@ The actions that are scripts today, each on a named account and each confirmed:
 - **A password is never typed into this page.** Reset means minting a
   single-use link the person sets their own password with, not choosing one for
   them. If that link doesn't exist yet, the dashboard doesn't reset passwords.
+  Whether that link revokes their sessions is the link's decision to state, not
+  to inherit: `set-password.ps1` deliberately leaves them alive, because one of
+  them is the search token in `tracker.json`, and revoking it stops that
+  person's nightly runs until someone mints a new one and edits a file on the
+  run machine.
+- **A destructive action shows how old the last backup is.** Deleting an account
+  from a phone without knowing whether there is a recent backup is the one way
+  this page can cost something that can't be got back.
 - **Deleting an account asks for its name typed back**, as the search reset
   does, and says what will go.
 - **Every action says what it did and what it changed**, because an operator
@@ -101,6 +123,11 @@ Editing a person's searches, their locations or their documents. An operator
 fixing someone's config by hand is the thing the account panel exists to end,
 and a dashboard that can do it invites doing it. A bad answer someone typed is
 fixed by telling them, or by a change to the form that asked badly.
+
+**It replaces one script, `new-invite.ps1`.** The others stay, because they act
+on the machine rather than on the data: `setup-scheduler.ps1` registers Windows
+tasks there, `backup-tracker.ps1` writes files to its disk, `import-documents.ps1`
+reads a folder on it, and no browser reaches any of that.
 
 ## Order of work
 
