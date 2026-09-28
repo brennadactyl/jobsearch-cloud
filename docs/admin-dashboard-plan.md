@@ -12,10 +12,10 @@ the tracker) and `docs/schema.md`. The routes today are in
 
 Screens: [Operator area](https://claude.ai/artifact/HpPc5T8egLhjm8aghhXMeW),
 approved - the operator's header and an ordinary one; invites at phone and
-desktop width with their first-run and minted states; last night, accounts, a
-person's own page and the company list, with a first look at an account that has
-no history; adding a company; and the composed step in each of its three
-refusals.
+desktop width with their first-run and minted states; Overview at both widths,
+with charts and on a night with nothing wrong; last night, accounts, a person's
+own page and the company list, with a first look at an account that has no
+history; adding a company; and the composed step in each of its three refusals.
 
 **The area shows only what exists.** No navigation row until there is a second
 panel to switch to, and each panel appears as it is built. A single chip is a
@@ -71,10 +71,12 @@ an Admin area; nothing new is typed into a browser.
 
 ## What it shows
 
-Four tabs. Overview is where the area opens; Last night, Accounts and the
+Five tabs. Overview is where the area opens; Last night, Accounts and the
 company list answer a question an operator asks today by reading logs or a
-backup. Everything about one person is reached through that person, not through
-a fifth tab.
+backup; Invites is the one tab that is an action rather than a reading, and it
+is a tab of its own because it ships before any of the panels exist and is the
+thing an operator reaches for most. Everything about one person is reached
+through that person, not through a sixth tab.
 
 **Overview.** Two questions, in this order: is the system running, and is it
 serving anyone. Everything on it is a number an operator can act on, and each
@@ -125,6 +127,17 @@ a fact.
   night panel states: a run that died recorded nothing, and no count here can
   tell that from a search that never ran. The missing-nights number is what
   surfaces that, and it is the one an operator should look at first.
+- **Running and serving are one screen, in that order**, and it scrolls. Two
+  tabs would turn one question - is this fine - into two checks, and the second
+  is the one nobody does.
+- **Searches finding nothing sits last in serving, with no colour.** It isn't a
+  fault: among the red things it reads as broken and gets chased like a bug,
+  when what it needs is a conversation with the person whose search it is.
+- **A number gets a picture only where a picture says more than the number.**
+  Seven nights of leads is a column chart, so last night has a baseline and a
+  night that found none is visible. A ratio of two parts stays a meter or a row:
+  a two-slice pie asks the eye to compare angles while the label carries the
+  number anyway.
 
 **Last night.** One row per search across every account: what it added and
 screened, and which of four states it is in. A search whose task has stopped
@@ -268,10 +281,9 @@ reads a folder on it, and no browser reaches any of that.
    migration, `ADMIN_ROUTES` accepting an operator session while its handlers
    keep `user: null` and `db: null`, and `GET /api/me` saying whether the caller
    is one - it returns `{id, name}` today, so that field is real work.
-2. **Invites** (Client Comrade): the whole panel, and the first thing worth
+2. **Invites** (Client Comrade): the whole tab, and the first thing worth
    having. Every route it needs exists, so step 1 is all that stands between
-   here and minting an invite from a phone. No mockup: a note, a day count, a
-   link to copy, a list with revoke.
+   here and minting an invite from a phone.
 3. **The read routes** (Backend Buddy): Overview's counts, last night across
    accounts, accounts with their setup state, and company-list coverage. One
    route per panel rather than one that answers everything, reading through a
@@ -279,7 +291,10 @@ reads a folder on it, and no browser reaches any of that.
    not summed by the page from rows it happens to hold - the page summing them
    is how a count starts meaning the window rather than the question.
 4. **Those panels** (Client Comrade), Overview first, since it is where the area
-   opens and the others are what its numbers link to.
+   opens and the others are what its numbers link to. Overview is built with its
+   charts: they cost little and the seven-night column is the one picture that
+   says something the rows can't. The chartless version is the fallback if that
+   turns out to be wrong, not a second design to maintain.
 5. **The rest of the actions** (Fullstack Friend, with the area's owner): retry
    a setup, which needs a way to put an intake back to `pending`; pause or
    resume.
