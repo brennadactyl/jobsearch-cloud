@@ -93,7 +93,11 @@ describe("the screened tab", () => {
     // Their own decision is one they already know about; this tab is what their
     // settings cost them without their seeing it.
     expect(screen.queryByText("not for me")).toBeNull();
-    expect(screen.queryByText(/You removed it/)).toBeNull();
+    // And no group stands ready for one. The filter drops these rows before
+    // anything is grouped, so a label for them is one nothing can render - and
+    // a vocabulary that still names them is how the next reader concludes the
+    // tab shows them.
+    expect(SCREENED_KINDS.some((k) => /removed|you took/i.test(k.label))).toBe(false);
   });
 
   it("takes what the settings cost from the server's count, never from the rows it holds", async () => {
