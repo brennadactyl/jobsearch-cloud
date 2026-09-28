@@ -44,7 +44,7 @@ export default function LocationsSection({
       <PlaceField
         {...field("search_locations")}
         placeholder="Add a place, then press Enter"
-        hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
+        hint="Every area the search should cover — name all of it, not only the part you'd prefer. Places, not employers: a city like Portland OR, or Remote with a country, like Remote US. The places you rank below are always searched too."
         // Empty doesn't mean anywhere: the search looks only where the ranked list says.
         empty="Only the ranked places"
       />

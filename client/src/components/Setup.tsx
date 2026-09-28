@@ -423,7 +423,12 @@ export default function Setup({
             // The one place the page states that preferred places are always
             // searched: a text match against this answer can't tell whether
             // Seattle is "US only", so no note names a place as outside it.
-            hint="Every area the search should cover — name all of it, not only the part you'd prefer. The places you rank below are always searched too."
+            // The first place question anyone meets, so it is the one that has
+            // to show what an entry looks like. Asking for "every area to
+            // cover" without an example invites an answer about scope in some
+            // other sense - the employers to cover, say - which is stored as
+            // typed, like any answer, and read as a place by every run after.
+            hint="Every area the search should cover — name all of it, not only the part you'd prefer. Places, not employers: a city like Portland OR, or Remote with a country, like Remote US. The places you rank below are always searched too."
           >
             <PlaceChips
               id={`${id}-scope`}
@@ -438,7 +443,7 @@ export default function Setup({
           <Field
             label={<label htmlFor={`${id}-first`}>{PLACE_QUESTIONS.priority_locations}</label>}
             problem={problems.locations_first}
-            hint="In order — the first is the one you want most, and the arrows move a place up or down. Use a city (add the state if the name is common, like Portland OR), or Remote with a country, like Remote US. Anywhere you don't name still shows up, just lower."
+            hint="In order — the first is the one you want most, and the arrows move a place up or down. Anywhere you don't name still shows up, just lower."
           >
             <PlaceChips
               id={`${id}-first`}
