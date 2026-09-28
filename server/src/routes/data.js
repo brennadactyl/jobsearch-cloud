@@ -36,12 +36,22 @@ export const SCREENED_WINDOW_DAYS = 90;
  * rather than 0: nothing was counted for it, which is not the same as a month
  * in which it turned nothing away.
  *
- * **What is shown**: "did this person choose this, or does it just explain a
- * night?" That set is the page's, not this route's - the settings-caused kinds
- * plus what someone removed from their own board by hand, which is the only
- * record of that. `delisted`, `dead` and `duplicate` travel as lead history
- * and are not displayed. Stated here because a row arriving is not a row shown,
- * and the next person to read this file will assume it is.
+ * **What is shown**: "what did their settings cost them without their seeing
+ * it?" That set is the page's, not this route's, and today it is the counted
+ * set exactly - SCREENED_BY_RULES and nothing else - which is deliberate: a
+ * list wider than the number above it is how someone stops trusting both.
+ *
+ * So the rows sent but not shown are `delisted`, `other`, and what someone set
+ * aside by hand. The last is the one worth naming, because sending it looks
+ * like intending to display it: the tab is for what a rule decided, and a
+ * decision they made themselves is one they already know about. It is sent
+ * anyway - it is the only record that they made it.
+ *
+ * Stated here because a row arriving is not a row shown, and the next person
+ * to read this file will assume it is. This route sends what the person owns;
+ * which of it belongs on a page is a different question, answered in
+ * client/src/domain/screened.ts and changed there without telling this file.
+ * Treat this paragraph as the likeliest of the three to have gone stale.
  *
  * `screened_window` is `{ days, older }`, and `older` follows the first rule,
  * since it describes the rows not sent.
