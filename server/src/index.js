@@ -12,12 +12,13 @@
  * to. It stands beside the scoped stores, never in place of one.
  */
 
-import { bearer, getSessionUser, isAdminRequest } from "./auth.js";
+import { DeploymentDb } from "./deployment-db.js";
+import { adminSessionUser, bearer, getSessionUser, isAdminRequest } from "./auth.js";
 import { CompanyList } from "./companies.js";
 import { Db } from "./db.js";
 import { corsPreflight, CORS_HEADERS, unauthorized } from "./http.js";
 import { Docs, RunLogs } from "./r2.js";
-import { ADMIN_ROUTES, matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./routes/index.js";
+import { ADMIN_ROUTES, matchRoute, PUBLIC_ROUTES, S2S_ROUTES, SESSION_ROUTES } from "./routes/index.js";
 
 /**
  * What every handler receives - one shape for all of them, so ./routes/index.js
@@ -34,6 +35,13 @@ import { ADMIN_ROUTES, matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./route
  * @property {CompanyList|null} companyList the company list every account shares, or null on a public route
  * @property {Docs|null} docs their documents in R2, scoped the same way
  * @property {RunLogs|null} runLogs their nightly run logs in R2, scoped the same way
+ * @property {DeploymentDb|null} deploymentDb the deployment-wide reader, on admin routes only
+ * @property {{id: string, name: string}|null} adminUser on an admin route reached
+ *   by a person's session, who that was; null when the deployment's
+ *   ADMIN_TOKEN was used, and on every other route. For attribution only - it
+ *   says who did something and never whose rows are in front of them. An admin
+ *   handler still receives `user: null` and `db: null`, so it cannot scope by
+ *   this even by accident.
  */
 
 export default {
@@ -47,22 +55,53 @@ export default {
     const open = matchRoute(PUBLIC_ROUTES, request.method, url.pathname);
     if (open) {
       return open.handler({
-        request, env, url, params: open.params, token: "", user: null, db: null, companyList: null, docs: null, runLogs: null,
+        request, env, url, params: open.params, token: "", user: null, db: null,
+        companyList: null, docs: null, runLogs: null, adminUser: null, deploymentDb: null,
       });
     }
 
-    // The admin list is checked as a list: ADMIN_TOKEN or 401, before any handler
-    // in it runs. Matched before the session is resolved, because no person's
-    // session is ever the credential for these.
+    // Two lists, one credential each, checked as lists before any handler in
+    // them runs. A machine's routes take ADMIN_TOKEN; a person's take a session
+    // whose account carries `users.admin`. Which list a route is in is the
+    // whole of who may call it - see routes/index.js for why that beats one
+    // list with two doors.
+    //
+    // The machine list is tried first and answers without a database read, so
+    // the scripts' path is exactly what it was. A path in both lists - invites,
+    // for now - falls through to the admin check when no token was given,
+    // which is what makes it reachable by either.
+    //
+    // What reaches neither kind of handler is `user` and `db`, null in both.
+    // These routes act on an account they name; handed a `Db` a handler would
+    // act on the caller's own while looking correct in review. The absence is
+    // the rule enforcing itself, so it survives the next handler added by
+    // someone who hasn't read this.
+    const context = (route, adminUser) => ({
+      request, env, url, params: route.params, token: "", user: null, db: null,
+      companyList: null, docs: null, runLogs: null, adminUser,
+      // The cross-account reader, and the only thing here that can see more
+      // than one person's rows. Built without a user on purpose
+      // (./deployment-db.js); it reads and never writes.
+      deploymentDb: new DeploymentDb(env.DB),
+    });
+
+    const s2s = matchRoute(S2S_ROUTES, request.method, url.pathname);
+    if (s2s && (await isAdminRequest(request, env))) {
+      return s2s.handler(context(s2s, null));
+    }
+
     const admin = matchRoute(ADMIN_ROUTES, request.method, url.pathname);
     if (admin) {
-      if (!(await isAdminRequest(request, env))) {
-        return unauthorized();
+      const adminUser = await adminSessionUser(request, env);
+      if (adminUser) {
+        return admin.handler(context(admin, adminUser));
       }
-      return admin.handler({
-        request, env, url, params: admin.params, token: "", user: null, db: null, companyList: null, docs: null, runLogs: null,
-      });
     }
+
+    // Matched one of the two lists but brought the wrong credential. Refused
+    // here rather than falling through to the session routes, where the path
+    // would 404 and say something about which routes exist.
+    if (s2s || admin) return unauthorized();
 
     // Resolve the session before matching the path, so an unauthenticated
     // caller gets 401 for every path and learns nothing about which exist.
@@ -88,6 +127,11 @@ export default {
       companyList: new CompanyList(env.DB),
       docs: new Docs(env.DOCS, user.id),
       runLogs: new RunLogs(env.DOCS, user.id),
+      // Null on every session route, including one an admin is making. Here
+      // they are a person reading their own tracker, and `db` is theirs; the
+      // admin reach begins and ends in ADMIN_ROUTES above.
+      adminUser: null,
+      deploymentDb: null,
     });
   },
 };

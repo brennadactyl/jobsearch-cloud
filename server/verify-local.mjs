@@ -108,9 +108,16 @@ check("a session token is not accepted as the admin token",
 // stayed under the router's check rather than a handler's.
 const routeTable = await import("./src/routes/index.js");
 const routeListed = (list, method, path) => list.some(([m, p]) => m === method && String(p) === String(path));
-check("provisioning an account and purging a search are admin routes, checked by the router",
-  routeListed(routeTable.ADMIN_ROUTES, "POST", "/api/users") && routeListed(routeTable.ADMIN_ROUTES, "POST", "/api/purge"));
-check("no public route is an operator route",
+check("provisioning an account and purging a search are machine routes, checked by the router",
+  routeListed(routeTable.S2S_ROUTES, "POST", "/api/users") && routeListed(routeTable.S2S_ROUTES, "POST", "/api/purge"));
+// Setting `users.admin` lives on /api/users, so keeping that route out of the
+// admin list is the whole of why an admin cannot promote anyone. Asserted
+// against the table because it is a fact about where a route sits, not about
+// what a handler does.
+check("and neither is reachable by a signed-in person, whatever their account carries",
+  !routeListed(routeTable.ADMIN_ROUTES, "POST", "/api/users") &&
+  !routeListed(routeTable.ADMIN_ROUTES, "POST", "/api/purge"));
+check("no public route is a privileged one",
   !routeTable.PUBLIC_ROUTES.some(([, p]) => ["/api/users", "/api/purge", "/api/invites", "/api/tokens"].includes(String(p))));
 check("no token at all is 401", (await req("GET", "/api/data")).status === 401);
 check("a made-up token is 401", (await req("GET", "/api/data", { token: "not-a-real-token" })).status === 401);
@@ -4323,6 +4330,177 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     { search: "SWE", company: "Acme", title: "SDE", location: "Remote", url: swUrl("ancient") }] } });
   check("nor as a new lead",
     asLead.json?.added === 0, JSON.stringify(asLead.json));
+}
+
+{
+  console.log("\n== an admin gets in by signing in, and the database decides ==");
+  // The flag is what admits someone to the admin routes, and it is read from
+  // the database on every one of them. So the property under test is not "an
+  // admin can get in" but "the answer follows the column, immediately, for
+  // a session already in someone's hand".
+  const opStamp = Date.now().toString(36);
+  const opName = `adm-${opStamp}`;
+  const plainName = `plain-${opStamp}`;
+  const pw = "admin-long-password-x";
+
+  await req("POST", "/api/users", { admin: true, body: { name: opName, password: pw, admin: true } });
+  await req("POST", "/api/users", { admin: true, body: { name: plainName, password: pw } });
+  const opTok = (await req("POST", "/api/login", { body: { name: opName, password: pw } })).json.token;
+  const plainTok = (await req("POST", "/api/login", { body: { name: plainName, password: pw } })).json.token;
+
+  check("a new account is not an admin unless it was made one",
+    (await req("GET", "/api/me", { token: plainTok })).json.admin === false);
+  check("and an admin's own /api/me says so, which is what offers them the area",
+    (await req("GET", "/api/me", { token: opTok })).json.admin === true);
+
+  check("an admin's session reaches an admin route",
+    (await req("GET", "/api/invites", { token: opTok })).status === 200);
+  // Refused at the router, before any handler, and told nothing about why: an
+  // area nobody else can see is the point.
+  check("an ordinary session does not, and learns nothing",
+    (await req("GET", "/api/invites", { token: plainTok })).status === 401);
+
+  // The flag admits; it never scopes. An admin handler gets no Db at all, so
+  // it cannot serve the caller's own rows by reaching for one - this is the
+  // observable half of that: an admin reading an account-shaped admin route
+  // gets the account it names, never themselves.
+  const opMe = (await req("GET", "/api/me", { token: opTok })).json;
+  const asked = await req("POST", "/api/purge", { admin: true, body: { user: plainName, search: "NOPE" } });
+  check("an admin route acts on the account it names, not on whoever called it",
+    asked.status !== 401 && !JSON.stringify(asked.json || {}).includes(opMe.id),
+    JSON.stringify(asked.json));
+
+  console.log("\n== clearing the flag takes the reach back, at once ==");
+  // The claim the design rests on: revocation is a column, not a sign-out.
+  // Checked by running it rather than reading it - the same session token
+  // throughout, so this is about the flag and not about the credential.
+  await req("POST", "/api/users", { admin: true, body: { name: opName, password: pw, admin: false } });
+  check("the same session is refused on its very next admin call",
+    (await req("GET", "/api/invites", { token: opTok })).status === 401);
+  check("while that session still works for their own tracker",
+    (await req("GET", "/api/data", { token: opTok })).status === 200);
+  check("and /api/me stops offering the area",
+    (await req("GET", "/api/me", { token: opTok })).json.admin === false);
+  // Granting is the same fact moving the other way, on the session they
+  // already hold - nobody has to sign in again to become an admin.
+  await req("POST", "/api/users", { admin: true, body: { name: opName, password: pw, admin: true } });
+  check("granting it again restores the reach on the session they already have",
+    (await req("GET", "/api/invites", { token: opTok })).status === 200);
+
+  console.log("\n== the two lists are not one list ==");
+  // The reason the lists are split rather than one list with two doors.
+  // `/api/tokens` mints a search token for a named account, which reaches
+  // everything that account owns - so a browser credential that could call it
+  // would quietly make every admin a reader of everyone's tracker. This is the
+  // check that would fail if someone folded the lists back together.
+  // Named by id, as that route wants - so a 401 here is the credential being
+  // refused rather than the subject being unfindable.
+  const plainId = (await req("GET", "/api/me", { token: plainTok })).json.id;
+  check("an admin's session cannot mint a search token for anyone",
+    (await req("POST", "/api/tokens", { token: opTok, body: { user: plainId } })).status === 401);
+  check("nor read what the onboarding run is handed",
+    (await req("GET", "/api/intake/pending", { token: opTok })).status === 401);
+  check("nor create or reset an account",
+    (await req("POST", "/api/users", { token: opTok, body: {
+      name: plainName, password: pw } })).status === 401);
+  // The machine keeps all of it, which is the other half of the same claim.
+  const stillPending = await req("GET", "/api/intake/pending", { admin: true });
+  const stillMints = await req("POST", "/api/tokens", { admin: true, body: { user: plainId } });
+  check("while the deployment's token still does each of those",
+    stillPending.status === 200 && stillMints.status < 400,
+    JSON.stringify({ pending: stillPending.status, tokens: stillMints.status }));
+  // Invites are the one path in both lists, on purpose and for now.
+  check("invites are the deliberate exception, reachable by either",
+    (await req("GET", "/api/invites", { admin: true })).status === 200 &&
+    (await req("GET", "/api/invites", { token: opTok })).status === 200);
+
+  console.log("\n== who may hand out the flag ==");
+  // An account that can grant itself the flag has a flag that means nothing.
+  // Nothing in the handler enforces that: the route that sets it is
+  // machine-only, so no session reaches it whoever they are. Checked by its
+  // effect rather than by a refusal message, because the protection is which
+  // list the route is in.
+  const grab = await req("POST", "/api/update", { token: opTok, body: { type: "application", link: "" } });
+  check("an admin is still an ordinary person on the ordinary routes",
+    grab.status === 200, String(grab.status));
+  const selfGrant = await req("POST", "/api/users", { token: opTok, body: {
+    name: plainName, password: pw, admin: true } });
+  check("an admin's session cannot make another admin",
+    selfGrant.status === 401, JSON.stringify(selfGrant.json));
+  check("and the account it tried to promote was not promoted",
+    (await req("GET", "/api/me", { token: plainTok })).json.admin === false);
+  check("an ordinary session is refused the same way, learning nothing extra",
+    (await req("POST", "/api/users", { token: plainTok, body: {
+      name: plainName, password: pw, admin: true } })).status === 401);
+
+  console.log("\n== each list is opened by its own credential, all of it ==");
+  // Walked over the route tables themselves rather than a sample. Five scripts
+  // authenticate with the token and one is the nightly onboarding run, which
+  // fails at 03:00 with nobody reading the log - so a narrowing has to fail
+  // here, on the route it dropped, rather than on whichever one someone
+  // remembered to test. The tables are the *subject* of this check, not its
+  // oracle, which is why importing them is right: an eleventh route is covered
+  // without anyone adding a line.
+  const { S2S_ROUTES, ADMIN_ROUTES } = await import("./src/routes/index.js");
+  // A RegExp path needs a subject in it. The id is nobody's, which is fine -
+  // what is being checked is admission, not the answer, so a 404 is a pass.
+  const asPath = (path) => typeof path === "string" ? path : path.source
+    .replace(/^\^/, "").replace(/\$$/, "").replace(/\\\//g, "/").replace(/\(\[\^\/\]\+\)/, "no-such-id");
+  const walk = async (table, creds) => {
+    const shut = [];
+    for (const [method, path] of table) {
+      const url = asPath(path);
+      const res = await req(method, url, { ...creds, body: method === "GET" ? undefined : {} });
+      if (res.status === 401) shut.push(`${method} ${url}`);
+    }
+    return shut;
+  };
+
+  const tokenShut = await walk(S2S_ROUTES, { admin: true });
+  check(`the deployment's token opens all ${S2S_ROUTES.length} machine routes`,
+    tokenShut.length === 0, tokenShut.join(", "));
+  const adminShut = await walk(ADMIN_ROUTES, { token: opTok });
+  check(`an admin's session opens all ${ADMIN_ROUTES.length} admin routes`,
+    adminShut.length === 0, adminShut.join(", "));
+
+  // And the crossing that must not work. Invites sit in both tables on
+  // purpose, so they are the expected overlap rather than a failure.
+  const overlap = new Set(ADMIN_ROUTES.map(([m, p]) => `${m} ${asPath(p)}`));
+  const crossed = [];
+  for (const [method, path] of S2S_ROUTES) {
+    const url = asPath(path);
+    if (overlap.has(`${method} ${url}`)) continue;
+    const res = await req(method, url, { token: opTok, body: method === "GET" ? undefined : {} });
+    if (res.status !== 401) crossed.push(`${method} ${url} -> ${res.status}`);
+  }
+  check("and an admin's session opens no machine route beyond the shared invites",
+    crossed.length === 0, crossed.join(", "));
+
+  console.log("\n== the operator's overview ==");
+  const ov = await req("GET", "/api/admin/overview", { token: opTok });
+  check("it answers an admin, grouped as the page reads it",
+    ov.status === 200 && !!ov.json.running && !!ov.json.serving && !!ov.json.standing,
+    JSON.stringify(ov.json).slice(0, 140));
+  check("an ordinary session cannot",
+    (await req("GET", "/api/admin/overview", { token: plainTok })).status === 401);
+  // A page's screen, not a script's. It sits in the admin list alone, so the
+  // machine's credential has no more business here than a stranger's - which
+  // is what having two lists is for.
+  check("and neither can the deployment's token - this one is the page's",
+    (await req("GET", "/api/admin/overview", { admin: true })).status === 401);
+  // The three quiet states are counted apart, since only one of them is a
+  // fault and a page that merges them teaches an operator to ignore it.
+  const r = ov.json.running;
+  check("the ways a search can be silent are counted separately",
+    ["ran_last_night", "reported_nothing", "no_task", "setups_waiting"].every((k) => typeof r[k] === "number"),
+    JSON.stringify(r));
+  check("and the night every 'last night' number is about is named",
+    typeof ov.json.night === "string");
+  // Demo accounts are invented by definition, so counting them would answer
+  // "is this serving anyone" with data about nobody.
+  const people = ov.json.standing.people;
+  check("the count of people leaves out the demo account",
+    typeof people === "number" && people > 0, String(people));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

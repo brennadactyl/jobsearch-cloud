@@ -1,0 +1,55 @@
+-- users.admin: this account may use the admin routes by signing in, rather
+-- than by holding the deployment's admin token (docs/admin-dashboard-plan.md).
+--
+-- Named for what it grants rather than for who holds it. The thing it opens is
+-- ADMIN_ROUTES in src/routes/index.js, reached today with ADMIN_TOKEN and
+-- checked by isAdminRequest - so a reader meeting this column already knows
+-- what admin means here, and doesn't have to map a second word onto it. The
+-- docs call the person an operator, which reads well of a person and badly of
+-- a boolean.
+--
+--   admin  1 may use the admin routes, 0 everyone else.
+--
+-- Declared BOOLEAN, which SQLite stores as 0 and 1 in a NUMERIC column - it
+-- has no boolean type, so the word is for the reader rather than the engine.
+-- `demo` beside it says INTEGER for the same two values, which is the older
+-- spelling; they behave identically and the difference is on the backlog
+-- rather than fixed here, because rewriting an applied migration is the one
+-- thing this directory never does. The API surface is a real boolean either
+-- way: `POST /api/users` takes `admin: true`, `GET /api/me` returns one.
+--
+-- Two credentials, two kinds of caller, and neither is the other's fallback. A
+-- person signs in and this column says whether they get in; a machine holds
+-- the token, which is what the operator scripts and the nightly onboarding run
+-- use. A browser is never given the token, and a script is never asked for a
+-- flag. The token keeps every route it reaches today.
+--
+-- Every existing account starts at 0, including whichever account has been
+-- doing this work with the token all along. There is no row it can be inferred
+-- for: holding the token is not a property of any account, which is most of
+-- the reason for this column.
+--
+-- **Read on every request, never copied.** The session lookup already joins
+-- `users`, so the flag is read where the decision is made and costs nothing.
+-- Clearing it ends that person's reach into every admin route at once, on
+-- every device, and leaves their ordinary session working - no revocation
+-- machinery, and nothing to keep in step. In particular it is never recorded
+-- on the session: a label written at sign-in would be a copy of a fact that
+-- moves afterwards, wrong in both directions and wrong silently.
+--
+-- Setting and clearing it needs the token, not another admin's session. An
+-- account that can grant itself the flag has a flag that means nothing, and
+-- one that can grant it to another has made a second admin nobody chose. That
+-- is also what makes the first admin on a database with none, and what
+-- recovers from losing the last.
+--
+-- What this is not: a permission system. There are two kinds of account here,
+-- and the reach is ADMIN_ROUTES as a set. A per-route grant would be a second
+-- thing to keep true.
+--
+-- The flag decides admittance and nothing else. It never scopes a query: an
+-- admin route still receives no `Db` and must name the account it acts on, and
+-- the caller's own id is carried separately, for saying who did something,
+-- never for deciding whose rows are in front of them.
+
+ALTER TABLE users ADD COLUMN admin BOOLEAN NOT NULL DEFAULT 0;

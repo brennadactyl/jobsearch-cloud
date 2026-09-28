@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0029_application_fit.sql` applied in order. This is the
+`0001_schema.sql` through `0030_user_admin.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -77,6 +77,7 @@ erDiagram
         INTEGER iterations
         TEXT created_at
         INTEGER demo
+        BOOLEAN admin
     }
     sessions {
         TEXT id PK "SHA-256 of the token"
@@ -285,11 +286,29 @@ is for login and display only, unique regardless of case. `password_hash` and
 `demo` is `1` for an account whose data is invented; `POST /api/coverage`
 refuses it, so nothing it holds reaches the shared company list.
 
+`admin` is `1` for an account that may use the admin routes by signing in,
+rather than by holding the deployment's admin token. It is declared `BOOLEAN`,
+which SQLite stores as `0`/`1` in a NUMERIC column - it has no boolean type, so
+the word is for the reader. `demo` says `INTEGER` for the same two values, the
+older spelling; the two behave identically. It is read on every
+request, in the same lookup that resolves the session, so clearing it ends that
+person's reach into every admin route at once and on every device while leaving
+their ordinary session working. Only the admin token can set or clear it: an
+an admin who could grant it has a flag that means nothing. The flag decides
+admittance and never scopes a query - an admin route receives no `Db` at all
+and names the account it acts on.
+
 ### sessions
 
 One row per issued bearer token. `id` is the base64 SHA-256 of the token, not
 the token. Sessions do not expire; logging out deletes the row. `label` says
 where the token lives, such as `browser` or `scheduled-search`.
+
+A label never records that a session belongs to an admin. That is `users.admin`,
+read per request: written here at sign-in it would be a copy of a fact that
+moves afterwards - a cleared flag leaving a session still labelled an admin's,
+a granted one leaving a live session labelled ordinary - and the next reader
+would take the label for the answer because it is cheaper to reach.
 
 ### tracks
 
