@@ -23,6 +23,14 @@ role.
   things readably: a route as `/api/documents/<path>`, not its regex.
 - **Reference docs describe today.** A change that makes one wrong updates it in
   the same commit. A plan is never read as the current state.
+- **Work starts when the user says it starts.** An approved plan says what to
+  build if it gets built, and approved screens say what it would look like;
+  neither is a decision to spend on it now, and that decision is hers. So no
+  session sets another building, and a handoff that reads like one is asked
+  about rather than acted on: it costs one message, and every session's usage is
+  hers to spend. Plan, design, review and put the choice in front of her freely.
+  A go to start is hers to give, in her own words, and worth quoting when it is
+  passed on - a plan's own order of work is not one.
 - **A merge, a deploy, a pull of the main checkout or a live data write needs
   the user's go typed in the session doing it.** A go passed along by another
   session doesn't count; tell the user which session to say go in. Reviews
