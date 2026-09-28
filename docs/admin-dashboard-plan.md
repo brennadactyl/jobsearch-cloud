@@ -195,7 +195,6 @@ The actions that are scripts today, each on a named account and each confirmed:
 | Mint an invite, list and revoke one | `POST`/`GET`/`POST /api/invites`, by hand - the routes exist, so this panel is only the credential change |
 | Retry a failed setup | nothing: `POST /api/intake/complete` takes `done` or `failed`, so no route puts an intake back to `pending`, and `RETRY_NIGHTS` expires it |
 | Pause or resume a search | the person's own panel, or `POST /api/config` |
-| Send a password-reset link | not built. `POST /api/users` resets by choosing a password, which this page won't do, so this row needs a new mechanism rather than a new caller |
 | Add a company to the shared list | `POST /api/coverage` with a session, or the `add-target-company` skill; the operator path is new |
 
 - **An invite is minted and read back on the page**, with its link ready to
@@ -212,14 +211,6 @@ The actions that are scripts today, each on a named account and each confirmed:
   save an operator pasting a link into the conversation they are already having.
   If it is ever wanted, the phone's own share sheet is the version that adds no
   service and stores nothing.
-- **A password is never typed into this page.** Reset means minting a
-  single-use link the person sets their own password with, not choosing one for
-  them. If that link doesn't exist yet, the dashboard doesn't reset passwords.
-  Whether that link revokes their sessions is the link's decision to state, not
-  to inherit: `set-password.ps1` deliberately leaves them alive, because one of
-  them is the search token in `tracker.json`, and revoking it stops that
-  person's nightly runs until someone mints a new one and edits a file on the
-  run machine.
 - **A destructive action shows how old the last backup is**, and names what it
   will change before it runs.
 - **Adding a company writes to the list every account shares**, so it is the one
@@ -275,5 +266,3 @@ reads a folder on it, and no browser reaches any of that.
    composed step never gets built - which is the failure that prompted this view
    in the first place.
 
-A password-reset link is its own change, whenever it is wanted: nothing in this
-plan depends on it, and the dashboard resets no passwords until it exists.
