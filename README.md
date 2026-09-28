@@ -64,6 +64,7 @@ scripts/
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
   run-onboarding.ps1           writes up the searches of everyone who sent the setup form - every account, one run
   run-lock.ps1                 one search or fill at a time on this machine - dot-sourced, not run on its own
+  run-report.ps1               one table for a night: a row per run, across every account
   claude-cli.ps1               finds the claude CLI and classifies its failures - dot-sourced by the runners
   verify-claude-cli.ps1        checks claude-cli.ps1's failure classification
   import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
@@ -449,15 +450,32 @@ nothing, so each track's tab says which it was. Beside its name:
 | Paused | It won't run until it's resumed, and keeps everything it found. |
 | No run recorded yet | It has never run. A new search reads this until its first night. |
 
-Amber or red means read that search's log: `private\<user-id>\logs\<track>.log`.
-Every warning and error there carries a tag in brackets
-(`WARNING [run-note-failed]`), so `grep -E "ERROR|WARNING"` gives the night in
-a few lines and the tag finds the code that wrote it. The last `run record:`
-line says whether the run reported itself to the tracker at all, which is the
-difference between a quiet night and a broken one.
+**Start with the night, not one search.** `scripts\run-report.ps1` prints a row
+per run across every account - when it started, how long it took, how it
+exited, what it wrote back and which problems it logged - so a run that died
+before recording anything is visible too. It prints no lead, company or file
+names, so the table is safe to paste anywhere. `-Night 2026-09-16` reads an
+earlier night; a night runs from noon to noon, so an early-morning run belongs
+to the evening before.
 
-Amber with a healthy log usually means the task didn't fire: check it with
-`Get-ScheduledTaskInfo JobSearch-<id8>-<track>`.
+**Then read that search's log:** `private\<user-id>\logs\<track>.log`. Every
+warning and error carries a tag in brackets (`WARNING [run-note-failed]`), so
+`grep -E "ERROR|WARNING"` gives the night in a few lines and the tag finds the
+code that wrote it. The last `run record:` line says whether the run reported
+itself to the tracker at all, which is the difference between a quiet night and
+a broken one.
+
+**Nothing in the log for last night means the task didn't fire.** List them all
+rather than spelling one name:
+
+```powershell
+Get-ScheduledTask -TaskName "JobSearch-*" | Get-ScheduledTaskInfo
+```
+
+`LastRunTime`, `LastTaskResult` and `NextRunTime` for every search at once.
+Spelling a task name is its own trap: the suffix is the search's key
+TitleCased with separators dropped, so `data-science` registers as
+`DataScience`, and a single-user machine has no id segment at all.
 
 **Logging an application takes a URL.** Paste it on the Applications tab, and
 the 06:30 fill reads the posting and fills in the rest - only into empty
