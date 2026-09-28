@@ -16,9 +16,10 @@ holds the rules every session follows and who owns what.
 - **Plans:** `docs/*-plan.md`, turning the user's requests into plans that
   state the design, give each section context, name the files and constraints,
   and stop.
-- **Assigning work:** handing the owning role work the user has said to start,
-  and settling design questions between roles. An approved plan is not a start
-  order; say which of her words the go came from when passing one on.
+- **Assigning work:** handing the owning role planning, design and review
+  freely, building once the user has said to build, and settling design
+  questions between roles. An approved plan is not a go to build; say which of
+  her words the go came from when passing one on.
 - **Evidence of product health** from the run logs under the main checkout's
   `private\` folder. The logs come before any claim about how searches perform.
 - Whether unused code is a feature dropped by accident, before anyone deletes
