@@ -64,6 +64,7 @@ scripts/
   run-fill.ps1                 reads the postings behind URL-only applications - every account, one run
   run-onboarding.ps1           writes up the searches of everyone who sent the setup form - every account, one run
   run-lock.ps1                 one search or fill at a time on this machine - dot-sourced, not run on its own
+  run-report.ps1               one table for a night: a row per run, across every account
   claude-cli.ps1               finds the claude CLI and classifies its failures - dot-sourced by the runners
   verify-claude-cli.ps1        checks claude-cli.ps1's failure classification
   import-documents.ps1         uploads a folder's resumes and baseline docs into the tracker
@@ -436,38 +437,48 @@ dropped.
 This makes a deletion recoverable, not impossible: wrangler's stored Cloudflare
 credential can still delete the database.
 
-## Things worth not relearning
+## When a search looks wrong
 
-**Verification is the whole game.** Every candidate URL must be fetched and
-confirmed to render a real job description - title plus
-responsibilities/qualifications. A search-engine snippet is a lead, not a
-finding. Watch especially for URLs that resolve to a company's *listing
-index* rather than the individual posting - the title text matches, so it
-looks right, and it isn't.
+A search that stopped running looks exactly like one that ran and found
+nothing, so each track's tab says which it was. Beside its name:
 
-**Per-company fetch notes in a track's baseline doc go stale.** Re-verify them
-rather than trusting them.
+| It says | What happened |
+|---|---|
+| Ran, with counts | It ran. Zero new is a real answer, not a failure. |
+| Ran, amber | Nothing has reported in within `stale_run_hours` (36 by default; raise it through `/api/config` if a search runs less often than daily). |
+| Ran, red | The last run reported an error, and says what it was. |
+| Paused | It won't run until it's resumed, and keeps everything it found. |
+| No run recorded yet | It has never run. A new search reads this until its first night. |
 
-**An amber dot on a track's tab means no run has reported in within
-`stale_run_hours`** (default 36; raise it via `/api/config` if searches run less
-often than daily). **A red dot means the last run reported an error.** Either
-way, check the scheduled task and `private\<user-id>\logs\<track>.log` - a
-search that stopped running looks like one that found nothing.
+**Start with the night, not one search.** `scripts\run-report.ps1` prints a row
+per run across every account - when it started, how long it took, how it
+exited, what it wrote back and which problems it logged - so a run that died
+before recording anything is visible too. It prints no lead, company or file
+names, so the table is safe to paste anywhere. `-Night 2026-09-16` reads an
+earlier night; a night runs from noon to noon, so an early-morning run belongs
+to the evening before.
 
-**Reading a run's log:** every warning and error carries a tag in brackets
-(`WARNING [run-note-failed]`), so `grep -E "ERROR|WARNING"` gives the night in
-a few lines, and searching the tag finds the code that wrote it. The last
-`run record:` line says whether the run reported itself to the tracker at all,
-which is the difference between a quiet night and a broken one.
+**Then read that search's log:** `private\<user-id>\logs\<track>.log`. Every
+warning and error carries a tag in brackets (`WARNING [run-note-failed]`), so
+`grep -E "ERROR|WARNING"` gives the night in a few lines and the tag finds the
+code that wrote it. The last `run record:` line says whether the run reported
+itself to the tracker at all, which is the difference between a quiet night and
+a broken one.
 
-**Logging an application takes a URL.** Paste it on the Applications tab. One
-nightly task per machine (`JobSearch-Applications`, 06:30) reads each posting
-once and fills in company, role, location, work setup and posted comp - only
-into empty fields, so what you type wins. A row it couldn't fully read says so
-and isn't retried. Its log is `private\logs\applications.log`. See
+**Nothing in the log for last night means the task didn't fire.** List them all
+rather than spelling one name:
+
+```powershell
+Get-ScheduledTask -TaskName "JobSearch-*" | Get-ScheduledTaskInfo
+```
+
+`LastRunTime`, `LastTaskResult` and `NextRunTime` for every search at once.
+Spelling a task name is its own trap: the suffix is the search's key
+TitleCased with separators dropped, so `data-science` registers as
+`DataScience`, and a single-user machine has no id segment at all.
+
+**Logging an application takes a URL.** Paste it on the Applications tab, and
+the 06:30 fill reads the posting and fills in the rest - only into empty
+fields, so what you type wins. A row it couldn't read says so on the page and
+isn't retried. Its log is `private\logs\applications.log`; the details are in
 [server/README.md](server/README.md#applications-added-as-nothing-but-a-url).
-
-**A convention changed in one track's doc doesn't reach the others.** Each
-`docs/tracked_<key>_postings.md` is self-contained; follow the
-[change-search-prompt](.claude/skills/change-search-prompt/) skill to update
-every track's doc.
