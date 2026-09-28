@@ -429,6 +429,13 @@ export default function Setup({
             // other sense - the employers to cover, say - which is stored as
             // typed, like any answer, and read as a place by every run after.
             //
+            // No example here may contain a comma. A comma is what ends an
+            // entry (PlaceChips), so "Seattle, WA" typed in as written becomes
+            // two places, and the second is a bare state nothing will match -
+            // an instruction that produces the answer this hint exists to
+            // prevent. The rule is said out loud as well, because it is the
+            // one thing about this field nobody would guess.
+            //
             // The examples show the shapes an entry takes, not a rule it has to
             // obey. A run is told to read each entry as the place it names, so
             // a country or a region is as good an answer as a city, and the
@@ -440,7 +447,7 @@ export default function Setup({
             //
             // Word for word what the account panel shows for this question:
             // the two are meant to match, so a reword changes both.
-            hint="Every area the search should cover — name all of it, not only the part you'd prefer. A city goes as Seattle, WA, somewhere outside the US as Toronto, Canada, a remote role as Remote (US); a whole country or region is fine too. The places you rank below are always searched too."
+            hint="Every area the search should cover — name all of it, not only the part you'd prefer. One place per entry, and a comma starts the next: a city as Seattle WA; a remote role as Remote (US); a whole country or region if that's what you want. The places you rank below are always searched too."
           >
             <PlaceChips
               id={`${id}-scope`}
