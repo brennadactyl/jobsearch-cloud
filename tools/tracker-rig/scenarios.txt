@@ -25,6 +25,8 @@ leads-nofile|ok|leads
 leads-scalar|ok|leads scalar.json
 leads-area|ok|leads leads-area.json
 leads-area-noranked|noranked|leads leads-area.json
+leads-area-fill|ok|leads leads-area-fill.json
+leads-area-fill-noranked|noranked|leads leads-area-fill.json
 screened|ok|screened screened.json
 screened-empty|ok|screened empty.json
 screened-kinds|ok|screened screened-kinds.json

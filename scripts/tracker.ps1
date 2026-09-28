@@ -422,8 +422,8 @@ function Invoke-KnownCommand {
 # The places this person ranked first, as entries an `area` has to equal:
 # `priority_locations` split on commas, each trimmed, empties dropped. The
 # leads route applies the same rule (docs/location-settings-plan.md, "Each lead
-# carries its area"); change both together. Read once, and only when a row
-# carries an area.
+# carries its area"); change both together. Read once, and only for a batch that
+# names an area somewhere.
 $script:RankedEntries = $null
 function Get-RankedEntries {
     if ($null -eq $script:RankedEntries) {
@@ -470,8 +470,13 @@ function Get-DeadLinkReason([string]$link) {
 }
 
 $script:AreaCleared = 0
+$script:AreaFilled = 0
 function Invoke-LeadsCommand {
     $rows = Read-Rows $PositionalArg "leads"
+    # Whether this batch mentions an area at all, which is what decides whether
+    # the ranked list is read: a batch naming none is sent without it, so the
+    # write doesn't depend on a fetch it only wanted to fill a field in.
+    $namesAnArea = @($rows | Where-Object { Get-TrimmedField $_ "area" }).Count -gt 0
     $send = @()
     foreach ($inputRow in $rows) {
         $url = Get-TrimmedField $inputRow "url"
@@ -494,6 +499,18 @@ function Invoke-LeadsCommand {
         # the person typed it, so every lead in one place carries one spelling.
         # The lead itself is always sent.
         $area = Get-TrimmedField $inputRow "area"
+        # A location written as a ranked place is that place, so a run that wrote
+        # "Remote (US)" and left the area out has already answered the question:
+        # the same equality below, against the location. Only an exact entry
+        # counts - several locations joined, or a city inside a wider entry, is
+        # a judgement, and step 9 is where that is made. Skipped entirely for a
+        # batch naming no area, so a leads write never dies on a config read it
+        # wanted only for this.
+        if (-not $area -and $namesAnArea -and $row.ContainsKey("location")) {
+            $entries = Get-RankedEntries
+            $area = @($entries | Where-Object { $_ -ieq $row["location"] }) | Select-Object -First 1
+            if ($area) { $script:AreaFilled++ }
+        }
         if ($area) {
             $entries = Get-RankedEntries
             $match = @($entries | Where-Object { $_ -ieq $area }) | Select-Object -First 1
@@ -509,7 +526,7 @@ function Invoke-LeadsCommand {
     }
     if ($send.Count -eq 0) { Write-TrackerLine "leads: nothing to send (refused=$($script:Refused))"; exit 0 }
     $res = Invoke-Tracker "POST" "/api/leads" @{ on = $Today; leads = @($send) }
-    Write-TrackerLine "leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) area_cleared=$($script:AreaCleared) on=$Today"
+    Write-TrackerLine "leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) area_cleared=$($script:AreaCleared) area_filled=$($script:AreaFilled) on=$Today"
     # Every area sent was checked above, so the route clearing one means the
     # two copies of the split rule disagree.
     if ([int]$res.area_cleared -gt 0) {

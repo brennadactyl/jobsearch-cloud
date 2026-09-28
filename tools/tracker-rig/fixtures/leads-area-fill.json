@@ -1,0 +1,6 @@
+[{"url":"https://a/20","company":"Acme","title":"SWE","location":"Remote US"},
+ {"url":"https://a/21","company":"Acme","title":"SWE","location":"remote us"},
+ {"url":"https://a/22","company":"Acme","title":"SWE","location":"  Portland OR  "},
+ {"url":"https://a/23","company":"Acme","title":"SWE","location":"Seattle area; Remote US"},
+ {"url":"https://a/24","company":"Acme","title":"SWE","location":"Seattle, WA"},
+ {"url":"https://a/25","company":"Acme","title":"SWE","location":"Remote US","area":"Portland OR"}]
