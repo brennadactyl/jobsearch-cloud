@@ -129,9 +129,6 @@ export function screenedFrom(rows: readonly Screened[], start: string): Screened
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 }
 
-/** The group for a posting someone removed themselves; no kind, because no rule made it. */
-export const HAND = "hand";
-
 /**
  * The kinds of rejection, in the order the run decides between them
  * (SCREENED_KINDS in server/src/validate.js), how each is said on the page, and
@@ -146,8 +143,8 @@ export const HAND = "hand";
  * because anything of theirs caused it, so the unmarked kinds are deliberate
  * and not unfinished.
  *
- * `mine` is the complement of SCREENED_NOT_BY_RULES in server/src/validate.js,
- * plus HAND. Nothing checks the two against each other, so a kind added there
+ * `mine` is the complement of SCREENED_NOT_BY_RULES in server/src/validate.js.
+ * Nothing checks the two against each other, so a kind added there
  * has to be added here: the tab asks the same question as the server's count,
  * and the two drifting apart is a list that disagrees with the number above it.
  *
@@ -179,28 +176,27 @@ export const SCREENED_KINDS: readonly {
   // of theirs landing here is a kind the vocabulary is missing, and a case for
   // adding one rather than for showing the catch-all.
   { kind: "other", label: "Other" },
-  // A posting the person took off their own board. It has no kind because no
-  // rule produced it, and it isn't shown here: this tab is what their settings
-  // cost them, and a decision they made themselves is one they already know
-  // about. The row still arrives, and still stops a run finding it again.
-  { kind: HAND, label: "You removed it" },
+  // A posting the person took off their own board has no entry at all. It
+  // never reaches this table: the filter above drops it on `added_by`, before
+  // anything is grouped. A label for it would be one nothing can render, and
+  // reading like a group this tab still has is how the next person concludes
+  // it shows a person's own removals.
+  //
   // Never classified, and not written by them either: rows from before a run
   // said which rule caused each rejection, and rows whose author is unknown.
   { kind: "", label: "Not grouped" },
 ];
 
 /**
- * Which group a row belongs to. The tab shows what someone's settings rejected
- * **and what they rejected themselves**, which is two rules rather than one: a
- * reader who simplifies this back to the kind alone drops their own decisions
- * into the unclassified pile.
+ * Which group a row belongs to. Only rows this tab shows are grouped, and it
+ * shows what someone's own settings rejected - a posting they took off their
+ * own board never gets here.
  *
  * A kind this page can't name groups as "not grouped" rather than as itself, so
  * that a row the list shows is a row the counts count. A group with no label
  * would be a row in the list that the table below it silently omits.
  */
 export function groupOf(row: Screened): string {
-  if (row.added_by === "hand") return HAND;
   return SCREENED_KINDS.some((k) => k.kind === row.kind) ? row.kind : "";
 }
 
