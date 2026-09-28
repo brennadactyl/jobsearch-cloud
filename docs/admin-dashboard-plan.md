@@ -57,19 +57,34 @@ an Admin area; nothing new is typed into a browser.
 Four panels, each answering a question an operator asks today by reading logs or
 a backup.
 
-**Last night.** One row per search across every account: ran, paused, failed or
-never ran, and what it added and screened. A search whose task has stopped reads
-differently from one that ran and found nothing - that distinction is the reason
-this panel exists.
+**Last night.** One row per search across every account: what it added and
+screened, and which of four states it is in. A search whose task has stopped
+reads differently from one that ran and found nothing - that distinction is the
+reason this panel exists.
+
+**Four states, and one of them is an absence.** A quiet night writes a row,
+`status=ok` with zeros. A stopped task writes nothing, so it shows as
+`last_run.at` unchanged from the night before - which means comparing against
+the previous night rather than reading one row. A paused search writes nothing
+either, and is told from a stopped one only by `paused_since` on the track. So:
+ran, ran and found nothing, paused, and didn't run. Every signal exists in the
+API today, in `last_run` and `paused_since`.
 
 **It shows recorded runs, and says so.** The server knows only what a run
 reported. A run that died before recording - the CLI unauthenticated, a document
 over the limit, the write-back refused, the machine asleep - reported nothing,
 so from here it is indistinguishable from a search that never ran, which is the
 distinction above. Queue wait, elapsed time and the runner's own problem tags
-live in logs on the machine that ran them. So the panel names what it can't see
-and points at `run-report.ps1` for the rest, until a route serves a run's log -
-which is its own change, not a detail of this one.
+live in logs on the machine that ran them, and so do the helper's own counts: a
+coerced kind, a cleared area, a tab filed at another group's root, a refused
+row. So the panel names what it can't see and points at `run-report.ps1` for
+the rest.
+
+**A night links to its log.** The logs are already in R2 and already served -
+`GET /api/logs/<track>` lists them, `GET /api/logs/<track>/<started>` serves
+one - so this needs an operator-scoped equivalent rather than a new store. That
+link is the difference between "it ran" and "it ran, and here is what it said",
+and without it an operator reads a count and then asks a session what happened.
 
 **"Never ran" needs a machine, not a button.** A search added through config has
 no scheduled task until `setup-scheduler.ps1` runs on the PC that runs the
@@ -87,8 +102,14 @@ across accounts, so this is the one panel that isn't per person.
 **What a run will read.** For one search, the composed step a night actually
 gets - the locations, the roles line, the fit rules, the pay floor - as
 `GET /api/prompt/<key>` builds it. A person's answers can be right and their
-composed step still wrong; today that is only visible to whoever reads the
-prompt.
+composed step still wrong, and the step is the only place the two meet: the
+location lists, the pay clause and the fit rules exist composed nowhere else,
+so this renders the rule rather than repeating a stored copy of it.
+
+The route is a pure read, and it refuses in three ways the page shows as states
+rather than errors: paused, not written up, and a tab that has no prompt of its
+own - where the answer is to offer the root that fills it. It takes a document
+budget; the panel passes none and shows the default.
 
 That route is a session route, composed from the caller's own config, so this
 panel needs an operator route of its own rather than a credential change - and
