@@ -63,9 +63,9 @@ an Admin area; nothing new is typed into a browser.
   exist is a `Db` with an absent user id: depending on the statement it matches
   nothing or everything, and which one shows up first in production.
 - **A browser can now reach admin routes, which today it cannot at all.** The
-  weaker credential defines the route, so operator sessions are minted
-  distinguishable from ordinary ones. Deleting an account and purging a search
-  stay out of this page altogether: they are the two that can't be undone, and
+  weaker credential defines the route, so the flag is read on every request and
+  clearing it withdraws the reach at once. Deleting an account and purging a
+  search stay out of this page altogether: they are the two that can't be undone, and
   an operator holding a phone is the worst place to offer them. They keep their
   scripts and the admin token.
 
@@ -88,7 +88,7 @@ one links to the rows behind it.
 |---|---|---|
 | Ran last night | searches whose `last_run.on` is last night, over searches not paused and written up | Last night |
 | Reported nothing | not paused, written up, and `last_run.on` older than last night: the one fault among the four kinds of nothing | Last night, those rows |
-| Nights missed, 7 days | for each search, nights in the last seven with no run recorded, summed | Last night |
+| Longest silence | the most days since any running search last recorded a run, and which search | Last night |
 | Setups waiting | intakes `pending` past their retry window, and `failed` | Accounts |
 | Searches with no task | written up, not paused, and never a run recorded | Accounts |
 
@@ -110,7 +110,16 @@ one links to the rows behind it.
 | Searches | running, and paused | Accounts |
 | Invites outstanding | minted, not used, not revoked, not expired | Invites |
 | Companies | rows on the shared list | Companies |
-| Least covered search | the search whose `sweep_cursor` has moved least in seven days | Companies |
+| Least covered search | the running search with the fewest companies swept in seven days, counted from `company_sweeps.last_swept` | Companies |
+
+**Every number here is computable from what is stored today.** `search_runs`
+holds one row per search - the last run, not a history - and `company_sweeps`
+holds the present, not its movement. So the page asks about the present instead
+of about change: how long a search has been silent rather than how many nights
+it missed, and how many companies it swept in a week rather than how far its
+cursor travelled. The questions about change want a run history, which is a
+table nobody has asked for and a migration nobody needs yet; if one ever
+arrives, these numbers get sharper and the page doesn't change shape.
 
 **Backup age isn't here**, though it belongs on a page like this: nothing
 records a backup in the database. `backup-tracker.ps1` writes files to the run
@@ -320,7 +329,12 @@ page never sends what the server would refuse.
   `ADMIN_TOKEN`. Only the check changes - handlers keep `user: null` and
   `db: null`, and the operator's identity arrives in a field of its own, for
   attribution, never for scoping.
-- Operator sessions minted distinguishable from ordinary ones.
+- **A session is never labelled an operator's.** The flag moves and a label
+  minted at sign-in doesn't: clear the flag and the label says operator while
+  the session reaches nothing; set it and a live session says otherwise while
+  reaching everything. Wrong in both directions and silently, and the first
+  reader to treat it as a cheap operator check undoes the rule below. Say so
+  where `sessions.label` is defined.
 - **The flag is read on the request, not baked into the session.** Clearing
   `users.operator` ends that person's reach into every admin route at once, on
   every device, and leaves their ordinary session working. That is how the
