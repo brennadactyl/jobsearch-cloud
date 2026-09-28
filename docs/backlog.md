@@ -164,6 +164,11 @@ doc, and a finding says whether anything was built on the wrong line.
 
 ## Small
 
+- The page's `--good` and `--crit` are a red and green four ΔE apart under
+  deuteranopia, so a reader with it can't separate them. Fine wherever colour
+  sits beside an icon and words, which is most of the page; the work is finding
+  where colour carries the meaning alone and giving it a second signal. Found by
+  the palette validator; Client Comrade's.
 - A stray phrase in `prompt.js` step 3b, "when the named list reads as big
   tech", left over from per-search company lists. Next change that touches
   `prompt.js`, along with a line saying why step 7(c)'s fixed "wrong level"
