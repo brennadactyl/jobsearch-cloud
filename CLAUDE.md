@@ -31,14 +31,17 @@ role.
   and every session's usage is hers to spend. A plan's own order of work isn't a
   go at all.
 - **Her go, quoted, starts the work a plan already assigns.** She says it once,
-  to whoever she is talking to, and that session passes it on in her words: the
-  named session starts the work the plan gives it, and nothing else. Making her
-  repeat the same decision to each session in turn is friction she pays for, and
-  the thing a relay must never do - approve something she didn't decide, or a
-  step beyond the one she named - is unchanged by it. A relay covers starting a
-  build and nothing more: merging, deploying, pulling the main checkout and any
-  live data write still need her go typed in the session doing it, because those
-  are the ones that can't be taken back.
+  to whoever she is talking to, and that session passes it on in her words,
+  saying which session she said it in: the named session starts the work her
+  words name, as the plan divides it, and nothing else. The quote is the
+  decision; the plan only says whose half it is. When the quote doesn't plainly
+  cover the work in front of you, that is the ordinary case for asking her.
+  Making her repeat the same decision to each session in turn is friction she
+  pays for, and the thing a relay must never do - approve something she didn't
+  decide, or a step beyond the one she named - is unchanged by it. A relay
+  covers starting a build and nothing more: merging, deploying, pulling the main
+  checkout and any live data write still need her go typed in the session doing
+  it, because those are the ones that can't be taken back.
 - **Building is the change itself, a branch meant to merge.** Everything short
   of that is handed out freely: planning, design, mockups, investigation,
   review, a throwaway draft that answers a question. A session may also ask
