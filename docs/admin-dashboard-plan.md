@@ -282,24 +282,26 @@ reviewed, merged and deployed on its own: the area grows a tab at a time rather
 than arriving whole. A chunk's server half ships before its page half, so the
 page never sends what the server would refuse.
 
-1. **Getting in, and invites.** The operator flag and the credential change,
-   then the header entry and the whole Invites tab. Every route invites needs
-   already exists, so this chunk is the distance between here and minting an
-   invite from a phone. Detailed below.
+1. **Getting in.** The operator flag, the credential change, and the header
+   entry that only an operator sees. Detailed below.
 2. **Overview.** Its counts as one route, then the tab, charts included: the
    seven-night column is the picture that says what the rows can't, and the
-   chartless board is the fallback rather than a second design. The navigation
-   row appears here, because this is where a second tab first exists.
-3. **Last night.** The four kinds of nothing, the comparison against the
+   chartless board is the fallback rather than a second design. This is the
+   area's first screen, so chunk one's entry leads here.
+3. **Invites.** The tab: mint, the link on its own screen, the list with
+   revoke. Every route it needs already exists, so it is page work alone. The
+   navigation row appears here, because this is where a second tab first
+   exists.
+4. **Last night.** The four kinds of nothing, the comparison against the
    previous night that makes an absence visible, and an operator-scoped way to
    open a run's log - the logs are already in R2 and already served to their own
    account.
-4. **Accounts, and a person's page.** The list, then everything about one
+5. **Accounts, and a person's page.** The list, then everything about one
    person in one place, with the actions that name them: pause, resume, and
    retrying a setup, which needs a way to put an intake back to `pending`.
-5. **Companies.** The shared list, what is walled or dead, each search's cursor,
+6. **Companies.** The shared list, what is walled or dead, each search's cursor,
    and adding a company with the facts that make it fetchable.
-6. **What a run will read**, on a person's page, and only after the person whose
+7. **What a run will read**, on a person's page, and only after the person whose
    search it is can see their own. Built the other way round, the operator's copy
    becomes the tool, and the page that would have let someone check their own
    composed step never gets built - which is the failure that prompted this view
@@ -328,19 +330,22 @@ page never sends what the server would refuse.
 - The Admin entry in the header, for an operator only, and the area as its own
   route and its own chunk - the ordinary page's payload doesn't change.
 - An ordinary account sees nothing there: no disabled control, no explanation.
-- The Invites tab: mint with a note and a day count, the minted link on its own
-  screen, the list with revoke, cards at phone width and a table at desktop.
-- No navigation row yet. Invites is the only tab until chunk two.
+- No navigation row: there is one screen until chunk three.
+
+**The entry leads somewhere empty until Overview lands**, which is the cost of
+this order. So the area's first screen names what is coming rather than
+apologising, and the page half of this chunk deploys with chunk two if that
+reads badly to the person using it. The server half deploys as soon as it is
+done either way: nothing else can start until it is live.
 
 **Fullstack Friend reviews both**, since each is its area's owner writing in
 their own area. It also holds the operator-side question nobody else does: what
-this does to `new-invite.ps1`, which this chunk supersedes.
+this eventually does to `new-invite.ps1`, which chunk three supersedes.
 
 **Nobody else has work in this chunk.** Prompt Bro's areas aren't touched;
 Documentation Dude's files aren't either, beyond the schema doc, which is
 Backend Buddy's to update in the same commit.
 
-**Done means:** Brenna signs in, sees Admin in the header, mints an invite from
-her phone and copies the link; an ordinary account signs in and sees no trace of
-it. Not "the routes work".
+**Done means:** an operator signs in and reaches the area from the header, and
+an ordinary account signs in and sees no trace of it. Not "the routes work".
 
