@@ -429,10 +429,18 @@ export default function Setup({
             // other sense - the employers to cover, say - which is stored as
             // typed, like any answer, and read as a place by every run after.
             //
-            // The examples are the forms prompt.js teaches the run to read, so
-            // an answer arrives already spelled the way the run and a lead's
-            // own area are matched against it.
-            hint="Every area the search should cover — name all of it, not only the part you'd prefer. Places, not employers: a city goes as Seattle, WA and a remote role as Remote (US). The places you rank below are always searched too."
+            // The examples show the shapes an entry takes, not a rule it has to
+            // obey. A run is told to read each entry as the place it names, so
+            // a country or a region is as good an answer as a city, and the
+            // last clause says so: someone who wants all of Canada should not
+            // read this and think their answer is malformed. The forms in
+            // location-forms.json are a different thing - how a run writes a
+            // lead's location - and their "not a bare country" is about a
+            // posting, not about what anyone here wants.
+            //
+            // Word for word what the account panel shows for this question:
+            // the two are meant to match, so a reword changes both.
+            hint="Every area the search should cover — name all of it, not only the part you'd prefer. A city goes as Seattle, WA, somewhere outside the US as Toronto, Canada, a remote role as Remote (US); a whole country or region is fine too. The places you rank below are always searched too."
           >
             <PlaceChips
               id={`${id}-scope`}
@@ -447,7 +455,7 @@ export default function Setup({
           <Field
             label={<label htmlFor={`${id}-first`}>{PLACE_QUESTIONS.priority_locations}</label>}
             problem={problems.locations_first}
-            hint="In order — the first is the one you want most, and the arrows move a place up or down. Anywhere you don't name still shows up, just lower."
+            hint="In order — the first is the one you want most. The arrows move a place up or down. Anywhere you don't name still shows up, just lower."
           >
             <PlaceChips
               id={`${id}-first`}
