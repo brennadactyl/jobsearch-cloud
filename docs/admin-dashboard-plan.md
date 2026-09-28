@@ -195,6 +195,7 @@ The actions that are scripts today, each on a named account and each confirmed:
 | Pause or resume a search | the person's own panel, or `POST /api/config` |
 | Send a password-reset link | not built. `POST /api/users` resets by choosing a password, which this page won't do, so this row needs a new mechanism rather than a new caller |
 | Delete an account | `DELETE /api/users/<id>`, which already requires the name in the body |
+| Add a company to the shared list | `POST /api/coverage` with a session, or the `add-target-company` skill; the operator path is new |
 
 - **An invite is minted and read back on the page**, with its link ready to
   copy. Minting is the action an operator takes most, and the one most likely to
@@ -223,6 +224,12 @@ The actions that are scripts today, each on a named account and each confirmed:
   this page can cost something that can't be got back.
 - **Deleting an account asks for its name typed back**, as the search reset
   does, and says what will go.
+- **Adding a company writes to the list every account shares**, so it is the one
+  action here that reaches everyone at once. It says so, and it records the same
+  facts the `add-target-company` skill does - the board, the endpoint, the URL
+  shape - because a name with no way to fetch it is a company every search skips
+  and nobody notices. A demo account can't write the list today, and that
+  refusal stays whoever is signed in.
 - **Every action says what it did and what it changed**, because an operator
   acting on someone else's account has no other way to check.
 
