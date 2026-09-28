@@ -230,6 +230,26 @@ describe("the applications grid", () => {
     expect(counts.reduce((a, b) => a + b, 0)).toBe(dataRows);
   });
 
+  it("keeps the search's sentence on an application made from a lead", async () => {
+    // The application outlives the posting, and the lead is deleted when the
+    // posting goes, so by the time someone is preparing for a screen this is
+    // the only place the sentence still exists.
+    renderApp();
+    await userEvent.click(await screen.findByRole("tab", { name: /^Applications/ }));
+    await userEvent.click(await screen.findByText("Kit"));
+    expect(await screen.findByText(/owns the deploy path/)).toBeInTheDocument();
+  });
+
+  it("shows nothing where an application never had one, rather than an empty space", async () => {
+    // "" means no search judged this - typed in by hand, or overruled from a
+    // screened row. Nothing can fill it later, so a placeholder would promise
+    // something that is never coming.
+    renderApp();
+    await userEvent.click(await screen.findByRole("tab", { name: /^Applications/ }));
+    await userEvent.click(await screen.findByText("Lux"));
+    expect(document.querySelector(".md-detail .dh-fit")).toBeNull();
+  });
+
   it("folds a group away but keeps reporting its count", async () => {
     renderApp();
     await userEvent.click(await screen.findByRole("tab", { name: /^Applications/ }));

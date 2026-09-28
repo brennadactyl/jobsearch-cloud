@@ -488,6 +488,12 @@ function AppDetail({
         <RemoveApp app={app} icon />
       </div>
 
+      {/* Where a lead shows the same sentence, so one that becomes an
+          application keeps it in the place its reader last saw it. Absent
+          rather than empty when there is none: only a search writes one, and
+          most applications never had a search behind them. */}
+      {app.fit && <div className="dh-fit">{app.fit}</div>}
+
       <div className="dh-status">
         <AppStatusSelect app={app} pending={pending} onNeedsDate={onNeedsDate} />
         <span className="dh-dates">

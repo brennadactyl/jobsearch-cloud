@@ -43,6 +43,9 @@ function app(over: Partial<Application> & Pick<Application, "id">): Application 
     dateOffer: "", dateRejected: "", dateWithdrawn: "",
     autofill: "", autofill_note: "",
     area: AREA_OF[over.location ?? ""] ?? "",
+    // Empty by default because most applications have none: only one made from
+    // a lead carries the search's sentence.
+    fit: "",
     ...over,
   };
 }
@@ -103,7 +106,8 @@ export const leads: Lead[] = [
 export const applications: Application[] = [
   app({ id: 11, company: "Ida", title: "Eng", location: "Springfield", status: "To Apply", link: "https://example.com/11" }),
   app({ id: 12, company: "Jet", title: "Eng", location: "Springfield", status: "To Apply" }),
-  app({ id: 13, company: "Kit", title: "Eng", location: "Springfield", dateApplied: daysAgo(2) }),
+  // Made from a lead, so it carries the sentence that search wrote about it.
+  app({ id: 13, company: "Kit", title: "Eng", location: "Springfield", dateApplied: daysAgo(2), leadId: "21", fit: "platform work on the team that owns the deploy path, which is the kind of role this search is for" }),
   app({ id: 14, company: "Lux", title: "Eng", location: "Springfield", dateApplied: daysAgo(40) }),
   app({ id: 15, company: "Mox", title: "Eng", location: "Springfield", dateApplied: daysAgo(52) }),
   // 18 days: inside a 14-day "gone quiet" rule and outside a 21-day one, which

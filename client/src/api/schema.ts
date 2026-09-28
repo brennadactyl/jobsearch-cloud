@@ -85,6 +85,17 @@ export const applicationSchema = z.object({
   autofill_note: text,
   /** The ranked place this application is in, copied from its lead or set by the overnight fill; "" for none. */
   area: text,
+  /**
+   * The search's sentence on why this posting suited this person, copied from
+   * the lead when the application was made from one.
+   *
+   * "" means no search ever judged this - a row typed in by hand, one made
+   * from a posting a search had turned away, or one older than the field. It
+   * is not a gap waiting to be filled: the overnight fill can't write one,
+   * because a posting says what a job is and never what it would mean for the
+   * person reading it. So the page shows nothing rather than a placeholder.
+   */
+  fit: text,
 });
 
 export const screenedSchema = z.object({

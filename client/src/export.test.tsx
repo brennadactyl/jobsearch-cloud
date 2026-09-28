@@ -176,6 +176,17 @@ describe("exporting applications", () => {
     expect(file.filename).toMatch(/^Applications-shown-/);
     expect(file.header).toContain("Recruiter Screen");
   });
+
+  it("carries the search's sentence, which is a reason to export one at all", async () => {
+    // Preparing for a screen is what someone exports applications for, and the
+    // sentence saying why the posting suited them is the part of that a search
+    // wrote. The leads export has always carried it.
+    await renderAt("/applications");
+    const file = await exportRows();
+
+    expect(file.header).toContain(LABELS.fit);
+    expect(file.col(LABELS.fit).some((v) => v?.includes("owns the deploy path"))).toBe(true);
+  });
 });
 
 describe("the Export button", () => {
