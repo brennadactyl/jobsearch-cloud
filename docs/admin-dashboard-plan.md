@@ -44,9 +44,11 @@ an Admin area; nothing new is typed into a browser.
   explanation. A greyed entry tells everyone on the deployment that an operator
   area exists and they are not in it.
 
-- **`ADMIN_TOKEN` stays what it is:** the machine key for scripts, and the way
-  the first operator flag is set on a database that has none. A person's session
-  never carries it.
+- **`ADMIN_TOKEN` stays what it is for now:** the machine key for scripts, and
+  the way the first operator flag is set on a database that has none. A person's
+  session never carries it. Retiring it as a general credential is its own
+  chunk, below, because five operator scripts authenticate with it and one of
+  them is the nightly onboarding run.
 - **Only the credential check changes.** `ADMIN_ROUTES` still means "operator
   only" rather than "token only", and its handlers still receive `user: null`
   and `db: null`. That absence is what protects them: with no `Db` to reach for,
@@ -298,20 +300,33 @@ page never sends what the server would refuse.
    the picture that says what the rows can't, and the chartless board is the
    fallback rather than a second design. One chunk, so the entry never leads
    somewhere empty. Detailed below.
-2. **Invites.** The tab: mint, the link on its own screen, the list with
+2. **Admin-ness is a database fact, and only a database fact.** Today
+   `ADMIN_TOKEN` opens every admin route without the database being asked
+   anything, which is the second door the operator flag doesn't close. Closing
+   it means the five scripts that authenticate with it - `run-onboarding.ps1`,
+   `new-invite.ps1`, `set-password.ps1`, `seed-demo-user.ps1`, and whatever
+   mints a search token - holding an operator's session token instead, as the
+   nightly search already holds one. Server, operator scripts and the runner
+   land together, because the onboarding run is the one nobody watches: it
+   fails at 03:00 on a machine with nobody reading the log.
+   The token keeps the one job it can't delegate: flagging the first operator on
+   a database that has none, which can't require an operator to exist. Related:
+   [token-split-plan.md](token-split-plan.md), which splits a machine's token
+   from a person's for a different reason and wants the same shape.
+3. **Invites.** The tab: mint, the link on its own screen, the list with
    revoke. Every route it needs already exists, so it is page work alone. The
    navigation row appears here, because this is where a second tab first
    exists.
-3. **Last night.** The four kinds of nothing, the comparison against the
+4. **Last night.** The four kinds of nothing, the comparison against the
    previous night that makes an absence visible, and an operator-scoped way to
    open a run's log - the logs are already in R2 and already served to their own
    account.
-4. **Accounts, and a person's page.** The list, then everything about one
+5. **Accounts, and a person's page.** The list, then everything about one
    person in one place, with the actions that name them: pause, resume, and
    retrying a setup, which needs a way to put an intake back to `pending`.
-5. **Companies.** The shared list, what is walled or dead, each search's cursor,
+6. **Companies.** The shared list, what is walled or dead, each search's cursor,
    and adding a company with the facts that make it fetchable.
-6. **What a run will read**, on a person's page, and only after the person whose
+7. **What a run will read**, on a person's page, and only after the person whose
    search it is can see their own. Built the other way round, the operator's copy
    becomes the tool, and the page that would have let someone check their own
    composed step never gets built - which is the failure that prompted this view
