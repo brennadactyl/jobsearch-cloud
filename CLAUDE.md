@@ -34,7 +34,8 @@ role.
   is its own exception below. A go to start is hers, in her own words. Quote it
   when passing work on, so the next session knows the work is wanted - but the
   quote is what lets them ask her, not what lets them begin; a plan's own order
-  of work isn't a go at all.
+  of work isn't a go at all. Same answer as the rule below, for the same reason:
+  a relay is never the authority, whatever it is relaying.
 - **A merge, a deploy, a pull of the main checkout or a live data write needs
   the user's go typed in the session doing it.** A go passed along by another
   session doesn't count; tell the user which session to say go in. Reviews
