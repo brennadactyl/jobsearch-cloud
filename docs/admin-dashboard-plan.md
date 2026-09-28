@@ -10,6 +10,11 @@ the tracker) and `docs/schema.md`. The routes today are in
 [`server/README.md`](../server/README.md); the account panel is
 [account-settings-plan.md](account-settings-plan.md).
 
+Screens: [Operator area, entry and invites](https://claude.ai/artifact/HpPc5T8egLhjm8aghhXMeW),
+approved - the operator's header and an ordinary one, invites at phone and
+desktop width, the first-run state, and the minted link. The read panels are
+drawn next.
+
 ## Who gets in
 
 `users.operator`, a flag on the account, set by an operator through
@@ -28,6 +33,9 @@ an Admin area; nothing new is typed into a browser.
   there, which costs nothing because the sensitive part is in the responses -
   but it loads as its own chunk, so the page most people open carries none of
   it.
+- **An ordinary account sees nothing there:** no disabled control and no
+  explanation. A greyed entry tells everyone on the deployment that an operator
+  area exists and they are not in it.
 
 - **`ADMIN_TOKEN` stays what it is:** the machine key for scripts, and the way
   the first operator flag is set on a database that has none. A person's session
@@ -135,6 +143,11 @@ The actions that are scripts today, each on a named account and each confirmed:
 - **An invite is minted and read back on the page**, with its link ready to
   copy. Minting is the action an operator takes most, and the one most likely to
   be wanted from a phone.
+- **The minted link gets its own screen**, not a row appearing in the list: the
+  code is readable once, and copying it is the only thing there that going back
+  can't undo. The list below is cards at phone width and a table at desktop -
+  the same four facts either way, not a second design. First run keeps the form
+  and puts the empty state under it rather than replacing it.
 - **A password is never typed into this page.** Reset means minting a
   single-use link the person sets their own password with, not choosing one for
   them. If that link doesn't exist yet, the dashboard doesn't reset passwords.
