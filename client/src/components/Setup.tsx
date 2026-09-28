@@ -428,7 +428,11 @@ export default function Setup({
             // cover" without an example invites an answer about scope in some
             // other sense - the employers to cover, say - which is stored as
             // typed, like any answer, and read as a place by every run after.
-            hint="Every area the search should cover — name all of it, not only the part you'd prefer. Places, not employers: a city like Portland OR, or Remote with a country, like Remote US. The places you rank below are always searched too."
+            //
+            // The examples are the forms prompt.js teaches the run to read, so
+            // an answer arrives already spelled the way the run and a lead's
+            // own area are matched against it.
+            hint="Every area the search should cover — name all of it, not only the part you'd prefer. Places, not employers: a city goes as Seattle, WA and a remote role as Remote (US). The places you rank below are always searched too."
           >
             <PlaceChips
               id={`${id}-scope`}
