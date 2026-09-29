@@ -11,7 +11,7 @@
 import { DELISTED_REASON } from "../db.js";
 import { excludedCompanyMatcher } from "../exclude.js";
 import { json, readJson } from "../http.js";
-import { isoDate, storedArea, today, unknownTrackResponse } from "../validate.js";
+import { areaToStore, isoDate, today, unknownTrackResponse } from "../validate.js";
 
 // Duplicated in client/src/domain/constants.ts's LEAD_STATUS: client and server
 // share no code. Only handleSetLeadStatus validates against it;
@@ -20,12 +20,14 @@ export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"];
 
 /**
  * POST /api/leads - requires a Bearer token. Body `{ on?, leads: [...] }` ->
- * `{ added, duplicates, excluded, area_cleared }`; 400 for no valid leads, 404
- * naming any unknown track (nothing inserted).
+ * `{ added, duplicates, excluded, area_cleared, area_filled }`; 400 for no
+ * valid leads, 404 naming any unknown track (nothing inserted).
  *
  * A lead's `area` is stored only when it is exactly one of the person's ranked
- * entries (validate.js storedArea), and empty otherwise; `area_cleared` counts
- * those emptied.
+ * entries, and empty otherwise; `area_cleared` counts those emptied. A lead
+ * sent with no area at all has its `location` read for one by the same
+ * equality, counted in `area_filled` (validate.js areaToStore) - an area the
+ * caller did send is never replaced.
  *
  * Appends leads whose posting this user doesn't already have, matched by
  * canonical URL (../url.js) as well as the UNIQUE constraint, so the same
@@ -66,16 +68,24 @@ export async function handleAddLeads({ request, db }) {
   const isExcluded = excludedCompanyMatcher(settings.excluded_companies);
   const allowed = valid.filter((lead) => !isExcluded(lead.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) return json({ added: 0, duplicates: 0, excluded, area_cleared: 0 });
+  if (allowed.length === 0) return json({ added: 0, duplicates: 0, excluded, area_cleared: 0, area_filled: 0 });
 
   // A lead's area is kept only when it is exactly one of the person's ranked
   // entries; anything else is stored empty, never refused, since losing a lead
   // over its area is the worse failure (docs/location-settings-plan.md).
   // `area_cleared` says how many were emptied, so a run hears about a mismatch.
+  //
+  // A run that sends no area at all has its `location` read instead
+  // (validate.js areaToStore), because the composed step asks for the area and
+  // a run doesn't always answer - and a lead with no area sits untiered on the
+  // page however plainly its location names a ranked place. `area_filled` says
+  // how many the route worked out, so a night can see how often it had to.
   let areaCleared = 0;
+  let areaFilled = 0;
   const filed = allowed.map((lead) => {
-    const area = storedArea(lead.area, settings.priority_locations);
-    if (!area && typeof lead.area === "string" && lead.area.trim()) areaCleared++;
+    const { area, cleared, filled } = areaToStore(lead.area, lead.location, settings.priority_locations);
+    if (cleared) areaCleared++;
+    if (filled) areaFilled++;
     return { ...lead, area };
   });
 
@@ -84,7 +94,7 @@ export async function handleAddLeads({ request, db }) {
 
   // `duplicates` is reported so a run's own report says what it actually added,
   // not how many rows it posted.
-  return json({ added, duplicates, excluded, area_cleared: areaCleared });
+  return json({ added, duplicates, excluded, area_cleared: areaCleared, area_filled: areaFilled });
 }
 
 /**

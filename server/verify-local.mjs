@@ -3843,6 +3843,59 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     JSON.stringify(arOther.json));
   check("a person can't set a lead's area by hand",
     (await req("POST", "/api/update", { token: AR, body: { type: "lead", id: exactId, area: "Remote US" } })).json?.lead?.area !== "Remote US");
+
+  // The composed step asks a run for the area and a run doesn't always answer.
+  // The page tiers by area alone, so a lead with none sits untiered however
+  // plainly its location names a ranked place - and the route holds the ranked
+  // list already, so the comparison is the route's to make rather than a
+  // model's.
+  const arPlaced = (n, location, area) => ({
+    search: "SWE", company: "Acme", title: `Role ${n}`, location, url: arUrl(n),
+    ...(area === undefined ? {} : { area }),
+  });
+  const arFrom = await req("POST", "/api/leads", { token: AR, body: { leads: [
+    arPlaced("loc-exact", "Seattle area"),
+    arPlaced("loc-case", "remote us"),
+    arPlaced("loc-near", "Seattle"),
+    arPlaced("loc-several", "Seattle area; Remote US"),
+    // The one that must not fill: the run named an area of its own. It saw the
+    // posting and the route didn't, so a location that happens to match is a
+    // coincidence, not a correction.
+    arPlaced("loc-overrule", "Seattle area", "Bay Area"),
+    arPlaced("loc-kept", "Seattle area", "Remote US"),
+  ] } });
+  const arData2 = (await req("GET", "/api/data", { token: AR })).json;
+  const areaOf2 = (n) => arData2.leads.find((l) => l.url === arUrl(n))?.area;
+  check("a lead sent with no area takes one from a location that names a ranked entry",
+    arFrom.json?.added === 6 && areaOf2("loc-exact") === "Seattle area" && areaOf2("loc-case") === "Remote US",
+    JSON.stringify([arFrom.json, areaOf2("loc-exact"), areaOf2("loc-case")]));
+  check("but only an exact entry - a near-miss or a location naming several places fills nothing",
+    areaOf2("loc-near") === "" && areaOf2("loc-several") === "",
+    JSON.stringify([areaOf2("loc-near"), areaOf2("loc-several")]));
+  check("an area the run did send is never replaced by its location, even to fix one",
+    areaOf2("loc-overrule") === "" && areaOf2("loc-kept") === "Remote US",
+    JSON.stringify([areaOf2("loc-overrule"), areaOf2("loc-kept")]));
+  check("and the reply counts what it filled apart from what it emptied",
+    arFrom.json?.area_filled === 2 && arFrom.json?.area_cleared === 1,
+    JSON.stringify(arFrom.json));
+
+  // The overnight fill reads a posting's location too, and had the same gap.
+  const arApp = async (n) => (await req("POST", "/api/update", { token: AR, body: {
+    type: "application", link: arUrl(n), company: "", title: "" } })).json.application.id;
+  const fillNone = await arApp("fill-none");
+  const fillOverrule = await arApp("fill-overrule");
+  const arFill2 = await req("POST", "/api/applications/autofill", { token: AR, body: { filled: [
+    { id: fillNone, company: "Acme", title: "Engineer", location: "Seattle area" },
+    { id: fillOverrule, company: "Acme", title: "Engineer", location: "Seattle area", area: "Bay Area" },
+  ] } });
+  const arApps2 = (await req("GET", "/api/data", { token: AR })).json.applications;
+  const appAreaOf = (id) => arApps2.find((a) => a.id === id)?.area;
+  check("the fill takes an area from a location the same way, and counts it",
+    appAreaOf(fillNone) === "Seattle area" && arFill2.json?.area_filled === 1,
+    JSON.stringify([appAreaOf(fillNone), arFill2.json]));
+  check("and leaves a row alone whose area the run named itself",
+    appAreaOf(fillOverrule) === "" && arFill2.json?.area_cleared === 1,
+    JSON.stringify([appAreaOf(fillOverrule), arFill2.json]));
 }
 
 
