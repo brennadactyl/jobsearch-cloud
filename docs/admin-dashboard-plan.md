@@ -22,6 +22,11 @@ panel to switch to, and each panel appears as it is built. A single chip is a
 tab bar with one tab, and a chip for a panel that isn't there is a promise the
 page can't keep.
 
+The invites boards were drawn when invites shipped first, so they show no
+navigation row at all - a state that no longer happens, since Overview exists
+before invites does. Read them for the panel, not for the chrome: by the time
+invites lands there are two tabs and a row.
+
 ## Who gets in
 
 `users.admin`, a flag on the account, set by an operator through
