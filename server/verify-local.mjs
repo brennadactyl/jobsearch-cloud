@@ -4492,7 +4492,7 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   // fault and a page that merges them teaches an operator to ignore it.
   const r = ov.json.running;
   check("the ways a search can be silent are counted separately",
-    ["ran_last_night", "reported_nothing", "no_task", "setups_waiting"].every((k) => typeof r[k] === "number"),
+    ["ran_last_night", "reported_nothing", "never_run", "setups_waiting"].every((k) => typeof r[k] === "number"),
     JSON.stringify(r));
   check("and the night every 'last night' number is about is named",
     typeof ov.json.night === "string");

@@ -61,17 +61,24 @@ export function lastNight(searches) {
  * Which of the three quiet states a running search is in, or "ran".
  *
  * They are counted apart because only one is a fault, and a page that merges
- * them teaches an operator to stop looking. A search that has run before has a
- * task and instructions, so its silence last night is the one worth acting on;
- * one that has never run usually has no scheduled task, which no browser can
- * create.
+ * them teaches an operator to stop looking.
+ *
+ * `never_run` is named for what the server knows rather than for what it
+ * suspects. A search with no run recorded usually has no scheduled task, which
+ * no browser can create - `setup-scheduler.ps1` runs on the machine that runs
+ * the searches - but it looks exactly the same as one registered this
+ * afternoon whose first night hasn't come. Calling it "no task" would state
+ * the likely cause as a fact.
+ *
+ * `reported_nothing` is the fault: this search has run before, so it has a
+ * task and instructions, and last night it didn't.
  *
  * @param {{last_run_on: string|null}} search
  * @param {string} night
- * @returns {'ran'|'reported_nothing'|'no_task'}
+ * @returns {'ran'|'reported_nothing'|'never_run'}
  */
 export function nightState(search, night) {
-  if (!search.last_run_on) return "no_task";
+  if (!search.last_run_on) return "never_run";
   if (night && search.last_run_on === night) return "ran";
   return "reported_nothing";
 }
@@ -84,9 +91,13 @@ export function nightState(search, night) {
  * the page from rows it happens to hold: the page holds a window, and a number
  * summed from a window is a different number wearing the same label.
  *
- * **It describes what was reported and cannot see what wasn't.** A run that
- * died before recording reported nothing, and from here that is
- * indistinguishable from a search with no scheduled task.
+ * **It describes what was reported and cannot see what wasn't.** The pair it
+ * cannot separate both land in `reported_nothing`: a run that started and died
+ * before recording - the machine asleep, the CLI unauthenticated, the
+ * write-back refused - and a task that never fired at all. Either way the
+ * server heard nothing, and the row looks the same. That is the fork where an
+ * operator's next step changes, and the logs are what decide it, so the page
+ * points at `run-report.ps1` rather than guessing.
  *
  * @param {import("./deployment-db.js").DeploymentDb} store
  */
@@ -118,7 +129,7 @@ export async function overview(store) {
     running: {
       ran_last_night: inState("ran"),
       reported_nothing: inState("reported_nothing"),
-      no_task: inState("no_task"),
+      never_run: inState("never_run"),
       setups_waiting: intake.failed + intake.stuck,
     },
     serving: {
