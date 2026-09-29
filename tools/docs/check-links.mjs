@@ -19,7 +19,9 @@ const stripCode = (s) => s.replace(/^```[\s\S]*?^```/gm, "").replace(/^~~~[\s\S]
 // repeated slugs get -1, -2...
 const slugCache = new Map();
 function slugsFor(file) {
-  if (slugCache.has(file)) return slugCache.get(file);
+  if (slugCache.has(file)) {
+    return slugCache.get(file);
+  }
   const seen = new Map(), slugs = new Set();
   const text = read(file).replace(/^```[\s\S]*?^```/gm, "");
   for (const m of text.matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gm)) {
@@ -27,10 +29,14 @@ function slugsFor(file) {
     let slug = plain.toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/ /g, "-");
     const n = seen.get(slug) || 0;
     seen.set(slug, n + 1);
-    if (n) slug = `${slug}-${n}`;
+    if (n) {
+      slug = `${slug}-${n}`;
+    }
     slugs.add(slug);
   }
-  for (const m of text.matchAll(/<a\s+(?:name|id)="([^"]+)"/g)) slugs.add(m[1]);
+  for (const m of text.matchAll(/<a\s+(?:name|id)="([^"]+)"/g)) {
+    slugs.add(m[1]);
+  }
   slugCache.set(file, slugs);
   return slugs;
 }
@@ -38,28 +44,42 @@ function slugsFor(file) {
 const problems = [], planProblems = [];
 let checked = 0;
 function checkLink(from, target) {
-  if (/^(https?:|mailto:|data:|javascript:)/i.test(target) || target === "") return;
+  if (/^(https?:|mailto:|data:|javascript:)/i.test(target) || target === "") {
+    return;
+  }
   checked++;
   const [pathPart, frag] = target.split("#");
   const resolved = pathPart ? normalize(join(dirname(from), decodeURI(pathPart))).replace(/\\/g, "/") : from;
   const isPlan = /^docs\/.*-plan\.md$/.test(from);
   const bucket = isPlan ? planProblems : problems;
-  if (!existsSync(resolved)) { bucket.push(`${from}: missing file -> ${target}`); return; }
+  if (!existsSync(resolved)) {
+    bucket.push(`${from}: missing file -> ${target}`); return;
+  }
   if (frag && statSync(resolved).isFile() && resolved.endsWith(".md")) {
-    if (!slugsFor(resolved).has(decodeURI(frag).toLowerCase())) bucket.push(`${from}: missing anchor -> ${target}`);
+    if (!slugsFor(resolved).has(decodeURI(frag).toLowerCase())) {
+      bucket.push(`${from}: missing anchor -> ${target}`);
+    }
   }
 }
 
 for (const f of mdFiles) {
   const text = stripCode(read(f));
-  for (const m of text.matchAll(/\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) checkLink(f, m[1]);
-  for (const m of text.matchAll(/^\[[^\]]+\]:\s*(\S+)/gm)) checkLink(f, m[1]);
+  for (const m of text.matchAll(/\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) {
+    checkLink(f, m[1]);
+  }
+  for (const m of text.matchAll(/^\[[^\]]+\]:\s*(\S+)/gm)) {
+    checkLink(f, m[1]);
+  }
 }
 for (const f of htmlFiles) {
-  for (const m of read(f).matchAll(/href="([^"]+)"/g)) checkLink(f, m[1]);
+  for (const m of read(f).matchAll(/href="([^"]+)"/g)) {
+    checkLink(f, m[1]);
+  }
 }
 
 console.log(`${checked} relative links checked in ${mdFiles.length} .md and ${htmlFiles.length} .html files`);
 console.log(problems.length ? `\nBROKEN (${problems.length}):\n  ` + problems.join("\n  ") : "\nno broken links outside plans");
-if (planProblems.length) console.log(`\nin plans, not edited (${planProblems.length}):\n  ` + planProblems.join("\n  "));
+if (planProblems.length) {
+  console.log(`\nin plans, not edited (${planProblems.length}):\n  ` + planProblems.join("\n  "));
+}
 process.exit(problems.length ? 1 : 0);

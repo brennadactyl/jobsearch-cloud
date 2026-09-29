@@ -64,8 +64,12 @@ function htmlParts(src) {
   while ((m = re.exec(src))) {
     markup += src.slice(last, m.index) + `<${m[1]}${m[2] || ""}>@@BLOCK@@</${m[1]}>`;
     const attrs = m[2] || "";
-    if (m[1].toLowerCase() === "script" && /\bsrc=/.test(attrs)) parts.push(["raw", m[3]]);
-    else parts.push([m[1].toLowerCase() === "style" ? "css" : "js", m[3]]);
+    if (m[1].toLowerCase() === "script" && /\bsrc=/.test(attrs)) {
+      parts.push(["raw", m[3]]);
+    }
+    else {
+      parts.push([m[1].toLowerCase() === "style" ? "css" : "js", m[3]]);
+    }
     last = re.lastIndex;
   }
   markup += src.slice(last);
@@ -79,7 +83,9 @@ const report = (f, ok, detail) => { ok ? pass++ : fail++; console.log(`  ${ok ? 
 
 for (const f of changed) {
   const ext = f.includes(".") ? f.split(".").pop().toLowerCase() : f;
-  if (ext === "md" || ext === "ps1") { skipped.push(f); continue; }
+  if (ext === "md" || ext === "ps1") {
+    skipped.push(f); continue;
+  }
   let before, after;
   try { before = baseVersion(f); } catch { report(f, false, `not in ${base} (new file?)`); continue; }
   try { after = readFileSync(f); } catch { report(f, false, "deleted in working copy"); continue; }
@@ -88,10 +94,16 @@ for (const f of changed) {
   // in the working copy all commit identically - note it, don't fail on it.
   const expectedEol = AUTOCRLF && eolStyle(before) === "lf" ? "crlf" : eolStyle(before);
   if (eolStyle(after) !== expectedEol) {
-    if (AUTOCRLF) console.log(`  note  ${f} -- working-copy endings ${eolStyle(after)} (normalized on commit)`);
-    else { report(f, false, `line endings: expected ${expectedEol}, found ${eolStyle(after)}`); continue; }
+    if (AUTOCRLF) {
+      console.log(`  note  ${f} -- working-copy endings ${eolStyle(after)} (normalized on commit)`);
+    }
+    else {
+      report(f, false, `line endings: expected ${expectedEol}, found ${eolStyle(after)}`); continue;
+    }
   }
-  if (hasBom(before) !== hasBom(after)) { report(f, false, `BOM ${hasBom(before)} -> ${hasBom(after)}`); continue; }
+  if (hasBom(before) !== hasBom(after)) {
+    report(f, false, `BOM ${hasBom(before)} -> ${hasBom(after)}`); continue;
+  }
 
   const b = before.toString("utf8"), a = after.toString("utf8");
   try {
@@ -100,12 +112,20 @@ for (const f of changed) {
       report(f, strip(b, loader) === strip(a, loader), "code differs after stripping comments");
     } else if (ext === "html") {
       const hb = htmlParts(b), ha = htmlParts(a);
-      if (hb.markup !== ha.markup) { report(f, false, "markup outside comments differs"); continue; }
-      if (hb.parts.length !== ha.parts.length) { report(f, false, "number of script/style blocks differs"); continue; }
+      if (hb.markup !== ha.markup) {
+        report(f, false, "markup outside comments differs"); continue;
+      }
+      if (hb.parts.length !== ha.parts.length) {
+        report(f, false, "number of script/style blocks differs"); continue;
+      }
       const bad = hb.parts.findIndex(([kind, code], i) => {
         const [kind2, code2] = ha.parts[i];
-        if (kind !== kind2) return true;
-        if (kind === "raw") return code !== code2;
+        if (kind !== kind2) {
+          return true;
+        }
+        if (kind === "raw") {
+          return code !== code2;
+        }
         return strip(code, kind) !== strip(code2, kind);
       });
       report(f, bad === -1, `inline block #${bad} differs after stripping comments`);
@@ -124,5 +144,7 @@ for (const f of changed) {
   }
 }
 console.log(`\n${pass} passed, ${fail} failed  (core.autocrlf=${AUTOCRLF})`);
-if (skipped.length) console.log(`skipped here: ${skipped.join(", ")}`);
+if (skipped.length) {
+  console.log(`skipped here: ${skipped.join(", ")}`);
+}
 process.exit(fail ? 1 : 0);

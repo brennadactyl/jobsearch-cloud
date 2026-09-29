@@ -88,7 +88,9 @@ export async function openEdge({ width = 1280, height = 900, port = 9340 } = {})
     /** Evaluates an expression in the page, awaiting a promise, and returns its value. */
     async js(expression) {
       const r = await cdp("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-      if (r.exceptionDetails) throw new Error(`in page: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
+      if (r.exceptionDetails) {
+        throw new Error(`in page: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
+      }
       return r.result?.value;
     },
 
@@ -109,7 +111,9 @@ export async function openEdge({ width = 1280, height = 900, port = 9340 } = {})
     async signIn(origin, token, name, theme) {
       await driver.goto(`${origin}/`);
       const sets = [`localStorage.setItem("tracker_token", ${JSON.stringify(token)})`, `localStorage.setItem("tracker_name", ${JSON.stringify(name)})`];
-      if (theme) sets.push(`localStorage.setItem("bjs.theme", ${JSON.stringify(theme)})`);
+      if (theme) {
+        sets.push(`localStorage.setItem("bjs.theme", ${JSON.stringify(theme)})`);
+      }
       await driver.js(`${sets.join("; ")}; true`);
       await cdp("Page.reload");
       await sleep(800);
@@ -118,7 +122,9 @@ export async function openEdge({ width = 1280, height = 900, port = 9340 } = {})
     /** Polls a page expression until it's truthy; throws naming it after `ms`. */
     async waitFor(expression, ms = 10000) {
       for (let t = 0; t < ms; t += 150) {
-        if (await driver.js(expression)) return;
+        if (await driver.js(expression)) {
+          return;
+        }
         await sleep(150);
       }
       throw new Error(`timed out waiting for: ${expression}`);
@@ -167,7 +173,9 @@ export async function openEdge({ width = 1280, height = 900, port = 9340 } = {})
     async attach(selector, ...files) {
       const doc = await cdp("DOM.getDocument", { depth: -1 });
       const node = await cdp("DOM.querySelector", { nodeId: doc.root.nodeId, selector });
-      if (!node.nodeId) throw new Error(`nothing matches ${selector}`);
+      if (!node.nodeId) {
+        throw new Error(`nothing matches ${selector}`);
+      }
       await cdp("DOM.setFileInputFiles", { nodeId: node.nodeId, files: files.map((f) => resolve(f)) });
       await sleep(400);
     },
@@ -189,7 +197,9 @@ export async function openEdge({ width = 1280, height = 900, port = 9340 } = {})
           const r = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
           return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
         })()`);
-        if (!box) throw new Error(`nothing to screenshot: ${selector}`);
+        if (!box) {
+          throw new Error(`nothing to screenshot: ${selector}`);
+        }
         params.clip = { x: Math.max(0, box.x - pad), y: Math.max(0, box.y - pad), width: box.w + pad * 2, height: box.h + pad * 2, scale: 1 };
       }
       const r = await cdp("Page.captureScreenshot", params);

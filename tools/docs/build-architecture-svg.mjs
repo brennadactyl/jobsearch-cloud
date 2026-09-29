@@ -10,7 +10,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const html = readFileSync("docs/architecture.html", "utf8").replace(/\r\n/g, "\n");
 const m = html.match(/^([ \t]*)<svg ([^>]*)>([\s\S]*?)\n[ \t]*<\/svg>/m);
-if (!m) throw new Error("no inline svg");
+if (!m) {
+  throw new Error("no inline svg");
+}
 const [, indent, attrs, body] = m;
 
 const light = {
@@ -21,7 +23,9 @@ const NL = String.fromCharCode(10);
 
 let out = body
   .replace(/var\((--[\w-]+)\)/g, (_, v) => {
-    if (!light[v]) throw new Error("no light value for " + v);
+    if (!light[v]) {
+      throw new Error("no light value for " + v);
+    }
     return light[v];
   })
   .replace(/currentColor/g, "#1D2027")
@@ -29,14 +33,18 @@ let out = body
   .split(NL)
   .map((l) => (l.startsWith(indent + "  ") ? l.slice(indent.length) : l.trim() === "" ? "" : l))
   .join(NL);
-while (out.startsWith(NL)) out = out.slice(1);
+while (out.startsWith(NL)) {
+  out = out.slice(1);
+}
 
 const vb = attrs.match(/viewBox="0 0 (\d+) (\d+)"/);
 const svg =
   `<svg xmlns="http://www.w3.org/2000/svg" ${attrs}>` + NL +
   `  <rect x="0" y="0" width="${vb[1]}" height="${vb[2]}" fill="#FAFAF7" />` + NL + NL +
   out + NL + `</svg>` + NL;
-if (/var\(|currentColor/.test(svg)) throw new Error("unresolved colour left in svg");
+if (/var\(|currentColor/.test(svg)) {
+  throw new Error("unresolved colour left in svg");
+}
 writeFileSync("docs/architecture.svg", svg);
 
 const texts = (s) => [...s.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((t) => t[1]);
