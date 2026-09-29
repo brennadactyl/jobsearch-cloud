@@ -67,6 +67,52 @@ export function storedArea(area, list) {
 }
 
 /**
+ * The area to store for a row, from what the caller said and where the posting
+ * is, and which of the two it came from.
+ *
+ * A writer that names an area decides: whatever it sent is judged by
+ * storedArea, and if that names no ranked entry the area is cleared. It saw the
+ * posting and this code did not, so a location that happens to match must not
+ * overrule it - and `cleared` is how a writer hears that its answer didn't land.
+ *
+ * **`cleared` is load-bearing elsewhere, which is the real reason not to fill
+ * over it.** `scripts/tracker.ps1` checks every area against the same ranked
+ * list before sending, and drops one that fails rather than forwarding it - so
+ * a nightly run reaches here having already said nothing, and a `cleared` from
+ * this route means the two rules have drifted apart. The helper warns on
+ * exactly that. Filling from the location instead would return 0 and silence a
+ * warning in a layer this code can't see.
+ *
+ * It also means the nightly path barely exercises that branch, and the next
+ * reader will be tempted to fold this into `sent || location`. The branch is
+ * for every other writer - the page, a direct call, a runner that doesn't
+ * pre-check - and for the day the helper stops stripping.
+ *
+ * **Only a writer that said nothing gets the location read for it.** The page
+ * tiers by area alone, so a row with none sits untiered however plainly its
+ * location names a place the person ranked. Filling it here covers every writer
+ * at once, and settles by the same equality rather than by asking a model
+ * twice: an exact ranked entry, and nothing else. "Seattle, WA" against
+ * "Seattle area", or a location naming several places, stays empty - filing a
+ * posting under somewhere nobody ranked is the worse answer, and that judgement
+ * is the composed step's to make.
+ *
+ * @param {unknown} sent the area the caller reported, if any
+ * @param {unknown} location where the posting is
+ * @param {unknown} list the stored `priority_locations`
+ * @returns {{area: string, cleared: boolean, filled: boolean}}
+ */
+export function areaToStore(sent, location, list) {
+  const area = storedArea(sent, list);
+  if (area) return { area, cleared: false, filled: false };
+  if (typeof sent === "string" && sent.trim()) {
+    return { area: "", cleared: true, filled: false };
+  }
+  const fromLocation = storedArea(location, list);
+  return { area: fromLocation, cleared: false, filled: !!fromLocation };
+}
+
+/**
  * The refusal for a search with nowhere to look, or "". An empty searched list
  * means "only the ranked places" (docs/location-settings-plan.md, "Where they
  * are written"), so only both lists empty is refused. Entries are counted by

@@ -7,7 +7,7 @@
  */
 
 import { json, readJson } from "../http.js";
-import { isoDate, storedArea } from "../validate.js";
+import { areaToStore, isoDate } from "../validate.js";
 
 // Duplicated in client/src/domain/constants.ts's APP_STATUS: client and server
 // share no code.
@@ -113,11 +113,14 @@ export async function handleGetAutofillQueue({ db }) {
 /**
  * POST /api/applications/autofill - requires a Bearer token. Body
  * `{ filled: [{id, company, title, location, area, team, setup, comp, note?}],
- *    failed: [{id, reason}] }` -> `{ filled, failed, unmatched: [id], area_cleared }`;
+ *    failed: [{id, reason}] }` -> `{ filled, failed, unmatched: [id], area_cleared, area_filled }`;
  * 400 when both lists are empty.
  *
- * `area` is kept only when it is exactly one of the person's ranked entries
- * (validate.js storedArea), as on a lead; `area_cleared` counts those emptied.
+ * `area` is kept only when it is exactly one of the person's ranked entries,
+ * as on a lead; `area_cleared` counts those emptied. A row reported with no
+ * area has its `location` read for one by the same equality, counted in
+ * `area_filled` (validate.js areaToStore); an area the run did send is never
+ * replaced by its location.
  *
  * One call for the whole night rather than one per row, because a run asked to
  * make thirty calls tends to stop short. Only unread rows move, so an id in
@@ -141,14 +144,21 @@ export async function handleReportAutofill({ request, db }) {
   let filledCount = 0;
   let failedCount = 0;
   let areaCleared = 0;
+  let areaFilled = 0;
   const { priority_locations: ranked } = filled.length ? (await db.getTracksAndSettings()).settings : {};
 
   for (const row of filled) {
     if (!row || !row.id) continue;
     // Shown on the row like a failure's reason, so it gets the same cap.
     const note = String((row.note || "")).trim().slice(0, MAX_REASON);
-    const area = storedArea(row.area, ranked);
-    if (!area && typeof row.area === "string" && row.area.trim()) areaCleared++;
+    // Same rule as a lead's: the run's area if it names a ranked entry, else
+    // the location read for one, and never a location overruling an area the
+    // run did send (validate.js areaToStore). A fill that reports where a
+    // posting is and forgets to say which ranked place that is would otherwise
+    // leave the row untiered.
+    const { area, cleared, filled: fromLocation } = areaToStore(row.area, row.location, ranked);
+    if (cleared) areaCleared++;
+    if (fromLocation) areaFilled++;
     if (await db.applyAutofill(row.id, { ...row, area, note })) filledCount++;
     else unmatched.push(row.id);
   }
@@ -163,7 +173,10 @@ export async function handleReportAutofill({ request, db }) {
   // Only a fill writes application fields. A failure sets just the flag and its
   // note, so it doesn't bump the page's "last updated" banner.
   if (filledCount > 0) await db.touchUpdated();
-  return json({ filled: filledCount, failed: failedCount, unmatched, area_cleared: areaCleared });
+  return json({
+    filled: filledCount, failed: failedCount, unmatched,
+    area_cleared: areaCleared, area_filled: areaFilled,
+  });
 }
 
 /**
