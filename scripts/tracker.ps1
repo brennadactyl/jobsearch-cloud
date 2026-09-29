@@ -455,7 +455,11 @@ function Get-RankedEntries {
 $PostingUrlRewrites = @(
     # Workday: /wday/cxs/<tenant>/<site>/job/<path> is the API for the page at
     # /en-US/<site>/job/<path> on the same host.
-    @{ From = '^(https://[^/]+\.myworkdayjobs\.com)/wday/cxs/[^/]+/([^/]+)/job/(.+)$'; To = '$1/en-US/$2/job/$3' }
+    # `(?i)` in the pattern, not on the match: `-match` ignores case and
+    # `[regex]::Replace` doesn't, so without it a mixed-case host matches here,
+    # comes back unchanged, and is then refused as an API address - turning a
+    # rewritable lead into a lost one.
+    @{ From = '(?i)^(https://[^/]+\.myworkdayjobs\.com)/wday/cxs/[^/]+/([^/]+)/job/(.+)$'; To = '$1/en-US/$2/job/$3' }
 )
 function ConvertTo-PostingUrl([string]$link) {
     foreach ($rule in $PostingUrlRewrites) {
@@ -498,11 +502,16 @@ $Curl = Join-Path $env:SystemRoot "System32\curl.exe"
 function Get-BadLinkReason([string]$link) {
     if (-not (Test-Path $Curl)) { return "" }
     try {
+        # Separated by a pipe, not a space: a content type carries its own space
+        # ("text/html; charset=utf-8"), and splitting on spaces puts the charset
+        # at the front of the url. `[Uri]` reads that as a relative address
+        # rather than throwing, so the redirect test below would look at an empty
+        # path and quietly pass everything.
         $out = & $Curl -s -o NUL -L --max-redirs 8 -m 10 -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) job-search-tracker" `
-            -w "%{http_code} %{content_type} %{url_effective}" $link 2>$null
+            -w "%{http_code}|%{content_type}|%{url_effective}" $link 2>$null
     } catch { return "" }
     if ($LASTEXITCODE -ne 0 -or -not $out) { return "" }
-    $status, $type, $landed = ([string]$out).Split(" ", 3)
+    $status, $type, $landed = ([string]$out).Split("|", 3)
     if ($status -eq "200" -and $type -match "^application/(json|.*\+json)") {
         return "it answers with $type rather than a page - that address is a listing API, not the posting"
     }
@@ -600,12 +609,13 @@ function Invoke-ScreenedCommand {
         $reason = Get-TrimmedField $inputRow "reason"
         if (-not $url) { Refuse "a screened row with no url" "the url is what stops tomorrow re-verifying it"; continue }
         if (-not $reason) { Refuse "$url" "a screened row needs a reason - it is the whole value of the entry"; continue }
-        # The same rewrite a lead gets: a screened row is a url the page shows
-        # and tomorrow's run dedups against, so both should be the posting's own
-        # address rather than the listing API's. An unmapped API address is kept
-        # rather than refused, unlike a lead: the row's job is to stop tomorrow
-        # re-verifying this posting, and losing that costs another night's work
-        # on something already rejected. No fetch here either - a rejected
+        # The same rewrite a lead gets: a screened row's url is a link on the
+        # page and what a later run dedups against, so it should be the posting's
+        # own address. An unmapped API address is kept rather than refused,
+        # unlike a lead, and the difference is what a refusal costs: a refused
+        # lead can be sent again with the page address, while a refused screened
+        # row loses the memory that stops the posting coming back. Refuse what
+        # can be resent, keep what can't. No fetch here either - a rejected
         # posting is not opened again to check it.
         $url = ConvertTo-PostingUrl $url
         $row = @{ search = $Search; url = $url; reason = $reason }
