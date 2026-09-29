@@ -190,7 +190,9 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
     const nowhere = Object.keys(places).length
       ? nowhereToSearch(draft.search_locations ?? stored.search_locations, draft.priority_locations ?? stored.priority_locations)
       : "";
-    if (nowhere) {return setSaveError({ message: nowhere, field: "search_locations", search: null });}
+    if (nowhere) {
+      return setSaveError({ message: nowhere, field: "search_locations", search: null });
+    }
     const blank = blankField(edits, searches);
     if (blank) {
       // Cleared, a roles line is how the database says a search was never
@@ -463,11 +465,15 @@ function PasswordForm({ onDone }: { onDone: () => void }) {
 
     // Checked here as well as on the server, so the common typos answer
     // instantly and without sending the password anywhere.
-    if (!current) {return setMsg({ text: "Enter your current password.", tone: "bad" });}
+    if (!current) {
+      return setMsg({ text: "Enter your current password.", tone: "bad" });
+    }
     if (next.length < MIN_PASSWORD) {
       return setMsg({ text: `Your new password needs to be at least ${MIN_PASSWORD} characters.`, tone: "bad" });
     }
-    if (next !== confirm) {return setMsg({ text: "Those two new passwords don’t match.", tone: "bad" });}
+    if (next !== confirm) {
+      return setMsg({ text: "Those two new passwords don’t match.", tone: "bad" });
+    }
 
     setBusy(true);
     setMsg({ text: "Changing…", tone: "" });

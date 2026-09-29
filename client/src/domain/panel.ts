@@ -141,7 +141,9 @@ export function changedSearches(tracks: readonly Track[], draft: SearchDraft): R
  * search with no floor shows a year rather than an empty choice.
  */
 function payEdit(track: Track, edits: SearchEdit): Partial<SearchFields> {
-  if (edits.pay_floor === undefined && edits.pay_floor_unit === undefined) {return {};}
+  if (edits.pay_floor === undefined && edits.pay_floor_unit === undefined) {
+    return {};
+  }
   const amount = (edits.pay_floor ?? track.pay_floor).trim();
   const unit = amount ? edits.pay_floor_unit ?? (track.pay_floor_unit || DEFAULT_PAY_UNIT) : "";
   const pay: Partial<SearchFields> = {};
@@ -169,7 +171,9 @@ export function blankField(
   }
   for (const [search, fields] of Object.entries(searches)) {
     for (const field of ["label", "role_search_line"] as const) {
-      if (fields[field] !== undefined && !fields[field]) {return { field, search };}
+      if (fields[field] !== undefined && !fields[field]) {
+        return { field, search };
+      }
     }
   }
   return null;

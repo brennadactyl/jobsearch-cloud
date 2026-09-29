@@ -78,7 +78,11 @@ export interface TabWarning {
 
 export function trackWarn(track: RunTrack | null | undefined, settings: Settings): TabWarning | null {
   const st = runState(track, settings);
-  if (st === "error") {return { cls: "error", title: "The last scheduled run reported an error" };}
-  if (st === "stale") {return { cls: "stale", title: "This search hasn’t run recently" };}
+  if (st === "error") {
+    return { cls: "error", title: "The last scheduled run reported an error" };
+  }
+  if (st === "stale") {
+    return { cls: "stale", title: "This search hasn’t run recently" };
+  }
   return null;
 }

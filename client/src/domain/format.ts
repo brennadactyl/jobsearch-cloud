@@ -141,7 +141,9 @@ export function safeUrl(v: string | null | undefined): string {
   if (/^https?:\/\//i.test(t)) {
     return t;
   }
-  if (/^[\w.-]+\.[a-z]{2,}([/?#]|$)/i.test(t)) {return `https://${t}`;}
+  if (/^[\w.-]+\.[a-z]{2,}([/?#]|$)/i.test(t)) {
+    return `https://${t}`;
+  }
   return "";
 }
 

@@ -93,7 +93,9 @@ export default function ResumeSection({
       return true;
     } catch (err) {
       const reason = reasonOf(err);
-      if (reason) {setAttachMsg({ text: reason, tone: "bad" });}
+      if (reason) {
+        setAttachMsg({ text: reason, tone: "bad" });
+      }
       return false;
     } finally {
       setUploading("");
@@ -143,7 +145,9 @@ export default function ResumeSection({
       await refresh();
     } catch (err) {
       const reason = reasonOf(err);
-      if (reason) {setRemoving({ path, refusal: reason, why: "server" });}
+      if (reason) {
+        setRemoving({ path, refusal: reason, why: "server" });
+      }
     }
   }
 

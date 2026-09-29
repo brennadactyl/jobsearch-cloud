@@ -454,7 +454,9 @@ function MoveLead({ lead, data }: { lead: Lead; data: TrackerData }) {
   const move = useMoveLead();
   const tracks = buildTracks(data.tracks);
   const keys = Object.keys(tracks);
-  if (keys.length < 2) {return <div className="dh-track">{tracks[lead.search]?.label ?? lead.search}</div>;}
+  if (keys.length < 2) {
+    return <div className="dh-track">{tracks[lead.search]?.label ?? lead.search}</div>;
+  }
   return (
     <select
       className="dh-track-in"
@@ -494,7 +496,9 @@ function RemoveLead({ lead }: { lead: Lead }) {
           `Remove ${name}?\n\nWhy? This is kept so the search doesn't find it again.`,
           "outside target locations",
         );
-        if (why?.trim()) {del.mutate({ id: lead.id, reason: why.trim() });}
+        if (why?.trim()) {
+          del.mutate({ id: lead.id, reason: why.trim() });
+        }
       }}
     >
       <TrashIcon />

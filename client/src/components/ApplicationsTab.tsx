@@ -214,7 +214,9 @@ function RemoveApp({ app, icon }: { app: Application; icon?: boolean }) {
   const del = useDeleteApplication();
   const name = `${app.company} ${app.title}`.trim() || "this row";
   const onClick = () => {
-    if (window.confirm(`Remove ${name} from Applications?`)) {del.mutate({ id: app.id });}
+    if (window.confirm(`Remove ${name} from Applications?`)) {
+      del.mutate({ id: app.id });
+    }
   };
   return icon ? (
     <button

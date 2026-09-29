@@ -235,7 +235,9 @@ function Root() {
       dropInvite();
       // Someone already signed in here has a tracker to go to; everyone else
       // gets the sign-in card, saying why the link didn't work.
-      if (!session.token()) {setGate({ notice, focusPassword: false });}
+      if (!session.token()) {
+        setGate({ notice, focusPassword: false });
+      }
     },
     [dropInvite],
   );

@@ -41,7 +41,9 @@ async function openSearch(panel: HTMLElement, name: string) {
   // The sidebar's own name gains "Unsaved changes" once a search is edited.
   await userEvent.click(within(nav(panel)).getByRole("button", { name: /Searches/ }));
   const strip = within(panel).queryByRole("tablist", { name: "Your searches" });
-  if (strip) {await userEvent.click(within(strip).getByRole("tab", { name }));}
+  if (strip) {
+    await userEvent.click(within(strip).getByRole("tab", { name }));
+  }
   return screen.getByRole("group", { name });
 }
 

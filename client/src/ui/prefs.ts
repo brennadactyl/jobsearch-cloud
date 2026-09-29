@@ -59,10 +59,14 @@ function read<K extends keyof Prefs>(key: K): Prefs[K] | undefined {
  */
 export function readOverviewCollapsed(): Record<string, boolean> {
   const raw = read("overviewCollapsed") as unknown;
-  if (typeof raw !== "string") {return {};}
+  if (typeof raw !== "string") {
+    return {};
+  }
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {return {};}
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
     const known: readonly string[] = OVERVIEW_FOLD_IDS;
     return Object.fromEntries(Object.entries(parsed).filter(([id, v]) => v === true && known.includes(id)));
   } catch {
