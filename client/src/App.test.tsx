@@ -155,7 +155,9 @@ describe("drill-downs: the number and the rows it opens", () => {
   /** Reads a tile's figure straight off the rendered page. */
   function tileValue(name: RegExp): number {
     const tile = screen.getAllByRole("link").find((el) => name.test(el.textContent ?? ""));
-    if (!tile) throw new Error(`no enabled tile matching ${name}`);
+    if (!tile) {
+      throw new Error(`no enabled tile matching ${name}`);
+    }
     return Number(tile.querySelector(".v")?.textContent);
   }
 
@@ -337,9 +339,13 @@ describe("every input is reachable by the stylesheet", () => {
       const type = el.getAttribute("type");
       expect(type, `an input rendered with no type attribute: #${el.id || el.getAttribute("aria-label")}`).not.toBeNull();
       // Checkboxes and radios are styled separately and deliberately.
-      if (["checkbox", "radio"].includes(type!)) continue;
+      if (["checkbox", "radio"].includes(type!)) {
+        continue;
+      }
       // A hidden file input is opened by its button and never drawn.
-      if (type === "file" && el.hidden) continue;
+      if (type === "file" && el.hidden) {
+        continue;
+      }
       expect(STYLED, `type="${type}" is not one the stylesheet targets`).toContain(type);
     }
   }

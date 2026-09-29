@@ -20,10 +20,16 @@ export type RunTrack = Pick<Track, "last_run" | "paused">;
  * paused search without its pause and read it as stale.
  */
 export function runState(track: RunTrack | null | undefined, settings: Settings): RunState {
-  if (track?.paused) return "paused";
+  if (track?.paused) {
+    return "paused";
+  }
   const run: LastRun | null | undefined = track?.last_run;
-  if (!run || !run.at) return "never";
-  if (run.status === "error") return "error";
+  if (!run || !run.at) {
+    return "never";
+  }
+  if (run.status === "error") {
+    return "error";
+  }
   const h = hoursSince(run.at);
   const limit = Number(settings.stale_run_hours) || DEFAULT_STALE_RUN_HOURS;
   return h === null || h > limit ? "stale" : "ok";
@@ -36,21 +42,31 @@ export function runState(track: RunTrack | null | undefined, settings: Settings)
  * "found nothing new" said the same thing for both.
  */
 export function runSummary(run: LastRun | null | undefined): string {
-  if (!run || !run.at) return "";
-  if (run.status === "error") return run.note || "the run reported an error";
+  if (!run || !run.at) {
+    return "";
+  }
+  if (run.status === "error") {
+    return run.note || "the run reported an error";
+  }
   const bits = [`${run.leads_added} new`];
   // A night with no count of its own says nothing about screening rather than
   // claiming a zero: it recorded rejections without recording which were the
   // person's own rules.
-  if (run.screened_by_rules != null) bits.push(`${run.screened_by_rules} screened out`);
+  if (run.screened_by_rules != null) {
+    bits.push(`${run.screened_by_rules} screened out`);
+  }
   // Only the run record counts these: the delisted rows were deleted.
-  if (run.delisted) bits.push(`${run.delisted} taken down`);
+  if (run.delisted) {
+    bits.push(`${run.delisted} taken down`);
+  }
   return bits.join(", ");
 }
 
 /** The day a pause was stamped, "" when it isn't paused or the instant is unreadable. */
 export function pausedDay(paused: string): string {
-  if (!paused) return "";
+  if (!paused) {
+    return "";
+  }
   const at = new Date(paused);
   return Number.isNaN(at.getTime()) ? "" : isoDay(at);
 }
@@ -62,7 +78,11 @@ export interface TabWarning {
 
 export function trackWarn(track: RunTrack | null | undefined, settings: Settings): TabWarning | null {
   const st = runState(track, settings);
-  if (st === "error") return { cls: "error", title: "The last scheduled run reported an error" };
-  if (st === "stale") return { cls: "stale", title: "This search hasn’t run recently" };
+  if (st === "error") {
+    return { cls: "error", title: "The last scheduled run reported an error" };
+  }
+  if (st === "stale") {
+    return { cls: "stale", title: "This search hasn’t run recently" };
+  }
   return null;
 }

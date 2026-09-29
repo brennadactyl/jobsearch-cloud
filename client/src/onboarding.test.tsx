@@ -156,7 +156,9 @@ describe("the setup form", () => {
     expect(screen.getByLabelText("Kinds of companies you'd like")).toBeInTheDocument();
     expect(screen.queryByLabelText(SEARCH_QUESTIONS.fit_clause)).toBeNull();
 
-    for (const key of GENERAL_KEYS) expect(screen.getByLabelText(GENERAL_QUESTIONS[key])).toBeInTheDocument();
+    for (const key of GENERAL_KEYS) {
+      expect(screen.getByLabelText(GENERAL_QUESTIONS[key])).toBeInTheDocument();
+    }
   });
 
   /** The two answers a form can't send without: where work is possible, and one role. */

@@ -117,7 +117,9 @@ export function NotesBlock({
  */
 export function AutofillNote({ app }: { app: Application }) {
   const note = app.autofill_note || "";
-  if (!note) return null;
+  if (!note) {
+    return null;
+  }
   const failed = fillState(app) === "stuck";
   return (
     <div className={`af${failed ? " bad" : ""}`}>

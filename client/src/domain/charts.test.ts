@@ -168,7 +168,9 @@ describe("the charts add up", () => {
   it("every Found breakdown adds up to its Found figure", () => {
     const { rows, total } = payoff(data);
     for (const r of [...rows, total]) {
-      if (!r.found) continue;
+      if (!r.found) {
+        continue;
+      }
       const b = r.found.breakdown;
       expect(b.open + b.notAFit + b.applied + b.other + b.removed, r.label).toBe(r.found.n);
     }
@@ -232,7 +234,9 @@ describe("drill parity for every chart", () => {
   ];
 
   it.each(targets)("%s: the figure is the length of the rows it opens", (_name, t, shown) => {
-    if (t.drill) expect(findDrill(t.drill), `${t.drill} resolves`).toBeDefined();
+    if (t.drill) {
+      expect(findDrill(t.drill), `${t.drill} resolves`).toBeDefined();
+    }
     // Reproduces what the tab does on arrival, independently of drillRows.
     const isApps = t.tab === "applications";
     const base = isApps ? appRows(data.applications) : leadRows(data.leads, t.tab);
@@ -247,7 +251,9 @@ describe("drill parity for every chart", () => {
       (r) => statusShown(r.status) && drillKeeps(t.drill ?? null, isApps ? "apps" : "leads", r, data),
     );
     expect(drillCount(t, data)).toBe(opened.length);
-    if (shown !== null) expect(shown).toBe(opened.length);
+    if (shown !== null) {
+      expect(shown).toBe(opened.length);
+    }
   });
 
   it("tiers applications by their own location, and leads by theirs", () => {

@@ -98,7 +98,9 @@ function Gate({ notice, focusPassword, onSignedIn }: GateState & { onSignedIn: (
  * it is a note on their own tracker rather than a screen in front of it.
  */
 function SetupNotice({ intake, staleRunHours }: { intake: Intake | null; staleRunHours: number }) {
-  if (!intake || intake.status === "done") return null;
+  if (!intake || intake.status === "done") {
+    return null;
+  }
   if (intake.status === "failed") {
     // Past the server's cutoff no run will pick this up again, and the stored
     // note can still say it will be tried again. Say who can help instead.
@@ -160,7 +162,9 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
   // up. Ending it here as well covers a rejection that never went through
   // request(), and lands on the same gate if it did.
   useEffect(() => {
-    if (error instanceof UnauthorizedError) session.end(error.message);
+    if (error instanceof UnauthorizedError) {
+      session.end(error.message);
+    }
   }, [error]);
 
   // An account with no tracks hasn't sent its setup answers: sending builds the
@@ -180,7 +184,9 @@ function Tracker({ onSignOut }: { onSignOut: () => void }) {
   }
 
   if (error) {
-    if (error instanceof UnauthorizedError) return null;
+    if (error instanceof UnauthorizedError) {
+      return null;
+    }
     return (
       <div className="wrap">
         <div className="load-err" role="alert">
@@ -229,7 +235,9 @@ function Root() {
       dropInvite();
       // Someone already signed in here has a tracker to go to; everyone else
       // gets the sign-in card, saying why the link didn't work.
-      if (!session.token()) setGate({ notice, focusPassword: false });
+      if (!session.token()) {
+        setGate({ notice, focusPassword: false });
+      }
     },
     [dropInvite],
   );

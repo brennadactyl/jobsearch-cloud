@@ -42,7 +42,9 @@ export function keptBy(row: StoredResume): string[] {
 /** Why a resume can't be removed, naming the searches that still read it, or "" when it can. */
 export function removeRefusal(row: StoredResume, labelOf: (search: string) => string): string {
   const searches = keptBy(row).map(labelOf);
-  if (!searches.length) return "";
+  if (!searches.length) {
+    return "";
+  }
   const one = searches.length === 1;
   return `${joinNames(searches)} ${one ? "reads" : "read"} this resume, so it can't be removed. Choose another resume for ${one ? "that search" : "them"} below first.`;
 }
@@ -81,7 +83,9 @@ function dayOf(iso: string): string {
 
 /** "Eng - Gaming", "Eng - Gaming and Eng - AI", "A, B and C". */
 export function joinNames(names: readonly string[]): string {
-  if (names.length <= 1) return names[0] ?? "";
+  if (names.length <= 1) {
+    return names[0] ?? "";
+  }
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 

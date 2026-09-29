@@ -78,12 +78,20 @@ export default function InviteGate({
     let live = true;
     checkInvite(code)
       .then((r) => {
-        if (!live) return;
-        if (r.valid) setChecked(true);
-        else onUnusable(inviteNotice(r.reason));
+        if (!live) {
+          return;
+        }
+        if (r.valid) {
+          setChecked(true);
+        }
+        else {
+          onUnusable(inviteNotice(r.reason));
+        }
       })
       .catch((err: unknown) => {
-        if (live) onUnusable(`Couldn't reach the server to check that invite: ${err instanceof Error ? err.message : String(err)}`);
+        if (live) {
+          onUnusable(`Couldn't reach the server to check that invite: ${err instanceof Error ? err.message : String(err)}`);
+        }
       });
     return () => {
       live = false;
@@ -93,12 +101,22 @@ export default function InviteGate({
   async function submit(e: FormEvent) {
     e.preventDefault();
     const found: Problems = {};
-    if (!name.trim()) found.name = "Pick a name — it's what you'll sign in with.";
-    else if (name.trim().length > MAX_NAME) found.name = `Use ${MAX_NAME} characters or fewer.`;
-    if (password.length < MIN_PASSWORD) found.password = `Use at least ${MIN_PASSWORD} characters.`;
-    else if (password !== confirm) found.confirm = "Those two passwords don't match.";
+    if (!name.trim()) {
+      found.name = "Pick a name — it's what you'll sign in with.";
+    }
+    else if (name.trim().length > MAX_NAME) {
+      found.name = `Use ${MAX_NAME} characters or fewer.`;
+    }
+    if (password.length < MIN_PASSWORD) {
+      found.password = `Use at least ${MIN_PASSWORD} characters.`;
+    }
+    else if (password !== confirm) {
+      found.confirm = "Those two passwords don't match.";
+    }
     setProblems(found);
-    if (Object.keys(found).length) return;
+    if (Object.keys(found).length) {
+      return;
+    }
 
     setBusy(true);
     try {

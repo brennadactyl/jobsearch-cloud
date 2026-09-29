@@ -192,7 +192,9 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
    */
   "found-day": (arg) => {
     const [trackKey, day] = splitOnce(arg);
-    if (!trackKey || !localDay(day)) return undefined;
+    if (!trackKey || !localDay(day)) {
+      return undefined;
+    }
     return {
       scope: "leads",
       label: (c) => {
@@ -223,8 +225,12 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
   /** `tier:<index>:<segment>`, index being a priority_locations rank or `other`. */
   tier: (arg) => {
     const [tier, segment] = splitOnce(arg);
-    if (!(tier === "other" || /^\d+$/.test(tier))) return undefined;
-    if (!(TIER_SEGMENTS as readonly string[]).includes(segment)) return undefined;
+    if (!(tier === "other" || /^\d+$/.test(tier))) {
+      return undefined;
+    }
+    if (!(TIER_SEGMENTS as readonly string[]).includes(segment)) {
+      return undefined;
+    }
     const name = (c: DrillContext) =>
       tier === "other" ? "Other locations" : (c.settings.areas[Number(tier)] ?? "Unknown tier");
     const inTier = (row: Lead | Application, c: DrillContext) => tierKey(row, c.settings) === tier;
@@ -243,7 +249,9 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
   flow: (arg) => {
     const [slug, segment] = splitOnce(arg);
     const stage = FORWARD_STAGES.findIndex((s) => s.slug === slug);
-    if (stage < 0) return undefined;
+    if (stage < 0) {
+      return undefined;
+    }
     const label = FORWARD_STAGES[stage].label;
     if (segment === "reached") {
       return {
@@ -252,7 +260,9 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
         test: (a) => (furthestStage(a) ?? -1) >= stage,
       };
     }
-    if (!(FLOW_SEGMENTS as readonly string[]).includes(segment) || stage === OFFER_INDEX) return undefined;
+    if (!(FLOW_SEGMENTS as readonly string[]).includes(segment) || stage === OFFER_INDEX) {
+      return undefined;
+    }
     const seg = segment as FlowSegment;
     return { scope: "apps", label: () => `${label} · ${FLOW_SEGMENT_LABELS[seg].toLowerCase()}`, test: (a) => flowSegment(a, stage) === seg };
   },
@@ -266,8 +276,12 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
 
 /** The rule a drill id names, parameterised or not. */
 export function findDrill(id: string | null): Drill | undefined {
-  if (!id) return undefined;
-  if (Object.hasOwn(DRILLS, id)) return DRILLS[id];
+  if (!id) {
+    return undefined;
+  }
+  if (Object.hasOwn(DRILLS, id)) {
+    return DRILLS[id];
+  }
   const [name, arg] = splitOnce(id);
   return arg && Object.hasOwn(PARAMETERISED, name) ? PARAMETERISED[name](arg) : undefined;
 }
@@ -280,7 +294,9 @@ export function drillLabel(id: string | null, ctx: DrillContext): string {
 /** True when a row survives the active drill. No drill, or one belonging to the other kind of tab, filters nothing. */
 export function drillKeeps(id: string | null, scope: DrillScope, row: Lead | Application, ctx: DrillContext): boolean {
   const d = findDrill(id);
-  if (!d || d.scope !== scope) return true;
+  if (!d || d.scope !== scope) {
+    return true;
+  }
   return d.scope === "leads"
     ? d.test(row as Lead, ctx)
     : d.test(row as Application, ctx);
@@ -325,8 +341,12 @@ export function resolveLeadFilter(filter: string | null | undefined): string {
 
 /** Whether a lead shows under a resolved leads filter: Open, All, or one status. */
 export function leadFilterKeeps(filter: string, lead: Lead): boolean {
-  if (filter === OPEN_FILTER) return isOpen(lead);
-  if (filter === ALL_FILTER) return true;
+  if (filter === OPEN_FILTER) {
+    return isOpen(lead);
+  }
+  if (filter === ALL_FILTER) {
+    return true;
+  }
   return lead.status === filter;
 }
 
@@ -349,7 +369,9 @@ export function drillRows(t: DrillTarget, src: RowSource): (Lead | Application)[
   let rows: (Lead | Application)[];
   if (isApps) {
     rows = appRows(src.applications);
-    if (t.filter) rows = rows.filter((r) => r.status === t.filter);
+    if (t.filter) {
+      rows = rows.filter((r) => r.status === t.filter);
+    }
   } else {
     const filter = resolveLeadFilter(t.filter);
     rows = leadRows(src.leads, t.tab).filter((l) => leadFilterKeeps(filter, l));
@@ -391,7 +413,9 @@ const searchById = new WeakMap<readonly Lead[], Map<string, string>>();
 
 /** The search an application's lead was filed under, or "" when it has none. */
 function leadSearch(a: Application, c: DrillContext): string {
-  if (!a.leadId) return "";
+  if (!a.leadId) {
+    return "";
+  }
   let m = searchById.get(c.leads);
   if (!m) {
     m = new Map(c.leads.map((l) => [String(l.id), l.search]));

@@ -42,10 +42,14 @@ export function changedGeneral(stored: General, draft: Partial<General>): Partia
   if (draft.display_title !== undefined && draft.display_title.trim() !== stored.display_title.trim()) {
     changed.display_title = draft.display_title.trim();
   }
-  if (draft.pronouns !== undefined && draft.pronouns !== stored.pronouns) changed.pronouns = draft.pronouns;
+  if (draft.pronouns !== undefined && draft.pronouns !== stored.pronouns) {
+    changed.pronouns = draft.pronouns;
+  }
   if (draft.excluded_companies) {
     const kept = draft.excluded_companies.map((c) => c.trim()).filter(Boolean);
-    if (!sameList(kept, stored.excluded_companies)) changed.excluded_companies = kept;
+    if (!sameList(kept, stored.excluded_companies)) {
+      changed.excluded_companies = kept;
+    }
   }
   return changed;
 }
@@ -107,15 +111,25 @@ export function changedSearches(tracks: readonly Track[], draft: SearchDraft): R
   const changed: Record<string, SearchEdit> = {};
   for (const track of tracks) {
     const edits = draft[track.key];
-    if (!edits) continue;
+    if (!edits) {
+      continue;
+    }
     const fields: SearchEdit = { ...payEdit(track, edits) };
     for (const key of SEARCH_KEYS) {
-      if (key === "pay_floor" || key === "pay_floor_unit") continue;
+      if (key === "pay_floor" || key === "pay_floor_unit") {
+        continue;
+      }
       const value = edits[key];
-      if (value !== undefined && value.trim() !== track[key].trim()) fields[key] = value.trim();
+      if (value !== undefined && value.trim() !== track[key].trim()) {
+        fields[key] = value.trim();
+      }
     }
-    if (edits.paused !== undefined && edits.paused !== Boolean(track.paused)) fields.paused = edits.paused;
-    if (Object.keys(fields).length) changed[track.key] = fields;
+    if (edits.paused !== undefined && edits.paused !== Boolean(track.paused)) {
+      fields.paused = edits.paused;
+    }
+    if (Object.keys(fields).length) {
+      changed[track.key] = fields;
+    }
   }
   return changed;
 }
@@ -127,12 +141,18 @@ export function changedSearches(tracks: readonly Track[], draft: SearchDraft): R
  * search with no floor shows a year rather than an empty choice.
  */
 function payEdit(track: Track, edits: SearchEdit): Partial<SearchFields> {
-  if (edits.pay_floor === undefined && edits.pay_floor_unit === undefined) return {};
+  if (edits.pay_floor === undefined && edits.pay_floor_unit === undefined) {
+    return {};
+  }
   const amount = (edits.pay_floor ?? track.pay_floor).trim();
   const unit = amount ? edits.pay_floor_unit ?? (track.pay_floor_unit || DEFAULT_PAY_UNIT) : "";
   const pay: Partial<SearchFields> = {};
-  if (amount !== track.pay_floor.trim()) pay.pay_floor = amount;
-  if (unit !== track.pay_floor_unit) pay.pay_floor_unit = unit;
+  if (amount !== track.pay_floor.trim()) {
+    pay.pay_floor = amount;
+  }
+  if (unit !== track.pay_floor_unit) {
+    pay.pay_floor_unit = unit;
+  }
   return pay;
 }
 
@@ -151,7 +171,9 @@ export function blankField(
   }
   for (const [search, fields] of Object.entries(searches)) {
     for (const field of ["label", "role_search_line"] as const) {
-      if (fields[field] !== undefined && !fields[field]) return { field, search };
+      if (fields[field] !== undefined && !fields[field]) {
+        return { field, search };
+      }
     }
   }
   return null;
@@ -168,10 +190,18 @@ export function unsavedAccountSentence(general: Partial<General>, searches: Reco
   const fields = entries.filter((e) => SEARCH_KEYS.some((k) => k in e && !isPay(k))).length;
   const pays = entries.filter((e) => Object.keys(e).some(isPay)).length;
   const pauses = entries.filter((e) => e.paused !== undefined).length;
-  if (fields) named.push(fields === 1 ? "what a search looks for" : `what ${fields} searches look for`);
-  if (pays) named.push(pays === 1 ? "the lowest pay a search takes" : `the lowest pay ${pays} searches take`);
-  if (pauses) named.push(pauses === 1 ? "whether a search runs" : `whether ${pauses} searches run`);
-  if (!named.length) return "";
+  if (fields) {
+    named.push(fields === 1 ? "what a search looks for" : `what ${fields} searches look for`);
+  }
+  if (pays) {
+    named.push(pays === 1 ? "the lowest pay a search takes" : `the lowest pay ${pays} searches take`);
+  }
+  if (pauses) {
+    named.push(pauses === 1 ? "whether a search runs" : `whether ${pauses} searches run`);
+  }
+  if (!named.length) {
+    return "";
+  }
   return `You changed ${joinNames(named)} but didn't save, so they stay as they are.`;
 }
 

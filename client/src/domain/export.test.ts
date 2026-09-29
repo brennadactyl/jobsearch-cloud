@@ -69,7 +69,9 @@ describe("the column lists", () => {
   const apps = applicationColumns(data.settings);
 
   it("take every header from the page's labels", () => {
-    for (const c of [...leads, ...apps]) expect(known, c.header).toContain(c.header);
+    for (const c of [...leads, ...apps]) {
+      expect(known, c.header).toContain(c.header);
+    }
     const source = readFileSync(join(process.cwd(), "src", "domain", "export.ts"), "utf8");
     expect(source).not.toMatch(/header:\s*["'`]/);
   });

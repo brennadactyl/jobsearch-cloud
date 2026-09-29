@@ -19,7 +19,9 @@ const css = readFileSync(join(process.cwd(), "src/tracker.css"), "utf8");
 /** Custom-property *declarations* inside one block - `--x:` , not `var(--x)`. */
 function declaredTokens(pattern: RegExp): string[] {
   const block = css.match(pattern);
-  if (!block) throw new Error(`theme block not found: ${pattern}`);
+  if (!block) {
+    throw new Error(`theme block not found: ${pattern}`);
+  }
   return [...block[0].matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]).sort();
 }
 

@@ -38,7 +38,9 @@ export default function PlaceChips({
   const add = () => {
     const added = listEntries(draft);
     setDraft("");
-    if (added.length) set([...entries, ...added]);
+    if (added.length) {
+      set([...entries, ...added]);
+    }
   };
   const remove = (i: number) => set(entries.filter((_, j) => j !== i));
   const move = (i: number, by: number) => {
@@ -48,7 +50,9 @@ export default function PlaceChips({
     set(next);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter" && e.key !== ",") return;
+    if (e.key !== "Enter" && e.key !== ",") {
+      return;
+    }
     // Enter would send the form it sits in, and a comma is how entries are
     // separated - both mean "that's one place".
     e.preventDefault();

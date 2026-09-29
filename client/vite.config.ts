@@ -13,7 +13,9 @@ function requireApiBase(): Plugin {
     apply: "build",
     config(_config, { mode }) {
       const env = loadEnv(mode, process.cwd(), "VITE_");
-      if (env.VITE_API_BASE?.trim()) return;
+      if (env.VITE_API_BASE?.trim()) {
+        return;
+      }
       throw new Error(
         "\n\n  VITE_API_BASE is not set - refusing to build.\n\n" +
           "  Without it this build would deploy a page that cannot reach any\n" +

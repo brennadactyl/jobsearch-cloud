@@ -25,11 +25,15 @@ const componentFiles = [
 function literalClasses(source: string): string[] {
   const tokens = new Set<string>();
   for (const m of source.matchAll(/className="([^"]+)"/g)) {
-    for (const t of m[1].split(/\s+/)) tokens.add(t);
+    for (const t of m[1].split(/\s+/)) {
+      tokens.add(t);
+    }
   }
   for (const m of source.matchAll(/className=\{`([^`]*)`\}/g)) {
     const statics = m[1].replace(/\$\{[^}]*\}/g, " ");
-    for (const t of statics.split(/\s+/)) tokens.add(t);
+    for (const t of statics.split(/\s+/)) {
+      tokens.add(t);
+    }
   }
   return [...tokens].filter((t) => /^[a-z][\w-]*$/i.test(t));
 }

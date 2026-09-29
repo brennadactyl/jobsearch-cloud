@@ -19,7 +19,9 @@ const listeners = new Set<() => void>();
 
 function set(next: SaveState) {
   current = next;
-  for (const l of listeners) l();
+  for (const l of listeners) {
+    l();
+  }
 }
 
 export const saved = {

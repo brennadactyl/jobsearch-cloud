@@ -108,7 +108,9 @@ function ResumeFiles({
   refused: Refused[];
   onRemove: (a: Attachment) => void;
 }) {
-  if (attachments.length === 0 && refused.length === 0) return null;
+  if (attachments.length === 0 && refused.length === 0) {
+    return null;
+  }
   return (
     <div className="setup-files">
       {attachments.map((a) => (
@@ -252,7 +254,9 @@ export default function Setup({
    * too big, or in the older Word format, is turned away without uploading.
    */
   function pick(files: FileList | null) {
-    if (!files) return;
+    if (!files) {
+      return;
+    }
     setRefused([]);
     for (const file of Array.from(files)) {
       if (file.size > MAX_FILE_BYTES) {
@@ -283,7 +287,9 @@ export default function Setup({
     } catch (err) {
       setAttachments((list) => list.filter((a) => a.key !== key));
       const failure = failureOf(err);
-      if (failure?.status === 401) return;
+      if (failure?.status === 401) {
+        return;
+      }
       // The server's reason already starts with the file's name.
       refuse({ name: failure ? "" : file.name, reason: failure?.message ?? (err instanceof Error ? err.message : String(err)) });
     }
@@ -292,14 +298,20 @@ export default function Setup({
   function remove(a: Attachment) {
     setAttachments((list) => list.filter((x) => x.key !== a.key));
     // Nothing names a removed file any more, so a failed delete leaves only a stray document.
-    if (a.status === "stored") void deleteDocument(a.path).catch(() => undefined);
+    if (a.status === "stored") {
+      void deleteDocument(a.path).catch(() => undefined);
+    }
   }
 
   async function send() {
     const found: Partial<Record<ProblemSlot, string>> = setupProblems(answers, stored.map((a) => fileNameOf(a.path)));
-    if (uploading) found.attach = "Wait for your resume to finish uploading, then send.";
+    if (uploading) {
+      found.attach = "Wait for your resume to finish uploading, then send.";
+    }
     setProblems(found);
-    if (Object.keys(found).length) return;
+    if (Object.keys(found).length) {
+      return;
+    }
 
     setSending(true);
     saved.saving("Sending…");
@@ -310,7 +322,9 @@ export default function Setup({
       onSent();
     } catch (err) {
       const failure = failureOf(err);
-      if (failure?.status === 401) return;
+      if (failure?.status === 401) {
+        return;
+      }
       setProblems({ [problemSlotFor(failure?.field)]: failure?.message ?? (err instanceof Error ? err.message : String(err)) });
       saved.message("Couldn't send — try again");
     } finally {

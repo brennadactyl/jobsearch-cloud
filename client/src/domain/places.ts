@@ -62,6 +62,8 @@ export function changedPlaces(stored: Places, draft: Partial<Places>): Partial<P
 /** What leaving now would lose from the Locations section, or "" when nothing would. */
 export function unsavedPlacesSentence(changed: Partial<Places>): string {
   const keys = PLACE_KEYS.filter((k) => k in changed);
-  if (!keys.length) return "";
+  if (!keys.length) {
+    return "";
+  }
   return `You changed ${joinNames(keys.map((k) => CALLED[k]))} but didn't save, so your searches keep the ones they use now.`;
 }

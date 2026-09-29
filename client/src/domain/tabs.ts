@@ -39,10 +39,18 @@ export function buildTracks(list: readonly Track[]): Record<string, Track> {
 }
 
 export function pathForTab(id: string): string {
-  if (id === "dashboard") return "/";
-  if (id === "applications") return "/applications";
-  if (id === ALL_LEADS) return "/all-leads";
-  if (id === SCREENED) return "/screened";
+  if (id === "dashboard") {
+    return "/";
+  }
+  if (id === "applications") {
+    return "/applications";
+  }
+  if (id === ALL_LEADS) {
+    return "/all-leads";
+  }
+  if (id === SCREENED) {
+    return "/screened";
+  }
   return `/t/${encodeURIComponent(id)}`;
 }
 
@@ -129,15 +137,21 @@ export function buildTabs(
 /** What the pooled leads tab says where a track tab shows its run stamp. */
 export function trackCountLine(tracks: Record<string, Track>): string {
   const n = Object.keys(tracks).length;
-  if (!n) return "No tracked searches configured";
+  if (!n) {
+    return "No tracked searches configured";
+  }
   return `${n} tracked search${n === 1 ? "" : "es"} feed this list`;
 }
 
 /** The narrowing rides in query params, so a drilled view is linkable and Back undoes it. */
 export function pathForTarget(t: DrillTarget): string {
   const params = new URLSearchParams();
-  if (t.filter) params.set("filter", t.filter);
-  if (t.drill) params.set("drill", t.drill);
+  if (t.filter) {
+    params.set("filter", t.filter);
+  }
+  if (t.drill) {
+    params.set("drill", t.drill);
+  }
   const q = params.toString();
   return pathForTab(t.tab) + (q ? `?${q}` : "");
 }

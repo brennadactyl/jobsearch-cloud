@@ -38,8 +38,12 @@ export default function ScreenedTab({ data }: { data: TrackerData }) {
   const narrow = (next: Partial<Record<"search" | "kind" | "sort" | "dir", string | null>>) => {
     const set = new URLSearchParams(params);
     for (const [key, value] of Object.entries(next)) {
-      if (value) set.set(key, value);
-      else set.delete(key);
+      if (value) {
+        set.set(key, value);
+      }
+      else {
+        set.delete(key);
+      }
     }
     setParams(set, { replace: true });
   };

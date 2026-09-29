@@ -13,10 +13,14 @@ function mediaBlock(query: string): string {
   const start = css.indexOf("@media");
   for (let at = start; at !== -1; at = css.indexOf("@media", at + 1)) {
     const open = css.indexOf("{", at);
-    if (!css.slice(at, open).replace(/\s+/g, "").includes(query)) continue;
+    if (!css.slice(at, open).replace(/\s+/g, "").includes(query)) {
+      continue;
+    }
     let depth = 1;
     let i = open + 1;
-    for (; i < css.length && depth; i++) depth += css[i] === "{" ? 1 : css[i] === "}" ? -1 : 0;
+    for (; i < css.length && depth; i++) {
+      depth += css[i] === "{" ? 1 : css[i] === "}" ? -1 : 0;
+    }
     return css.slice(open + 1, i - 1);
   }
   throw new Error(`no @media block for ${query}`);

@@ -153,7 +153,9 @@ describe("drillId", () => {
   };
 
   it.each(Object.entries(built))("builds %s ids that findDrill can read", (_name, ids) => {
-    for (const id of ids) expect(findDrill(id), id).toBeDefined();
+    for (const id of ids) {
+      expect(findDrill(id), id).toBeDefined();
+    }
   });
 });
 

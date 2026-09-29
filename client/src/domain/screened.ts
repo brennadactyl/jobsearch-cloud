@@ -90,7 +90,9 @@ export function latestRunDay(tracks: readonly Track[], search = ""): string {
  * where a day either side doesn't change what is in them.
  */
 export function windowStart(days: number, now: number, runDay = ""): string {
-  if (days === RUN_DAY_WINDOW) return runDay || isoDay(new Date(now));
+  if (days === RUN_DAY_WINDOW) {
+    return runDay || isoDay(new Date(now));
+  }
   return days ? isoDay(new Date(now - (days - 1) * 86_400_000)) : "";
 }
 
@@ -109,7 +111,9 @@ export function windowStart(days: number, now: number, runDay = ""): string {
  * bucket is not one of theirs.
  */
 function isOwnRejection(row: Screened): boolean {
-  if (row.added_by === "hand") return false;
+  if (row.added_by === "hand") {
+    return false;
+  }
   const known = SCREENED_KINDS.find((k) => k.kind === row.kind);
   return known ? known.mine === true : true;
 }
@@ -259,7 +263,9 @@ export function sortScreened(rows: readonly Screened[], key: string, descending:
 /** How many rows each search has, by its key. A search with none is absent, not zero. */
 export function countsBySearch(rows: readonly Screened[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const row of rows) counts[row.search] = (counts[row.search] ?? 0) + 1;
+  for (const row of rows) {
+    counts[row.search] = (counts[row.search] ?? 0) + 1;
+  }
   return counts;
 }
 

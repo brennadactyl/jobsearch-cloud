@@ -194,7 +194,9 @@ describe("exporting from a leads tab", () => {
     // What the list shows: the button itself, or its menu's first choice.
     const button = screen.getByRole("button", { name: "Export" });
     await userEvent.click(button);
-    if (button.getAttribute("aria-haspopup")) await userEvent.click(screen.getByRole("menuitem", { name: /^Export \d+ shown$/ }));
+    if (button.getAttribute("aria-haspopup")) {
+      await userEvent.click(screen.getByRole("menuitem", { name: /^Export \d+ shown$/ }));
+    }
     return save.mock.calls[0][1];
   }
 

@@ -32,7 +32,9 @@ function patch(qc: QueryClient, fn: (d: TrackerData) => TrackerData) {
  * same gate.
  */
 function signedOut(err: Error): boolean {
-  if (!(err instanceof api.UnauthorizedError)) return false;
+  if (!(err instanceof api.UnauthorizedError)) {
+    return false;
+  }
   api.session.end(err.message);
   return true;
 }
@@ -65,22 +67,38 @@ function useWrite<TVars, TResult>(opts: {
       // silently undo it.
       await qc.cancelQueries({ queryKey: DATA_KEY });
       const snapshot = qc.getQueryData<TrackerData>(DATA_KEY);
-      if (opts.optimistic) patch(qc, (d) => opts.optimistic!(d, vars));
+      if (opts.optimistic) {
+        patch(qc, (d) => opts.optimistic!(d, vars));
+      }
       return { snapshot };
     },
     onError(err: Error, vars, ctx) {
-      if (ctx?.snapshot) qc.setQueryData(DATA_KEY, ctx.snapshot);
+      if (ctx?.snapshot) {
+        qc.setQueryData(DATA_KEY, ctx.snapshot);
+      }
       opts.failed?.(vars);
-      if (signedOut(err)) return;
+      if (signedOut(err)) {
+        return;
+      }
       const specific = opts.message?.(err);
-      if (specific) saved.message(specific);
-      else saved.failed();
+      if (specific) {
+        saved.message(specific);
+      }
+      else {
+        saved.failed();
+      }
     },
     onSuccess(result: TResult, vars) {
-      if (opts.onResult) patch(qc, (d) => opts.onResult!(d, result, vars));
+      if (opts.onResult) {
+        patch(qc, (d) => opts.onResult!(d, result, vars));
+      }
       const text = opts.done?.(result, qc.getQueryData<TrackerData>(DATA_KEY), vars);
-      if (text) saved.note(text);
-      else saved.ok();
+      if (text) {
+        saved.note(text);
+      }
+      else {
+        saved.ok();
+      }
     },
   });
 }
@@ -137,7 +155,9 @@ export function useSetLeadStatus() {
     }),
     done: (_res, _d, { leaving }) => leaving?.note,
     failed: ({ leaving }) => {
-      if (leaving?.restore) selectRow(leaving.restore.scope, leaving.restore.id);
+      if (leaving?.restore) {
+        selectRow(leaving.restore.scope, leaving.restore.id);
+      }
     },
   });
 }
@@ -200,13 +220,19 @@ export function useDeleteLead() {
       return { snapshot };
     },
     onError(err, _vars, ctx) {
-      if (ctx?.snapshot) qc.setQueryData(DATA_KEY, ctx.snapshot);
-      if (signedOut(err)) return;
+      if (ctx?.snapshot) {
+        qc.setQueryData(DATA_KEY, ctx.snapshot);
+      }
+      if (signedOut(err)) {
+        return;
+      }
       saved.failed();
     },
     onSuccess(res, _vars, ctx) {
       if (res.kept.length) {
-        if (ctx?.snapshot) qc.setQueryData(DATA_KEY, ctx.snapshot);
+        if (ctx?.snapshot) {
+          qc.setQueryData(DATA_KEY, ctx.snapshot);
+        }
         saved.message("Kept — an application points at it");
         return;
       }

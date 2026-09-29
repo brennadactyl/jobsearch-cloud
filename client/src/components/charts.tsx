@@ -45,7 +45,9 @@ export function TipLayer({ children }: { children: ReactNode }) {
 
   // A scroll moves the mark out from under a tooltip fixed to the viewport.
   useEffect(() => {
-    if (!tip) return;
+    if (!tip) {
+      return;
+    }
     const hide = () => setTip(null);
     window.addEventListener("scroll", hide, true);
     return () => window.removeEventListener("scroll", hide, true);

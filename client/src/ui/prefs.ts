@@ -41,7 +41,9 @@ const KEYS: Partial<Record<keyof Prefs, string>> = {
 /** Guarded like client.ts's readStored: losing preferences is a worse experience, not a broken one. */
 function read<K extends keyof Prefs>(key: K): Prefs[K] | undefined {
   const storageKey = KEYS[key];
-  if (!storageKey) return undefined;
+  if (!storageKey) {
+    return undefined;
+  }
   try {
     const raw = localStorage.getItem(storageKey);
     return raw === null ? undefined : (raw as Prefs[K]);
@@ -57,10 +59,14 @@ function read<K extends keyof Prefs>(key: K): Prefs[K] | undefined {
  */
 export function readOverviewCollapsed(): Record<string, boolean> {
   const raw = read("overviewCollapsed") as unknown;
-  if (typeof raw !== "string") return {};
+  if (typeof raw !== "string") {
+    return {};
+  }
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
     const known: readonly string[] = OVERVIEW_FOLD_IDS;
     return Object.fromEntries(Object.entries(parsed).filter(([id, v]) => v === true && known.includes(id)));
   } catch {
@@ -79,7 +85,9 @@ let current: Prefs = {
 const listeners = new Set<() => void>();
 
 function emit() {
-  for (const l of listeners) l();
+  for (const l of listeners) {
+    l();
+  }
 }
 
 /** A module-level store rather than a context: these are global and every panel reads them. */
@@ -87,13 +95,19 @@ export function setPrefs(patch: Partial<Prefs>): void {
   current = { ...current, ...patch };
   for (const [k, v] of Object.entries(patch)) {
     const storageKey = KEYS[k as keyof Prefs];
-    if (!storageKey) continue;
+    if (!storageKey) {
+      continue;
+    }
     // A string as it is; a record as JSON of its true entries.
     let stored: string;
-    if (typeof v === "string") stored = v;
+    if (typeof v === "string") {
+      stored = v;
+    }
     else if (v && typeof v === "object") {
       stored = JSON.stringify(Object.fromEntries(Object.entries(v).filter(([, on]) => on === true)));
-    } else continue;
+    } else {
+      continue;
+    }
     try {
       localStorage.setItem(storageKey, stored);
     } catch {
@@ -134,8 +148,12 @@ export function usePrefs(): Prefs {
 /** Folds or unfolds one Overview section or chart. Reads the store, so clicks landing before a re-render all count. */
 export function toggleOverviewFold(id: string): void {
   const next = { ...current.overviewCollapsed };
-  if (next[id]) delete next[id];
-  else next[id] = true;
+  if (next[id]) {
+    delete next[id];
+  }
+  else {
+    next[id] = true;
+  }
   setPrefs({ overviewCollapsed: next });
 }
 

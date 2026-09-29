@@ -17,9 +17,13 @@ function assetsSetting(key: string): string | undefined {
       inAssets = line === "[assets]";
       continue;
     }
-    if (!inAssets) continue;
+    if (!inAssets) {
+      continue;
+    }
     const m = line.match(/^([\w-]+)\s*=\s*"([^"]*)"$/);
-    if (m && m[1] === key) return m[2];
+    if (m && m[1] === key) {
+      return m[2];
+    }
   }
   return undefined;
 }

@@ -24,7 +24,9 @@ function TrackPanel({ data }: { data: TrackerData }) {
   const { trackKey = "" } = useParams();
   const tracks = buildTracks(data.tracks);
   // A bookmark can name a track config no longer has.
-  if (!tracks[trackKey]) return <Navigate to="/" replace />;
+  if (!tracks[trackKey]) {
+    return <Navigate to="/" replace />;
+  }
   return <LeadsTab data={data} trackKey={trackKey} />;
 }
 
@@ -175,7 +177,9 @@ export default function Shell({
         settings={data.settings}
         onClose={() => {
           setAccountOpen(false);
-          if (askedSection !== null) closeAsked();
+          if (askedSection !== null) {
+            closeAsked();
+          }
         }}
       />
     </div>
