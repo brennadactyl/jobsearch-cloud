@@ -40,6 +40,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # oxlint holds the conventions a reader can't be asked to police, and this
+      # is where one stops depending on somebody remembering to run it.
+      #
+      # Beside the typecheck rather than after the tests: both are static, both
+      # take a moment, and a run that is going to fail on one of them should say
+      # so before spending a minute on the suite.
+      - name: Lint
+        run: npm run lint
+
       - name: Test
         run: npm test
 
