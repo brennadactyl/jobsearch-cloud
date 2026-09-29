@@ -73,7 +73,20 @@ export function storedArea(area, list) {
  * A writer that names an area decides: whatever it sent is judged by
  * storedArea, and if that names no ranked entry the area is cleared. It saw the
  * posting and this code did not, so a location that happens to match must not
- * overrule it - and `cleared` is how a run hears that its answer didn't land.
+ * overrule it - and `cleared` is how a writer hears that its answer didn't land.
+ *
+ * **`cleared` is load-bearing elsewhere, which is the real reason not to fill
+ * over it.** `scripts/tracker.ps1` checks every area against the same ranked
+ * list before sending, and drops one that fails rather than forwarding it - so
+ * a nightly run reaches here having already said nothing, and a `cleared` from
+ * this route means the two rules have drifted apart. The helper warns on
+ * exactly that. Filling from the location instead would return 0 and silence a
+ * warning in a layer this code can't see.
+ *
+ * It also means the nightly path barely exercises that branch, and the next
+ * reader will be tempted to fold this into `sent || location`. The branch is
+ * for every other writer - the page, a direct call, a runner that doesn't
+ * pre-check - and for the day the helper stops stripping.
  *
  * **Only a writer that said nothing gets the location read for it.** The page
  * tiers by area alone, so a row with none sits untiered however plainly its
