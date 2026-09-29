@@ -35,11 +35,21 @@ const SCREENED_BY_RULES_CHECK = [
 // whose body is not JSON in either direction (see src/routes/documents.js).
 const req = async (method, path, { token, body, admin, raw, type, ifMatch, bytes } = {}) => {
   const headers = {};
-  if (body) headers["content-type"] = "application/json";
-  if (type) headers["content-type"] = type;
-  if (ifMatch) headers["if-match"] = ifMatch;
-  if (token) headers.authorization = "Bearer " + token;
-  if (admin) headers.authorization = "Bearer " + ADMIN;
+  if (body) {
+    headers["content-type"] = "application/json";
+  }
+  if (type) {
+    headers["content-type"] = type;
+  }
+  if (ifMatch) {
+    headers["if-match"] = ifMatch;
+  }
+  if (token) {
+    headers.authorization = "Bearer " + token;
+  }
+  if (admin) {
+    headers.authorization = "Bearer " + ADMIN;
+  }
   const res = await fetch(A + path, {
     method,
     headers,
@@ -55,8 +65,12 @@ const req = async (method, path, { token, body, admin, raw, type, ifMatch, bytes
 };
 
 function check(name, ok, detail) {
-  if (ok) { pass++; console.log(`  PASS  ${name}`); }
-  else { fail++; console.log(`  FAIL  ${name}${detail ? " -- " + detail : ""}`); }
+  if (ok) {
+    pass++; console.log(`  PASS  ${name}`);
+  }
+  else {
+    fail++; console.log(`  FAIL  ${name}${detail ? " -- " + detail : ""}`);
+  }
 }
 
 console.log("\n== provisioning ==");
@@ -1250,8 +1264,12 @@ const cycleSlices = Math.ceil(cycleTotal / 24) + 5;
 for (let guard = 0; guard < cycleSlices && reached.size < cycleTotal; guard++) {
   const s = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json;
   for (const c of s.companies) {
-    if (reached.size === cycleTotal) break;
-    if (reached.has(c.company)) servedTwiceEarly++;
+    if (reached.size === cycleTotal) {
+      break;
+    }
+    if (reached.has(c.company)) {
+      servedTwiceEarly++;
+    }
     reached.add(c.company);
   }
   await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
@@ -1267,7 +1285,9 @@ const furthest = whole.reduce((a, c) => (c.position > a.position ? c : a));
 let endSlice = [];
 for (let guard = 0; guard < cycleSlices; guard++) {
   endSlice = (await req("GET", `/api/coverage/${ROT}`, { token: C_TOK })).json.companies;
-  if (endSlice.some((c) => c.company === furthest.company)) break;
+  if (endSlice.some((c) => c.company === furthest.company)) {
+    break;
+  }
   await req("POST", "/api/coverage", { token: C_TOK, body: { search: ROT, on: day,
     swept: endSlice.map((c) => ({ company: c.company })) } });
 }
@@ -1826,13 +1846,18 @@ const attrDb = await import("./src/db.js");
 let threw = "";
 try {
   await new attrDb.Db({}, "u").deleteLeadAndScreen({ id: 1, search: "SWE", url: "u" }, "r", null);
-} catch (e) { threw = e.message; }
+} catch (e) {
+  threw = e.message;
+}
 check("deleteLeadAndScreen refuses a missing added_by instead of guessing 'run'",
   /addedBy must be 'run' or 'hand'/.test(threw), JSON.stringify(threw.slice(0, 90)));
 for (const bad of ["", "RUN", "person", null]) {
   let m = "";
-  try { await new attrDb.Db({}, "u").deleteLeadAndScreen({ id: 1, search: "SWE", url: "u" }, "r", null, bad); }
-  catch (e) { m = e.message; }
+  try {
+    await new attrDb.Db({}, "u").deleteLeadAndScreen({ id: 1, search: "SWE", url: "u" }, "r", null, bad);
+  } catch (e) {
+    m = e.message;
+  }
   check(`and refuses ${JSON.stringify(bad)}`, /addedBy must be/.test(m), JSON.stringify(m.slice(0, 60)));
 }
 
@@ -3147,7 +3172,9 @@ for (const [path, raw, type] of [
   ["resumes/Pasted.txt", sixtyWords, "text/plain"],
   ["resumes/Headshot.png", "not an image", "image/png"],
   ["reference/notes.txt", "reference notes", "text/plain"],
-]) await putDoc(R, path, raw, type);
+]) {
+  await putDoc(R, path, raw, type);
+}
 await putDoc(R, "resumes/AI_Roles.docx", plainDocx(), DOCX_TYPE);
 await req("POST", "/api/writeup", { token: R.token, body: { search: "SWE", role_search_line: "engineering roles", documents: ["resumes/Engineering.pdf", "reference/notes.txt"] } });
 await req("POST", "/api/writeup", { token: R.token, body: { search: "CPM", role_search_line: "program roles", documents: ["resumes/Engineering.pdf"] } });

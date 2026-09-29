@@ -19,8 +19,12 @@ import { readFileSync } from "node:fs";
 const OWNER = "ab266b6c-00cc-45d1-92ac-cdad412c1558";
 let pass = 0, fail = 0;
 const check = (name, ok, detail) => {
-  if (ok) { pass++; console.log(`  PASS  ${name}`); }
-  else { fail++; console.log(`  FAIL  ${name}${detail ? " -- " + detail : ""}`); }
+  if (ok) {
+    pass++; console.log(`  PASS  ${name}`);
+  }
+  else {
+    fail++; console.log(`  FAIL  ${name}${detail ? " -- " + detail : ""}`);
+  }
 };
 
 // D1 applies a migration file statement by statement; node:sqlite's exec()
@@ -30,7 +34,9 @@ const sql = (f) => readFileSync(new URL(`./migrations/${f}`, import.meta.url), "
 function migrated(seed) {
   const db = new DatabaseSync(":memory:");
   db.exec(sql("0001_schema.sql"));
-  if (seed) db.exec(seed);
+  if (seed) {
+    db.exec(seed);
+  }
   db.exec(sql("0002_multi_user.sql"));
   return db;
 }
@@ -162,9 +168,15 @@ const MIGRATIONS = readdirSync(new URL("./migrations/", import.meta.url))
 // hold (control characters).
 function migratedThrough(stop, seed) {
   const db = new DatabaseSync(":memory:");
-  for (const f of MIGRATIONS.filter((f) => f < stop)) db.exec(sql(f));
-  if (typeof seed === "function") seed(db);
-  else if (seed) db.exec(seed);
+  for (const f of MIGRATIONS.filter((f) => f < stop)) {
+    db.exec(sql(f));
+  }
+  if (typeof seed === "function") {
+    seed(db);
+  }
+  else if (seed) {
+    db.exec(seed);
+  }
   db.exec(sql(stop));
   return db;
 }
@@ -255,13 +267,17 @@ console.log("\n== 0011: normalize() in SQL agrees with the JavaScript function =
   const names = [];
   for (let c = 1; c < 128; c++) {
     const ch = String.fromCharCode(c);
-    if (/[a-zA-Z0-9 ]/.test(ch)) continue;
+    if (/[a-zA-Z0-9 ]/.test(ch)) {
+      continue;
+    }
     names.push(`x${ch}y${c}`, `${ch}lead${c}`, `trail${c}${ch}`, `mid${ch}${ch}${ch}run${c}`, `MiXeD${ch}CaSe${c}`);
   }
   names.push("a" + "!@#$%^&*()".repeat(6) + "b", "!!!", "  padded  ", "Rocket Companies (formerly Redfin)");
   const db = migratedThrough(STOP, (d) => {
     const ins = d.prepare("INSERT INTO company_sweeps (user_id, search, company) VALUES ('u', 's', ?)");
-    for (const n of names) ins.run(n);
+    for (const n of names) {
+      ins.run(n);
+    }
   });
   const rows = db.prepare("SELECT company, company_key FROM company_sweeps").all();
   const wrong = rows.filter((r) => r.company_key !== normalize(r.company));

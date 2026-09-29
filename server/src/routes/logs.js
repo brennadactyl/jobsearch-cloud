@@ -19,7 +19,9 @@ export const MAX_LOG_BYTES = 2 * 1024 * 1024;
 const STARTED = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
 
 function missingBucket(runLogs) {
-  if (runLogs && runLogs.bucket) return null;
+  if (runLogs && runLogs.bucket) {
+    return null;
+  }
   return json(
     { error: "run logs are not configured on this deployment - the DOCS R2 bucket is not bound (see server/wrangler.toml)" },
     503
@@ -45,18 +47,28 @@ function badStarted(started) {
  */
 export async function handlePutRunLog({ request, db, runLogs, params }) {
   const unconfigured = missingBucket(runLogs);
-  if (unconfigured) return unconfigured;
+  if (unconfigured) {
+    return unconfigured;
+  }
 
   const [track, started] = params;
-  if (!STARTED.test(started)) return badStarted(started);
-  if (!(await db.trackExists(track))) return unknownTrack(track);
+  if (!STARTED.test(started)) {
+    return badStarted(started);
+  }
+  if (!(await db.trackExists(track))) {
+    return unknownTrack(track);
+  }
 
   // Refused on the declared length before reading, and on the buffered length
   // after, as documents are: the object is never written oversized.
   const declared = Number(request.headers.get("content-length") || 0);
-  if (declared > MAX_LOG_BYTES) return tooLarge(declared);
+  if (declared > MAX_LOG_BYTES) {
+    return tooLarge(declared);
+  }
   const body = await request.arrayBuffer();
-  if (body.byteLength > MAX_LOG_BYTES) return tooLarge(body.byteLength);
+  if (body.byteLength > MAX_LOG_BYTES) {
+    return tooLarge(body.byteLength);
+  }
 
   const written = await runLogs.put(track, started, body);
   return json({ track, started, bytes: written.bytes });
@@ -69,10 +81,14 @@ export async function handlePutRunLog({ request, db, runLogs, params }) {
  */
 export async function handleListRunLogs({ db, runLogs, params }) {
   const unconfigured = missingBucket(runLogs);
-  if (unconfigured) return unconfigured;
+  if (unconfigured) {
+    return unconfigured;
+  }
 
   const [track] = params;
-  if (!(await db.trackExists(track))) return unknownTrack(track);
+  if (!(await db.trackExists(track))) {
+    return unknownTrack(track);
+  }
   return json({ track, logs: await runLogs.list(track) });
 }
 
@@ -87,14 +103,22 @@ export async function handleListRunLogs({ db, runLogs, params }) {
  */
 export async function handleGetRunLog({ db, runLogs, params }) {
   const unconfigured = missingBucket(runLogs);
-  if (unconfigured) return unconfigured;
+  if (unconfigured) {
+    return unconfigured;
+  }
 
   const [track, started] = params;
-  if (!STARTED.test(started)) return badStarted(started);
-  if (!(await db.trackExists(track))) return unknownTrack(track);
+  if (!STARTED.test(started)) {
+    return badStarted(started);
+  }
+  if (!(await db.trackExists(track))) {
+    return unknownTrack(track);
+  }
 
   const obj = await runLogs.get(track, started);
-  if (!obj) return json({ error: `no log for the ${track} run that started ${started}` }, 404);
+  if (!obj) {
+    return json({ error: `no log for the ${track} run that started ${started}` }, 404);
+  }
   return new Response(obj.body, {
     headers: { "content-type": "text/plain; charset=utf-8", ...CORS_HEADERS },
   });

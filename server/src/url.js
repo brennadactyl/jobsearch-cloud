@@ -67,7 +67,9 @@ const REQ_ID = /\d{5,}/g;
  */
 export function canonicalUrl(url) {
   const raw = String(url || "").trim();
-  if (!raw) return "";
+  if (!raw) {
+    return "";
+  }
 
   let u;
   try {
@@ -79,13 +81,17 @@ export function canonicalUrl(url) {
   const host = u.hostname.toLowerCase().replace(/^www\./, "");
 
   for (const p of [...u.searchParams.keys()]) {
-    if (TRACKING_PARAMS.has(p.toLowerCase())) u.searchParams.delete(p);
+    if (TRACKING_PARAMS.has(p.toLowerCase())) {
+      u.searchParams.delete(p);
+    }
   }
 
   // Deduped and sorted, so the same id in both the path and the query counts
   // once and the order it appeared in doesn't matter.
   const ids = [...new Set(`${u.pathname} ${u.searchParams.toString()}`.match(REQ_ID) || [])].sort();
-  if (ids.length) return `${host}#${ids.join(",")}`;
+  if (ids.length) {
+    return `${host}#${ids.join(",")}`;
+  }
 
   const path = u.pathname.replace(/\/+$/, "").toLowerCase();
   const query = [...u.searchParams.entries()]

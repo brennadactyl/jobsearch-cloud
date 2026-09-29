@@ -38,10 +38,14 @@ import { READABLE_DOCUMENT_EXTENSIONS } from "./validate.js";
  * @returns {{name: string, base: string, ext: string}|null}
  */
 export function resumeParts(path) {
-  if (!path.startsWith("resumes/")) return null;
+  if (!path.startsWith("resumes/")) {
+    return null;
+  }
   const name = path.slice("resumes/".length);
   const dot = name.lastIndexOf(".");
-  if (dot <= 0) return { name, base: name, ext: "" };
+  if (dot <= 0) {
+    return { name, base: name, ext: "" };
+  }
   return { name, base: name.slice(0, dot), ext: name.slice(dot + 1).toLowerCase() };
 }
 
@@ -60,7 +64,9 @@ export function fileName(path) {
  */
 export function samePairName(stored, path, ext) {
   const want = resumeParts(path)?.base.toLowerCase();
-  if (want === undefined) return [];
+  if (want === undefined) {
+    return [];
+  }
   return stored.filter((p) => {
     const parts = resumeParts(p);
     return parts?.ext === ext && parts.base.toLowerCase() === want;
@@ -75,7 +81,9 @@ export function samePairName(stored, path, ext) {
  * @returns {string|null}
  */
 export function listedPathFor(stored, path) {
-  if (resumeParts(path)?.ext !== "docx") return path;
+  if (resumeParts(path)?.ext !== "docx") {
+    return path;
+  }
   return samePairName(stored, path, "txt")[0] || null;
 }
 
@@ -88,9 +96,15 @@ export function listedPathFor(stored, path) {
  */
 export function isChoosableResume(stored, path) {
   const parts = resumeParts(path);
-  if (!parts) return false;
-  if (parts.ext === "docx") return listedPathFor(stored, path) !== null;
-  if (parts.ext === "txt" && samePairName(stored, path, "docx").length) return false;
+  if (!parts) {
+    return false;
+  }
+  if (parts.ext === "docx") {
+    return listedPathFor(stored, path) !== null;
+  }
+  if (parts.ext === "txt" && samePairName(stored, path, "docx").length) {
+    return false;
+  }
   return READABLE_DOCUMENT_EXTENSIONS.includes(parts.ext);
 }
 
@@ -165,7 +179,9 @@ export function resumeUsage(rows, stored, path) {
  * @param {string[]} names
  */
 export function joinNames(names) {
-  if (names.length <= 1) return names.join("");
+  if (names.length <= 1) {
+    return names.join("");
+  }
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 

@@ -32,7 +32,9 @@ export const PRONOUNS = {
 // "a, b, and c" - the serial comma a plain join can't produce.
 function joinAnd(parts) {
   const p = parts.filter(Boolean);
-  if (p.length <= 1) return p[0] || "";
+  if (p.length <= 1) {
+    return p[0] || "";
+  }
   return p.slice(0, -1).join(", ") + ", and " + p[p.length - 1];
 }
 
@@ -281,7 +283,9 @@ const PAY_FLOOR_UNITS = { year: "a year", hour: "an hour" };
 function payFloor(track) {
   const amount = typeof track.pay_floor === "string" ? track.pay_floor.trim() : "";
   const unit = PAY_FLOOR_UNITS[track.pay_floor_unit] || "";
-  if (!amount || !unit) return { finding: "", disqualified: "" };
+  if (!amount || !unit) {
+    return { finding: "", disqualified: "" };
+  }
   return {
     finding:
       `paying at least ${amount} ${unit} - a stated range that includes that or lies entirely above it, ` +
@@ -317,10 +321,18 @@ function geoStep(settings, name) {
     return "WHERE THIS SEARCH LOOKS: no locations are set for this search - don't exclude a posting on location alone.";
   }
   const lines = ["WHERE THIS SEARCH LOOKS. " + name + " listed these places, exactly as typed - read each entry as the place it names:"];
-  if (preferred) lines.push(`   - **Wanted first, in this order, and always searched:** ${preferred}`);
-  if (searched) lines.push(`   - **Also searched:** ${searched}`);
-  if (excluded) lines.push(`   - **Ruled out:** ${excluded}`);
-  if (note) lines.push(`   - **In ${name}'s words:** ${note}`);
+  if (preferred) {
+    lines.push(`   - **Wanted first, in this order, and always searched:** ${preferred}`);
+  }
+  if (searched) {
+    lines.push(`   - **Also searched:** ${searched}`);
+  }
+  if (excluded) {
+    lines.push(`   - **Ruled out:** ${excluded}`);
+  }
+  if (note) {
+    lines.push(`   - **In ${name}'s words:** ${note}`);
+  }
   // With no searched list, the places wanted first are the whole search; with
   // neither, only the rule-outs narrow it.
   const lastly = searched
@@ -346,7 +358,9 @@ function geoStep(settings, name) {
 // paraphrase. A person with nothing ranked gets no area at all.
 function areaStep(settings, name) {
   const ranked = typeof settings.priority_locations === "string" ? settings.priority_locations.trim() : "";
-  if (!ranked) return { areaKey: "", areaRule: "" };
+  if (!ranked) {
+    return { areaKey: "", areaRule: "" };
+  }
   return {
     areaKey: ", area",
     areaRule:
@@ -396,7 +410,9 @@ function filingStep(track, { fed, multi, allKeys }, doc) {
 // all under the tab that happens to own the search. Only a multi-tab run has
 // anything to say: a single-tab search has one key, which the helper stamps.
 function screenedTabFields({ multi, allKeys }) {
-  if (!multi) return { screenedTab: "", screenedTabRule: "" };
+  if (!multi) {
+    return { screenedTab: "", screenedTabRule: "" };
+  }
   return {
     screenedTab: ", search",
     screenedTabRule:

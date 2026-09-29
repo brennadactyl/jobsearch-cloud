@@ -82,10 +82,14 @@ export function mergedFacts(kept, absorbed) {
   const fresher = [...absorbed].sort((a, b) => (b.verified_on || "").localeCompare(a.verified_on || ""));
   const row = { ...kept };
   for (const f of FACT_FIELDS) {
-    if (!row[f]) row[f] = fresher.find((a) => a[f])?.[f] || "";
+    if (!row[f]) {
+      row[f] = fresher.find((a) => a[f])?.[f] || "";
+    }
   }
   row.verified_on = [kept, ...absorbed].map((r) => r.verified_on || "").sort().pop();
-  if (row.board || row.endpoint) return { ...row, ...NO_WALL };
+  if (row.board || row.endpoint) {
+    return { ...row, ...NO_WALL };
+  }
   if (!row.wall) {
     const walled = absorbed.filter((a) => a.wall).sort((a, b) => b.wall_last_on.localeCompare(a.wall_last_on))[0];
     if (walled) {
@@ -113,7 +117,9 @@ export function mergedSweeps(keptKey, rows, finalKey) {
   const bySearch = new Map();
   for (const r of rows) {
     const id = JSON.stringify([r.user_id, r.search]);
-    if (!bySearch.has(id)) bySearch.set(id, []);
+    if (!bySearch.has(id)) {
+      bySearch.set(id, []);
+    }
     bySearch.get(id).push(r);
   }
   return [...bySearch.values()].map((group) => {
@@ -171,12 +177,20 @@ export function planCleanup(body, fetchRows, sweepRows, aliasRows = []) {
   /** @returns {FetchRow|{status: number, error: string}} */
   const claim = (name, role) => {
     const key = typeof name === "string" ? normalize(name) : "";
-    if (!key) return refuse(400, `${role} must be a company name`);
-    if (used.has(key)) return refuse(400, `"${name}" is named more than once - each company can be in one change`);
+    if (!key) {
+      return refuse(400, `${role} must be a company name`);
+    }
+    if (used.has(key)) {
+      return refuse(400, `"${name}" is named more than once - each company can be in one change`);
+    }
     used.add(key);
     const row = rows.get(key);
-    if (!row) return refuse(404, `"${name}" is not on the company list`);
-    if (row.retracted_on) return refuse(409, `"${row.display_name}" is retracted - clear the retraction before merging or renaming it`);
+    if (!row) {
+      return refuse(404, `"${name}" is not on the company list`);
+    }
+    if (row.retracted_on) {
+      return refuse(409, `"${row.display_name}" is retracted - clear the retraction before merging or renaming it`);
+    }
     return row;
   };
   // A new name may be the kept row's own key under another spelling, but never
@@ -184,7 +198,9 @@ export function planCleanup(body, fetchRows, sweepRows, aliasRows = []) {
   const finalKeys = new Set();
   const nameFor = (name, fromKey) => {
     const key = typeof name === "string" ? normalize(name) : "";
-    if (!key) return refuse(400, "a new name must be a company name");
+    if (!key) {
+      return refuse(400, "a new name must be a company name");
+    }
     if ((rows.has(key) && key !== fromKey) || finalKeys.has(key)) {
       return refuse(409, `"${name}" is already on the company list - merge into it instead of renaming`);
     }
@@ -197,17 +213,27 @@ export function planCleanup(body, fetchRows, sweepRows, aliasRows = []) {
   const changes = [];
   for (const m of merges) {
     const kept = claim(m?.keep, "keep");
-    if (isRefusal(kept)) return kept;
-    if (!Array.isArray(m.absorb) || m.absorb.length === 0) return refuse(400, `a merge into "${m.keep}" needs absorb: [names]`);
+    if (isRefusal(kept)) {
+      return kept;
+    }
+    if (!Array.isArray(m.absorb) || m.absorb.length === 0) {
+      return refuse(400, `a merge into "${m.keep}" needs absorb: [names]`);
+    }
     const absorbed = [];
     for (const a of m.absorb) {
       const row = claim(a, "absorb");
-      if (isRefusal(row)) return row;
+      if (isRefusal(row)) {
+        return row;
+      }
       absorbed.push(row);
     }
     const target = m.rename === undefined ? { key: kept.company_key, name: kept.display_name } : nameFor(m.rename, kept.company_key);
-    if (isRefusal(target)) return target;
-    if (m.rename === undefined) finalKeys.add(kept.company_key);
+    if (isRefusal(target)) {
+      return target;
+    }
+    if (m.rename === undefined) {
+      finalKeys.add(kept.company_key);
+    }
 
     const keys = [kept.company_key, ...absorbed.map((a) => a.company_key)];
     changes.push({
@@ -221,9 +247,13 @@ export function planCleanup(body, fetchRows, sweepRows, aliasRows = []) {
 
   for (const r of renames) {
     const from = claim(r?.from, "from");
-    if (isRefusal(from)) return from;
+    if (isRefusal(from)) {
+      return from;
+    }
     const target = nameFor(r.to, from.company_key);
-    if (isRefusal(target)) return target;
+    if (isRefusal(target)) {
+      return target;
+    }
     // An acquired company's facts describe the old careers site, so a caller
     // that knows they no longer apply clears them, and the next run re-learns
     // them under the new name.
@@ -246,7 +276,9 @@ export function planCleanup(body, fetchRows, sweepRows, aliasRows = []) {
   // builds the list; a caller only ever names an alias and a company.
   const finalOf = new Map();
   for (const c of changes) {
-    for (const k of [c.from_key, ...c.absorbed_keys]) finalOf.set(k, c.row.company_key);
+    for (const k of [c.from_key, ...c.absorbed_keys]) {
+      finalOf.set(k, c.row.company_key);
+    }
     const names = c.before.flatMap((r) => [...parseAliases(r.aliases), r.display_name]);
     c.row.aliases = aliasList(names, c.row.company_key);
   }
@@ -254,7 +286,9 @@ export function planCleanup(body, fetchRows, sweepRows, aliasRows = []) {
   // Who owns each alias today, so one name never means two companies.
   const ownerOf = new Map();
   for (const r of aliasRows) {
-    for (const name of parseAliases(r.aliases)) ownerOf.set(normalize(name), r);
+    for (const name of parseAliases(r.aliases)) {
+      ownerOf.set(normalize(name), r);
+    }
   }
   const involved = new Set(finalOf.keys());
 
@@ -264,13 +298,19 @@ export function planCleanup(body, fetchRows, sweepRows, aliasRows = []) {
   for (const a of aliasAsks) {
     const aliasKey = typeof a?.name === "string" ? normalize(a.name) : "";
     const companyKey = typeof a?.company === "string" ? normalize(a.company) : "";
-    if (!aliasKey || !companyKey) return refuse(400, "an alias needs a name and the company it means");
+    if (!aliasKey || !companyKey) {
+      return refuse(400, "an alias needs a name and the company it means");
+    }
     if (rows.has(aliasKey) || finalKeys.has(aliasKey)) {
       return refuse(409, `"${a.name}" is a company on the list - merge it into "${a.company}" instead of aliasing it`);
     }
     const target = rows.get(companyKey);
-    if (!target) return refuse(404, `"${a.company}" is not on the company list`);
-    if (target.retracted_on) return refuse(409, `"${target.display_name}" is retracted - an alias can't point at it`);
+    if (!target) {
+      return refuse(404, `"${a.company}" is not on the company list`);
+    }
+    if (target.retracted_on) {
+      return refuse(409, `"${target.display_name}" is retracted - an alias can't point at it`);
+    }
     // A company this request merges away or renames: the alias goes where it went.
     const finalKey = finalOf.get(companyKey) || companyKey;
     const owner = ownerOf.get(aliasKey);
@@ -323,7 +363,9 @@ function aliasList(names, companyKey) {
   const out = [];
   for (const name of names) {
     const key = normalize(name);
-    if (!key || seen.has(key)) continue;
+    if (!key || seen.has(key)) {
+      continue;
+    }
     seen.add(key);
     out.push(name.trim());
   }

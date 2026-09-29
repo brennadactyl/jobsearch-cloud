@@ -38,7 +38,9 @@ import { ADMIN_ROUTES, matchRoute, PUBLIC_ROUTES, SESSION_ROUTES } from "./route
 
 export default {
   async fetch(request, env) {
-    if (request.method === "OPTIONS") return corsPreflight();
+    if (request.method === "OPTIONS") {
+      return corsPreflight();
+    }
 
     const url = new URL(request.url);
 
@@ -54,7 +56,9 @@ export default {
     // session is ever the credential for these.
     const admin = matchRoute(ADMIN_ROUTES, request.method, url.pathname);
     if (admin) {
-      if (!(await isAdminRequest(request, env))) return unauthorized();
+      if (!(await isAdminRequest(request, env))) {
+        return unauthorized();
+      }
       return admin.handler({
         request, env, url, params: admin.params, token: "", user: null, db: null, companyList: null, docs: null, runLogs: null,
       });
@@ -64,10 +68,14 @@ export default {
     // caller gets 401 for every path and learns nothing about which exist.
     const token = bearer(request);
     const user = await getSessionUser(env.DB, token);
-    if (!user) return unauthorized();
+    if (!user) {
+      return unauthorized();
+    }
 
     const route = matchRoute(SESSION_ROUTES, request.method, url.pathname);
-    if (!route) return new Response("Not found", { status: 404, headers: CORS_HEADERS });
+    if (!route) {
+      return new Response("Not found", { status: 404, headers: CORS_HEADERS });
+    }
 
     return route.handler({
       request,

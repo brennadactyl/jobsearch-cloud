@@ -50,20 +50,26 @@ const DUMMY_SALT = "AAAAAAAAAAAAAAAAAAAAAA==";
 // and '/' are exactly the characters that survive that journey least well.
 function toBase64Url(bytes) {
   let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
+  for (const b of bytes) {
+    binary += String.fromCharCode(b);
+  }
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function fromBase64(text) {
   const binary = atob(text);
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
   return bytes;
 }
 
 function toBase64(bytes) {
   let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
+  for (const b of bytes) {
+    binary += String.fromCharCode(b);
+  }
   return btoa(binary);
 }
 
@@ -89,9 +95,13 @@ export async function hashPassword(password, saltB64, iterations = PBKDF2_ITERAT
 // Compares every byte regardless of where the first mismatch is, so how long
 // the comparison takes doesn't leak how much of the hash was guessed right.
 function timingSafeEqual(a, b) {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length) {
+    return false;
+  }
   let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
   return diff === 0;
 }
 
@@ -146,7 +156,9 @@ export async function hashToken(token) {
  */
 export async function isAdminRequest(request, env) {
   const given = bearer(request);
-  if (!env.ADMIN_TOKEN || !given) return false;
+  if (!env.ADMIN_TOKEN || !given) {
+    return false;
+  }
   return timingSafeEqual(await hashToken(given), await hashToken(env.ADMIN_TOKEN));
 }
 
@@ -168,7 +180,9 @@ export function bearer(request) {
  * @returns {Promise<{id: string, name: string, demo: number, session_id: string}|null>}
  */
 export async function getSessionUser(d1, token) {
-  if (!token) return null;
+  if (!token) {
+    return null;
+  }
   const row = await d1
     .prepare(
       `SELECT u.id AS id, u.name AS name, u.demo AS demo, s.id AS session_id

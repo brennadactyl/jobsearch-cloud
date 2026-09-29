@@ -50,7 +50,9 @@ export const STAGE_DATE_MAP = {
 export async function handleSetApplicationStatus({ request, db, params }) {
   const id = params[0];
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   if (!APP_STATUS.includes(body.status)) {
     return json({ error: "invalid status" }, 400);
@@ -64,7 +66,9 @@ export async function handleSetApplicationStatus({ request, db, params }) {
     body.status === "To Apply" ? "dateApplied" : null,
     explicitDate
   );
-  if (!application) return json({ error: "application not found" }, 404);
+  if (!application) {
+    return json({ error: "application not found" }, 404);
+  }
   await db.touchUpdated();
   return json({ application });
 }
@@ -75,11 +79,17 @@ export async function handleSetApplicationStatus({ request, db, params }) {
  */
 export async function handleDeleteApplication({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
-  if (!body.id) return json({ error: "missing id" }, 400);
+  if (!body.id) {
+    return json({ error: "missing id" }, 400);
+  }
   const deleted = await db.deleteApplication(body.id);
-  if (!deleted) return json({ error: "application not found" }, 404);
+  if (!deleted) {
+    return json({ error: "application not found" }, 404);
+  }
   await db.touchUpdated();
   return json({ ok: true });
 }
@@ -132,7 +142,9 @@ export async function handleGetAutofillQueue({ db }) {
  */
 export async function handleReportAutofill({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const filled = Array.isArray(body.filled) ? body.filled : [];
   const failed = Array.isArray(body.failed) ? body.failed : [];
@@ -148,7 +160,9 @@ export async function handleReportAutofill({ request, db }) {
   const { priority_locations: ranked } = filled.length ? (await db.getTracksAndSettings()).settings : {};
 
   for (const row of filled) {
-    if (!row || !row.id) continue;
+    if (!row || !row.id) {
+      continue;
+    }
     // Shown on the row like a failure's reason, so it gets the same cap.
     const note = String((row.note || "")).trim().slice(0, MAX_REASON);
     // Same rule as a lead's: the run's area if it names a ranked entry, else
@@ -157,22 +171,37 @@ export async function handleReportAutofill({ request, db }) {
     // posting is and forgets to say which ranked place that is would otherwise
     // leave the row untiered.
     const { area, cleared, filled: fromLocation } = areaToStore(row.area, row.location, ranked);
-    if (cleared) areaCleared++;
-    if (fromLocation) areaFilled++;
-    if (await db.applyAutofill(row.id, { ...row, area, note })) filledCount++;
-    else unmatched.push(row.id);
+    if (cleared) {
+      areaCleared++;
+    }
+    if (fromLocation) {
+      areaFilled++;
+    }
+    if (await db.applyAutofill(row.id, { ...row, area, note })) {
+      filledCount++;
+    } else {
+      unmatched.push(row.id);
+    }
   }
 
   for (const row of failed) {
-    if (!row || !row.id) continue;
+    if (!row || !row.id) {
+      continue;
+    }
     const reason = String(row.reason || "").trim() || "couldn't read the posting";
-    if (await db.failAutofill(row.id, reason.slice(0, MAX_REASON))) failedCount++;
-    else unmatched.push(row.id);
+    if (await db.failAutofill(row.id, reason.slice(0, MAX_REASON))) {
+      failedCount++;
+    }
+    else {
+      unmatched.push(row.id);
+    }
   }
 
   // Only a fill writes application fields. A failure sets just the flag and its
   // note, so it doesn't bump the page's "last updated" banner.
-  if (filledCount > 0) await db.touchUpdated();
+  if (filledCount > 0) {
+    await db.touchUpdated();
+  }
   return json({
     filled: filledCount, failed: failedCount, unmatched,
     area_cleared: areaCleared, area_filled: areaFilled,
@@ -195,10 +224,14 @@ export async function handleReportAutofill({ request, db }) {
  */
 export async function handleRequeueAutofill({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const ids = Array.isArray(body.ids) ? body.ids.filter((id) => id || id === 0) : [];
-  if (ids.length === 0) return json({ error: "no ids provided" }, 400);
+  if (ids.length === 0) {
+    return json({ error: "no ids provided" }, 400);
+  }
 
   const requeued = await db.requeueAutofill(ids);
   return json({ requeued });

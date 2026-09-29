@@ -55,10 +55,14 @@ export class CompanyList {
    */
   async getCompanyFetch(names) {
     const keys = [...new Set(names.map(normalizeCompany).filter(Boolean))];
-    if (keys.length === 0) return new Map();
+    if (keys.length === 0) {
+      return new Map();
+    }
     // Chunked by ID_CHUNK: routes/coverage.js's `?all=1` asks for the whole list.
     const chunks = [];
-    for (let i = 0; i < keys.length; i += ID_CHUNK) chunks.push(keys.slice(i, i + ID_CHUNK));
+    for (let i = 0; i < keys.length; i += ID_CHUNK) {
+      chunks.push(keys.slice(i, i + ID_CHUNK));
+    }
     const batches = await this.d1.batch(
       chunks.map((chunk) =>
         this.d1
@@ -125,7 +129,9 @@ export class CompanyList {
         normalizeCompany(r.company) &&
         (r.board || r.endpoint || r.url_shape || r.dead_signal || r.note || r.wall)
     );
-    if (useful.length === 0) return { written: 0 };
+    if (useful.length === 0) {
+      return { written: 0 };
+    }
 
     const works = "(excluded.board <> '' OR excluded.endpoint <> '')";
     const positive =
@@ -195,7 +201,9 @@ export class CompanyList {
    */
   async addCompanies(items) {
     const rows = items.filter((i) => normalizeCompany(i.company));
-    if (rows.length === 0) return 0;
+    if (rows.length === 0) {
+      return 0;
+    }
     const stmt = this.d1.prepare(
       `INSERT INTO company_fetch (company_key, display_name, position) VALUES (?, ?, ?)
        ON CONFLICT(company_key) DO NOTHING`
@@ -237,7 +245,9 @@ export class CompanyList {
         ])
       : [{ results: [] }, { results: [] }, { results: [] }];
     const plan = planCleanup(body, fetched.results, swept.results, aliased.results);
-    if ("error" in plan || dryRun) return plan;
+    if ("error" in plan || dryRun) {
+      return plan;
+    }
 
     const statements = [];
     for (const c of plan.changes) {
@@ -306,7 +316,9 @@ export class CompanyList {
       .all();
     const map = new Map();
     for (const r of rows.results) {
-      for (const name of parseAliases(r.aliases)) map.set(normalizeCompany(name), r.company);
+      for (const name of parseAliases(r.aliases)) {
+        map.set(normalizeCompany(name), r.company);
+      }
     }
     return map;
   }

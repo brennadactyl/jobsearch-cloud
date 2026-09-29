@@ -37,16 +37,22 @@ export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"];
  */
 export async function handleAddLeads({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const incoming = Array.isArray(body.leads) ? body.leads : [];
-  if (incoming.length === 0) return json({ error: "no leads provided" }, 400);
+  if (incoming.length === 0) {
+    return json({ error: "no leads provided" }, 400);
+  }
 
   // Of EXTRA_FIELDS, only team/setup/comp are things a posting states. The rest
   // (referral, resume, lastContact, nextAction*, link) are the person's own:
   // accepted, but a search never sends them, so they default to ''.
   const valid = incoming.filter((lead) => lead.search && lead.url && lead.company && lead.title);
-  if (valid.length === 0) return json({ error: "no valid leads in payload" }, 400);
+  if (valid.length === 0) {
+    return json({ error: "no valid leads in payload" }, 400);
+  }
 
   // The run's own local date, applied to every lead that didn't carry one.
   // Same reasoning as /api/runs' `on`: the worker only knows UTC, so it cannot
@@ -60,7 +66,9 @@ export async function handleAddLeads({ request, db }) {
   // Checked before the exclusion filter, so a mistyped search whose rows are
   // all excluded still gets the 404 rather than `{ added: 0 }`.
   const drift = unknownTrackResponse(tracks, valid);
-  if (drift) return drift;
+  if (drift) {
+    return drift;
+  }
 
   // Companies this person will not work for, enforced here because a run
   // doesn't reliably follow the prompt's instruction. See ../exclude.js for the
@@ -68,7 +76,9 @@ export async function handleAddLeads({ request, db }) {
   const isExcluded = excludedCompanyMatcher(settings.excluded_companies);
   const allowed = valid.filter((lead) => !isExcluded(lead.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) return json({ added: 0, duplicates: 0, excluded, area_cleared: 0, area_filled: 0 });
+  if (allowed.length === 0) {
+    return json({ added: 0, duplicates: 0, excluded, area_cleared: 0, area_filled: 0 });
+  }
 
   // A lead's area is kept only when it is exactly one of the person's ranked
   // entries; anything else is stored empty, never refused, since losing a lead
@@ -84,13 +94,19 @@ export async function handleAddLeads({ request, db }) {
   let areaFilled = 0;
   const filed = allowed.map((lead) => {
     const { area, cleared, filled } = areaToStore(lead.area, lead.location, settings.priority_locations);
-    if (cleared) areaCleared++;
-    if (filled) areaFilled++;
+    if (cleared) {
+      areaCleared++;
+    }
+    if (filled) {
+      areaFilled++;
+    }
     return { ...lead, area };
   });
 
   const { added, duplicates } = await db.addLeads(filed, on);
-  if (added > 0) await db.touchUpdated();
+  if (added > 0) {
+    await db.touchUpdated();
+  }
 
   // `duplicates` is reported so a run's own report says what it actually added,
   // not how many rows it posted.
@@ -151,14 +167,18 @@ export function applicationFromLead(lead) {
 export async function handleSetLeadStatus({ request, db, params }) {
   const id = params[0];
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   if (!LEAD_STATUS.includes(body.status)) {
     return json({ error: "invalid status" }, 400);
   }
 
   const [lead, existingApp] = await Promise.all([db.getLead(id), db.getApplicationByLeadId(id)]);
-  if (!lead) return json({ error: "lead not found" }, 404);
+  if (!lead) {
+    return json({ error: "lead not found" }, 404);
+  }
 
   const willCreateApp = body.status === "Applied" && !existingApp;
   const { lead: updatedLead, application: newApp } = await db.setLeadStatusAndMaybeCreateApplication(
@@ -195,7 +215,9 @@ const MAX_REASON = 200;
  */
 export async function handleDeleteLeads({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   let reason = typeof body.reason === "string" ? body.reason.trim() : "";
   if (!reason) {
@@ -207,10 +229,14 @@ export async function handleDeleteLeads({ request, db }) {
 
   // DELISTED_REASON is reserved for delistings, and a person could naturally
   // type it here - see server/README.md, "One shared trap".
-  if (reason.toLowerCase() === DELISTED_REASON) reason = "removed by hand";
+  if (reason.toLowerCase() === DELISTED_REASON) {
+    reason = "removed by hand";
+  }
 
   const ids = Array.isArray(body.ids) ? body.ids : body.id != null ? [body.id] : [];
-  if (!ids.length) return json({ error: "missing ids" }, 400);
+  if (!ids.length) {
+    return json({ error: "missing ids" }, 400);
+  }
 
   let removed = 0;
   const kept = [];
@@ -229,9 +255,13 @@ export async function handleDeleteLeads({ request, db }) {
     // screened row isn't counted as one (docs/glossary.md#postings).
     // No kind: clearing a lead off a board is a person's decision, not one of
     // the sorts of rejection a search makes (validate.js SCREENED_KINDS).
-    if (await db.deleteLeadAndScreen(lead, reason, null, "hand", "")) removed++;
+    if (await db.deleteLeadAndScreen(lead, reason, null, "hand", "")) {
+      removed++;
+    }
   }
 
-  if (removed) await db.touchUpdated();
+  if (removed) {
+    await db.touchUpdated();
+  }
   return json({ removed, kept, unmatched, reason });
 }

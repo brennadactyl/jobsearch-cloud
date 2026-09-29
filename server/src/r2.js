@@ -123,11 +123,17 @@ export class Docs {
   async put(path, body, contentType, ifMatch, words) {
     /** @type {R2PutOptions} */
     const options = { httpMetadata: { contentType } };
-    if (Number.isInteger(words)) options.customMetadata = { words: String(words) };
-    if (ifMatch) options.onlyIf = { etagMatches: bareEtag(ifMatch) };
+    if (Number.isInteger(words)) {
+      options.customMetadata = { words: String(words) };
+    }
+    if (ifMatch) {
+      options.onlyIf = { etagMatches: bareEtag(ifMatch) };
+    }
 
     const obj = await this.bucket.put(this.#key(path), body, options);
-    if (!obj) return null;
+    if (!obj) {
+      return null;
+    }
     return { etag: obj.etag, bytes: obj.size };
   }
 
@@ -144,7 +150,9 @@ export class Docs {
   async delete(path) {
     const key = this.#key(path);
     const existing = await this.bucket.head(key);
-    if (!existing) return false;
+    if (!existing) {
+      return false;
+    }
     await this.bucket.delete(key);
     return true;
   }
@@ -179,7 +187,9 @@ async function deleteUnder(bucket, prefix) {
   let removed = 0;
   for (let pass = 0; pass < 20; pass++) {
     const result = await bucket.list({ prefix });
-    if (result.objects.length === 0) break;
+    if (result.objects.length === 0) {
+      break;
+    }
     await bucket.delete(result.objects.map((obj) => obj.key));
     removed += result.objects.length;
   }

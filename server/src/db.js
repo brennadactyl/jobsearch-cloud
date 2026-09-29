@@ -309,8 +309,12 @@ const AUTOFILL_FILL_FIELDS = ["company", "title", "location", "area", "team", "s
 // application has to know about the fill.
 function applicationValues(fields) {
   return APPLICATION_COLS.map((f) => {
-    if (f === "dateApplied") return fields.dateApplied || today();
-    if (f === "status") return fields.status || "Applied";
+    if (f === "dateApplied") {
+      return fields.dateApplied || today();
+    }
+    if (f === "status") {
+      return fields.status || "Applied";
+    }
     return fields[f] || "";
   });
 }
@@ -497,7 +501,9 @@ export class Db {
       .prepare("SELECT answers, status, status_note, sent_at, updated_at FROM intake WHERE user_id = ?")
       .bind(this.userId)
       .first();
-    if (!row) return null;
+    if (!row) {
+      return null;
+    }
     let answers;
     try {
       answers = JSON.parse(row.answers);
@@ -591,10 +597,14 @@ export class Db {
    * @returns {Promise<string[]|null>} the fields written, or null for an unknown track
    */
   async writeUpTrack(key, body) {
-    if (!(await this.trackExists(key))) return null;
+    if (!(await this.trackExists(key))) {
+      return null;
+    }
     const fields = WRITEUP_FIELDS.filter((f) => typeof body[f] === "string");
     const refreshed = typeof body.profile_refreshed === "string" && body.profile_refreshed ? body.profile_refreshed : "";
-    if (fields.length === 0 && !refreshed) return [];
+    if (fields.length === 0 && !refreshed) {
+      return [];
+    }
 
     const statements = [];
     // Last in the batch, so its result is the last one. It matches on the mark
@@ -618,7 +628,9 @@ export class Db {
           .bind(...fields.map((f) => body[f]), this.userId, key)
       );
     }
-    if (clearMark) statements.push(clearMark);
+    if (clearMark) {
+      statements.push(clearMark);
+    }
     const results = await this.d1.batch(statements);
     const cleared = clearMark && (results[results.length - 1].meta.changes || 0) > 0;
     return [...fields, ...(cleared ? ["profile_refreshed"] : [])];
@@ -653,7 +665,9 @@ export class Db {
    * @param {string} now ISO 8601 instant
    */
   async markProfilesStale(keys, path, now) {
-    if (keys.length === 0) return;
+    if (keys.length === 0) {
+      return;
+    }
     await this.d1.batch(
       keys.map((key) =>
         this.d1
@@ -686,7 +700,9 @@ export class Db {
    * @param {string} now ISO 8601 instant
    */
   async setSearchResumes(changes, now) {
-    if (changes.length === 0) return;
+    if (changes.length === 0) {
+      return;
+    }
     await this.d1.batch(
       changes.map((c) =>
         this.d1
@@ -878,7 +894,9 @@ export class Db {
         }
       } else if (row.key === "stale_run_hours") {
         const n = Number(row.value);
-        if (Number.isFinite(n) && n > 0) settings.stale_run_hours = n;
+        if (Number.isFinite(n) && n > 0) {
+          settings.stale_run_hours = n;
+        }
       } else {
         settings[row.key] = row.value;
       }
@@ -886,7 +904,9 @@ export class Db {
 
     const tracks = tracksRes.results.map((row) => {
       const track = { key: row.key };
-      for (const f of [...TRACK_DISPLAY_FIELDS, ...TRACK_CONFIG_FIELDS]) track[f] = row[f];
+      for (const f of [...TRACK_DISPLAY_FIELDS, ...TRACK_CONFIG_FIELDS]) {
+        track[f] = row[f];
+      }
       // Served as a list, so a caller that reads the config and posts a track back
       // sends what POST /api/config accepts.
       track.documents = parseDocumentList(row.documents);
@@ -913,7 +933,9 @@ export class Db {
     // is the answer resolved through the feed group, so no reader has to find
     // the root to know whether a tab is running.
     const pausedAt = new Map(tracks.map((t) => [t.key, t.paused_since || ""]));
-    for (const t of tracks) t.paused = pausedAt.get(searchRootOf(t)) ?? t.paused_since ?? "";
+    for (const t of tracks) {
+      t.paused = pausedAt.get(searchRootOf(t)) ?? t.paused_since ?? "";
+    }
 
     return { tracks, settings };
   }
@@ -950,14 +972,18 @@ export class Db {
     const statements = [];
     for (const [key, fields] of Object.entries(bySearch)) {
       const cols = Object.keys(fields).filter((f) => PANEL_TRACK_FIELDS.includes(f));
-      if (!cols.length) continue;
+      if (!cols.length) {
+        continue;
+      }
       statements.push(
         this.d1
           .prepare(`UPDATE tracks SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE user_id = ? AND key = ?`)
           .bind(...cols.map((c) => fields[c]), this.userId, key)
       );
     }
-    if (statements.length) await this.d1.batch(statements);
+    if (statements.length) {
+      await this.d1.batch(statements);
+    }
   }
 
   /**
@@ -1043,7 +1069,9 @@ export class Db {
       .prepare(`SELECT key, ${cols.join(", ")} FROM tracks WHERE user_id = ?`)
       .bind(this.userId)
       .all();
-    for (const row of current.results) existing[row.key] = row;
+    for (const row of current.results) {
+      existing[row.key] = row;
+    }
 
     // Posted, then stored, then default. `sort_order` too: defaulting it to the
     // array index would reorder tabs when a caller posts them in another order.
@@ -1083,8 +1111,12 @@ export class Db {
             // an array and store it as JSON, or pass through a string that
             // already is. A new track's documents start as an empty list, not
             // an empty string, so every stored value parses.
-            if ((f === "target_companies" || f === "documents") && Array.isArray(t[f])) return JSON.stringify(t[f]);
-            if (typeof t[f] === "string") return t[f];
+            if ((f === "target_companies" || f === "documents") && Array.isArray(t[f])) {
+              return JSON.stringify(t[f]);
+            }
+            if (typeof t[f] === "string") {
+              return t[f];
+            }
             return keep(t, f, f === "documents" ? "[]" : "");
           })
         )
@@ -1120,7 +1152,9 @@ export class Db {
       await this.setSetting("stale_run_hours", String(patch.stale_run_hours));
     }
     for (const key of LOCATION_SETTING_KEYS) {
-      if (typeof patch[key] === "string") await this.setSetting(key, patch[key].trim());
+      if (typeof patch[key] === "string") {
+        await this.setSetting(key, patch[key].trim());
+      }
     }
     // An empty array is a real instruction ("exclude no one"), so any array is written.
     if (Array.isArray(patch.excluded_companies)) {
@@ -1233,7 +1267,9 @@ export class Db {
    * @returns {Promise<SearchRun[]>} the written rows, in the order asked for
    */
   async recordRuns(runs) {
-    if (!runs.length) return [];
+    if (!runs.length) {
+      return [];
+    }
     const stmt = this.d1.prepare(
       `INSERT INTO search_runs
          (user_id, track_key, last_run_at, last_run_on, status, leads_added, screened_added, screened_by_rules, delisted, swept, note)
@@ -1295,7 +1331,9 @@ export class Db {
    */
   async dropKnownUrls(rows) {
     const asked = [...new Set(rows.map((r) => r.search).filter(Boolean))];
-    if (asked.length === 0) return { fresh: [], duplicates: rows.length };
+    if (asked.length === 0) {
+      return { fresh: [], duplicates: rows.length };
+    }
 
     // A track's feed group: the track that runs the search, plus every tab it
     // fills. `fed_by` is one level (a fed track is a tab, not a search), so
@@ -1310,7 +1348,11 @@ export class Db {
     const groupKeys = tracks.results.map((t) => t.key).filter((k) => roots.has(root(k)));
     // A key the batch names that isn't a configured track has no group; keep it
     // so it still dedups against itself rather than skipping the check.
-    for (const k of asked) if (!groupKeys.includes(k)) groupKeys.push(k);
+    for (const k of asked) {
+      if (!groupKeys.includes(k)) {
+        groupKeys.push(k);
+      }
+    }
 
     const seen = new Map([...roots].map((r) => [r, new Set()]));
     const placeholders = groupKeys.map(() => "?").join(", ");
@@ -1338,7 +1380,11 @@ export class Db {
     // searches may each hold; a person applies once.
     for (const row of applications.results) {
       const key = canonicalUrl(row.link);
-      if (key) for (const set of seen.values()) set.add(key);
+      if (key) {
+        for (const set of seen.values()) {
+          set.add(key);
+        }
+      }
     }
 
     const fresh = [];
@@ -1384,7 +1430,9 @@ export class Db {
     const t = on || today();
 
     const { fresh, duplicates } = await this.dropKnownUrls(leads);
-    if (fresh.length === 0) return { added: 0, duplicates };
+    if (fresh.length === 0) {
+      return { added: 0, duplicates };
+    }
 
     const stmt = this.d1.prepare(
       `INSERT OR IGNORE INTO leads
@@ -1501,9 +1549,13 @@ export class Db {
    * @returns {Promise<number>} how many rows were actually stamped
    */
   async markVerified(ids, on) {
-    if (!ids.length) return 0;
+    if (!ids.length) {
+      return 0;
+    }
     const chunks = [];
-    for (let i = 0; i < ids.length; i += ID_CHUNK) chunks.push(ids.slice(i, i + ID_CHUNK));
+    for (let i = 0; i < ids.length; i += ID_CHUNK) {
+      chunks.push(ids.slice(i, i + ID_CHUNK));
+    }
     const results = await this.d1.batch(
       chunks.map((chunk) =>
         this.d1
@@ -1539,7 +1591,9 @@ export class Db {
     const t = on || today();
 
     const { fresh, duplicates } = await this.dropKnownUrls(items);
-    if (fresh.length === 0) return { added: 0, duplicates };
+    if (fresh.length === 0) {
+      return { added: 0, duplicates };
+    }
 
     const stmt = this.d1.prepare(
       // added_by is always 'run': this path serves POST /api/screened, a
@@ -1591,7 +1645,9 @@ export class Db {
    */
   async unscreenUrls(searches, urls) {
     const keys = Array.isArray(searches) ? searches : [searches];
-    if (keys.length === 0) return { removed: 0, urls: [], unmatched: urls.slice() };
+    if (keys.length === 0) {
+      return { removed: 0, urls: [], unmatched: urls.slice() };
+    }
     const wanted = new Map(urls.map((u) => [canonicalUrl(u), u]));
     const inKeys = keys.map(() => "?").join(",");
     const rows = await this.d1
@@ -1610,7 +1666,9 @@ export class Db {
     // Reported rather than swallowed: a silent 0 for a url never screened here
     // would look the same as a successful undo.
     const unmatched = [...wanted.values()];
-    if (hits.length === 0) return { removed: 0, urls: [], unmatched };
+    if (hits.length === 0) {
+      return { removed: 0, urls: [], unmatched };
+    }
 
     const placeholders = hits.map(() => "?").join(",");
     const res = await this.d1
@@ -1711,12 +1769,16 @@ export class Db {
       sets.push(`${stageDateColumn} = CASE WHEN ${stageDateColumn} = '' THEN ? ELSE ${stageDateColumn} END`);
       values.push(explicitDate || today());
     }
-    if (clearColumn) sets.push(`${clearColumn} = ''`);
+    if (clearColumn) {
+      sets.push(`${clearColumn} = ''`);
+    }
     const result = await this.d1
       .prepare(`UPDATE applications SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`)
       .bind(...values, id, this.userId)
       .run();
-    if (result.meta.changes === 0) return null;
+    if (result.meta.changes === 0) {
+      return null;
+    }
     return this.getApplication(id);
   }
 
@@ -1770,7 +1832,9 @@ export class Db {
     const values = [note];
     for (const f of AUTOFILL_FILL_FIELDS) {
       const value = typeof fields[f] === "string" ? fields[f].trim() : "";
-      if (!value) continue;
+      if (!value) {
+        continue;
+      }
       // Column names come from this file's own constant, never the body.
       sets.push(`${f} = CASE WHEN ${f} = '' THEN ? ELSE ${f} END`);
       values.push(value);
@@ -1782,7 +1846,9 @@ export class Db {
       )
       .bind(...values, id, this.userId)
       .run();
-    if (result.meta.changes === 0) return null;
+    if (result.meta.changes === 0) {
+      return null;
+    }
     return this.getApplication(id);
   }
 
@@ -1796,9 +1862,13 @@ export class Db {
    * @returns {Promise<number>} rows actually cleared
    */
   async requeueAutofill(ids) {
-    if (!ids.length) return 0;
+    if (!ids.length) {
+      return 0;
+    }
     const chunks = [];
-    for (let i = 0; i < ids.length; i += ID_CHUNK) chunks.push(ids.slice(i, i + ID_CHUNK));
+    for (let i = 0; i < ids.length; i += ID_CHUNK) {
+      chunks.push(ids.slice(i, i + ID_CHUNK));
+    }
     const results = await this.d1.batch(
       chunks.map((chunk) =>
         this.d1
@@ -1831,7 +1901,9 @@ export class Db {
       )
       .bind(note, id, this.userId)
       .run();
-    if (result.meta.changes === 0) return null;
+    if (result.meta.changes === 0) {
+      return null;
+    }
     return this.getApplication(id);
   }
 
@@ -1867,7 +1939,9 @@ export class Db {
     const key = canonicalUrl(url);
     // A blank or unparseable link identifies no posting, so it matches nothing
     // rather than matching every other row that also has none.
-    if (!key) return null;
+    if (!key) {
+      return null;
+    }
 
     const [apps, leads, screened] = await Promise.all([
       this.d1
@@ -1889,11 +1963,17 @@ export class Db {
 
     const match = (rows, col) => rows.results.find((r) => canonicalUrl(r[col]) === key);
     const app = match(apps, "link");
-    if (app) return { where: "application", row: app };
+    if (app) {
+      return { where: "application", row: app };
+    }
     const lead = match(leads, "url");
-    if (lead) return { where: "lead", row: lead };
+    if (lead) {
+      return { where: "lead", row: lead };
+    }
     const screenedRow = match(screened, "url");
-    if (screenedRow) return { where: "screened", row: screenedRow };
+    if (screenedRow) {
+      return { where: "screened", row: screenedRow };
+    }
     return null;
   }
 
@@ -1936,7 +2016,9 @@ export class Db {
         .prepare("UPDATE leads SET status = ? WHERE id = ? AND user_id = ?")
         .bind(status, id, this.userId),
     ];
-    if (newApplicationFields) batch.push(this.#applicationInsert(newApplicationFields));
+    if (newApplicationFields) {
+      batch.push(this.#applicationInsert(newApplicationFields));
+    }
     const results = await this.d1.batch(batch);
 
     const lead = await this.getLead(id);

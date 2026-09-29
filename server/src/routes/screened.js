@@ -93,8 +93,12 @@ function chooseRechecks(groupLeads) {
 export async function handleGetDedup({ db, params, url }) {
   const key = params[0];
   const track = await db.getTrack(key);
-  if (!track) return unknownTrack(key);
-  if (url.searchParams.get("scope") !== "batch") return json(await db.getDedupData(key));
+  if (!track) {
+    return unknownTrack(key);
+  }
+  if (url.searchParams.get("scope") !== "batch") {
+    return json(await db.getDedupData(key));
+  }
 
   const rootKey = searchRootOf(track);
   const upcoming = await upcomingCompanies(db, rootKey, 2 * COVERAGE_BATCH);
@@ -161,13 +165,19 @@ export async function handleGetDedup({ db, params, url }) {
  */
 export async function handleAddScreened({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const incoming = Array.isArray(body.screened) ? body.screened : [];
-  if (incoming.length === 0) return json({ error: "no screened items provided" }, 400);
+  if (incoming.length === 0) {
+    return json({ error: "no screened items provided" }, 400);
+  }
 
   const valid = incoming.filter((item) => item.search && item.url);
-  if (valid.length === 0) return json({ error: "no valid screened items in payload" }, 400);
+  if (valid.length === 0) {
+    return json({ error: "no valid screened items in payload" }, 400);
+  }
 
   const on = isoDate(body.on);
 
@@ -185,7 +195,9 @@ export async function handleAddScreened({ request, db }) {
   // which is the one the caller sent. Same all-or-nothing refusal as
   // /api/leads; see unknownTrackResponse for why nothing is inserted.
   const drift = unknownTrackResponse(tracks, valid);
-  if (drift) return drift;
+  if (drift) {
+    return drift;
+  }
 
   // An excluded company is dropped outright rather than becoming a screened
   // row like other rejected candidates: a screened row says "considered and
@@ -195,7 +207,9 @@ export async function handleAddScreened({ request, db }) {
   const isExcluded = excludedCompanyMatcher(settings.excluded_companies);
   const allowed = valid.filter((item) => !isExcluded(item.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) return json({ added: 0, duplicates: 0, excluded });
+  if (allowed.length === 0) {
+    return json({ added: 0, duplicates: 0, excluded });
+  }
 
   // DELISTED_REASON is reserved for delistings, and a run could reasonably
   // describe a dead-on-arrival candidate in those words - see server/README.md,
@@ -215,7 +229,9 @@ export async function handleAddScreened({ request, db }) {
   for (const item of allowed) {
     const { kind, coercedFrom } = storedKind(item.kind);
     item.kind = kind;
-    if (coercedFrom) coerced[coercedFrom] = (coerced[coercedFrom] || 0) + 1;
+    if (coercedFrom) {
+      coerced[coercedFrom] = (coerced[coercedFrom] || 0) + 1;
+    }
   }
 
   // A rejection is filed under the tab it was judged for, when the run says
@@ -243,7 +259,9 @@ export async function handleAddScreened({ request, db }) {
       // Counted only when the tab is one this search fills: a key from another
       // group is a fallback, already counted as one, and counting it here too
       // would read as the run naming tabs correctly.
-      if (item.search !== root) namedATab++;
+      if (item.search !== root) {
+        namedATab++;
+      }
       return { ...item, search: item.search };
     }
     tabsFallback[item.search] = (tabsFallback[item.search] || 0) + 1;
@@ -252,8 +270,12 @@ export async function handleAddScreened({ request, db }) {
 
   const { added, duplicates } = await db.addScreened(filed, on);
   const reply = { added, duplicates, excluded };
-  if (Object.keys(coerced).length) reply.kinds_coerced = coerced;
-  if (Object.keys(tabsFallback).length) reply.tabs_filed_at_root = tabsFallback;
+  if (Object.keys(coerced).length) {
+    reply.kinds_coerced = coerced;
+  }
+  if (Object.keys(tabsFallback).length) {
+    reply.tabs_filed_at_root = tabsFallback;
+  }
   // How many rows said which tab they were judged for. A fallback count alone
   // can't show the failure worth seeing: a run that stopped naming tabs reports
   // no fallbacks, exactly like a night where every row named its own tab. Only
@@ -281,14 +303,22 @@ export async function handleAddScreened({ request, db }) {
  */
 export async function handleUnscreen({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const key = typeof body.search === "string" ? body.search.trim() : "";
-  if (!key) return json({ error: "missing search (track key)" }, 400);
-  if (!(await db.trackExists(key))) return unknownTrack(key);
+  if (!key) {
+    return json({ error: "missing search (track key)" }, 400);
+  }
+  if (!(await db.trackExists(key))) {
+    return unknownTrack(key);
+  }
 
   const urls = Array.isArray(body.urls) ? body.urls.filter((u) => typeof u === "string" && u) : [];
-  if (urls.length === 0) return json({ error: "missing urls" }, 400);
+  if (urls.length === 0) {
+    return json({ error: "missing urls" }, 400);
+  }
 
   // The whole feed group, not just the key given or its feeder: a run's
   // rejections sit under the feeder (handleAddScreened rewrites them), a

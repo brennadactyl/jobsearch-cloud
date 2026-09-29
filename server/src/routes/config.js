@@ -41,21 +41,29 @@ import {
  * @returns {string|null}
  */
 function pausedSinceError(t, was) {
-  if (t.paused_since === undefined || t.paused_since === "") return null;
+  if (t.paused_since === undefined || t.paused_since === "") {
+    return null;
+  }
   if (typeof t.paused_since !== "string" || Number.isNaN(Date.parse(t.paused_since))) {
     return "paused_since must be an ISO 8601 instant, or \"\" to resume";
   }
   // replaceTracks keeps a stored fed_by that the post leaves out.
   const fedBy = typeof t.fed_by === "string" ? t.fed_by : was?.fed_by || "";
-  if (fedBy) return `a tab filled by "${fedBy}" is paused with that search - pause "${fedBy}" instead`;
+  if (fedBy) {
+    return `a tab filled by "${fedBy}" is paused with that search - pause "${fedBy}" instead`;
+  }
   t.paused_since = new Date(t.paused_since).toISOString();
   return null;
 }
 
 function documentsChoiceError(list, storedList, fedBy) {
-  if (fedBy) return null;
+  if (fedBy) {
+    return null;
+  }
   const deduped = [...new Set(list)];
-  if (storedList && JSON.stringify(deduped) === JSON.stringify(storedList)) return null;
+  if (storedList && JSON.stringify(deduped) === JSON.stringify(storedList)) {
+    return null;
+  }
   return unreadableDocumentsError(deduped);
 }
 
@@ -100,10 +108,14 @@ export async function handleGetConfig({ db }) {
  */
 export async function handleWriteUp({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const key = typeof body.search === "string" ? body.search.trim() : "";
-  if (!key) return json({ error: "missing search (track key)" }, 400);
+  if (!key) {
+    return json({ error: "missing search (track key)" }, 400);
+  }
 
   const accepted = new Set([...WRITEUP_FIELDS, "search", "profile_refreshed"]);
   for (const sent of Object.keys(body)) {
@@ -120,22 +132,30 @@ export async function handleWriteUp({ request, db }) {
     // prose the prompt reads.
     if (sent === "documents") {
       const problem = trackDocumentsError(body.documents);
-      if (problem) return json({ error: problem, field: "documents" }, 400);
+      if (problem) {
+        return json({ error: problem, field: "documents" }, 400);
+      }
     } else if (sent !== "search" && typeof body[sent] !== "string") {
       return json({ error: `${sent} must be text`, field: sent }, 400);
     }
   }
 
   const stored = await db.getTrack(key);
-  if (!stored) return unknownTrack(key);
+  if (!stored) {
+    return unknownTrack(key);
+  }
   if ("documents" in body) {
     const problem = documentsChoiceError(body.documents, parseDocumentList(stored.documents), stored.fed_by);
-    if (problem) return json({ error: problem, field: "documents" }, 400);
+    if (problem) {
+      return json({ error: problem, field: "documents" }, 400);
+    }
   }
 
   const fields = "documents" in body ? { ...body, documents: JSON.stringify([...new Set(body.documents)]) } : body;
   const written = await db.writeUpTrack(key, fields);
-  if (written === null) return unknownTrack(key);
+  if (written === null) {
+    return unknownTrack(key);
+  }
   return json({ written });
 }
 
@@ -169,11 +189,17 @@ export async function handleWriteUp({ request, db }) {
  * @returns {{error: string, field: string}|null}
  */
 function payFloorProblem(t, was) {
-  if (t.pay_floor === undefined && t.pay_floor_unit === undefined) return null;
+  if (t.pay_floor === undefined && t.pay_floor_unit === undefined) {
+    return null;
+  }
   for (const [field, check] of [["pay_floor", payFloorError], ["pay_floor_unit", payFloorUnitError]]) {
-    if (t[field] === undefined) continue;
+    if (t[field] === undefined) {
+      continue;
+    }
     const problem = check(field, t[field]);
-    if (problem) return { error: problem, field };
+    if (problem) {
+      return { error: problem, field };
+    }
   }
   const amount = t.pay_floor === undefined ? was?.pay_floor || "" : t.pay_floor.trim();
   const unit = t.pay_floor_unit === undefined ? was?.pay_floor_unit || "" : t.pay_floor_unit;
@@ -183,20 +209,28 @@ function payFloorProblem(t, was) {
 
 export async function handleSetConfig({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   // Checked before anything is written, so a refused value leaves the tracks as
   // they were too.
   for (const key of LOCATION_SETTING_KEYS) {
-    if (body[key] === undefined) continue;
+    if (body[key] === undefined) {
+      continue;
+    }
     const problem = locationSettingError(key, body[key]);
-    if (problem) return json({ error: problem, field: key }, 400);
+    if (problem) {
+      return json({ error: problem, field: key }, 400);
+    }
   }
 
   if (Array.isArray(body.tracks)) {
     const stored = new Map((await db.getTracksAndSettings()).tracks.map((t) => [t.key, t]));
     const valid = body.tracks.filter((t) => t && typeof t.key === "string" && t.key);
-    if (valid.length === 0) return json({ error: "tracks must be a non-empty array of {key, ...}" }, 400);
+    if (valid.length === 0) {
+      return json({ error: "tracks must be a non-empty array of {key, ...}" }, 400);
+    }
     // A `fed_by` pointing anywhere but at another track in this same list is a
     // tab no search fills: nothing lands in it and nothing records a run
     // against it, so it sits there reading "no run recorded yet" forever with
@@ -207,17 +241,25 @@ export async function handleSetConfig({ request, db }) {
         return json({ error: `track "${t.key}" is fed_by "${t.fed_by}", which is not another track in this list` }, 400);
       }
       const paused = pausedSinceError(t, stored.get(t.key));
-      if (paused) return json({ error: `track "${t.key}": ${paused}`, field: "paused_since" }, 400);
+      if (paused) {
+        return json({ error: `track "${t.key}": ${paused}`, field: "paused_since" }, 400);
+      }
       const floor = payFloorProblem(t, stored.get(t.key));
-      if (floor) return json({ error: `track "${t.key}": ${floor.error}`, field: floor.field }, 400);
+      if (floor) {
+        return json({ error: `track "${t.key}": ${floor.error}`, field: floor.field }, 400);
+      }
       if (t.documents !== undefined) {
         const problem = trackDocumentsError(t.documents);
-        if (problem) return json({ error: `track "${t.key}": ${problem}`, field: "documents" }, 400);
+        if (problem) {
+          return json({ error: `track "${t.key}": ${problem}`, field: "documents" }, 400);
+        }
         // replaceTracks keeps a stored fed_by that the post leaves out.
         const was = stored.get(t.key);
         const fedBy = typeof t.fed_by === "string" ? t.fed_by : was?.fed_by || "";
         const unreadable = documentsChoiceError(t.documents, was ? was.documents : null, fedBy);
-        if (unreadable) return json({ error: `track "${t.key}": ${unreadable}`, field: "documents" }, 400);
+        if (unreadable) {
+          return json({ error: `track "${t.key}": ${unreadable}`, field: "documents" }, 400);
+        }
       }
     }
     // Each track carries its display fields and, optionally, its search
@@ -234,7 +276,9 @@ export async function handleSetConfig({ request, db }) {
   // there.
   if (body.stale_run_hours != null) {
     const n = Number(body.stale_run_hours);
-    if (!Number.isFinite(n) || n <= 0) return json({ error: "stale_run_hours must be a positive number" }, 400);
+    if (!Number.isFinite(n) || n <= 0) {
+      return json({ error: "stale_run_hours must be a positive number" }, 400);
+    }
   }
   await db.setSettings(body);
 
