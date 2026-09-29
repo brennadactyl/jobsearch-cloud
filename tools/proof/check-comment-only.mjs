@@ -24,7 +24,11 @@ try {
 }
 
 let AUTOCRLF = false;
-try { AUTOCRLF = execSync("git config --get core.autocrlf", { encoding: "utf8" }).trim() === "true"; } catch { AUTOCRLF = false; }
+try {
+  AUTOCRLF = execSync("git config --get core.autocrlf", { encoding: "utf8" }).trim() === "true";
+} catch {
+  AUTOCRLF = false;
+}
 
 const args = process.argv.slice(2);
 const base = (args.find((a) => a.startsWith("--base=")) ?? "--base=HEAD").slice("--base=".length);
@@ -87,8 +91,18 @@ for (const f of changed) {
     skipped.push(f); continue;
   }
   let before, after;
-  try { before = baseVersion(f); } catch { report(f, false, `not in ${base} (new file?)`); continue; }
-  try { after = readFileSync(f); } catch { report(f, false, "deleted in working copy"); continue; }
+  try {
+    before = baseVersion(f);
+  } catch {
+    report(f, false, `not in ${base} (new file?)`);
+    continue;
+  }
+  try {
+    after = readFileSync(f);
+  } catch {
+    report(f, false, "deleted in working copy");
+    continue;
+  }
 
   // With core.autocrlf=true git normalizes endings on commit, so LF, CRLF or mixed
   // in the working copy all commit identically - note it, don't fail on it.
