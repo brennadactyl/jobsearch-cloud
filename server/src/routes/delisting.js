@@ -36,10 +36,16 @@ function matchLeadsByUrl(leads, urls) {
   const byKey = new Map();
   for (const lead of leads) {
     const key = canonicalUrl(lead.url);
-    if (!key) continue;
+    if (!key) {
+      continue;
+    }
     const bucket = byKey.get(key);
-    if (bucket) bucket.push(lead);
-    else byKey.set(key, [lead]);
+    if (bucket) {
+      bucket.push(lead);
+    }
+    else {
+      byKey.set(key, [lead]);
+    }
   }
 
   const matched = [];
@@ -47,11 +53,17 @@ function matchLeadsByUrl(leads, urls) {
   const seen = new Set();
   for (const raw of urls) {
     const key = canonicalUrl(raw);
-    if (!key || seen.has(key)) continue;
+    if (!key || seen.has(key)) {
+      continue;
+    }
     seen.add(key);
     const hit = byKey.get(key);
-    if (hit) matched.push(...hit);
-    else unmatched.push(raw);
+    if (hit) {
+      matched.push(...hit);
+    }
+    else {
+      unmatched.push(raw);
+    }
   }
   return { matched, unmatched };
 }
@@ -64,16 +76,16 @@ function matchLeadsByUrl(leads, urls) {
 // disagree about the search, which is worth failing loudly over.
 async function parseUrlReport(request, db) {
   const body = await readJson(request);
-  if (body instanceof Response) return { error: body };
+  if (body instanceof Response) {return { error: body };}
 
   const key = typeof body.search === "string" ? body.search : "";
-  if (!key) return { error: json({ error: "missing search (track key)" }, 400) };
-  if (!(await db.trackExists(key))) return { error: unknownTrack(key) };
+  if (!key) {return { error: json({ error: "missing search (track key)" }, 400) };}
+  if (!(await db.trackExists(key))) {return { error: unknownTrack(key) };}
 
   const urls = (Array.isArray(body.urls) ? body.urls : [])
     .filter((u) => typeof u === "string" && u.trim())
     .map((u) => u.trim());
-  if (urls.length === 0) return { error: json({ error: "no urls provided" }, 400) };
+  if (urls.length === 0) {return { error: json({ error: "no urls provided" }, 400) };}
   return { body, key, urls };
 }
 
@@ -92,7 +104,9 @@ async function parseUrlReport(request, db) {
  */
 export async function handleMarkVerified({ request, db }) {
   const parsed = await parseUrlReport(request, db);
-  if (parsed.error) return parsed.error;
+  if (parsed.error) {
+    return parsed.error;
+  }
 
   const on = isoDate(parsed.body.on) || today();
 
@@ -100,7 +114,9 @@ export async function handleMarkVerified({ request, db }) {
   const stamped = await db.markVerified(matched.map((l) => l.id), on);
   // The page shows this date on every lead, so a stamp is a visible change and
   // bumps "last updated".
-  if (stamped > 0) await db.touchUpdated();
+  if (stamped > 0) {
+    await db.touchUpdated();
+  }
 
   return json({ stamped, unmatched: unmatched.length, unmatchedUrls: unmatched, on });
 }
@@ -155,10 +171,10 @@ async function delistLead(db, lead, on) {
  */
 export async function removeDelistedLead(db, id, on) {
   const lead = await db.getLead(id);
-  if (!lead) return json({ error: "lead not found" }, 404);
+  if (!lead) {return json({ error: "lead not found" }, 404);}
 
   const { kept, removed } = await delistLead(db, lead, on);
-  if (kept) return json({ ok: true, lead, removed: false, reason: "applied to - kept" });
+  if (kept) {return json({ ok: true, lead, removed: false, reason: "applied to - kept" });}
 
   await db.touchUpdated();
   return json({ ok: true, removed, id: lead.id, screened: lead.url });
@@ -182,10 +198,12 @@ export async function removeDelistedLead(db, id, on) {
  */
 export async function handleDelistUrls({ request, db }) {
   const parsed = await parseUrlReport(request, db);
-  if (parsed.error) return parsed.error;
+  if (parsed.error) {
+    return parsed.error;
+  }
 
   const on = isoDate(typeof parsed.body.on === "string" ? parsed.body.on.trim() : "");
-  if (!on) return json({ error: "on must be YYYY-MM-DD" }, 400);
+  if (!on) {return json({ error: "on must be YYYY-MM-DD" }, 400);}
 
   const { matched, unmatched } = matchLeadsByUrl(await db.getLeadsForUrlMatch(), parsed.urls);
 
@@ -193,12 +211,18 @@ export async function handleDelistUrls({ request, db }) {
   let kept = 0;
   for (const lead of matched) {
     const verdict = await delistLead(db, lead, on);
-    if (verdict.kept) kept++;
-    else if (verdict.removed) removed++;
+    if (verdict.kept) {
+      kept++;
+    }
+    else if (verdict.removed) {
+      removed++;
+    }
     // Neither when the DELETE matched nothing (the concurrent-report race in
     // delistLead): the lead is gone, but this call didn't remove it.
   }
-  if (removed > 0) await db.touchUpdated();
+  if (removed > 0) {
+    await db.touchUpdated();
+  }
 
   return json({ removed, kept, unmatched: unmatched.length, unmatchedUrls: unmatched, on });
 }

@@ -28,8 +28,12 @@ const ROOT = join(SERVER, "..");
 
 let pass = 0, fail = 0;
 const check = (name, ok, detail) => {
-  if (ok) { pass++; console.log(`  PASS  ${name}`); }
-  else { fail++; console.log(`  FAIL  ${name}${detail ? "\n          " + detail : ""}`); }
+  if (ok) {
+    pass++; console.log(`  PASS  ${name}`);
+  }
+  else {
+    fail++; console.log(`  FAIL  ${name}${detail ? "\n          " + detail : ""}`);
+  }
 };
 const sorted = (xs) => [...new Set(xs)].sort();
 const sameSet = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
@@ -40,7 +44,9 @@ const notFound = (text) => `no text starting ${JSON.stringify(text)} in docs/sch
 
 const migrations = readdirSync(join(SERVER, "migrations")).filter((f) => f.endsWith(".sql")).sort();
 const db = new DatabaseSync(":memory:");
-for (const f of migrations) db.exec(readFileSync(join(SERVER, "migrations", f), "utf8"));
+for (const f of migrations) {
+  db.exec(readFileSync(join(SERVER, "migrations", f), "utf8"));
+}
 
 const schema = {};
 for (const { name, sql } of db
@@ -84,21 +90,32 @@ if (!mermaid) {
   let entity = null;
   for (const line of mermaid[1].split("\n")) {
     let m;
-    if (!line.trim() || line.trim() === "erDiagram") continue;
-    if ((m = line.match(/^\s*(\w+) \{$/))) { entity = diagram[m[1]] = []; continue; }
-    if (/^\s*\}$/.test(line)) { entity = null; continue; }
+    if (!line.trim() || line.trim() === "erDiagram") {
+      continue;
+    }
+    if ((m = line.match(/^\s*(\w+) \{$/))) {
+      entity = diagram[m[1]] = [];
+      continue;
+    }
+    if (/^\s*\}$/.test(line)) {
+      entity = null; continue;
+    }
     if (entity && (m = line.match(/^\s*(\w+) (\w+)(?: ((?:PK|FK|UK)(?:, (?:PK|FK|UK))*))?(?: "[^"]*")?$/))) {
       entity.push({ type: m[1], name: m[2], keys: m[3] ? m[3].split(", ") : [] });
       continue;
     }
-    if (!entity && (m = line.match(/^\s*(\w+)\s+\S+--\S+\s+(\w+)\s*:/))) { rels.push([m[1], m[2]]); continue; }
+    if (!entity && (m = line.match(/^\s*(\w+)\s+\S+--\S+\s+(\w+)\s*:/))) {
+      rels.push([m[1], m[2]]); continue;
+    }
     check(`diagram line is understood: ${line.trim()}`, false);
   }
 }
 
 check("draws every table the migrations build, and no others",
   sameSet(Object.keys(diagram), tables), vs(sorted(Object.keys(diagram)), sorted(tables)));
-for (const [a, b] of rels) check(`relationship ${a} - ${b} joins tables that exist`, isTable(a) && isTable(b));
+for (const [a, b] of rels) {
+  check(`relationship ${a} - ${b} joins tables that exist`, isTable(a) && isTable(b));
+}
 
 for (const t of tables.filter((t) => diagram[t])) {
   const drawn = diagram[t];
@@ -113,7 +130,9 @@ for (const t of tables.filter((t) => diagram[t])) {
   check(`${t}: PK marks`, sameSet(marked("PK"), pk), vs(marked("PK"), pk));
   const uk = schema[t].indexes.filter((i) => i.unique && i.origin === "u").flatMap((i) => i.columns);
   check(`${t}: UK marks`, sameSet(marked("UK"), uk), vs(marked("UK"), uk));
-  if (colNames(t).includes("user_id")) check(`${t}: user_id is marked FK`, marked("FK").includes("user_id"));
+  if (colNames(t).includes("user_id")) {
+    check(`${t}: user_id is marked FK`, marked("FK").includes("user_id"));
+  }
 }
 
 console.log("\n== the opening sentence ==");
@@ -138,7 +157,9 @@ if (prose.includes("**There are no foreign keys.**")) {
   const start = "**Apart from";
   const chunk = chunkStarting(start);
   const built = tables.filter((t) => !colNames(t).includes("user_id"));
-  if (!chunk) check("the tables with no user_id", false, notFound(start));
+  if (!chunk) {
+    check("the tables with no user_id", false, notFound(start));
+  }
   else {
     const named = ticks(chunk).filter(isTable);
     check("the tables with no user_id", sameSet(named, built), vs(sorted(named), sorted(built)));
@@ -162,16 +183,22 @@ console.log("\n== conventions ==");
   const start = "- Every column outside a primary key is `NOT NULL`";
   const chunk = chunkStarting(start);
   const nullable = allCols.filter((c) => c.pk === 0 && !c.notnull).map((c) => c.ref);
-  if (!chunk) check("the NOT NULL rule", false, notFound(start));
-  else check("the columns allowed to be NULL are the ones the doc names",
-    sameSet(refsIn(chunk), nullable), vs(sorted(refsIn(chunk)), sorted(nullable)));
+  if (!chunk) {
+    check("the NOT NULL rule", false, notFound(start));
+  }
+  else {check("the columns allowed to be NULL are the ones the doc names",
+    sameSet(refsIn(chunk), nullable), vs(sorted(refsIn(chunk)), sorted(nullable)));}
 }
 {
   const start = "- Columns with no default";
   const chunk = chunkStarting(start);
   const built = allCols.filter((c) => c.pk === 0 && c.notnull && c.dflt_value === null).map((c) => c.ref);
-  if (!chunk) check("the no-default list", false, notFound(start));
-  else check("the no-default list", sameSet(refsIn(chunk), built), vs(sorted(refsIn(chunk)), sorted(built)));
+  if (!chunk) {
+    check("the no-default list", false, notFound(start));
+  }
+  else {
+    check("the no-default list", sameSet(refsIn(chunk), built), vs(sorted(refsIn(chunk)), sorted(built)));
+  }
 }
 {
   const start = "- The only defaults other than";
@@ -179,7 +206,9 @@ console.log("\n== conventions ==");
   const built = allCols
     .filter((c) => c.dflt_value !== null && c.dflt_value !== "''" && c.dflt_value !== "0")
     .map((c) => `${c.ref} = ${c.dflt_value.replace(/^'(.*)'$/, "$1")}`);
-  if (!chunk) check("the non-empty defaults", false, notFound(start));
+  if (!chunk) {
+    check("the non-empty defaults", false, notFound(start));
+  }
   else {
     const said = [...chunk.matchAll(/`(\w+\.\w+)`\s+\(`([^`]*)`\)/g)].map((m) => `${m[1]} = ${m[2]}`);
     check("the non-empty defaults", sameSet(said, built), vs(sorted(said), sorted(built)));
@@ -188,7 +217,9 @@ console.log("\n== conventions ==");
 {
   const chunk = chunks.find((c) => c.startsWith("- ") && c.includes("`AUTOINCREMENT`"));
   const built = tables.filter((t) => /\bAUTOINCREMENT\b/i.test(schema[t].sql));
-  if (!chunk) check("the AUTOINCREMENT tables", false, notFound("- ... `AUTOINCREMENT`"));
+  if (!chunk) {
+    check("the AUTOINCREMENT tables", false, notFound("- ... `AUTOINCREMENT`"));
+  }
   else {
     const named = refsIn(chunk).map((r) => r.split(".")[0]);
     check("the AUTOINCREMENT tables", sameSet(named, built), vs(sorted(named), sorted(built)));
@@ -198,7 +229,9 @@ console.log("\n== conventions ==");
   const start = "- `user_id` has its own index on";
   const chunk = chunkStarting(start);
   const built = tables.filter((t) => schema[t].indexes.some((i) => i.origin === "c" && i.columns.join() === "user_id"));
-  if (!chunk) check("the tables with a user_id index", false, notFound(start));
+  if (!chunk) {
+    check("the tables with a user_id index", false, notFound(start));
+  }
   else {
     const named = ticks(chunk).filter(isTable);
     check("the tables with a user_id index", sameSet(named, built), vs(sorted(named), sorted(built)));

@@ -62,7 +62,9 @@ export function rankedEntries(list) {
  */
 export function storedArea(area, list) {
   const value = typeof area === "string" ? area.trim().toLowerCase() : "";
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
   return rankedEntries(list).find((entry) => entry.toLowerCase() === value) ?? "";
 }
 
@@ -104,7 +106,7 @@ export function storedArea(area, list) {
  */
 export function areaToStore(sent, location, list) {
   const area = storedArea(sent, list);
-  if (area) return { area, cleared: false, filled: false };
+  if (area) {return { area, cleared: false, filled: false };}
   if (typeof sent === "string" && sent.trim()) {
     return { area: "", cleared: true, filled: false };
   }
@@ -122,7 +124,9 @@ export function areaToStore(sent, location, list) {
  * @returns {string}
  */
 export function nowhereToSearchError(searched, ranked) {
-  if (rankedEntries(searched).length || rankedEntries(ranked).length) return "";
+  if (rankedEntries(searched).length || rankedEntries(ranked).length) {
+    return "";
+  }
   return "say where to search, or rank at least one place first - the search needs somewhere to look";
 }
 
@@ -135,9 +139,13 @@ export function nowhereToSearchError(searched, ranked) {
  * @returns {string}
  */
 export function locationSettingError(key, value) {
-  if (typeof value !== "string") return `${key} must be text`;
+  if (typeof value !== "string") {
+    return `${key} must be text`;
+  }
   const max = key === "location_note" ? LOCATION_NOTE_MAX_CHARS : LOCATION_LIST_MAX_CHARS;
-  if (value.trim().length > max) return `${key} is longer than ${max} characters`;
+  if (value.trim().length > max) {
+    return `${key} is longer than ${max} characters`;
+  }
   return "";
 }
 
@@ -158,10 +166,16 @@ export const TRACK_LABEL_MAX_CHARS = 60;
  * @returns {string}
  */
 export function nameError(field, value, max) {
-  if (typeof value !== "string") return `${field} must be text`;
+  if (typeof value !== "string") {
+    return `${field} must be text`;
+  }
   const name = value.trim();
-  if (!name) return `${field} can't be empty`;
-  if (name.length > max) return `${field} is longer than ${max} characters`;
+  if (!name) {
+    return `${field} can't be empty`;
+  }
+  if (name.length > max) {
+    return `${field} is longer than ${max} characters`;
+  }
   return "";
 }
 
@@ -185,8 +199,12 @@ export const FIT_PROSE_MAX_CHARS = 2000;
  * @returns {string}
  */
 export function searchProseError(field, value, max) {
-  if (typeof value !== "string") return `${field} must be text`;
-  if (value.trim().length > max) return `${field} is longer than ${max} characters`;
+  if (typeof value !== "string") {
+    return `${field} must be text`;
+  }
+  if (value.trim().length > max) {
+    return `${field} is longer than ${max} characters`;
+  }
   return "";
 }
 
@@ -248,8 +266,8 @@ export const SCREENED_NOT_BY_RULES = ["delisted", "dead", "duplicate", "other"];
  */
 export function storedKind(sent) {
   const value = typeof sent === "string" ? sent.trim().toLowerCase() : "";
-  if (!value) return { kind: "", coercedFrom: "" };
-  if (SCREENED_KINDS.includes(value)) return { kind: value, coercedFrom: "" };
+  if (!value) {return { kind: "", coercedFrom: "" };}
+  if (SCREENED_KINDS.includes(value)) {return { kind: value, coercedFrom: "" };}
   return { kind: KIND_WHEN_UNKNOWN, coercedFrom: typeof sent === "string" ? sent : String(sent) };
 }
 
@@ -269,7 +287,9 @@ export const PAY_FLOOR_UNITS = ["year", "hour"];
  * @returns {string}
  */
 export function payFloorError(field, value) {
-  if (typeof value !== "string") return `${field} must be text`;
+  if (typeof value !== "string") {
+    return `${field} must be text`;
+  }
   if (value.trim().length > PAY_FLOOR_MAX_CHARS) {
     return `${field} is longer than ${PAY_FLOOR_MAX_CHARS} characters - it is an amount, not a rule`;
   }
@@ -301,8 +321,12 @@ export function payFloorUnitError(field, value) {
  * @returns {string}
  */
 export function halfSetPayFloorError(amount, unit) {
-  if (!amount && unit) return "a pay floor needs an amount as well as a unit";
-  if (amount && !unit) return `a pay floor needs a unit - ${PAY_FLOOR_UNITS.join(" or ")}`;
+  if (!amount && unit) {
+    return "a pay floor needs an amount as well as a unit";
+  }
+  if (amount && !unit) {
+    return `a pay floor needs a unit - ${PAY_FLOOR_UNITS.join(" or ")}`;
+  }
   return "";
 }
 
@@ -335,9 +359,15 @@ const COMPANY_NAME_MAX_CHARS = 200;
  * @returns {string}
  */
 export function excludedCompaniesError(list) {
-  if (!Array.isArray(list)) return "excluded_companies must be a list";
-  if (list.length > EXCLUDED_COMPANIES_MAX) return `at most ${EXCLUDED_COMPANIES_MAX} companies`;
-  if (list.some((c) => typeof c !== "string")) return "each excluded company must be text";
+  if (!Array.isArray(list)) {
+    return "excluded_companies must be a list";
+  }
+  if (list.length > EXCLUDED_COMPANIES_MAX) {
+    return `at most ${EXCLUDED_COMPANIES_MAX} companies`;
+  }
+  if (list.some((c) => typeof c !== "string")) {
+    return "each excluded company must be text";
+  }
   if (list.some((c) => c.length > COMPANY_NAME_MAX_CHARS)) {
     return `an excluded company is longer than ${COMPANY_NAME_MAX_CHARS} characters`;
   }
@@ -364,7 +394,9 @@ export function unknownTrack(key) {
 export function unknownTrackResponse(tracks, rows) {
   const configured = new Set(tracks.map((t) => t.key));
   const unknown = [...new Set(rows.map((r) => r.search))].filter((k) => !configured.has(k));
-  if (unknown.length === 0) return null;
+  if (unknown.length === 0) {
+    return null;
+  }
   // Refuse the whole request; never drop just the drifted rows. The run reads
   // `added` as filed and treats those postings as ones it never has to find
   // again.
@@ -409,7 +441,9 @@ const DOS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
 
 /** @param {unknown} path @returns {boolean} */
 export function isDocumentPath(path) {
-  if (typeof path !== "string" || !DOCUMENT_PATH.test(path)) return false;
+  if (typeof path !== "string" || !DOCUMENT_PATH.test(path)) {
+    return false;
+  }
   const name = path.slice(path.indexOf("/") + 1);
   return !DOS_DEVICE.test(name.split(".")[0]);
 }
@@ -431,8 +465,12 @@ export const TRACK_DOCUMENTS_MAX = 20;
  * @returns {string|null}
  */
 export function trackDocumentsError(list) {
-  if (!Array.isArray(list)) return "documents must be a list of document paths";
-  if (list.length > TRACK_DOCUMENTS_MAX) return `at most ${TRACK_DOCUMENTS_MAX} documents for one search`;
+  if (!Array.isArray(list)) {
+    return "documents must be a list of document paths";
+  }
+  if (list.length > TRACK_DOCUMENTS_MAX) {
+    return `at most ${TRACK_DOCUMENTS_MAX} documents for one search`;
+  }
   const bad = list.filter((p) => !isDocumentPath(p));
   if (bad.length) {
     return `not a document path: ${bad.map((p) => JSON.stringify(p)).join(", ")} - a path is ${DOCUMENT_FOLDERS.map((f) => `${f}/`).join(", ")} and a plain file name`;
@@ -463,7 +501,9 @@ export function documentExtension(path) {
  * @returns {string|null}
  */
 export function unreadableDocumentsError(list) {
-  if (list.length === 0) return "a search needs at least one document to read - its resume";
+  if (list.length === 0) {
+    return "a search needs at least one document to read - its resume";
+  }
   const word = list.filter((p) => ["docx", "doc"].includes(documentExtension(p)));
   if (word.length) {
     return `a run can't read a Word file: ${word.map((p) => JSON.stringify(p)).join(", ")} - list the .txt read from it instead`;

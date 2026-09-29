@@ -67,19 +67,29 @@ export function excludedCompanyMatcher(excludedCompanies) {
   for (const entry of Array.isArray(excludedCompanies) ? excludedCompanies : []) {
     for (const piece of String(entry == null ? "" : entry).split(/[/()]/)) {
       const alt = normalize(piece);
-      if (!alt) continue;
+      if (!alt) {
+        continue;
+      }
       // Padded, so the includes() below can only land on word boundaries.
-      if (alt.length <= WHOLE_NAME_MAX) wholeName.add(alt);
-      else phrases.add(` ${alt} `);
+      if (alt.length <= WHOLE_NAME_MAX) {
+        wholeName.add(alt);
+      }
+      else {
+        phrases.add(` ${alt} `);
+      }
     }
   }
 
   return function isExcludedCompany(companyName) {
     const name = normalize(companyName);
-    if (!name) return false;
-    if (wholeName.has(name)) return true;
+    if (!name) {
+      return false;
+    }
+    if (wholeName.has(name)) {
+      return true;
+    }
     const padded = ` ${name} `;
-    for (const phrase of phrases) if (padded.includes(phrase)) return true;
+    for (const phrase of phrases) {if (padded.includes(phrase)) {return true;}}
     return false;
   };
 }

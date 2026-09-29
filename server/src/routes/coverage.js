@@ -70,7 +70,9 @@ export async function upcomingCompanies(db, key, count) {
 export async function handleGetCoverage({ db, companyList, params, url }) {
   const key = params[0];
   const all = url.searchParams.get("all") === "1";
-  if (!(await db.trackExists(key))) return unknownTrack(key);
+  if (!(await db.trackExists(key))) {
+    return unknownTrack(key);
+  }
   // Excluded companies are filtered on read as well as on write: recordSweeps
   // refuses to add one, but a company is usually already in the rotation by the
   // time someone excludes it. Filtered rather than deleted, because the row
@@ -164,11 +166,15 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
     );
   }
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const key = typeof body.search === "string" ? body.search : "";
-  if (!key) return json({ error: "missing search (track key)" }, 400);
-  if (!(await db.trackExists(key))) return unknownTrack(key);
+  if (!key) {return json({ error: "missing search (track key)" }, 400);}
+  if (!(await db.trackExists(key))) {
+    return unknownTrack(key);
+  }
 
   // A name that is another company's alias is that company: a run that meets
   // "Marriott" in discovery reports Marriott International rather than adding
@@ -179,11 +185,13 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   let aliased = 0;
   const valid = sweptCompanies(body.swept).map((i) => {
     const company = aliasTo.get(normalize(i.company));
-    if (!company) return i;
+    if (!company) {
+      return i;
+    }
     aliased++;
     return { ...i, company };
   });
-  if (valid.length === 0) return json({ error: "no companies provided" }, 400);
+  if (valid.length === 0) {return json({ error: "no companies provided" }, 400);}
 
   // The run's own date: the worker only knows UTC, and a 01:00 local run is
   // already the next UTC day. An explicit "" means "register these companies,
@@ -211,7 +219,7 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   const isExcluded = await excluderFor(db);
   const allowed = valid.filter((i) => !isExcluded(i.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) return json({ recorded: 0, excluded, aliased, on });
+  if (allowed.length === 0) {return json({ recorded: 0, excluded, aliased, on });}
 
   // A wall is dated evidence: it is served only after two separate dates, and
   // only while the last is fresh (companyList.getCompanyFetch). An undated one is not a
@@ -317,7 +325,9 @@ function positionNewCompanies(allowed, log, onList) {
   const seenFresh = new Set();
   for (const i of allowed) {
     const k = normalize(i.company);
-    if (onList.has(k) || seenFresh.has(k)) continue;
+    if (onList.has(k) || seenFresh.has(k)) {
+      continue;
+    }
     seenFresh.add(k);
     fresh.push(i);
   }

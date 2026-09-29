@@ -68,7 +68,9 @@ function tooLarge(bytes, path) {
  * @returns {Response|null} the refusal, or null when the bucket is there
  */
 function missingBucket(docs) {
-  if (docs && docs.bucket) return null;
+  if (docs && docs.bucket) {
+    return null;
+  }
   return json(
     {
       error:
@@ -123,7 +125,9 @@ function missingBucket(docs) {
  */
 export async function handleListDocuments({ docs, db, url }) {
   const unconfigured = missingBucket(docs);
-  if (unconfigured) return unconfigured;
+  if (unconfigured) {
+    return unconfigured;
+  }
 
   const all = (await docs.list()).map((d) => ({
     path: d.path,
@@ -142,7 +146,9 @@ export async function handleListDocuments({ docs, db, url }) {
     return json({
       documents: all.map((d) => {
         const parts = resumeParts(d.path);
-        if (!parts) return d;
+        if (!parts) {
+          return d;
+        }
         const pairing =
           parts.ext === "docx"
             ? { text_path: listedPathFor(stored, d.path) }
@@ -160,7 +166,9 @@ export async function handleListDocuments({ docs, db, url }) {
   }
 
   const track = await db.getTrack(search);
-  if (!track) return unknownTrack(search);
+  if (!track) {
+    return unknownTrack(search);
+  }
   // A fed tab reads the documents of the search that fills it. A root that has
   // gone missing falls back to the tab itself.
   const rootKey = searchRootOf(track);
@@ -196,15 +204,19 @@ export async function handleListDocuments({ docs, db, url }) {
  */
 export async function handleGetDocument({ docs, params }) {
   const unconfigured = missingBucket(docs);
-  if (unconfigured) return unconfigured;
+  if (unconfigured) {
+    return unconfigured;
+  }
 
   const path = params[0];
-  if (!isDocumentPath(path)) return badDocumentPath(path);
+  if (!isDocumentPath(path)) {
+    return badDocumentPath(path);
+  }
 
   const obj = await docs.get(path);
   // `Docs` only addresses keys under this caller's own prefix, so another
   // person's path is simply not there.
-  if (!obj) return json({ error: `no document at "${path}"` }, 404);
+  if (!obj) {return json({ error: `no document at "${path}"` }, 404);}
 
   return new Response(obj.body, {
     headers: {
@@ -249,10 +261,14 @@ export async function handleGetDocument({ docs, params }) {
  */
 export async function handlePutDocument({ request, docs, db, params }) {
   const unconfigured = missingBucket(docs);
-  if (unconfigured) return unconfigured;
+  if (unconfigured) {
+    return unconfigured;
+  }
 
   const path = params[0];
-  if (!isDocumentPath(path)) return badDocumentPath(path);
+  if (!isDocumentPath(path)) {
+    return badDocumentPath(path);
+  }
 
   const contentType = request.headers.get("content-type") || "application/octet-stream";
   const ifMatch = request.headers.get("if-match") || "";
@@ -261,10 +277,14 @@ export async function handlePutDocument({ request, docs, db, params }) {
   // buffered length catches a chunked or understated one. Buffering before the
   // put is what keeps an oversized object from ever being written.
   const declared = Number(request.headers.get("content-length") || 0);
-  if (declared > MAX_DOCUMENT_BYTES) return tooLarge(declared, path);
+  if (declared > MAX_DOCUMENT_BYTES) {
+    return tooLarge(declared, path);
+  }
 
   const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > MAX_DOCUMENT_BYTES) return tooLarge(bytes.byteLength, path);
+  if (bytes.byteLength > MAX_DOCUMENT_BYTES) {
+    return tooLarge(bytes.byteLength, path);
+  }
 
   const resume = resumeParts(path);
   const before = resume ? await docs.list() : [];
@@ -274,7 +294,9 @@ export async function handlePutDocument({ request, docs, db, params }) {
   }
   if (resume?.ext === "txt") {
     const wordFile = samePairName(storedBefore, path, "docx")[0];
-    if (wordFile) return textIsServerOwned(wordFile, "replace");
+    if (wordFile) {
+      return textIsServerOwned(wordFile, "replace");
+    }
   }
 
   // A Word resume is read on the way in, so a file with nothing readable in it
@@ -284,7 +306,9 @@ export async function handlePutDocument({ request, docs, db, params }) {
     try {
       extracted = await docxText(bytes);
     } catch (err) {
-      if (!(err instanceof DocxError)) throw err;
+      if (!(err instanceof DocxError)) {
+        throw err;
+      }
       return json({ error: `${resume.name} ${err.message}`, ...RESUME_FIELD }, 422);
     }
     if (extracted.words < MIN_WORDS) {
@@ -322,7 +346,9 @@ export async function handlePutDocument({ request, docs, db, params }) {
     // A text file of the same name in another case would be the same file on the
     // Windows disk a run downloads to, and whichever arrived second would win.
     for (const other of samePairName(storedBefore, path, "txt")) {
-      if (other !== textPath) await docs.delete(other);
+      if (other !== textPath) {
+        await docs.delete(other);
+      }
     }
   }
 
@@ -336,7 +362,7 @@ export async function handlePutDocument({ request, docs, db, params }) {
     await db.markProfilesStale(readers.map((s) => s.key), listed, new Date().toISOString());
   }
 
-  if (!extracted) return json({ path, etag: written.etag, bytes: written.bytes });
+  if (!extracted) {return json({ path, etag: written.etag, bytes: written.bytes });}
   return json({ path, etag: written.etag, bytes: written.bytes, text_path: textPath, words: extracted.words });
 }
 
@@ -373,16 +399,22 @@ function textIsServerOwned(wordFile, action) {
  */
 export async function handleDeleteDocument({ docs, db, params }) {
   const unconfigured = missingBucket(docs);
-  if (unconfigured) return unconfigured;
+  if (unconfigured) {
+    return unconfigured;
+  }
 
   const path = params[0];
-  if (!isDocumentPath(path)) return badDocumentPath(path);
+  if (!isDocumentPath(path)) {
+    return badDocumentPath(path);
+  }
 
   const stored = (await docs.list()).map((d) => d.path);
   const resume = resumeParts(path);
   if (resume?.ext === "txt") {
     const wordFile = samePairName(stored, path, "docx")[0];
-    if (wordFile) return textIsServerOwned(wordFile, "remove");
+    if (wordFile) {
+      return textIsServerOwned(wordFile, "remove");
+    }
   }
 
   const readers = searchesReading(await db.getResumeState(), stored, path);
@@ -397,7 +429,7 @@ export async function handleDeleteDocument({ docs, db, params }) {
   }
 
   const deleted = await docs.delete(path);
-  if (!deleted) return json({ error: `no document at "${path}"` }, 404);
+  if (!deleted) {return json({ error: `no document at "${path}"` }, 404);}
 
   // Removing a Word resume removes the text read from it: the pair is one
   // resume. The Word file goes first, so a failure between the two leaves a
@@ -405,7 +437,9 @@ export async function handleDeleteDocument({ docs, db, params }) {
   if (resume?.ext === "docx") {
     const removed = [];
     for (const text of samePairName(stored, path, "txt")) {
-      if (await docs.delete(text)) removed.push(text);
+      if (await docs.delete(text)) {
+        removed.push(text);
+      }
     }
     return json({ path, deleted: true, removed });
   }

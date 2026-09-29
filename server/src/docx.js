@@ -53,7 +53,9 @@ async function readZipEntry(zip, wanted) {
       break;
     }
   }
-  if (end < 0) throw new DocxError("isn't a Word document - it isn't a .docx file inside, whatever its name says");
+  if (end < 0) {
+    throw new DocxError("isn't a Word document - it isn't a .docx file inside, whatever its name says");
+  }
 
   const entries = view.getUint16(end + 10, true);
   let at = view.getUint32(end + 16, true);
@@ -76,21 +78,31 @@ async function readZipEntry(zip, wanted) {
     const localOffset = view.getUint32(at + 42, true);
     const name = nameOf(at + 46, nameLength);
     at += 46 + nameLength + extraLength + commentLength;
-    if (name !== wanted) continue;
+    if (name !== wanted) {
+      continue;
+    }
 
-    if (flags & FLAG_ENCRYPTED) throw new DocxError("is password-protected - remove the password in Word, or attach a PDF");
+    if (flags & FLAG_ENCRYPTED) {
+      throw new DocxError("is password-protected - remove the password in Word, or attach a PDF");
+    }
     if (compressedSize === 0xffffffff || size === 0xffffffff || localOffset === 0xffffffff) {
       throw new DocxError("is packed in a way this can't read - save it again from Word, or attach a PDF");
     }
-    if (size > MAX_XML_BYTES) throw new DocxError("holds far more text than a resume - attach a PDF instead");
+    if (size > MAX_XML_BYTES) {
+      throw new DocxError("holds far more text than a resume - attach a PDF instead");
+    }
     if (localOffset + 30 > zip.length || view.getUint32(localOffset, true) !== SIG_LOCAL_HEADER) {
       throw new DocxError("is damaged - its contents can't be found where its list says they are");
     }
     const dataStart = localOffset + 30 + view.getUint16(localOffset + 26, true) + view.getUint16(localOffset + 28, true);
-    if (dataStart + compressedSize > zip.length) throw new DocxError("is damaged - it ends partway through");
+    if (dataStart + compressedSize > zip.length) {
+      throw new DocxError("is damaged - it ends partway through");
+    }
     const data = zip.subarray(dataStart, dataStart + compressedSize);
 
-    if (method === METHOD_STORED) return data;
+    if (method === METHOD_STORED) {
+      return data;
+    }
     if (method !== METHOD_DEFLATE) {
       throw new DocxError("is packed in a way this can't read - save it again from Word, or attach a PDF");
     }
@@ -112,7 +124,9 @@ async function inflate(data) {
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
       total += value.length;
       if (total > MAX_XML_BYTES) {
         await reader.cancel();
@@ -121,7 +135,9 @@ async function inflate(data) {
       chunks.push(value);
     }
   } catch (err) {
-    if (err instanceof DocxError) throw err;
+    if (err instanceof DocxError) {
+      throw err;
+    }
     throw new DocxError("is damaged - its text can't be unpacked");
   }
   const out = new Uint8Array(total);
@@ -136,7 +152,9 @@ async function inflate(data) {
 const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 function decodeEntities(text) {
   return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, code) => {
-    if (code[0] !== "#") return ENTITIES[code.toLowerCase()] ?? whole;
+    if (code[0] !== "#") {
+      return ENTITIES[code.toLowerCase()] ?? whole;
+    }
     const n = code[1] === "x" || code[1] === "X" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
     return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : whole;
   });
@@ -170,19 +188,33 @@ export function documentText(xml) {
   for (const m of xml.matchAll(tag)) {
     const [, closing, name, selfClosing, text] = m;
     if (text !== undefined) {
-      if (inText && fallbackDepth === 0) out += decodeEntities(text);
+      if (inText && fallbackDepth === 0) {
+        out += decodeEntities(text);
+      }
       continue;
     }
-    if (!name) continue;
+    if (!name) {
+      continue;
+    }
     if (name === "mc:Fallback") {
-      if (!closing && !selfClosing) fallbackDepth++;
-      else if (closing) fallbackDepth = Math.max(0, fallbackDepth - 1);
+      if (!closing && !selfClosing) {
+        fallbackDepth++;
+      }
+      else if (closing) {
+        fallbackDepth = Math.max(0, fallbackDepth - 1);
+      }
       continue;
     }
-    if (fallbackDepth > 0) continue;
+    if (fallbackDepth > 0) {
+      continue;
+    }
     if (name === "w:tabs") {
-      if (!closing && !selfClosing) tabStopsDepth++;
-      else if (closing) tabStopsDepth = Math.max(0, tabStopsDepth - 1);
+      if (!closing && !selfClosing) {
+        tabStopsDepth++;
+      }
+      else if (closing) {
+        tabStopsDepth = Math.max(0, tabStopsDepth - 1);
+      }
     } else if (name === "w:t") {
       inText = !closing && !selfClosing;
     } else if (name === "w:tab" && !closing && tabStopsDepth === 0) {
@@ -190,7 +222,9 @@ export function documentText(xml) {
     } else if ((name === "w:br" || name === "w:cr") && !closing) {
       out += "\n";
     } else if (name === "w:tc") {
-      if (!closing && !selfClosing) cellDepth++;
+      if (!closing && !selfClosing) {
+        cellDepth++;
+      }
       else if (closing) {
         cellDepth = Math.max(0, cellDepth - 1);
         out = out.replace(/ +$/, "") + "\t";

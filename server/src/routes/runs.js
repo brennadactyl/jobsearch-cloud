@@ -33,11 +33,15 @@ import { isoDate, unknownTrack } from "../validate.js";
  */
 export async function handleRecordRun({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const key = typeof body.search === "string" ? body.search : "";
-  if (!key) return json({ error: "missing search (track key)" }, 400);
-  if (!(await db.trackExists(key))) return unknownTrack(key);
+  if (!key) {return json({ error: "missing search (track key)" }, 400);}
+  if (!(await db.trackExists(key))) {
+    return unknownTrack(key);
+  }
 
   const now = new Date();
   // `at` is an instant the server can trust; a caller-supplied one is only

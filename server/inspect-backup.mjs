@@ -36,7 +36,9 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!sql) fail('usage: node server/inspect-backup.mjs [--file <backup.sql>] "SELECT ..."');
+if (!sql) {
+  fail('usage: node server/inspect-backup.mjs [--file <backup.sql>] "SELECT ..."');
+}
 
 // One statement, starting with SELECT or WITH once comments are set aside. A
 // trailing semicolon is allowed; a second statement after it is not.
@@ -54,19 +56,25 @@ function newestBackup() {
   const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const dataDir = process.env.JOB_SEARCH_DATA_DIR || path.join(repo, "private");
   const dir = path.join(dataDir, "backups");
-  if (!fs.existsSync(dir)) fail(`no backups folder at ${dir} - run scripts/backup-tracker.ps1, or pass --file`);
+  if (!fs.existsSync(dir)) {
+    fail(`no backups folder at ${dir} - run scripts/backup-tracker.ps1, or pass --file`);
+  }
   // The file name carries the date and time, so name order is time order.
   const newest = fs
     .readdirSync(dir)
     .filter((f) => /^d1-.*\d{4}-\d{2}-\d{2}-\d{6}\.sql$/.test(f))
     .sort()
     .pop();
-  if (!newest) fail(`no backup in ${dir} - run scripts/backup-tracker.ps1, or pass --file`);
+  if (!newest) {
+    fail(`no backup in ${dir} - run scripts/backup-tracker.ps1, or pass --file`);
+  }
   return path.join(dir, newest);
 }
 
 const file = explicit || newestBackup();
-if (!fs.existsSync(file)) fail(`no file at ${file}`);
+if (!fs.existsSync(file)) {
+  fail(`no file at ${file}`);
+}
 
 const db = new DatabaseSync(":memory:");
 db.exec(fs.readFileSync(file, "utf8"));
@@ -82,5 +90,9 @@ try {
 }
 
 console.log(`backup: ${path.basename(file)}`);
-if (rows.length === 0) console.log("(no rows)");
-else console.table(rows);
+if (rows.length === 0) {
+  console.log("(no rows)");
+}
+else {
+  console.table(rows);
+}

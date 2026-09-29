@@ -28,7 +28,9 @@ import { unknownTrack } from "../validate.js";
 export async function handleGetPrompt({ db, user, params, url }) {
   const key = params[0];
   const [track, config] = await Promise.all([db.getTrack(key), db.getTracksAndSettings()]);
-  if (!track) return unknownTrack(key);
+  if (!track) {
+    return unknownTrack(key);
+  }
 
   // A track with `fed_by` set is a tab, not a search: a sibling's run fills it
   // (docs/glossary.md#searches-and-tracks), and a prompt for it would be a

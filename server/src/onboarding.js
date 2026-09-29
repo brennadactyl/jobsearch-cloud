@@ -57,9 +57,15 @@ export function retriesEndAt(sentAt) {
  * @returns {"open"|"used"|"revoked"|"expired"}
  */
 export function inviteState(invite, now) {
-  if (invite.used_at) return "used";
-  if (invite.revoked_at) return "revoked";
-  if (invite.expires_at <= now) return "expired";
+  if (invite.used_at) {
+    return "used";
+  }
+  if (invite.revoked_at) {
+    return "revoked";
+  }
+  if (invite.expires_at <= now) {
+    return "expired";
+  }
   return "open";
 }
 
@@ -90,7 +96,9 @@ export async function mintInvite(d1, note, days) {
  * @returns {Promise<Invite|null>}
  */
 export async function findInvite(d1, code) {
-  if (typeof code !== "string" || !code || code.length > 200) return null;
+  if (typeof code !== "string" || !code || code.length > 200) {
+    return null;
+  }
   const row = await d1.prepare("SELECT * FROM invites WHERE code_hash = ?").bind(await hashToken(code)).first();
   return row || null;
 }
@@ -135,7 +143,9 @@ export async function revokeInvite(d1, id) {
     .bind(new Date().toISOString(), id)
     .run();
   const row = await d1.prepare("SELECT used_at FROM invites WHERE id = ?").bind(id).first();
-  if (!row) return "missing";
+  if (!row) {
+    return "missing";
+  }
   return row.used_at ? "used" : "revoked";
 }
 
@@ -160,7 +170,7 @@ export async function revokeInvite(d1, id) {
 export async function signupWithInvite(d1, invite, name, password) {
   // Cheap refusal first, before the password is stretched. The constraint below
   // is what actually decides, since a name can be taken between the two.
-  if (await getUserByName(d1, name)) return { taken: true };
+  if (await getUserByName(d1, name)) {return { taken: true };}
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -182,7 +192,7 @@ export async function signupWithInvite(d1, invite, name, password) {
         .bind(id, name, hash, salt, iterations, now.slice(0, 10), invite.id, id),
     ]);
   } catch (err) {
-    if (/UNIQUE constraint failed: users\.name/i.test(String(err && err.message))) return { taken: true };
+    if (/UNIQUE constraint failed: users\.name/i.test(String(err && err.message))) {return { taken: true };}
     throw err;
   }
   if (!results[1].meta.changes) {
@@ -210,8 +220,8 @@ export async function signupWithInvite(d1, invite, name, password) {
  */
 export async function mintSearchToken(d1, userId) {
   const user = typeof userId === "string" && userId ? await getUserById(d1, userId) : null;
-  if (!user) return { missing: true };
-  if (Number(user.demo)) return { demo: true };
+  if (!user) {return { missing: true };}
+  if (Number(user.demo)) {return { demo: true };}
   const token = newSessionToken();
   const [removed] = await d1.batch([
     d1.prepare("DELETE FROM sessions WHERE user_id = ? AND label = ?").bind(user.id, SESSION_LABEL.scheduledSearch),
@@ -289,7 +299,7 @@ export async function completeIntake(d1, userId, status, note) {
     )
     .bind(userId)
     .first();
-  if (!row) return { missing: true };
-  if (!result.meta.changes) return { done: true };
+  if (!row) {return { missing: true };}
+  if (!result.meta.changes) {return { done: true };}
   return { user: { id: row.user_id, name: row.name || "" }, status: row.status, status_note: row.status_note, updated_at: row.updated_at };
 }

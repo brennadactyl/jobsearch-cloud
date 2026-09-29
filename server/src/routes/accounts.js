@@ -43,11 +43,13 @@ import { Docs, RunLogs } from "../r2.js";
  */
 export async function handleLogin({ request, env }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  if (!name || !password) return json({ error: "name and password are required" }, 400);
+  if (!name || !password) {return json({ error: "name and password are required" }, 400);}
 
   const user = await getUserByName(env.DB, name);
   if (!(await verifyPassword(password, user))) {
@@ -82,11 +84,13 @@ export async function handleLogout({ env, token }) {
  */
 export async function handleUpsertUser({ request, env }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  if (!name) return json({ error: "name is required" }, 400);
+  if (!name) {return json({ error: "name is required" }, 400);}
   if (password.length < PASSWORD_MIN_LENGTH) {
     return json({ error: `password must be at least ${PASSWORD_MIN_LENGTH} characters` }, 400);
   }
@@ -124,13 +128,15 @@ export async function handleUpsertUser({ request, env }) {
 export async function handleDeleteUser({ request, env, params }) {
   const id = params[0];
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return json({ error: "name is required - it names the same account as the id, so a wrong id deletes nobody" }, 400);
+  if (!name) {return json({ error: "name is required - it names the same account as the id, so a wrong id deletes nobody" }, 400);}
 
   const user = await getUserById(env.DB, id);
-  if (!user) return json({ error: `no account with id "${id}"` }, 404);
+  if (!user) {return json({ error: `no account with id "${id}"` }, 404);}
   if (user.name !== name) {
     return json({ error: `"${name}" is not the name of account ${id}`, name: user.name }, 409);
   }
@@ -176,7 +182,9 @@ export function handleGetMe({ user }) {
  */
 export async function handleChangePassword({ request, env, user, token }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
   const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";

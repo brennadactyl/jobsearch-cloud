@@ -31,7 +31,9 @@ import { applicationFromLead } from "./leads.js";
  */
 export async function handleUpdate({ request, db }) {
   const body = await readJson(request);
-  if (body instanceof Response) return body;
+  if (body instanceof Response) {
+    return body;
+  }
 
   if (body.type === "lead") {
     // `delistedOn` is the one field the server acts on rather than stores: the
@@ -46,7 +48,7 @@ export async function handleUpdate({ request, db }) {
     // read as "dead, date unknown".
     if (typeof body.delistedOn === "string" && body.delistedOn.trim()) {
       const on = isoDate(body.delistedOn.trim());
-      if (!on) return json({ error: "delistedOn must be YYYY-MM-DD" }, 400);
+      if (!on) {return json({ error: "delistedOn must be YYYY-MM-DD" }, 400);}
       return removeDelistedLead(db, body.id, on);
     }
 
@@ -57,7 +59,9 @@ export async function handleUpdate({ request, db }) {
     // lead nobody sees again), and the destination may already hold this url,
     // which UNIQUE(user_id, search, url) refuses.
     const move = typeof body.search === "string" && body.search ? body.search : "";
-    if (move && !(await db.trackExists(move))) return unknownTrack(move);
+    if (move && !(await db.trackExists(move))) {
+      return unknownTrack(move);
+    }
 
     let lead;
     try {
@@ -68,7 +72,7 @@ export async function handleUpdate({ request, db }) {
       }
       throw err;
     }
-    if (!lead) return json({ error: "lead not found" }, 404);
+    if (!lead) {return json({ error: "lead not found" }, 404);}
     await db.touchUpdated();
     return json({ ok: true, lead });
   }
@@ -76,7 +80,7 @@ export async function handleUpdate({ request, db }) {
   if (body.type === "application") {
     if (body.id) {
       const app = await db.updateApplication(body.id, body);
-      if (!app) return json({ error: "application not found" }, 404);
+      if (!app) {return json({ error: "application not found" }, 404);}
       await db.touchUpdated();
       return json({ ok: true, application: app });
     }
