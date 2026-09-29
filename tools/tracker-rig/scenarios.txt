@@ -43,3 +43,5 @@ run-nonote|ok|run
 retry|retry|leads leads.json
 e400|e400|screened screened.json
 e503|e503|companies
+leads-workday|ok|leads leads-workday.json
+screened-workday|ok|screened screened-workday.json

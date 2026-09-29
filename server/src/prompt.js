@@ -552,6 +552,14 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
    \`./tracker leads leads.json\`. \`team\`, \`setup\` and \`comp\` are the
    step-${captureNum} fields; leave a key out entirely for anything the posting
    didn't state.${areaRule} Every row's \`"search"\` ${searchValue}${leadsNote}.
+
+   \`url\` is the posting's own page - the address a person opens and reads the
+   job at. When you found the posting through a board's listing API, that API's
+   address is not it: both answer, so nothing downstream can tell them apart for
+   you, and a lead saved as an API address shows ${name} raw data instead of a
+   job. Workday is the one that catches runs out - a posting fetched at
+   \`/wday/cxs/<tenant>/<site>/job/<path>\` is read by a person at
+   \`/en-US/<site>/job/<path>\` on the same host.
 9b. RECORD SCREENED-OUT CANDIDATES so tomorrow's run doesn't re-verify them.
    Write the disqualified-but-new candidates from step 7 to \`screened.json\` -
    \`{url, company, title, location, reason, kind${screenedTab}}\` - then run

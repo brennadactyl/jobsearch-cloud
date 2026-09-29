@@ -1010,6 +1010,14 @@ const listed = buildSearchPrompt({
     withRanked.includes("copied as written") && withRanked.includes("leave it out when the posting falls in none"));
   check("a person with nothing ranked is asked for no area",
     !/area/.test(syncStep({ priority_locations: "" })) && !/area/.test(syncStep({})));
+  // A lead's url is the one field a person clicks, and a board answers a posting
+  // at two addresses. Nothing downstream can tell a page from its listing API by
+  // what it serves, so the step has to say which one to send.
+  for (const [what, step] of [["ranked places set", withRanked], ["nothing ranked", syncStep({})]]) {
+    check(`step 9 says the url is the posting's page rather than the listing API's, with ${what}`,
+      step.includes("posting's own page") && step.includes("/wday/cxs/<tenant>/<site>/job/<path>") &&
+      step.includes("/en-US/<site>/job/<path>"));
+  }
 }
 
 // ---- Where a search looks comes from the three location lists.
