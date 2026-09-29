@@ -205,11 +205,15 @@ export function matchRoute(routes, method, pathname) {
       continue;
     }
     if (typeof path === "string") {
-      if (path === pathname) {return { handler, params: [] };}
+      if (path === pathname) {
+        return { handler, params: [] };
+      }
       continue;
     }
     const hit = pathname.match(path);
-    if (hit) {return { handler, params: hit.slice(1).map(decodeURIComponent) };}
+    if (hit) {
+      return { handler, params: hit.slice(1).map(decodeURIComponent) };
+    }
   }
   return null;
 }

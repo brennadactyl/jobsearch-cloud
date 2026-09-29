@@ -185,9 +185,10 @@ console.log("\n== conventions ==");
   const nullable = allCols.filter((c) => c.pk === 0 && !c.notnull).map((c) => c.ref);
   if (!chunk) {
     check("the NOT NULL rule", false, notFound(start));
+  } else {
+    check("the columns allowed to be NULL are the ones the doc names",
+      sameSet(refsIn(chunk), nullable), vs(sorted(refsIn(chunk)), sorted(nullable)));
   }
-  else {check("the columns allowed to be NULL are the ones the doc names",
-    sameSet(refsIn(chunk), nullable), vs(sorted(refsIn(chunk)), sorted(nullable)));}
 }
 {
   const start = "- Columns with no default";

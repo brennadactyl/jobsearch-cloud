@@ -38,7 +38,9 @@ export async function handleRecordRun({ request, db }) {
   }
 
   const key = typeof body.search === "string" ? body.search : "";
-  if (!key) {return json({ error: "missing search (track key)" }, 400);}
+  if (!key) {
+    return json({ error: "missing search (track key)" }, 400);
+  }
   if (!(await db.trackExists(key))) {
     return unknownTrack(key);
   }

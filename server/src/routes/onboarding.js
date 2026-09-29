@@ -67,7 +67,9 @@ const ROLE_STRINGS = ["name", "titles", "company_kinds", "rule_outs", "min_pay"]
  */
 export async function handleCheckInvite({ env, params }) {
   const invite = await findInvite(env.DB, params[0]);
-  if (!invite) {return json({ valid: false, reason: "invalid" });}
+  if (!invite) {
+    return json({ valid: false, reason: "invalid" });
+  }
   const state = inviteState(invite, new Date().toISOString());
   return state === "open" ? json({ valid: true, expires_at: invite.expires_at }) : json({ valid: false, reason: state });
 }
@@ -92,12 +94,18 @@ export async function handleSignup({ request, env }) {
 
   const invite = await findInvite(env.DB, typeof body.code === "string" ? body.code : "");
   const state = invite ? inviteState(invite, new Date().toISOString()) : "invalid";
-  if (state !== "open") {return json({ error: "this invite can't be used", reason: state }, 410);}
+  if (state !== "open") {
+    return json({ error: "this invite can't be used", reason: state }, 410);
+  }
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  if (!name) {return json({ error: "name is required", field: "name" }, 400);}
-  if (name.length > NAME_MAX) {return json({ error: `name must be at most ${NAME_MAX} characters`, field: "name" }, 400);}
+  if (!name) {
+    return json({ error: "name is required", field: "name" }, 400);
+  }
+  if (name.length > NAME_MAX) {
+    return json({ error: `name must be at most ${NAME_MAX} characters`, field: "name" }, 400);
+  }
   if (password.length < PASSWORD_MIN_LENGTH) {
     return json({ error: `password must be at least ${PASSWORD_MIN_LENGTH} characters`, field: "password" }, 400);
   }
@@ -106,7 +114,9 @@ export async function handleSignup({ request, env }) {
   if (outcome.taken) {
     return json({ error: `The name “${name}” is already taken here — pick another.`, field: "name" }, 409);
   }
-  if (outcome.reason) {return json({ error: "this invite can't be used", reason: outcome.reason }, 410);}
+  if (outcome.reason) {
+    return json({ error: "this invite can't be used", reason: outcome.reason }, 410);
+  }
 
   const token = await createSession(env.DB, outcome.user.id, SESSION_LABEL.browser);
   return json({ token, user: outcome.user }, 201);
@@ -139,7 +149,9 @@ export async function handleGetIntake({ db }) {
  * the page uploads files before it sends the answers.
  */
 export async function handlePostIntake({ request, db, docs, user }) {
-  if (user.demo) {return json({ error: "a demo account cannot send setup" }, 403);}
+  if (user.demo) {
+    return json({ error: "a demo account cannot send setup" }, 403);
+  }
   const body = await readJson(request);
   if (body instanceof Response) {
     return body;
@@ -348,10 +360,16 @@ export async function handleRevokeInvite({ request, env }) {
   if (body instanceof Response) {
     return body;
   }
-  if (!Number.isInteger(body.id)) {return json({ error: "id must be an invite id" }, 400);}
+  if (!Number.isInteger(body.id)) {
+    return json({ error: "id must be an invite id" }, 400);
+  }
   const outcome = await revokeInvite(env.DB, body.id);
-  if (outcome === "missing") {return json({ error: "no such invite" }, 404);}
-  if (outcome === "used") {return json({ error: "invite already used" }, 409);}
+  if (outcome === "missing") {
+    return json({ error: "no such invite" }, 404);
+  }
+  if (outcome === "used") {
+    return json({ error: "invite already used" }, 409);
+  }
   return json({ id: body.id, state: "revoked" });
 }
 
@@ -380,8 +398,12 @@ export async function handleMintSearchToken({ request, env }) {
     return body;
   }
   const outcome = await mintSearchToken(env.DB, body.user);
-  if (outcome.missing) {return json({ error: "no such user" }, 404);}
-  if (outcome.demo) {return json({ error: "a demo account has no scheduled search" }, 403);}
+  if (outcome.missing) {
+    return json({ error: "no such user" }, 404);
+  }
+  if (outcome.demo) {
+    return json({ error: "a demo account has no scheduled search" }, 403);
+  }
   return json({ token: outcome.token, user: outcome.user, label: SESSION_LABEL.scheduledSearch, replaced: outcome.replaced }, 201);
 }
 
@@ -397,14 +419,22 @@ export async function handleCompleteIntake({ request, env }) {
   if (body instanceof Response) {
     return body;
   }
-  if (typeof body.user !== "string" || !body.user) {return json({ error: "user must be an account id" }, 400);}
-  if (body.status !== "done" && body.status !== "failed") {return json({ error: 'status must be "done" or "failed"' }, 400);}
+  if (typeof body.user !== "string" || !body.user) {
+    return json({ error: "user must be an account id" }, 400);
+  }
+  if (body.status !== "done" && body.status !== "failed") {
+    return json({ error: 'status must be "done" or "failed"' }, 400);
+  }
   const note = body.note === undefined ? "" : body.note;
   if (typeof note !== "string" || note.length > STATUS_NOTE_MAX) {
     return json({ error: `note must be at most ${STATUS_NOTE_MAX} characters` }, 400);
   }
   const outcome = await completeIntake(env.DB, body.user, body.status, note);
-  if (outcome.missing) {return json({ error: "no such intake" }, 404);}
-  if (outcome.done) {return json({ error: "intake already done" }, 409);}
+  if (outcome.missing) {
+    return json({ error: "no such intake" }, 404);
+  }
+  if (outcome.done) {
+    return json({ error: "intake already done" }, 409);
+  }
   return json(outcome);
 }

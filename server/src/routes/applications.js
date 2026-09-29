@@ -66,7 +66,9 @@ export async function handleSetApplicationStatus({ request, db, params }) {
     body.status === "To Apply" ? "dateApplied" : null,
     explicitDate
   );
-  if (!application) {return json({ error: "application not found" }, 404);}
+  if (!application) {
+    return json({ error: "application not found" }, 404);
+  }
   await db.touchUpdated();
   return json({ application });
 }
@@ -81,9 +83,13 @@ export async function handleDeleteApplication({ request, db }) {
     return body;
   }
 
-  if (!body.id) {return json({ error: "missing id" }, 400);}
+  if (!body.id) {
+    return json({ error: "missing id" }, 400);
+  }
   const deleted = await db.deleteApplication(body.id);
-  if (!deleted) {return json({ error: "application not found" }, 404);}
+  if (!deleted) {
+    return json({ error: "application not found" }, 404);
+  }
   await db.touchUpdated();
   return json({ ok: true });
 }
@@ -223,7 +229,9 @@ export async function handleRequeueAutofill({ request, db }) {
   }
 
   const ids = Array.isArray(body.ids) ? body.ids.filter((id) => id || id === 0) : [];
-  if (ids.length === 0) {return json({ error: "no ids provided" }, 400);}
+  if (ids.length === 0) {
+    return json({ error: "no ids provided" }, 400);
+  }
 
   const requeued = await db.requeueAutofill(ids);
   return json({ requeued });

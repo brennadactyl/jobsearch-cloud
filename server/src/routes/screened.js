@@ -170,10 +170,14 @@ export async function handleAddScreened({ request, db }) {
   }
 
   const incoming = Array.isArray(body.screened) ? body.screened : [];
-  if (incoming.length === 0) {return json({ error: "no screened items provided" }, 400);}
+  if (incoming.length === 0) {
+    return json({ error: "no screened items provided" }, 400);
+  }
 
   const valid = incoming.filter((item) => item.search && item.url);
-  if (valid.length === 0) {return json({ error: "no valid screened items in payload" }, 400);}
+  if (valid.length === 0) {
+    return json({ error: "no valid screened items in payload" }, 400);
+  }
 
   const on = isoDate(body.on);
 
@@ -203,7 +207,9 @@ export async function handleAddScreened({ request, db }) {
   const isExcluded = excludedCompanyMatcher(settings.excluded_companies);
   const allowed = valid.filter((item) => !isExcluded(item.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) {return json({ added: 0, duplicates: 0, excluded });}
+  if (allowed.length === 0) {
+    return json({ added: 0, duplicates: 0, excluded });
+  }
 
   // DELISTED_REASON is reserved for delistings, and a run could reasonably
   // describe a dead-on-arrival candidate in those words - see server/README.md,
@@ -302,13 +308,17 @@ export async function handleUnscreen({ request, db }) {
   }
 
   const key = typeof body.search === "string" ? body.search.trim() : "";
-  if (!key) {return json({ error: "missing search (track key)" }, 400);}
+  if (!key) {
+    return json({ error: "missing search (track key)" }, 400);
+  }
   if (!(await db.trackExists(key))) {
     return unknownTrack(key);
   }
 
   const urls = Array.isArray(body.urls) ? body.urls.filter((u) => typeof u === "string" && u) : [];
-  if (urls.length === 0) {return json({ error: "missing urls" }, 400);}
+  if (urls.length === 0) {
+    return json({ error: "missing urls" }, 400);
+  }
 
   // The whole feed group, not just the key given or its feeder: a run's
   // rejections sit under the feeder (handleAddScreened rewrites them), a

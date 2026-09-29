@@ -216,7 +216,9 @@ export async function handleGetDocument({ docs, params }) {
   const obj = await docs.get(path);
   // `Docs` only addresses keys under this caller's own prefix, so another
   // person's path is simply not there.
-  if (!obj) {return json({ error: `no document at "${path}"` }, 404);}
+  if (!obj) {
+    return json({ error: `no document at "${path}"` }, 404);
+  }
 
   return new Response(obj.body, {
     headers: {
@@ -362,7 +364,9 @@ export async function handlePutDocument({ request, docs, db, params }) {
     await db.markProfilesStale(readers.map((s) => s.key), listed, new Date().toISOString());
   }
 
-  if (!extracted) {return json({ path, etag: written.etag, bytes: written.bytes });}
+  if (!extracted) {
+    return json({ path, etag: written.etag, bytes: written.bytes });
+  }
   return json({ path, etag: written.etag, bytes: written.bytes, text_path: textPath, words: extracted.words });
 }
 
@@ -429,7 +433,9 @@ export async function handleDeleteDocument({ docs, db, params }) {
   }
 
   const deleted = await docs.delete(path);
-  if (!deleted) {return json({ error: `no document at "${path}"` }, 404);}
+  if (!deleted) {
+    return json({ error: `no document at "${path}"` }, 404);
+  }
 
   // Removing a Word resume removes the text read from it: the pair is one
   // resume. The Word file goes first, so a failure between the two leaves a

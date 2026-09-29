@@ -170,7 +170,9 @@ export async function revokeInvite(d1, id) {
 export async function signupWithInvite(d1, invite, name, password) {
   // Cheap refusal first, before the password is stretched. The constraint below
   // is what actually decides, since a name can be taken between the two.
-  if (await getUserByName(d1, name)) {return { taken: true };}
+  if (await getUserByName(d1, name)) {
+    return { taken: true };
+  }
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -192,7 +194,9 @@ export async function signupWithInvite(d1, invite, name, password) {
         .bind(id, name, hash, salt, iterations, now.slice(0, 10), invite.id, id),
     ]);
   } catch (err) {
-    if (/UNIQUE constraint failed: users\.name/i.test(String(err && err.message))) {return { taken: true };}
+    if (/UNIQUE constraint failed: users\.name/i.test(String(err && err.message))) {
+      return { taken: true };
+    }
     throw err;
   }
   if (!results[1].meta.changes) {
@@ -220,8 +224,12 @@ export async function signupWithInvite(d1, invite, name, password) {
  */
 export async function mintSearchToken(d1, userId) {
   const user = typeof userId === "string" && userId ? await getUserById(d1, userId) : null;
-  if (!user) {return { missing: true };}
-  if (Number(user.demo)) {return { demo: true };}
+  if (!user) {
+    return { missing: true };
+  }
+  if (Number(user.demo)) {
+    return { demo: true };
+  }
   const token = newSessionToken();
   const [removed] = await d1.batch([
     d1.prepare("DELETE FROM sessions WHERE user_id = ? AND label = ?").bind(user.id, SESSION_LABEL.scheduledSearch),
@@ -299,7 +307,11 @@ export async function completeIntake(d1, userId, status, note) {
     )
     .bind(userId)
     .first();
-  if (!row) {return { missing: true };}
-  if (!result.meta.changes) {return { done: true };}
+  if (!row) {
+    return { missing: true };
+  }
+  if (!result.meta.changes) {
+    return { done: true };
+  }
   return { user: { id: row.user_id, name: row.name || "" }, status: row.status, status_note: row.status_note, updated_at: row.updated_at };
 }

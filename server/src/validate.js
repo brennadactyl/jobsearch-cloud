@@ -106,7 +106,9 @@ export function storedArea(area, list) {
  */
 export function areaToStore(sent, location, list) {
   const area = storedArea(sent, list);
-  if (area) {return { area, cleared: false, filled: false };}
+  if (area) {
+    return { area, cleared: false, filled: false };
+  }
   if (typeof sent === "string" && sent.trim()) {
     return { area: "", cleared: true, filled: false };
   }
@@ -266,8 +268,12 @@ export const SCREENED_NOT_BY_RULES = ["delisted", "dead", "duplicate", "other"];
  */
 export function storedKind(sent) {
   const value = typeof sent === "string" ? sent.trim().toLowerCase() : "";
-  if (!value) {return { kind: "", coercedFrom: "" };}
-  if (SCREENED_KINDS.includes(value)) {return { kind: value, coercedFrom: "" };}
+  if (!value) {
+    return { kind: "", coercedFrom: "" };
+  }
+  if (SCREENED_KINDS.includes(value)) {
+    return { kind: value, coercedFrom: "" };
+  }
   return { kind: KIND_WHEN_UNKNOWN, coercedFrom: typeof sent === "string" ? sent : String(sent) };
 }
 

@@ -129,7 +129,9 @@ export class CompanyList {
         normalizeCompany(r.company) &&
         (r.board || r.endpoint || r.url_shape || r.dead_signal || r.note || r.wall)
     );
-    if (useful.length === 0) {return { written: 0 };}
+    if (useful.length === 0) {
+      return { written: 0 };
+    }
 
     const works = "(excluded.board <> '' OR excluded.endpoint <> '')";
     const positive =

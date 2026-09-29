@@ -87,7 +87,9 @@ export function mergedFacts(kept, absorbed) {
     }
   }
   row.verified_on = [kept, ...absorbed].map((r) => r.verified_on || "").sort().pop();
-  if (row.board || row.endpoint) {return { ...row, ...NO_WALL };}
+  if (row.board || row.endpoint) {
+    return { ...row, ...NO_WALL };
+  }
   if (!row.wall) {
     const walled = absorbed.filter((a) => a.wall).sort((a, b) => b.wall_last_on.localeCompare(a.wall_last_on))[0];
     if (walled) {

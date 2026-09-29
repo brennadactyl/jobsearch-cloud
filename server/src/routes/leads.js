@@ -42,13 +42,17 @@ export async function handleAddLeads({ request, db }) {
   }
 
   const incoming = Array.isArray(body.leads) ? body.leads : [];
-  if (incoming.length === 0) {return json({ error: "no leads provided" }, 400);}
+  if (incoming.length === 0) {
+    return json({ error: "no leads provided" }, 400);
+  }
 
   // Of EXTRA_FIELDS, only team/setup/comp are things a posting states. The rest
   // (referral, resume, lastContact, nextAction*, link) are the person's own:
   // accepted, but a search never sends them, so they default to ''.
   const valid = incoming.filter((lead) => lead.search && lead.url && lead.company && lead.title);
-  if (valid.length === 0) {return json({ error: "no valid leads in payload" }, 400);}
+  if (valid.length === 0) {
+    return json({ error: "no valid leads in payload" }, 400);
+  }
 
   // The run's own local date, applied to every lead that didn't carry one.
   // Same reasoning as /api/runs' `on`: the worker only knows UTC, so it cannot
@@ -72,7 +76,9 @@ export async function handleAddLeads({ request, db }) {
   const isExcluded = excludedCompanyMatcher(settings.excluded_companies);
   const allowed = valid.filter((lead) => !isExcluded(lead.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) {return json({ added: 0, duplicates: 0, excluded, area_cleared: 0, area_filled: 0 });}
+  if (allowed.length === 0) {
+    return json({ added: 0, duplicates: 0, excluded, area_cleared: 0, area_filled: 0 });
+  }
 
   // A lead's area is kept only when it is exactly one of the person's ranked
   // entries; anything else is stored empty, never refused, since losing a lead
@@ -170,7 +176,9 @@ export async function handleSetLeadStatus({ request, db, params }) {
   }
 
   const [lead, existingApp] = await Promise.all([db.getLead(id), db.getApplicationByLeadId(id)]);
-  if (!lead) {return json({ error: "lead not found" }, 404);}
+  if (!lead) {
+    return json({ error: "lead not found" }, 404);
+  }
 
   const willCreateApp = body.status === "Applied" && !existingApp;
   const { lead: updatedLead, application: newApp } = await db.setLeadStatusAndMaybeCreateApplication(
@@ -226,7 +234,9 @@ export async function handleDeleteLeads({ request, db }) {
   }
 
   const ids = Array.isArray(body.ids) ? body.ids : body.id != null ? [body.id] : [];
-  if (!ids.length) {return json({ error: "missing ids" }, 400);}
+  if (!ids.length) {
+    return json({ error: "missing ids" }, 400);
+  }
 
   let removed = 0;
   const kept = [];

@@ -73,7 +73,9 @@ export default {
     }
 
     const route = matchRoute(SESSION_ROUTES, request.method, url.pathname);
-    if (!route) {return new Response("Not found", { status: 404, headers: CORS_HEADERS });}
+    if (!route) {
+      return new Response("Not found", { status: 404, headers: CORS_HEADERS });
+    }
 
     return route.handler({
       request,

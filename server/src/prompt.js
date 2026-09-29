@@ -283,7 +283,9 @@ const PAY_FLOOR_UNITS = { year: "a year", hour: "an hour" };
 function payFloor(track) {
   const amount = typeof track.pay_floor === "string" ? track.pay_floor.trim() : "";
   const unit = PAY_FLOOR_UNITS[track.pay_floor_unit] || "";
-  if (!amount || !unit) {return { finding: "", disqualified: "" };}
+  if (!amount || !unit) {
+    return { finding: "", disqualified: "" };
+  }
   return {
     finding:
       `paying at least ${amount} ${unit} - a stated range that includes that or lies entirely above it, ` +
@@ -356,7 +358,9 @@ function geoStep(settings, name) {
 // paraphrase. A person with nothing ranked gets no area at all.
 function areaStep(settings, name) {
   const ranked = typeof settings.priority_locations === "string" ? settings.priority_locations.trim() : "";
-  if (!ranked) {return { areaKey: "", areaRule: "" };}
+  if (!ranked) {
+    return { areaKey: "", areaRule: "" };
+  }
   return {
     areaKey: ", area",
     areaRule:
@@ -406,7 +410,9 @@ function filingStep(track, { fed, multi, allKeys }, doc) {
 // all under the tab that happens to own the search. Only a multi-tab run has
 // anything to say: a single-tab search has one key, which the helper stamps.
 function screenedTabFields({ multi, allKeys }) {
-  if (!multi) {return { screenedTab: "", screenedTabRule: "" };}
+  if (!multi) {
+    return { screenedTab: "", screenedTabRule: "" };
+  }
   return {
     screenedTab: ", search",
     screenedTabRule:

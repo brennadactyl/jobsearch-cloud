@@ -43,7 +43,9 @@ export function resumeParts(path) {
   }
   const name = path.slice("resumes/".length);
   const dot = name.lastIndexOf(".");
-  if (dot <= 0) {return { name, base: name, ext: "" };}
+  if (dot <= 0) {
+    return { name, base: name, ext: "" };
+  }
   return { name, base: name.slice(0, dot), ext: name.slice(dot + 1).toLowerCase() };
 }
 

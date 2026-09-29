@@ -171,7 +171,9 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   }
 
   const key = typeof body.search === "string" ? body.search : "";
-  if (!key) {return json({ error: "missing search (track key)" }, 400);}
+  if (!key) {
+    return json({ error: "missing search (track key)" }, 400);
+  }
   if (!(await db.trackExists(key))) {
     return unknownTrack(key);
   }
@@ -191,7 +193,9 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
     aliased++;
     return { ...i, company };
   });
-  if (valid.length === 0) {return json({ error: "no companies provided" }, 400);}
+  if (valid.length === 0) {
+    return json({ error: "no companies provided" }, 400);
+  }
 
   // The run's own date: the worker only knows UTC, and a 01:00 local run is
   // already the next UTC day. An explicit "" means "register these companies,
@@ -219,7 +223,9 @@ export async function handleRecordSweeps({ request, db, companyList, user }) {
   const isExcluded = await excluderFor(db);
   const allowed = valid.filter((i) => !isExcluded(i.company));
   const excluded = valid.length - allowed.length;
-  if (allowed.length === 0) {return json({ recorded: 0, excluded, aliased, on });}
+  if (allowed.length === 0) {
+    return json({ recorded: 0, excluded, aliased, on });
+  }
 
   // A wall is dated evidence: it is served only after two separate dates, and
   // only while the last is fresh (companyList.getCompanyFetch). An undated one is not a

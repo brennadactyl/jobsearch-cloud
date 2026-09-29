@@ -123,8 +123,12 @@ export class Docs {
   async put(path, body, contentType, ifMatch, words) {
     /** @type {R2PutOptions} */
     const options = { httpMetadata: { contentType } };
-    if (Number.isInteger(words)) {options.customMetadata = { words: String(words) };}
-    if (ifMatch) {options.onlyIf = { etagMatches: bareEtag(ifMatch) };}
+    if (Number.isInteger(words)) {
+      options.customMetadata = { words: String(words) };
+    }
+    if (ifMatch) {
+      options.onlyIf = { etagMatches: bareEtag(ifMatch) };
+    }
 
     const obj = await this.bucket.put(this.#key(path), body, options);
     if (!obj) {

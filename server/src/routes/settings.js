@@ -157,7 +157,9 @@ export async function handlePostSettings({ request, db, docs }) {
       continue;
     }
     const problem = locationSettingError(key, body[key]);
-    if (problem) {return json({ error: problem, field: key }, 400);}
+    if (problem) {
+      return json({ error: problem, field: key }, 400);
+    }
     locations[key] = body[key].trim();
   }
   // Judged on what the write leaves, so clearing the searched list is accepted
@@ -169,7 +171,9 @@ export async function handlePostSettings({ request, db, docs }) {
       locations.search_locations ?? settings.search_locations,
       locations.priority_locations ?? settings.priority_locations
     );
-    if (problem) {return json({ error: problem, field: "search_locations" }, 400);}
+    if (problem) {
+      return json({ error: problem, field: "search_locations" }, 400);
+    }
   }
 
   const values = {};
@@ -183,7 +187,9 @@ export async function handlePostSettings({ request, db, docs }) {
         : key === "pronouns"
           ? pronounsError(body[key], Object.keys(PRONOUNS))
           : excludedCompaniesError(body[key]);
-    if (problem) {return json({ error: problem, field: key }, 400);}
+    if (problem) {
+      return json({ error: problem, field: key }, 400);
+    }
     values[key] = typeof body[key] === "string" ? body[key].trim() : body[key];
   }
 
@@ -201,7 +207,9 @@ export async function handlePostSettings({ request, db, docs }) {
 
   const bySearch = {};
   for (const [key, sent] of Object.entries(searches || {})) {
-    if (!byKey.has(key)) {return json({ error: `unknown search "${key}"`, search: key, field: "label" }, 404);}
+    if (!byKey.has(key)) {
+      return json({ error: `unknown search "${key}"`, search: key, field: "label" }, 404);
+    }
     if (!sent || typeof sent !== "object" || Array.isArray(sent)) {
       return json({ error: `the entry for ${key} must be an object of fields`, search: key, field: "label" }, 400);
     }
@@ -213,7 +221,9 @@ export async function handlePostSettings({ request, db, docs }) {
     const fields = {};
     for (const [field, value] of Object.entries(sent)) {
       const problem = SEARCH_FIELD_CHECKS[field](field, value, byKey.get(key));
-      if (problem) {return json({ error: problem, search: key, field }, 400);}
+      if (problem) {
+        return json({ error: problem, search: key, field }, 400);
+      }
       if (field !== "paused") {
         fields[field] = value.trim();
       }
@@ -235,7 +245,9 @@ export async function handlePostSettings({ request, db, docs }) {
         fields.pay_floor ?? track.pay_floor ?? "",
         fields.pay_floor_unit ?? track.pay_floor_unit ?? ""
       );
-      if (problem) {return json({ error: problem, search: key, field: "pay_floor" }, 400);}
+      if (problem) {
+        return json({ error: problem, search: key, field: "pay_floor" }, 400);
+      }
     }
     if (Object.keys(fields).length) {
       bySearch[key] = fields;
@@ -290,7 +302,9 @@ export async function handlePostSettings({ request, db, docs }) {
     }
 
     const changed = JSON.stringify(documents) !== JSON.stringify(current);
-    if (changed) {changes.push({ key, documents, was: current.find((p) => p.startsWith("resumes/")) || "" });}
+    if (changed) {
+      changes.push({ key, documents, was: current.find((p) => p.startsWith("resumes/")) || "" });
+    }
     // A search not yet written up gets its profile from the current resume when
     // it is, so it has nothing pending (db.setSearchResumes).
     reply[key] = { documents, profile_pending: !!track.role_search_line && (changed || !!track.profile_stale_since) };

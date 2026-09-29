@@ -1331,7 +1331,9 @@ export class Db {
    */
   async dropKnownUrls(rows) {
     const asked = [...new Set(rows.map((r) => r.search).filter(Boolean))];
-    if (asked.length === 0) {return { fresh: [], duplicates: rows.length };}
+    if (asked.length === 0) {
+      return { fresh: [], duplicates: rows.length };
+    }
 
     // A track's feed group: the track that runs the search, plus every tab it
     // fills. `fed_by` is one level (a fed track is a tab, not a search), so
@@ -1346,7 +1348,11 @@ export class Db {
     const groupKeys = tracks.results.map((t) => t.key).filter((k) => roots.has(root(k)));
     // A key the batch names that isn't a configured track has no group; keep it
     // so it still dedups against itself rather than skipping the check.
-    for (const k of asked) {if (!groupKeys.includes(k)) {groupKeys.push(k);}}
+    for (const k of asked) {
+      if (!groupKeys.includes(k)) {
+        groupKeys.push(k);
+      }
+    }
 
     const seen = new Map([...roots].map((r) => [r, new Set()]));
     const placeholders = groupKeys.map(() => "?").join(", ");
@@ -1374,7 +1380,11 @@ export class Db {
     // searches may each hold; a person applies once.
     for (const row of applications.results) {
       const key = canonicalUrl(row.link);
-      if (key) {for (const set of seen.values()) {set.add(key);}}
+      if (key) {
+        for (const set of seen.values()) {
+          set.add(key);
+        }
+      }
     }
 
     const fresh = [];
@@ -1420,7 +1430,9 @@ export class Db {
     const t = on || today();
 
     const { fresh, duplicates } = await this.dropKnownUrls(leads);
-    if (fresh.length === 0) {return { added: 0, duplicates };}
+    if (fresh.length === 0) {
+      return { added: 0, duplicates };
+    }
 
     const stmt = this.d1.prepare(
       `INSERT OR IGNORE INTO leads
@@ -1579,7 +1591,9 @@ export class Db {
     const t = on || today();
 
     const { fresh, duplicates } = await this.dropKnownUrls(items);
-    if (fresh.length === 0) {return { added: 0, duplicates };}
+    if (fresh.length === 0) {
+      return { added: 0, duplicates };
+    }
 
     const stmt = this.d1.prepare(
       // added_by is always 'run': this path serves POST /api/screened, a
@@ -1631,7 +1645,9 @@ export class Db {
    */
   async unscreenUrls(searches, urls) {
     const keys = Array.isArray(searches) ? searches : [searches];
-    if (keys.length === 0) {return { removed: 0, urls: [], unmatched: urls.slice() };}
+    if (keys.length === 0) {
+      return { removed: 0, urls: [], unmatched: urls.slice() };
+    }
     const wanted = new Map(urls.map((u) => [canonicalUrl(u), u]));
     const inKeys = keys.map(() => "?").join(",");
     const rows = await this.d1
@@ -1650,7 +1666,9 @@ export class Db {
     // Reported rather than swallowed: a silent 0 for a url never screened here
     // would look the same as a successful undo.
     const unmatched = [...wanted.values()];
-    if (hits.length === 0) {return { removed: 0, urls: [], unmatched };}
+    if (hits.length === 0) {
+      return { removed: 0, urls: [], unmatched };
+    }
 
     const placeholders = hits.map(() => "?").join(",");
     const res = await this.d1
@@ -1945,11 +1963,17 @@ export class Db {
 
     const match = (rows, col) => rows.results.find((r) => canonicalUrl(r[col]) === key);
     const app = match(apps, "link");
-    if (app) {return { where: "application", row: app };}
+    if (app) {
+      return { where: "application", row: app };
+    }
     const lead = match(leads, "url");
-    if (lead) {return { where: "lead", row: lead };}
+    if (lead) {
+      return { where: "lead", row: lead };
+    }
     const screenedRow = match(screened, "url");
-    if (screenedRow) {return { where: "screened", row: screenedRow };}
+    if (screenedRow) {
+      return { where: "screened", row: screenedRow };
+    }
     return null;
   }
 

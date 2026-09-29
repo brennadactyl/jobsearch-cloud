@@ -116,7 +116,9 @@ export async function handleGetRunLog({ db, runLogs, params }) {
   }
 
   const obj = await runLogs.get(track, started);
-  if (!obj) {return json({ error: `no log for the ${track} run that started ${started}` }, 404);}
+  if (!obj) {
+    return json({ error: `no log for the ${track} run that started ${started}` }, 404);
+  }
   return new Response(obj.body, {
     headers: { "content-type": "text/plain; charset=utf-8", ...CORS_HEADERS },
   });

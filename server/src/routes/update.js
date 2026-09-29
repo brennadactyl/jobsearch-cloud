@@ -48,7 +48,9 @@ export async function handleUpdate({ request, db }) {
     // read as "dead, date unknown".
     if (typeof body.delistedOn === "string" && body.delistedOn.trim()) {
       const on = isoDate(body.delistedOn.trim());
-      if (!on) {return json({ error: "delistedOn must be YYYY-MM-DD" }, 400);}
+      if (!on) {
+        return json({ error: "delistedOn must be YYYY-MM-DD" }, 400);
+      }
       return removeDelistedLead(db, body.id, on);
     }
 
@@ -72,7 +74,9 @@ export async function handleUpdate({ request, db }) {
       }
       throw err;
     }
-    if (!lead) {return json({ error: "lead not found" }, 404);}
+    if (!lead) {
+      return json({ error: "lead not found" }, 404);
+    }
     await db.touchUpdated();
     return json({ ok: true, lead });
   }
@@ -80,7 +84,9 @@ export async function handleUpdate({ request, db }) {
   if (body.type === "application") {
     if (body.id) {
       const app = await db.updateApplication(body.id, body);
-      if (!app) {return json({ error: "application not found" }, 404);}
+      if (!app) {
+        return json({ error: "application not found" }, 404);
+      }
       await db.touchUpdated();
       return json({ ok: true, application: app });
     }

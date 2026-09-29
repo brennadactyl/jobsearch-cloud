@@ -41,10 +41,14 @@ export async function handlePurgeSearch({ request, env }) {
 
   const name = typeof body.user === "string" ? body.user.trim() : "";
   const key = typeof body.search === "string" ? body.search.trim() : "";
-  if (!name || !key) {return json({ error: "user and search are required" }, 400);}
+  if (!name || !key) {
+    return json({ error: "user and search are required" }, 400);
+  }
 
   const user = await getUserByName(env.DB, name);
-  if (!user) {return json({ error: `no user named "${name}"` }, 404);}
+  if (!user) {
+    return json({ error: `no user named "${name}"` }, 404);
+  }
 
   const db = new Db(env.DB, user.id);
   if (await db.trackExists(key)) {
@@ -64,7 +68,9 @@ export async function handlePurgeSearch({ request, env }) {
   // `dryRun` so the rows can be counted before anyone commits to removing
   // them. The counts come from the same method the purge uses, so what this
   // reports is what that would delete.
-  if (body.dryRun) {return json({ dryRun: true, wouldPurge: counts });}
+  if (body.dryRun) {
+    return json({ dryRun: true, wouldPurge: counts });
+  }
 
   const purged = await db.purgeSearch(key);
   await db.touchUpdated();
@@ -106,7 +112,9 @@ export async function handleCleanUpCompanies({ request, env }) {
 
   const dryRun = body.dryRun === true;
   const result = await new CompanyList(env.DB).cleanUpCompanies(body, dryRun);
-  if ("error" in result) {return json({ error: result.error }, result.status);}
+  if ("error" in result) {
+    return json({ error: result.error }, result.status);
+  }
 
   return json({
     dryRun,

@@ -76,16 +76,24 @@ function matchLeadsByUrl(leads, urls) {
 // disagree about the search, which is worth failing loudly over.
 async function parseUrlReport(request, db) {
   const body = await readJson(request);
-  if (body instanceof Response) {return { error: body };}
+  if (body instanceof Response) {
+    return { error: body };
+  }
 
   const key = typeof body.search === "string" ? body.search : "";
-  if (!key) {return { error: json({ error: "missing search (track key)" }, 400) };}
-  if (!(await db.trackExists(key))) {return { error: unknownTrack(key) };}
+  if (!key) {
+    return { error: json({ error: "missing search (track key)" }, 400) };
+  }
+  if (!(await db.trackExists(key))) {
+    return { error: unknownTrack(key) };
+  }
 
   const urls = (Array.isArray(body.urls) ? body.urls : [])
     .filter((u) => typeof u === "string" && u.trim())
     .map((u) => u.trim());
-  if (urls.length === 0) {return { error: json({ error: "no urls provided" }, 400) };}
+  if (urls.length === 0) {
+    return { error: json({ error: "no urls provided" }, 400) };
+  }
   return { body, key, urls };
 }
 
@@ -171,10 +179,14 @@ async function delistLead(db, lead, on) {
  */
 export async function removeDelistedLead(db, id, on) {
   const lead = await db.getLead(id);
-  if (!lead) {return json({ error: "lead not found" }, 404);}
+  if (!lead) {
+    return json({ error: "lead not found" }, 404);
+  }
 
   const { kept, removed } = await delistLead(db, lead, on);
-  if (kept) {return json({ ok: true, lead, removed: false, reason: "applied to - kept" });}
+  if (kept) {
+    return json({ ok: true, lead, removed: false, reason: "applied to - kept" });
+  }
 
   await db.touchUpdated();
   return json({ ok: true, removed, id: lead.id, screened: lead.url });
@@ -203,7 +215,9 @@ export async function handleDelistUrls({ request, db }) {
   }
 
   const on = isoDate(typeof parsed.body.on === "string" ? parsed.body.on.trim() : "");
-  if (!on) {return json({ error: "on must be YYYY-MM-DD" }, 400);}
+  if (!on) {
+    return json({ error: "on must be YYYY-MM-DD" }, 400);
+  }
 
   const { matched, unmatched } = matchLeadsByUrl(await db.getLeadsForUrlMatch(), parsed.urls);
 

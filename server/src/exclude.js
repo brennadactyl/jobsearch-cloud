@@ -89,7 +89,11 @@ export function excludedCompanyMatcher(excludedCompanies) {
       return true;
     }
     const padded = ` ${name} `;
-    for (const phrase of phrases) {if (padded.includes(phrase)) {return true;}}
+    for (const phrase of phrases) {
+      if (padded.includes(phrase)) {
+        return true;
+      }
+    }
     return false;
   };
 }
