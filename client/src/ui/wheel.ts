@@ -14,8 +14,12 @@ export const WHEEL_TARGET = "data-wheel-target";
 /** Whether `el` scrolls vertically and has room to move `dy` pixels that way. */
 function canScroll(el: Element, dy: number): boolean {
   const overflow = getComputedStyle(el).overflowY;
-  if (overflow !== "auto" && overflow !== "scroll") return false;
-  if (el.scrollHeight <= el.clientHeight) return false;
+  if (overflow !== "auto" && overflow !== "scroll") {
+    return false;
+  }
+  if (el.scrollHeight <= el.clientHeight) {
+    return false;
+  }
   return dy > 0 ? el.scrollTop + el.clientHeight < el.scrollHeight - 1 : el.scrollTop > 0;
 }
 
@@ -26,7 +30,9 @@ function canScroll(el: Element, dy: number): boolean {
  */
 export function wheelTarget(from: Element, dy: number, doc: Document = document): HTMLElement | null {
   for (let el: Element | null = from; el && el !== doc.documentElement; el = el.parentElement) {
-    if (canScroll(el, dy)) return null;
+    if (canScroll(el, dy)) {
+      return null;
+    }
   }
   const dialogs = doc.querySelectorAll(".modal-overlay");
   const scope: ParentNode = dialogs.length ? dialogs[dialogs.length - 1] : doc;
@@ -36,8 +42,12 @@ export function wheelTarget(from: Element, dy: number, doc: Document = document)
 
 /** A wheel's vertical distance in pixels, whichever unit the device reports it in. */
 function pixelsOf(e: WheelEvent, target: HTMLElement): number {
-  if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) return e.deltaY * 16;
-  if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) return e.deltaY * target.clientHeight;
+  if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    return e.deltaY * 16;
+  }
+  if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    return e.deltaY * target.clientHeight;
+  }
   return e.deltaY;
 }
 
@@ -46,10 +56,16 @@ export function useWheelAnywhere(): void {
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
       // Pinch and ctrl+wheel zoom; a sideways scroll belongs to a wide table.
-      if (e.defaultPrevented || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-      if (!(e.target instanceof Element)) return;
+      if (e.defaultPrevented || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        return;
+      }
+      if (!(e.target instanceof Element)) {
+        return;
+      }
       const target = wheelTarget(e.target, e.deltaY);
-      if (!target) return;
+      if (!target) {
+        return;
+      }
       e.preventDefault();
       target.scrollTop += pixelsOf(e, target);
     };

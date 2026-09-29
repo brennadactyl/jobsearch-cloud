@@ -75,7 +75,9 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
             value={link}
             onChange={(e) => setLink(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") add();
+              if (e.key === "Enter") {
+                add();
+              }
             }}
           />
         </div>
@@ -212,7 +214,7 @@ function RemoveApp({ app, icon }: { app: Application; icon?: boolean }) {
   const del = useDeleteApplication();
   const name = `${app.company} ${app.title}`.trim() || "this row";
   const onClick = () => {
-    if (window.confirm(`Remove ${name} from Applications?`)) del.mutate({ id: app.id });
+    if (window.confirm(`Remove ${name} from Applications?`)) {del.mutate({ id: app.id });}
   };
   return icon ? (
     <button
@@ -233,7 +235,9 @@ function RemoveApp({ app, icon }: { app: Application; icon?: boolean }) {
 
 /** The track an application came from, when it came from a lead - the one thing the tab no longer says by itself. */
 function appTrackLabel(app: Application, data: TrackerData): string {
-  if (!app.leadId) return "";
+  if (!app.leadId) {
+    return "";
+  }
   const lead = data.leads.find((l) => String(l.id) === String(app.leadId));
   return lead ? (buildTracks(data.tracks)[lead.search]?.label ?? "") : "";
 }

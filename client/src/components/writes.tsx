@@ -174,7 +174,9 @@ export function StageDateModal({
 }) {
   // Split so the dialog mounts per opening: today's date is plain initial state
   // and autoFocus does the focusing, with no resetting effect.
-  if (!pending) return null;
+  if (!pending) {
+    return null;
+  }
   return <StageDateDialog key={`${pending.app.id}:${pending.status}`} pending={pending} onClose={onClose} />;
 }
 
@@ -184,7 +186,9 @@ function StageDateDialog({ pending, onClose }: { pending: PendingStage; onClose:
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -192,7 +196,9 @@ function StageDateDialog({ pending, onClose }: { pending: PendingStage; onClose:
 
   const confirm = () => {
     // The date is the whole point of this dialog - require one.
-    if (!date) return;
+    if (!date) {
+      return;
+    }
     setStatus.mutate({ id: pending.app.id, status: pending.status, date });
     onClose();
   };
@@ -207,7 +213,9 @@ function StageDateDialog({ pending, onClose }: { pending: PendingStage; onClose:
       aria-labelledby="stageDateTitle"
       // Only a click on the backdrop itself cancels, not one on the card.
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
       }}
     >
       <div className="card modal-card">
@@ -224,7 +232,9 @@ function StageDateDialog({ pending, onClose }: { pending: PendingStage; onClose:
           value={date}
           onChange={(e) => setDate(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") confirm();
+            if (e.key === "Enter") {
+              confirm();
+            }
           }}
         />
         <div className="modal-actions">

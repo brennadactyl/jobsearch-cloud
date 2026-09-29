@@ -5,7 +5,9 @@ import { wheelTarget } from "./wheel";
 function scroller(parent: Element, { height = 100, content = 400, top = 0, target = false } = {}): HTMLDivElement {
   const el = document.createElement("div");
   el.style.overflowY = "auto";
-  if (target) el.setAttribute("data-wheel-target", "");
+  if (target) {
+    el.setAttribute("data-wheel-target", "");
+  }
   Object.defineProperty(el, "clientHeight", { value: height });
   Object.defineProperty(el, "scrollHeight", { value: content });
   el.scrollTop = top;

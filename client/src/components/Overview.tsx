@@ -254,13 +254,23 @@ function searchesSubline(trackKeys: string[], tracks: ReturnType<typeof buildTra
   const bad = running.filter((k) => ["stale", "error"].includes(state(k)));
   const never = running.filter((k) => state(k) === "never");
 
-  if (!trackKeys.length) return "No tracks configured yet";
-  if (!running.length) return paused.length === 1 ? "Paused" : `All ${paused.length} paused`;
+  if (!trackKeys.length) {
+    return "No tracks configured yet";
+  }
+  if (!running.length) {
+    return paused.length === 1 ? "Paused" : `All ${paused.length} paused`;
+  }
 
   let line: string;
-  if (bad.length) line = `${bad.length} of ${running.length} haven’t reported a clean run recently`;
-  else if (never.length === running.length) line = "Waiting on the first recorded run";
-  else line = `All ${running.length} reporting on schedule`;
+  if (bad.length) {
+    line = `${bad.length} of ${running.length} haven’t reported a clean run recently`;
+  }
+  else if (never.length === running.length) {
+    line = "Waiting on the first recorded run";
+  }
+  else {
+    line = `All ${running.length} reporting on schedule`;
+  }
   return paused.length ? `${line} · ${paused.length} paused` : line;
 }
 
@@ -306,7 +316,9 @@ function foundTip(n: number, b: FoundBreakdown): string {
 }
 
 function CountCell({ c, tip }: { c: Count | null; tip: string }) {
-  if (!c) return null;
+  if (!c) {
+    return null;
+  }
   return (
     <Mark n={c.n} target={c.target} tip={`${tip}: ${c.n}`} className="cnt">
       {c.n}
@@ -451,7 +463,9 @@ const TIER_TONES: Record<string, string> = { applied: "s-accent", open: "s-accen
 
 function TierChart({ data }: { data: TrackerData }) {
   const bars = tierBars(data);
-  if (!bars.length) return null;
+  if (!bars.length) {
+    return null;
+  }
   const totals = bars.map((b) => b.segments.reduce((s, x) => s + x.n, 0));
   const segs = (b: (typeof bars)[number], total: number): BarSegment[] =>
     b.segments.map((s) => ({

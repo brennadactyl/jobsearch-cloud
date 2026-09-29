@@ -43,6 +43,12 @@ jobs:
       - name: Test
         run: npm test
 
+      # oxlint holds the conventions a reader can't be asked to police, `curly`
+      # among them: a brace-less body reads as one statement where there are
+      # two, and a line added to it later falls outside the branch.
+      - name: Lint
+        run: npm run lint
+
       # Proves the bundle builds, and with it that the guard in vite.config.ts
       # is satisfied by a real value rather than only failing without one. The
       # URL is a placeholder: nothing is deployed from CI, and the build must

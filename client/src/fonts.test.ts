@@ -15,7 +15,9 @@ function familiesUsed(): string[] {
   const decls = css.match(/font-family:[^;}]*/g) ?? [];
   const names = new Set<string>();
   for (const d of decls) {
-    for (const m of d.matchAll(/"([^"]+)"/g)) names.add(m[1]);
+    for (const m of d.matchAll(/"([^"]+)"/g)) {
+      names.add(m[1]);
+    }
   }
   return [...names].sort();
 }

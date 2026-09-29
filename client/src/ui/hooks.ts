@@ -21,9 +21,13 @@ export function useTheme(): [Theme, () => void] {
 
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!mq) return;
+    if (!mq) {
+      return;
+    }
     const onChange = () => {
-      if (!explicitTheme()) setTheme(mq.matches ? "dark" : "light");
+      if (!explicitTheme()) {
+        setTheme(mq.matches ? "dark" : "light");
+      }
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
@@ -79,7 +83,9 @@ export function usePinnedLayout(active: boolean) {
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
-    if (el) setScrolled(el.scrollTop > 0);
+    if (el) {
+      setScrolled(el.scrollTop > 0);
+    }
   }, []);
 
   return { scrollRef, scrolled, onScroll };

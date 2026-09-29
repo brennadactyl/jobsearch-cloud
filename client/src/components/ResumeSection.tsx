@@ -65,7 +65,9 @@ export default function ResumeSection({
 
   /** A refusal worth showing as the server wrote it, or null for a 401 that has already shown the gate. */
   function reasonOf(err: unknown): string | null {
-    if (err instanceof UnauthorizedError) return null;
+    if (err instanceof UnauthorizedError) {
+      return null;
+    }
     return failureOf(err)?.message ?? (err instanceof Error ? err.message : String(err));
   }
 
@@ -91,7 +93,7 @@ export default function ResumeSection({
       return true;
     } catch (err) {
       const reason = reasonOf(err);
-      if (reason) setAttachMsg({ text: reason, tone: "bad" });
+      if (reason) {setAttachMsg({ text: reason, tone: "bad" });}
       return false;
     } finally {
       setUploading("");
@@ -102,8 +104,12 @@ export default function ResumeSection({
     setRemoving(null);
     setPicks((p) => {
       const next = { ...p };
-      if (path === currentResume(rows, search)) delete next[search];
-      else next[search] = path;
+      if (path === currentResume(rows, search)) {
+        delete next[search];
+      }
+      else {
+        next[search] = path;
+      }
       return next;
     });
   }
@@ -119,8 +125,12 @@ export default function ResumeSection({
    * save points those searches elsewhere.
    */
   function removingFor(row: StoredResume): { refusal: string } | null {
-    if (removing?.path !== row.path) return null;
-    if (removing.why === "server" || !removing.refusal) return removing;
+    if (removing?.path !== row.path) {
+      return null;
+    }
+    if (removing.why === "server" || !removing.refusal) {
+      return removing;
+    }
     const refusal = removeRefusal(row, labelOf);
     return refusal ? { refusal } : null;
   }
@@ -133,7 +143,7 @@ export default function ResumeSection({
       await refresh();
     } catch (err) {
       const reason = reasonOf(err);
-      if (reason) setRemoving({ path, refusal: reason, why: "server" });
+      if (reason) {setRemoving({ path, refusal: reason, why: "server" });}
     }
   }
 
@@ -186,7 +196,9 @@ export default function ResumeSection({
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = "";
-              if (file) void store(file.name, `resumes/${safeDocumentName(file.name)}`, file, "uploaded");
+              if (file) {
+                void store(file.name, `resumes/${safeDocumentName(file.name)}`, file, "uploaded");
+              }
             }}
           />
           <button
@@ -211,7 +223,9 @@ export default function ResumeSection({
             onAdd={async (name, text) => {
               const fileName = `${name}.txt`;
               const ok = await store(fileName, `resumes/${safeDocumentName(fileName)}`, new Blob([text], { type: "text/plain" }), "pasted");
-              if (ok) setPasting(false);
+              if (ok) {
+                setPasting(false);
+              }
             }}
           />
         )}
@@ -396,8 +410,12 @@ function PasteBox({
             type="button"
             disabled={busy}
             onClick={() => {
-              if (!name.trim()) return setProblem("Give it a name.");
-              if (!text.trim()) return setProblem("Paste the resume's text.");
+              if (!name.trim()) {
+                return setProblem("Give it a name.");
+              }
+              if (!text.trim()) {
+                return setProblem("Paste the resume's text.");
+              }
               setProblem("");
               onAdd(name.trim(), text);
             }}
@@ -438,7 +456,9 @@ function unsavedSummary(
   addedCount: number,
 ): string {
   const keys = Object.keys(picks);
-  if (!keys.length) return "";
+  if (!keys.length) {
+    return "";
+  }
   let sentence: string;
   if (keys.length === 1) {
     const label = labelOf(keys[0]);
@@ -449,7 +469,11 @@ function unsavedSummary(
   } else {
     sentence = `You chose new resumes for ${joinNames(keys.map(labelOf))} but didn't save, so they keep the ones they read now.`;
   }
-  if (addedCount === 1) sentence += " The file you attached stays in your resumes either way.";
-  if (addedCount > 1) sentence += " The files you attached stay in your resumes either way.";
+  if (addedCount === 1) {
+    sentence += " The file you attached stays in your resumes either way.";
+  }
+  if (addedCount > 1) {
+    sentence += " The files you attached stay in your resumes either way.";
+  }
   return sentence;
 }

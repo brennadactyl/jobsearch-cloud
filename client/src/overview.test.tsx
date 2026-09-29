@@ -125,7 +125,9 @@ describe("which searches pay off", () => {
     const span = (label: string) => headers.find((th) => th.textContent === label)!.getAttribute("colspan");
     expect(span("Applied")).toBe("2");
     expect(span("Responded")).toBe("2");
-    for (const tr of within(table).getAllByRole("row").slice(1)) expect(tr.querySelectorAll("td")).toHaveLength(8);
+    for (const tr of within(table).getAllByRole("row").slice(1)) {
+      expect(tr.querySelectorAll("td")).toHaveLength(8);
+    }
   });
 
   it("puts the apply rate in its own cell after the count, with the count as the link and the fraction in the tooltip", async () => {
@@ -178,7 +180,9 @@ describe("which searches pay off", () => {
     const table = screen.getByRole("table", { name: "Which searches pay off" });
     for (const r of payoff(data).rows.filter((row) => row.key)) {
       const cells = within(table).getByRole("link", { name: r.label }).closest("tr")!.querySelectorAll("td");
-      if (r.applied.n === 0) expect(cells[5].textContent, `${r.label} apply rate`).toBe("");
+      if (r.applied.n === 0) {
+        expect(cells[5].textContent, `${r.label} apply rate`).toBe("");
+      }
       if (r.applied.n < 3) {
         expect(cells[6].textContent, `${r.label} responded`).toBe(String(r.responded.n));
         expect(cells[7].textContent, `${r.label} response rate`).toBe("");
@@ -221,7 +225,9 @@ describe("by location", () => {
     for (const r of tierRows(labels()).filter((row) => row.total > 0)) {
       const marks = [...r.breakdown!.querySelectorAll(".seglabel")];
       expect(marks.map((m) => Number(m.getAttribute("data-n"))), r.label).toEqual(r.segments);
-      for (const m of marks) expect(m.tagName, r.label).toBe("A");
+      for (const m of marks) {
+        expect(m.tagName, r.label).toBe("A");
+      }
       // Filled segments only: an outline reads as an empty box. And none in the
       // --line shade, which is too close to an empty tier's track to read as filled.
       for (const tone of r.tones) {
@@ -268,7 +274,9 @@ describe("folding sections and charts", () => {
     for (const other of OVERVIEW_FOLD_IDS) {
       // A folded section's charts aren't rendered; every heading still on the
       // page is as it was.
-      if (other !== id && foldButton(other)) expect(foldButton(other)).toHaveAttribute("aria-expanded", before[other]!);
+      if (other !== id && foldButton(other)) {
+        expect(foldButton(other)).toHaveAttribute("aria-expanded", before[other]!);
+      }
     }
   });
 
@@ -312,7 +320,9 @@ describe("folding sections and charts", () => {
 
   it("counts every fold when several land before the page re-renders", async () => {
     await renderOverview();
-    for (const id of ["pipeline.flow", "momentum", "searches.location"]) foldButton(id)!.click();
+    for (const id of ["pipeline.flow", "momentum", "searches.location"]) {
+      foldButton(id)!.click();
+    }
     await waitFor(() => expect(foldButton("momentum")).toHaveAttribute("aria-expanded", "false"));
     expect(JSON.parse(localStorage.getItem("bjs.overviewCollapsed")!)).toEqual({
       "pipeline.flow": true,
@@ -334,7 +344,9 @@ describe("folding sections and charts", () => {
     localStorage.setItem("bjs.overviewCollapsed", "{not json");
     setPrefs({ overviewCollapsed: readOverviewCollapsed() });
     await renderOverview();
-    for (const id of OVERVIEW_FOLD_IDS) expect(foldButton(id)).toHaveAttribute("aria-expanded", "true");
+    for (const id of OVERVIEW_FOLD_IDS) {
+      expect(foldButton(id)).toHaveAttribute("aria-expanded", "true");
+    }
   });
 
   it("sums Momentum up as this week's columns", async () => {

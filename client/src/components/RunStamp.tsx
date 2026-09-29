@@ -18,7 +18,9 @@ function pathForFound(key: string, on: string): string {
 
 /** When a search last ran and what it found, beside its tab and on the Overview. */
 export function RunStamp({ track, settings }: { track: Track | undefined; settings: Settings }) {
-  if (!track) return null;
+  if (!track) {
+    return null;
+  }
   const run = track.last_run;
   const st = runState(track, settings);
   if (st === "paused") {

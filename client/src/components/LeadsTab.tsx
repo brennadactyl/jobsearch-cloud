@@ -56,8 +56,12 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
 
   const withFilter = (f: string) => {
     const next = new URLSearchParams(params);
-    if (f === OPEN_FILTER) next.delete("filter");
-    else next.set("filter", f);
+    if (f === OPEN_FILTER) {
+      next.delete("filter");
+    }
+    else {
+      next.set("filter", f);
+    }
     const qs = next.toString();
     return pathForTab(trackKey) + (qs ? `?${qs}` : "");
   };
@@ -67,7 +71,9 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   // Applied takes the row out of every leads tab, so its note names the tab it
   // went to rather than the chip it left.
   const onLeave = (lead: Lead, status: string): LeavingView | undefined => {
-    if (status !== "Applied" && leadFilterKeeps(filter, { ...lead, status })) return undefined;
+    if (status !== "Applied" && leadFilterKeeps(filter, { ...lead, status })) {
+      return undefined;
+    }
     const leaving: LeavingView = {
       note:
         status === "Applied"
@@ -87,8 +93,12 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
 
   const setParam = (k: string, v: string | null) => {
     const next = new URLSearchParams(params);
-    if (v) next.set(k, v);
-    else next.delete(k);
+    if (v) {
+      next.set(k, v);
+    }
+    else {
+      next.delete(k);
+    }
     setParams(next, { replace: true });
   };
 
@@ -444,7 +454,7 @@ function MoveLead({ lead, data }: { lead: Lead; data: TrackerData }) {
   const move = useMoveLead();
   const tracks = buildTracks(data.tracks);
   const keys = Object.keys(tracks);
-  if (keys.length < 2) return <div className="dh-track">{tracks[lead.search]?.label ?? lead.search}</div>;
+  if (keys.length < 2) {return <div className="dh-track">{tracks[lead.search]?.label ?? lead.search}</div>;}
   return (
     <select
       className="dh-track-in"
@@ -484,7 +494,7 @@ function RemoveLead({ lead }: { lead: Lead }) {
           `Remove ${name}?\n\nWhy? This is kept so the search doesn't find it again.`,
           "outside target locations",
         );
-        if (why?.trim()) del.mutate({ id: lead.id, reason: why.trim() });
+        if (why?.trim()) {del.mutate({ id: lead.id, reason: why.trim() });}
       }}
     >
       <TrashIcon />

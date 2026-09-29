@@ -65,9 +65,13 @@ export function DrillChip({
   ctx: DrillContext;
   clearTo: string;
 }) {
-  if (!drill) return null;
+  if (!drill) {
+    return null;
+  }
   const label = drillLabel(drill, ctx);
-  if (!label) return null;
+  if (!label) {
+    return null;
+  }
   return (
     <Link className="chip drill" to={clearTo} aria-label={`Clear filter: ${label}`} title="Clear this filter">
       {label}
@@ -105,12 +109,18 @@ export function ExportButton<T>({
 
   // Closes on a click anywhere else, and on Escape, like any menu.
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     const onDown = (e: MouseEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+      if (!wrap.current?.contains(e.target as Node)) {
+        setOpen(false);
+      }
     };
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -122,7 +132,9 @@ export function ExportButton<T>({
 
   const save = (rows: readonly T[], filtered: boolean) => {
     setOpen(false);
-    if (!rows.length) return;
+    if (!rows.length) {
+      return;
+    }
     const name = exportFilename(filtered ? `${label}-shown` : label, isoDay(new Date()));
     downloadFile(name, toCsv(columns, rows), "text/csv;charset=utf-8");
   };
@@ -140,7 +152,9 @@ export function ExportButton<T>({
 
   // Up and Down move between the two choices, as in any menu.
   const moveFocus = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") {
+      return;
+    }
     e.preventDefault();
     const items = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
     const at = items.indexOf(document.activeElement as HTMLButtonElement);

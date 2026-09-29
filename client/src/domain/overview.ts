@@ -192,7 +192,9 @@ export interface TierBar {
 /** One bar per ranked area plus Other. Empty when no places are ranked. */
 export function tierBars(data: TrackerData): TierBar[] {
   const areas = data.settings.areas;
-  if (!areas.length) return [];
+  if (!areas.length) {
+    return [];
+  }
   const tiers = [...areas.map((label, i) => ({ key: String(i), label })), { key: "other", label: "Other" }];
   return tiers.map((t) => ({
     ...t,

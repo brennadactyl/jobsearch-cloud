@@ -56,8 +56,12 @@ export function safeDocumentName(original: string): string {
     .replace(/[^\w .-]/g, "-")
     .replace(/-{2,}/g, "-")
     .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
-  if (!stem) stem = "resume";
-  if (DOS_DEVICE.test(stem)) stem = `${stem}-file`;
+  if (!stem) {
+    stem = "resume";
+  }
+  if (DOS_DEVICE.test(stem)) {
+    stem = `${stem}-file`;
+  }
   return ext ? `${stem}.${ext}` : stem;
 }
 
@@ -93,14 +97,18 @@ export type SetupProblems = Partial<
 export function setupProblems(answers: IntakeAnswers, files: readonly string[]): SetupProblems {
   const found: SetupProblems = {};
   if (!answers.resume_text.trim()) {
-    if (!files.length) found.attach = "Attach your resume or paste its text.";
+    if (!files.length) {
+      found.attach = "Attach your resume or paste its text.";
+    }
     else if (!files.some(isReadableResume)) {
       found.attach = "We can't read that file overnight. Attach a PDF, Word (.docx), .txt or .md file, or paste the text too.";
     }
   }
   // The ruled-out list never says where to look, so it can't stand in for these two.
   const nowhere = nowhereToSearch(answers.work_scope, answers.locations_first);
-  if (nowhere) found.work_scope = nowhere;
+  if (nowhere) {
+    found.work_scope = nowhere;
+  }
   const usable = answers.roles.some((r) => r.name.trim() && r.titles.trim());
   if (!usable) {
     const i = Math.max(0, answers.roles.findIndex((r) => !r.name.trim() || !r.titles.trim()));

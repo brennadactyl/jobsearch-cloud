@@ -39,10 +39,14 @@ export const OFFER_INDEX = FORWARD_STAGES.length - 1;
  * and a status can be set with its date cleared.
  */
 export function furthestStage(a: Application): number | null {
-  if (a.status === "To Apply") return null;
+  if (a.status === "To Apply") {
+    return null;
+  }
   let furthest = Math.max(0, FORWARD_STAGES.findIndex((s) => s.label === a.status));
   FORWARD_STAGES.forEach((s, i) => {
-    if ((a as unknown as Row)[s.field]) furthest = Math.max(furthest, i);
+    if ((a as unknown as Row)[s.field]) {
+      furthest = Math.max(furthest, i);
+    }
   });
   return furthest;
 }
@@ -64,10 +68,18 @@ export const FLOW_SEGMENT_LABELS: Record<FlowSegment, string> = {
 /** Where an application sits in one stage's bar, or null if it never reached that stage. */
 export function flowSegment(a: Application, stage: number): FlowSegment | null {
   const f = furthestStage(a);
-  if (f === null || f < stage) return null;
-  if (f > stage) return "moved-on";
-  if (a.status === "Rejected") return "rejected";
-  if (a.status === "Withdrawn") return "withdrew";
+  if (f === null || f < stage) {
+    return null;
+  }
+  if (f > stage) {
+    return "moved-on";
+  }
+  if (a.status === "Rejected") {
+    return "rejected";
+  }
+  if (a.status === "Withdrawn") {
+    return "withdrew";
+  }
   return "waiting";
 }
 
@@ -84,13 +96,19 @@ export function responded(a: Application): boolean {
 /** Whole days from applying to the first reply, or null without both dates. */
 export function daysToFirstResponse(a: Application): number | null {
   const applied = localDay(a.dateApplied);
-  if (!applied) return null;
+  if (!applied) {
+    return null;
+  }
   let earliest: Date | null = null;
   for (const f of RESPONSE_FIELDS) {
     const d = localDay((a as unknown as Row)[f]);
-    if (d && (!earliest || d < earliest)) earliest = d;
+    if (d && (!earliest || d < earliest)) {
+      earliest = d;
+    }
   }
-  if (!earliest) return null;
+  if (!earliest) {
+    return null;
+  }
   const days = daysBetween(applied, earliest);
   return days >= 0 ? days : null;
 }
@@ -105,13 +123,17 @@ export const RESPONSE_BINS: readonly { key: string; label: string; max: number }
 
 export function responseBin(a: Application): string | null {
   const d = daysToFirstResponse(a);
-  if (d === null) return null;
+  if (d === null) {
+    return null;
+  }
   return RESPONSE_BINS.find((b) => d <= b.max)!.key;
 }
 
 /** The middle value, rounded to a whole day; null for no values. */
 export function median(values: readonly number[]): number | null {
-  if (!values.length) return null;
+  if (!values.length) {
+    return null;
+  }
   const s = [...values].sort((x, y) => x - y);
   const mid = Math.floor(s.length / 2);
   return Math.round(s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2);
@@ -127,7 +149,9 @@ export function lastMoved(a: Application): Date | null {
   let latest: Date | null = null;
   for (const s of FORWARD_STAGES) {
     const d = localDay((a as unknown as Row)[s.field]);
-    if (d && (!latest || d > latest)) latest = d;
+    if (d && (!latest || d > latest)) {
+      latest = d;
+    }
   }
   return latest;
 }

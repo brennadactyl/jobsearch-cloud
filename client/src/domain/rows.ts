@@ -30,7 +30,9 @@ function inOrder<T>(...steps: Compare<T>[]): Compare<T> {
   return (a, b) => {
     for (const step of steps) {
       const d = step(a, b);
-      if (d) return d;
+      if (d) {
+        return d;
+      }
     }
     return 0;
   };
@@ -68,7 +70,9 @@ export function leadComparator(sortKey: string, settings: TierSettings): Compare
  * sequence of steps, not one comparator.
  */
 export function appComparator(sortKey: string): Compare<Application> {
-  if (sortKey === "company-asc") return byText((a) => a.company);
+  if (sortKey === "company-asc") {
+    return byText((a) => a.company);
+  }
   if (sortKey === "location-asc") {
     return inOrder<Application>(
       // A hand-added application can have no location, and "" would sort first
@@ -96,7 +100,9 @@ export function appComparator(sortKey: string): Compare<Application> {
 }
 
 function waitGroup(a: Application): number {
-  if (!isWaiting(a)) return 2;
+  if (!isWaiting(a)) {
+    return 2;
+  }
   return lastMoved(a) ? 0 : 1;
 }
 
@@ -111,7 +117,9 @@ export type FillState = "" | "waiting" | "stuck";
  * promises a fill no run will attempt.
  */
 export function fillState(a: Application): FillState {
-  if ((a.autofill || "") === "failed") return "stuck";
+  if ((a.autofill || "") === "failed") {
+    return "stuck";
+  }
   if ((a.autofill || "") === "" && safeUrl(a.link) && (!a.company || !a.title || !a.location)) {
     return "waiting";
   }

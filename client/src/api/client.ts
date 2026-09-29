@@ -76,7 +76,9 @@ export const session = {
    */
   end(reason = "") {
     clearStored(TOKEN_KEY);
-    for (const fn of endListeners) fn(reason);
+    for (const fn of endListeners) {
+      fn(reason);
+    }
   },
   onEnd(fn: (reason: string) => void): () => void {
     endListeners.add(fn);
@@ -139,7 +141,9 @@ async function request<T>(
     "Content-Type": raw ? raw.type || "application/octet-stream" : "application/json",
   };
   const bearer = token ?? session.token();
-  if (bearer) headers.Authorization = `Bearer ${bearer}`;
+  if (bearer) {
+    headers.Authorization = `Bearer ${bearer}`;
+  }
 
   const res = await fetch(API_BASE + path, {
     method,
@@ -169,7 +173,9 @@ async function request<T>(
   }
 
   const parsed = schema.safeParse(payload);
-  if (!parsed.success) throw new SchemaError(z.prettifyError(parsed.error));
+  if (!parsed.success) {
+    throw new SchemaError(z.prettifyError(parsed.error));
+  }
   return parsed.data;
 }
 
@@ -330,7 +336,9 @@ export function deleteDocument(path: string): Promise<{ path: string }> {
 export async function logout(): Promise<boolean> {
   const token = session.token();
   session.end();
-  if (!token) return true;
+  if (!token) {
+    return true;
+  }
   try {
     const res = await fetch(`${API_BASE}/api/logout`, {
       method: "POST",

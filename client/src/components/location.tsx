@@ -4,7 +4,9 @@ import { tierColour, tierOf } from "../domain/geo";
 
 export function GeoBadge({ row, settings }: { row: { area: string }; settings: Settings }) {
   const g = tierOf(row, settings);
-  if (!g) return null;
+  if (!g) {
+    return null;
+  }
   return <span className={`geo ${g.cssClass}`}>{g.label}</span>;
 }
 

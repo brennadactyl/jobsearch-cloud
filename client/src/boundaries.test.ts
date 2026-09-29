@@ -12,8 +12,12 @@ const SRC = join(process.cwd(), "src");
 function sourceFiles(dir = SRC): string[] {
   return readdirSync(dir).flatMap((name) => {
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) return sourceFiles(full);
-    if (!/\.tsx?$/.test(name) || /\.test\.tsx?$/.test(name)) return [];
+    if (statSync(full).isDirectory()) {
+      return sourceFiles(full);
+    }
+    if (!/\.tsx?$/.test(name) || /\.test\.tsx?$/.test(name)) {
+      return [];
+    }
     return [full];
   });
 }

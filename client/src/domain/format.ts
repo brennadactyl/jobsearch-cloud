@@ -15,19 +15,29 @@ export const DAY_MS = 86_400_000;
  * time instead, a day early for the rest of the evening.
  */
 export function daysSince(d: string | null | undefined): number | null {
-  if (!d) return null;
+  if (!d) {
+    return null;
+  }
   const day = localDay(d);
-  if (day) return Math.max(0, daysBetween(day, localToday()));
+  if (day) {
+    return Math.max(0, daysBetween(day, localToday()));
+  }
   const t = Date.parse(d);
-  if (Number.isNaN(t)) return null;
+  if (Number.isNaN(t)) {
+    return null;
+  }
   return Math.max(0, Math.floor((Date.now() - t) / DAY_MS));
 }
 
 /** Fractional hours since an instant, for staleness maths. */
 export function hoursSince(d: string | null | undefined): number | null {
-  if (!d) return null;
+  if (!d) {
+    return null;
+  }
   const t = Date.parse(d);
-  if (Number.isNaN(t)) return null;
+  if (Number.isNaN(t)) {
+    return null;
+  }
   return Math.max(0, (Date.now() - t) / HOUR_MS);
 }
 
@@ -42,7 +52,9 @@ export function today(): string {
  */
 export function localDay(d: string | null | undefined): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d ?? "").trim());
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   const day = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   // Rejects 2026-02-31, which Date would roll over into March.
   return day.getMonth() === Number(m[2]) - 1 ? day : null;
@@ -102,9 +114,15 @@ export function shortDate(d: string): string {
  */
 export function relWhen(iso: string | null | undefined): string {
   const h = hoursSince(iso);
-  if (h === null) return "";
-  if (h < 1) return "just now";
-  if (h < 24) return `${Math.round(h)}h ago`;
+  if (h === null) {
+    return "";
+  }
+  if (h < 1) {
+    return "just now";
+  }
+  if (h < 24) {
+    return `${Math.round(h)}h ago`;
+  }
   const d = Math.floor(h / 24);
   return d === 1 ? "yesterday" : `${d}d ago`;
 }
@@ -117,9 +135,13 @@ export function relWhen(iso: string | null | undefined): string {
  */
 export function safeUrl(v: string | null | undefined): string {
   const t = String(v ?? "").trim();
-  if (!t) return "";
-  if (/^https?:\/\//i.test(t)) return t;
-  if (/^[\w.-]+\.[a-z]{2,}([/?#]|$)/i.test(t)) return `https://${t}`;
+  if (!t) {
+    return "";
+  }
+  if (/^https?:\/\//i.test(t)) {
+    return t;
+  }
+  if (/^[\w.-]+\.[a-z]{2,}([/?#]|$)/i.test(t)) {return `https://${t}`;}
   return "";
 }
 
@@ -130,7 +152,9 @@ export function safeUrl(v: string | null | undefined): string {
  */
 export function hostOf(v: string | null | undefined): string {
   const u = safeUrl(v);
-  if (!u) return "";
+  if (!u) {
+    return "";
+  }
   try {
     return new URL(u).hostname.replace(/^www\./, "");
   } catch {

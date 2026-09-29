@@ -34,7 +34,9 @@ function parseCsv(text: string): string[][] {
   let record: string[] = [];
   let i = text.startsWith("﻿") ? 1 : 0;
   while (i < text.length) {
-    if (text[i] !== '"') throw new Error(`unquoted field at ${i}`);
+    if (text[i] !== '"') {
+      throw new Error(`unquoted field at ${i}`);
+    }
     let value = "";
     i++;
     for (;;) {
@@ -81,7 +83,7 @@ const exportRows = () =>
   download_(async () => {
     const menu = hasMenu();
     await userEvent.click(exportButton());
-    if (menu) await userEvent.click(screen.getByRole("menuitem", { name: /^Export \d+ shown$/ }));
+    if (menu) {await userEvent.click(screen.getByRole("menuitem", { name: /^Export \d+ shown$/ }));}
   });
 
 /** Opens the menu and exports every row the tab holds. */

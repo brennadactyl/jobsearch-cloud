@@ -51,7 +51,9 @@ type Props = {
 
 export default function AccountPanel({ open, ...props }: Props) {
   // Mounts per opening, so nothing typed or chosen in one visit is still there in the next.
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
   return <AccountDialog {...props} />;
 }
 
@@ -138,16 +140,28 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
 
   // Every way out comes through here, so unsaved choices are never lost without asking.
   const leave = () => {
-    if (count) setAsking(true);
-    else onClose();
+    if (count) {
+      setAsking(true);
+    }
+    else {
+      onClose();
+    }
   };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (asking) setAsking(false);
-      else if (count) setAsking(true);
-      else onClose();
+      if (e.key !== "Escape") {
+        return;
+      }
+      if (asking) {
+        setAsking(false);
+      }
+      else if (count) {
+        setAsking(true);
+      }
+      else {
+        onClose();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -155,7 +169,9 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
 
   // Asks before the browser leaves the page too, not only the panel.
   useEffect(() => {
-    if (!count) return;
+    if (!count) {
+      return;
+    }
     const hold = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", hold);
     return () => window.removeEventListener("beforeunload", hold);
@@ -174,7 +190,7 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
     const nowhere = Object.keys(places).length
       ? nowhereToSearch(draft.search_locations ?? stored.search_locations, draft.priority_locations ?? stored.priority_locations)
       : "";
-    if (nowhere) return setSaveError({ message: nowhere, field: "search_locations", search: null });
+    if (nowhere) {return setSaveError({ message: nowhere, field: "search_locations", search: null });}
     const blank = blankField(edits, searches);
     if (blank) {
       // Cleared, a roles line is how the database says a search was never
@@ -218,7 +234,9 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
       saved.ok();
     } catch (err) {
       // A 401 has already forgotten the session and shown the gate.
-      if (err instanceof UnauthorizedError) return;
+      if (err instanceof UnauthorizedError) {
+        return;
+      }
       const failure = failureOf(err);
       setSaveError({
         message: failure?.message ?? (err instanceof Error ? err.message : String(err)),
@@ -227,7 +245,9 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
         search: typeof failure?.search === "string" ? failure.search : null,
       });
       // The section shows one search at a time, so the refused one is brought up.
-      if (typeof failure?.search === "string") setShownSearch(failure.search);
+      if (typeof failure?.search === "string") {
+        setShownSearch(failure.search);
+      }
       saved.failed();
     } finally {
       setSaving(false);
@@ -238,7 +258,9 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
     <div
       className="modal-overlay"
       onClick={(e) => {
-        if (e.target === e.currentTarget) leave();
+        if (e.target === e.currentTarget) {
+          leave();
+        }
       }}
     >
       <div className="card account-panel" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
@@ -261,7 +283,9 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
               problem={isGeneralKey(saveError?.field ?? null) ? { field: saveError!.field as GeneralKey, message: saveError!.message } : null}
               onChange={(key, value) => {
                 setGeneral((g) => ({ ...g, [key]: value }));
-                if (saveError?.field === key) setSaveError(null);
+                if (saveError?.field === key) {
+                  setSaveError(null);
+                }
               }}
             >
               <PasswordSection />
@@ -281,11 +305,15 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
               }
               onChange={(key, field, value) => {
                 setSearchDraft((d) => ({ ...d, [key]: { ...d[key], [field]: value } }));
-                if (saveError?.search === key) setSaveError(null);
+                if (saveError?.search === key) {
+                  setSaveError(null);
+                }
               }}
               onPause={(key, paused) => {
                 setSearchDraft((d) => ({ ...d, [key]: { ...d[key], paused } }));
-                if (saveError?.search === key) setSaveError(null);
+                if (saveError?.search === key) {
+                  setSaveError(null);
+                }
               }}
             />
           )}
@@ -309,7 +337,9 @@ function AccountDialog({ name, tracks, settings, section, search, onClose }: Omi
               onChange={(key, value) => {
                 setDraft((d) => ({ ...d, [key]: value }));
                 setPlacesSaved(false);
-                if (saveError?.field === key) setSaveError(null);
+                if (saveError?.field === key) {
+                  setSaveError(null);
+                }
               }}
             />
           )}
@@ -433,11 +463,11 @@ function PasswordForm({ onDone }: { onDone: () => void }) {
 
     // Checked here as well as on the server, so the common typos answer
     // instantly and without sending the password anywhere.
-    if (!current) return setMsg({ text: "Enter your current password.", tone: "bad" });
+    if (!current) {return setMsg({ text: "Enter your current password.", tone: "bad" });}
     if (next.length < MIN_PASSWORD) {
       return setMsg({ text: `Your new password needs to be at least ${MIN_PASSWORD} characters.`, tone: "bad" });
     }
-    if (next !== confirm) return setMsg({ text: "Those two new passwords don’t match.", tone: "bad" });
+    if (next !== confirm) {return setMsg({ text: "Those two new passwords don’t match.", tone: "bad" });}
 
     setBusy(true);
     setMsg({ text: "Changing…", tone: "" });
@@ -460,7 +490,9 @@ function PasswordForm({ onDone }: { onDone: () => void }) {
     } catch (err) {
       // A 401 has already forgotten the session and shown the gate, so saying
       // anything here would be writing into a panel nobody can see.
-      if (err instanceof UnauthorizedError) return;
+      if (err instanceof UnauthorizedError) {
+        return;
+      }
       setMsg({ text: err instanceof Error ? err.message : String(err), tone: "bad" });
     } finally {
       setBusy(false);

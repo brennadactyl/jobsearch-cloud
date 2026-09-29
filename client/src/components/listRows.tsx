@@ -62,7 +62,9 @@ export function ExpandableRow({
       data-expand={id}
       className={className || undefined}
       onClick={(e) => {
-        if (!isClickOnControl(e)) onToggle();
+        if (!isClickOnControl(e)) {
+          onToggle();
+        }
       }}
     >
       {children}
