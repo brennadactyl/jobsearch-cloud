@@ -74,9 +74,11 @@ export function pathWithoutDrill(id: string, params: URLSearchParams): string {
 
 /**
  * `day` is today as a calendar date, taken apart so a test can say which day it
- * is. Local, not `toISOString()`: a run stamps its own local date, and a UTC
- * day is tomorrow's from Pacific evening onwards, which would light every tab
- * at 5pm and none of them at 9am.
+ * is. Local, not `toISOString()`: a run stamps its own local Pacific date, and
+ * a UTC day rolls over at 5pm PT. A UTC today would match that stamp all
+ * morning and stop matching mid-afternoon, so every dot would go dark for the
+ * rest of the day - and a dark dot reads as "this search found nothing", not
+ * as a clock bug.
  */
 export function buildTabs(
   leads: readonly Lead[],
