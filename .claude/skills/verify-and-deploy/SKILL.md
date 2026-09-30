@@ -136,13 +136,25 @@ against the same local database is fine - it resets its own fixtures.
 **Read the failures, do not just count them.** A run where everything fails at
 once means the port is wrong, not the change.
 
-### Prove the checks can fail
+### Prove the checks catch a broken isolation guard
 
-A clean first run is also what a check that tests nothing looks like. For each
-rule the change adds, commit, then break it on purpose - skip the refusal, swap
-the comparison - and rerun: the new checks must FAIL. Restore with
-`git checkout -- src` and rerun clean. Commit before breaking anything, or the
-restore takes your uncommitted work with it.
+Only for a guard that keeps one account out of another's rows or files. That is
+what this suite is for, and a check that silently tests nothing there ships a
+privacy hole green. Everywhere else a new check that passes is the proof, and
+this step is skipped.
+
+A clean first run is also what a check that tests nothing looks like. So for
+that one kind of guard: commit, break it on purpose - skip the refusal, swap the
+comparison - and rerun once: the new checks must FAIL. Restore with
+`git checkout -- src`. Commit before breaking anything, or the restore takes
+your uncommitted work with it.
+
+One broken run, not one per rule: break every isolation guard the change adds in
+that one run, and every new check must fail. And no clean rerun after restoring,
+since the restored tree is byte-identical to the one that already passed, so
+running it again answers a question already answered. There is no way to run one
+check alone - every run is the whole file against a fresh worker, which is the
+cost being spent.
 
 A change that should alter no behaviour at all - a refactor, a comment edit - is
 proved another way: see the `prove-a-change` skill.
