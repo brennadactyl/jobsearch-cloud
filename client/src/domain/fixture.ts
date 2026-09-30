@@ -93,7 +93,10 @@ export const tracks: Track[] = [
 ];
 
 export const leads: Lead[] = [
-  lead({ id: 1, company: "Acme", title: "Eng", location: "Springfield", status: "New", url: "https://example.com/1" }),
+  lead({
+    id: 1, company: "Acme", title: "Eng", location: "Springfield", status: "New", url: "https://example.com/1",
+    fit: "names alpha work in the posting itself, which is what this search asks for",
+  }),
   lead({ id: 2, company: "Bolt", title: "Eng", location: "Springfield", status: "Reviewing", url: "https://example.com/2" }),
   lead({ id: 3, company: "Cog", title: "Eng", location: "Springfield", status: "Applied", url: "https://example.com/3" }),
   lead({ id: 4, company: "Dyn", title: "Eng", location: "Springfield", status: "Not a fit", url: "https://example.com/4" }),

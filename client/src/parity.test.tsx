@@ -177,6 +177,19 @@ describe("grid rows", () => {
     expect(document.querySelector("tr.more-row .facts-card .more-grid")).not.toBeNull();
   });
 
+  it("open on the fit sentence and leave out the fields the row has columns for", async () => {
+    setPrefs({ view: "grid" });
+    await renderAt("/all-leads");
+
+    await userEvent.click(screen.getByText("Acme"));
+
+    const panel = document.querySelector("tr.more-row")!;
+    expect(panel.querySelector(".dh-fit")).toHaveTextContent("names alpha work in the posting itself");
+    // Comp is a column on the row above; the panel says the rest.
+    expect(within(panel as HTMLElement).queryByLabelText("Comp range")).toBeNull();
+    expect(within(panel as HTMLElement).getByLabelText("Team / product")).toBeInTheDocument();
+  });
+
   it("leave a click on a control to the control", async () => {
     setPrefs({ view: "grid" });
     await renderAt("/all-leads");

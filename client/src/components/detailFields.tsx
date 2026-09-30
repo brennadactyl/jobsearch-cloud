@@ -4,7 +4,7 @@
  * and what the nightly fill couldn't read.
  */
 import type { Application, Lead } from "../api/schema";
-import { APP_ROLE_FIELDS, LABELS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "../domain/constants";
+import { APP_ROLE_FIELDS, GRID_ROLE_FIELDS, LABELS, ROLE_FIELDS, STAGE_HISTORY_FIELDS } from "../domain/constants";
 import { safeUrl } from "../domain/format";
 import { fillState } from "../domain/rows";
 import { EditableField, EditableNotes } from "./writes";
@@ -85,10 +85,17 @@ export function AppFactsCards({ app, compact }: { app: Application; compact?: bo
   );
 }
 
+/**
+ * `compact` is a grid row opened out, which differs from Detail view in what the
+ * row above it already says: the fields it has columns for are left out, and the
+ * space goes to the search's fit sentence, which the grid has nowhere else to
+ * put. Detail view carries that sentence in its header instead.
+ */
 export function LeadFactsCard({ lead, compact }: { lead: Lead; compact?: boolean }) {
   return (
     <div className="facts-card" style={compact ? { marginTop: 0 } : undefined}>
-      <RoleFields item={lead} kind="lead" fields={ROLE_FIELDS} />
+      {compact && lead.fit && <div className="dh-fit">{lead.fit}</div>}
+      <RoleFields item={lead} kind="lead" fields={compact ? GRID_ROLE_FIELDS : ROLE_FIELDS} />
     </div>
   );
 }

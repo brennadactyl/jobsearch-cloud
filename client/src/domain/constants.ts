@@ -82,6 +82,24 @@ export const ROLE_FIELDS: readonly (readonly [field: string, label: string])[] =
 ];
 
 /**
+ * The grid is for a fast scan without scrolling, so it shows a deliberately
+ * short list of columns - Detail view has the rest. Comp earns the one extra
+ * because it is the field most likely to change whether a posting is worth a
+ * second look.
+ */
+export const LEAD_GRID_FIELDS: readonly (readonly [field: string, label: string])[] = [["comp", "Comp range"]];
+
+/**
+ * What a grid row opened out shows: the role fields its own columns don't. A
+ * value already on the row above is one the panel doesn't have to spend its
+ * width saying again, and deriving the list means a new column drops out of the
+ * panel in the same edit.
+ */
+export const GRID_ROLE_FIELDS: readonly (readonly [field: string, label: string])[] = ROLE_FIELDS.filter(
+  ([field]) => !LEAD_GRID_FIELDS.some(([col]) => col === field),
+);
+
+/**
  * Applications add "link": a hand-added one has no posting URL to fall back on,
  * whereas a lead already carries its own `url`.
  */
