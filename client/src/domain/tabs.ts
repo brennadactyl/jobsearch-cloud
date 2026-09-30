@@ -7,6 +7,7 @@ import type { Application, Lead, Settings, Track } from "../api/schema";
 import type { DrillTarget } from "./drills";
 import { ALL_LEADS } from "./constants";
 import { fillState } from "./rows";
+import { isoDay } from "./format";
 import { SCREENED } from "./screened";
 import { trackWarn, type TabWarning } from "./runs";
 
@@ -26,10 +27,9 @@ export interface Tab {
    */
   paused: string;
   /**
-   * How many postings this search found on its latest run, 0 for none and for
-   * every tab that isn't a search. "Today" is the run's own stamped day, the
-   * same day the Screened tab's `today` window reads, not the reader's clock: a
-   * bare date has no instant, and comparing it to one moves it.
+   * How many postings this search found today, 0 for none and for every tab
+   * that isn't a search. Today only: a search whose last run was days ago has
+   * nothing new this morning, however recently those finds were its latest.
    *
    * Searches only. The pooled tab would carry a dot on any morning any search
    * ran, which is most of them, and a light that is always on says nothing.
@@ -72,11 +72,18 @@ export function pathWithoutDrill(id: string, params: URLSearchParams): string {
   return pathForTab(id) + (query ? `?${query}` : "");
 }
 
+/**
+ * `day` is today as a calendar date, taken apart so a test can say which day it
+ * is. Local, not `toISOString()`: a run stamps its own local date, and a UTC
+ * day is tomorrow's from Pacific evening onwards, which would light every tab
+ * at 5pm and none of them at 9am.
+ */
 export function buildTabs(
   leads: readonly Lead[],
   applications: readonly Application[],
   tracks: Record<string, Track>,
   settings: Settings,
+  day: string = isoDay(new Date()),
 ): Tab[] {
   const tabs: Tab[] = [
     {
@@ -118,10 +125,6 @@ export function buildTabs(
   ];
 
   for (const key of Object.keys(tracks)) {
-    // A search that has never run has no day, and every lead's `found` would
-    // have to be "" to match one - so the guard is what keeps a blank stamp
-    // from counting rows it never found.
-    const day = tracks[key].last_run.on;
     tabs.push({
       id: key,
       kind: "track",
@@ -131,7 +134,10 @@ export function buildTabs(
       n: leads.filter((l) => l.search === key && l.status === "New").length,
       warn: trackWarn(tracks[key], settings),
       paused: tracks[key].paused,
-      fresh: day ? leads.filter((l) => l.search === key && l.found === day).length : 0,
+      // Dated today, not "dated on this search's last run day": a run that
+      // failed or never started leaves older finds as the newest there are,
+      // and those are not news this morning.
+      fresh: leads.filter((l) => l.search === key && l.found === day).length,
       path: pathForTab(key),
     });
   }

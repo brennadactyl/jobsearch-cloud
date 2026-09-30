@@ -63,6 +63,19 @@ describe("a search that found something today", () => {
     expect(within(tab("All leads")).queryByRole("img")).toBeNull();
   });
 
+  it("stays quiet for a search whose last run was days ago", async () => {
+    // Beta ran eight days ago. What it found then is still the newest it has,
+    // and none of it is news this morning - so no dot, and the label can't
+    // claim a day it doesn't mean.
+    const stale: TrackerData = {
+      ...fixture,
+      leads: [...fixture.leads, { ...fixture.leads[0], id: 906, search: "beta", found: fixture.tracks[1].last_run.on }],
+    };
+    await renderAt("/all-leads", stale);
+
+    expect(within(tab("Beta roles")).queryByRole("img", { name: /found today/ })).toBeNull();
+  });
+
   it("stays quiet where the run found nothing", async () => {
     await renderAt("/all-leads");
 
