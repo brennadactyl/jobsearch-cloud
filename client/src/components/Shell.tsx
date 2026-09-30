@@ -20,6 +20,11 @@ function pausedTitle(paused: string): string {
   return `Paused${day ? ` since ${day}` : ""}: this search doesn't run until it's resumed. Its leads stay here.`;
 }
 
+/** What the dot says: the count, because a dot alone doesn't say how much is behind it. */
+function freshTitle(n: number): string {
+  return `${n} found today`;
+}
+
 function TrackPanel({ data }: { data: TrackerData }) {
   const { trackKey = "" } = useParams();
   const tracks = buildTracks(data.tracks);
@@ -141,6 +146,12 @@ export default function Shell({
                     is quiet for a reason, and the reason should be visible
                     without opening it. */}
                 {t.warn && <i className={`tabwarn ${t.warn.cls}`} title={t.warn.title} />}
+                {/* Named rather than left as decoration: a colour is nothing
+                    to a screen reader, and this one is the only thing saying
+                    the search found anything last night. */}
+                {t.fresh > 0 && (
+                  <i className="tabnew" role="img" aria-label={freshTitle(t.fresh)} title={freshTitle(t.fresh)} />
+                )}
                 {t.n !== null && <span className="n">{t.n}</span>}
               </Link>
             ))}

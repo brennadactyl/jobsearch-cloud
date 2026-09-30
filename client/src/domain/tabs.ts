@@ -25,6 +25,16 @@ export interface Tab {
    * looking like a search that simply went quiet.
    */
   paused: string;
+  /**
+   * How many postings this search found on its latest run, 0 for none and for
+   * every tab that isn't a search. "Today" is the run's own stamped day, the
+   * same day the Screened tab's `today` window reads, not the reader's clock: a
+   * bare date has no instant, and comparing it to one moves it.
+   *
+   * Searches only. The pooled tab would carry a dot on any morning any search
+   * ran, which is most of them, and a light that is always on says nothing.
+   */
+  fresh: number;
   path: string;
 }
 
@@ -76,6 +86,7 @@ export function buildTabs(
       n: null,
       warn: null,
       paused: "",
+      fresh: 0,
       path: pathForTab("dashboard"),
     },
     {
@@ -89,6 +100,7 @@ export function buildTabs(
         ? { cls: "fill", title: "A posting couldn’t be read — a row here needs filling in by hand" }
         : null,
       paused: "",
+      fresh: 0,
       path: pathForTab("applications"),
     },
     {
@@ -100,11 +112,16 @@ export function buildTabs(
       n: leads.filter((l) => l.status === "New").length,
       warn: null,
       paused: "",
+      fresh: 0,
       path: pathForTab(ALL_LEADS),
     },
   ];
 
   for (const key of Object.keys(tracks)) {
+    // A search that has never run has no day, and every lead's `found` would
+    // have to be "" to match one - so the guard is what keeps a blank stamp
+    // from counting rows it never found.
+    const day = tracks[key].last_run.on;
     tabs.push({
       id: key,
       kind: "track",
@@ -114,6 +131,7 @@ export function buildTabs(
       n: leads.filter((l) => l.search === key && l.status === "New").length,
       warn: trackWarn(tracks[key], settings),
       paused: tracks[key].paused,
+      fresh: day ? leads.filter((l) => l.search === key && l.found === day).length : 0,
       path: pathForTab(key),
     });
   }
@@ -128,6 +146,7 @@ export function buildTabs(
     n: null,
     warn: null,
     paused: "",
+    fresh: 0,
     path: pathForTab(SCREENED),
   });
 

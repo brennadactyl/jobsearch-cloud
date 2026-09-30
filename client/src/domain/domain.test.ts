@@ -249,6 +249,33 @@ describe("buildTabs", () => {
     expect(tabs.find((t) => t.id === ALL_LEADS)?.n).toBe(3);
   });
 
+  it("counts what a search found on its own latest run, and only for searches", () => {
+    // Nothing in the fixture was found on a run day: every lead is a day old
+    // and alpha ran today, so the quiet case is the starting point.
+    const quiet = buildTabs(leads, applications, tracks, settings);
+    expect(quiet.filter((t) => t.fresh > 0)).toEqual([]);
+
+    const today = trackList[0].last_run.on;
+    const found = [
+      ...leads,
+      { ...leads[0], id: 901, company: "Fresh One", found: today },
+      { ...leads[0], id: 902, company: "Fresh Two", found: today },
+      // Beta ran eight days ago, so a lead found today is not its news.
+      { ...leads[0], id: 903, company: "Other", search: "beta", found: today },
+    ];
+    const tabs = buildTabs(found, applications, tracks, settings);
+    expect(tabs.find((t) => t.id === "alpha")?.fresh).toBe(2);
+    expect(tabs.find((t) => t.id === "beta")?.fresh).toBe(0);
+    // The pooled tab would light on any morning any search ran.
+    expect(tabs.find((t) => t.id === ALL_LEADS)?.fresh).toBe(0);
+  });
+
+  it("counts nothing for a search that has never run, whose stamp is blank", () => {
+    const never = buildTracks([{ ...trackList[0], last_run: { ...trackList[0].last_run, on: "" } }]);
+    const unstamped = [{ ...leads[0], id: 904, search: "alpha", found: "" }];
+    expect(buildTabs(unstamped, applications, never, settings).find((t) => t.id === "alpha")?.fresh).toBe(0);
+  });
+
   it("marks the Applications tab when a posting could not be read", () => {
     const tabs = buildTabs(leads, applications, tracks, settings);
     expect(tabs.find((t) => t.id === "applications")?.warn?.cls).toBe("fill");

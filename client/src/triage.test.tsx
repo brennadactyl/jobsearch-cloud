@@ -42,6 +42,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("a search that found something today", () => {
+  const today = fixture.tracks[0].last_run.on;
+  const withFresh: TrackerData = {
+    ...fixture,
+    leads: [...fixture.leads, { ...fixture.leads[0], id: 905, company: "Fresh", found: today }],
+  };
+  const tab = (name: string) => screen.getByRole("tab", { name: new RegExp(`^${name}`) });
+
+  it("says so on its tab, and says how much", async () => {
+    await renderAt("/all-leads", withFresh);
+
+    expect(within(tab("Alpha roles")).getByRole("img", { name: "1 found today" })).toBeInTheDocument();
+    expect(within(tab("Beta roles")).queryByRole("img")).toBeNull();
+    // The pooled tab holds the same lead and stays quiet: it would light on
+    // any morning any search ran.
+    expect(within(tab("All leads")).queryByRole("img")).toBeNull();
+  });
+
+  it("stays quiet where the run found nothing", async () => {
+    await renderAt("/all-leads");
+
+    expect(screen.queryByRole("img", { name: /found today/ })).toBeNull();
+  });
+});
+
 describe("triage-covers-status", () => {
   it("offers every status a person sets, and only New is left out", () => {
     expect([...LEAD_TRIAGE].sort()).toEqual(LEAD_STATUS.filter((s) => s !== LEAD_NEW).sort());

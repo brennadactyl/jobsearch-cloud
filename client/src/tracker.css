@@ -94,6 +94,9 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 .tab .tabwarn.stale{background:var(--warn)}
 .tab .tabwarn.error{background:var(--crit)}
 .tab .tabwarn.fill{background:var(--warn)}
+/* Same dot as a warning, in the colour that means nothing is wrong: this one
+   is news, not a problem. */
+.tab .tabnew{width:6px;height:6px;border-radius:50%;flex:none;margin-left:-2px;background:var(--good)}
 .tab:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 
