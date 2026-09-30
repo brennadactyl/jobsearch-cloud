@@ -1024,6 +1024,17 @@ const listed = buildSearchPrompt({
     withRanked.includes("copied as written") && withRanked.includes("leave it out when the posting falls in none"));
   check("a person with nothing ranked is asked for no area",
     !/area/.test(syncStep({ priority_locations: "" })) && !/area/.test(syncStep({})));
+  // A lead's url is the one field a person clicks, and a board answers a posting
+  // at two addresses that both return 200. Nothing downstream can tell them
+  // apart, so the step says so plainly and names the API forms - this wording is
+  // the whole of the defence, which is why it is checked rather than trusted.
+  for (const [what, step] of [["ranked places set", withRanked], ["nothing ranked", syncStep({})]]) {
+    check(`step 9 says the url is the page a person opens and that nothing else checks it, with ${what}`,
+      step.includes("you are the only\n   thing that checks it") &&
+      step.includes("/wday/cxs/<tenant>/<site>/job/<path>") && step.includes("/en-US/<site>/job/<path>"));
+    check(`step 9 names the listing-API address forms, with ${what}`,
+      ["/v1/boards/", "/posting-api/", "/v0/postings/", "/api/v3/accounts/"].every((m) => step.includes(m)));
+  }
 }
 
 // ---- Where a search looks comes from the three location lists.

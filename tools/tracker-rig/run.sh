@@ -7,6 +7,18 @@
 # stub.mjs. Then diffs what each version printed, its exit code, the files it
 # wrote, and every request it sent. A refactor passes only with both diffs
 # empty. Needs Windows PowerShell and node; run from Git Bash.
+#
+# One fixture reaches the network on purpose. `leads-reallinks.json` holds live
+# third-party postings, because the helper's link check calls curl and its
+# parsing is unreachable with hosts that don't resolve - every other fixture's
+# urls fail to connect and the check returns before reading anything. So that
+# scenario's output depends on those sites: when the posting comes down it
+# answers 404 and the lead is refused as dead, and when a board changes where it
+# sends an unknown code the refusal's wording moves with it. A diff there is that
+# rot rather than a regression - read the refusal reasons before believing the
+# code broke. Replace an expired posting with a current one and the coverage
+# comes back; deleting the fixture leaves that branch untested, which is how it
+# went wrong once already.
 set -u
 RIG=$(cd "$(dirname "$0")" && pwd)
 OLD=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")

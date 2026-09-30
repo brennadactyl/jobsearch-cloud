@@ -568,6 +568,19 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
    \`./tracker leads leads.json\`. \`team\`, \`setup\` and \`comp\` are the
    step-${captureNum} fields; leave a key out entirely for anything the posting
    didn't state.${areaRule} Every row's \`"search"\` ${searchValue}${leadsNote}.
+
+   **\`url\` is the address ${name} opens to read the job, and you are the only
+   thing that checks it.** A board answers a posting at two addresses - the page,
+   and the JSON its listing API serves - and both answer 200, so nothing
+   downstream can tell them apart: a lead saved as the API's address arrives as
+   raw data instead of a job, and no check anywhere will catch it. So when you
+   found a posting through a listing API, the address you fetched is not the one
+   to send: open the posting's own page, see that it is a page rather than JSON,
+   and send that. Workday is the one that catches runs out - a posting fetched at
+   \`/wday/cxs/<tenant>/<site>/job/<path>\` is read at
+   \`/en-US/<site>/job/<path>\` on the same host. Every board has the same pair:
+   an address carrying \`/v1/boards/\`, \`/posting-api/\`, \`/v0/postings/\`,
+   \`/api/v3/accounts/\` or \`/wday/cxs/\` is a listing API's, never a posting's.
 9b. RECORD SCREENED-OUT CANDIDATES so tomorrow's run doesn't re-verify them.
    Write the disqualified-but-new candidates from step 7 to \`screened.json\` -
    \`{url, company, title, location, reason, kind${screenedTab}}\` - then run
