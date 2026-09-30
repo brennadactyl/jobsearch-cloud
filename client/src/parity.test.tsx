@@ -184,7 +184,7 @@ describe("grid rows", () => {
     await userEvent.click(screen.getByText("Acme"));
 
     const panel = document.querySelector("tr.more-row")!;
-    expect(panel.querySelector(".dh-fit")).toHaveTextContent("names alpha work in the posting itself");
+    expect(panel.querySelector(".dh-fit")).toHaveTextContent("runs the billing service");
     // Comp is a column on the row above; the panel says the rest.
     expect(within(panel as HTMLElement).queryByLabelText("Comp range")).toBeNull();
     expect(within(panel as HTMLElement).getByLabelText("Team / product")).toBeInTheDocument();

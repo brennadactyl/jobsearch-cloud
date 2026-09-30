@@ -95,7 +95,10 @@ export const tracks: Track[] = [
 export const leads: Lead[] = [
   lead({
     id: 1, company: "Acme", title: "Eng", location: "Springfield", status: "New", url: "https://example.com/1",
-    fit: "names alpha work in the posting itself, which is what this search asks for",
+    // Nothing else in the fixture says "billing": a lead's sentence and its
+    // track's fit_clause read alike, and a test matching on words they share
+    // would pass against either.
+    fit: "a staff-level role on the team that runs the billing service",
   }),
   lead({ id: 2, company: "Bolt", title: "Eng", location: "Springfield", status: "Reviewing", url: "https://example.com/2" }),
   lead({ id: 3, company: "Cog", title: "Eng", location: "Springfield", status: "Applied", url: "https://example.com/3" }),
