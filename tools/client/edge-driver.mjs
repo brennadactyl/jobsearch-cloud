@@ -181,16 +181,28 @@ export async function openEdge({ width = 1280, height = 900, port = 9340 } = {})
     /**
      * Saves a PNG of the viewport, or of the element matching `selector` with a
      * `pad`-pixel margin. Creates the folder.
+     *
+     * The clip is in page coordinates, while `getBoundingClientRect` gives
+     * viewport ones, so the page's scroll offset is added to both. Without it a
+     * shot taken after any scrolling captures a rectangle that far up the page -
+     * a picture of the wrong thing, saved as a PNG, with nothing raised: the
+     * check that compares it against a design is then comparing something else.
      */
     async screenshot(path, selector, pad = 12) {
       const params = { format: "png" };
       if (selector) {
         const box = await driver.js(`(() => {
           const r = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
-          return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+          return r ? { x: r.x + window.scrollX, y: r.y + window.scrollY, w: r.width, h: r.height } : null;
         })()`);
         if (!box) throw new Error(`nothing to screenshot: ${selector}`);
         params.clip = { x: Math.max(0, box.x - pad), y: Math.max(0, box.y - pad), width: box.w + pad * 2, height: box.h + pad * 2, scale: 1 };
+        // Right coordinates are not enough on their own: a clip reaching past
+        // what is on screen is otherwise rendered blank rather than refused, so
+        // an element below the fold comes back the right size and white. An
+        // element taller than the viewport has no on-screen state to fall back
+        // on, so this is the only way to shoot one whole.
+        params.captureBeyondViewport = true;
       }
       const r = await cdp("Page.captureScreenshot", params);
       mkdirSync(dirname(resolve(path)), { recursive: true });
