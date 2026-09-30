@@ -24,7 +24,7 @@ import { RunStamp } from "./RunStamp";
 import { TrashIcon } from "./TrashIcon";
 import { LeadFactsCard, NotesBlock } from "./detailFields";
 import { ExpandableRow, SelectableRow } from "./listRows";
-import { EditableField, LeadStatusSelect } from "./writes";
+import { EditableField, LeadStatusSelect, LeadTriageButtons } from "./writes";
 
 export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackKey: string }) {
   const { settings } = data;
@@ -352,7 +352,7 @@ function LeadsGrid({
                     <div className="loc-txt">{l.location}</div>
                   </td>
                   <td>
-                    <LeadStatusSelect lead={l} onLeave={onLeave} />
+                    <LeadTriageButtons lead={l} onLeave={onLeave} />
                   </td>
                   {LEAD_GRID_FIELDS.map(([field, label]) => (
                     <td key={field}>

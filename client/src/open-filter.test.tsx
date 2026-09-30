@@ -156,7 +156,7 @@ describe("marking a lead so it leaves the chip on screen", () => {
     vi.spyOn(client, "setLeadStatus").mockResolvedValue({ lead: { ...lead("Bolt"), status: "Not a fit" }, application: null });
     const boltRow = [...document.querySelectorAll<HTMLElement>("tr[data-expand]")].find((r) => r.textContent?.includes("Bolt"))!;
 
-    await userEvent.selectOptions(within(boltRow).getByLabelText("Status"), "Not a fit");
+    await userEvent.click(within(boltRow).getByRole("button", { name: "Not a fit" }));
 
     await waitFor(() => expect(document.querySelectorAll("tr[data-expand]")).toHaveLength(1));
     expect(document.querySelector("tr.gr-sel")).toHaveTextContent("Acme");

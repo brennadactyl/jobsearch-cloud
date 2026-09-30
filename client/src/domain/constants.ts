@@ -7,6 +7,17 @@
 /** server/src/routes/leads.js */
 export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"] as const;
 
+/** Where a lead starts. Nobody sets it on purpose; it is what a verdict is taken back to. */
+export const LEAD_NEW = "New";
+
+/**
+ * The verdicts the grid offers as buttons, in the order a row is scanned: the
+ * two that answer "is this worth my time" first, then the one that acts on the
+ * answer. Every status but LEAD_NEW, which a row is returned to rather than
+ * moved to - `triage-covers-status` in triage.test.tsx keeps the two in step.
+ */
+export const LEAD_TRIAGE: readonly string[] = ["Reviewing", "Not a fit", "Applied"];
+
 /**
  * server/src/routes/applications.js. "To Apply" is a posting parked here before
  * applying to it - tracked, but not sent, so it has no applied date until it
