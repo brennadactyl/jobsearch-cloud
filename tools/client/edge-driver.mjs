@@ -220,5 +220,12 @@ export async function openEdge({ width = 1280, height = 900, port = 9340 } = {})
       }
     },
   };
+
+  // The size asked for, applied rather than left to whatever Edge opens with.
+  // Without this the metrics are the window's, which vary between launches on
+  // the same machine - so two runs' screenshots are of different layouts and
+  // comparing them says nothing. Through the same override `resize` uses, so a
+  // check that resizes later lands in the same place it started.
+  await driver.resize(width, height);
   return driver;
 }
