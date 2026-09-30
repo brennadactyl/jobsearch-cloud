@@ -396,6 +396,32 @@ export async function getUserById(d1, id) {
 }
 
 /**
+ * Sets or clears `users.admin` on an account, and touches nothing else.
+ *
+ * Separate from upsertUser because that one writes the password on every call
+ * - it has to, since its other job is resetting a password nobody can supply.
+ * Changing who may use the admin routes is not a reason to change anyone's
+ * password, and a grant that costs a password reset is one nobody performs
+ * twice: it makes revoking cost the same, which is how a flag stops being
+ * taken back.
+ *
+ * The caller has already found the account and checked its name
+ * (routes/accounts.js), so this only writes.
+ *
+ * @param {D1Database} d1
+ * @param {string} id
+ * @param {boolean} admin
+ * @returns {Promise<boolean>} whether a row changed
+ */
+export async function setUserAdmin(d1, id, admin) {
+  const result = await d1
+    .prepare("UPDATE users SET admin = ? WHERE id = ?")
+    .bind(admin ? 1 : 0, id)
+    .run();
+  return (result.meta.changes || 0) > 0;
+}
+
+/**
  * Sets the password of an account that already exists, by id. Never use
  * upsertUser here: it creates an account on a name miss.
  *

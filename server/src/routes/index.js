@@ -25,6 +25,7 @@ import {
   handleGetMe,
   handleLogin,
   handleLogout,
+  handleSetUserAdmin,
   handleUpsertUser,
 } from "./accounts.js";
 import { handleCleanUpCompanies, handlePurgeSearch } from "./admin.js";
@@ -125,6 +126,11 @@ export const S2S_ROUTES = [
   // Creating an account or resetting its password, and removing one. Each names
   // the account it acts on, so the caller is never the subject.
   ["POST", "/api/users", handleUpsertUser],
+  // Who may use the admin routes, changed on its own. Separate from the upsert
+  // above because that one writes a password on every call, so granting
+  // through it would cost the person theirs - and revoking would too, which is
+  // how a flag stops being taken back.
+  ["POST", /^\/api\/users\/([^/]+)\/admin$/, handleSetUserAdmin],
   ["DELETE", /^\/api\/users\/([^/]+)$/, handleDeleteUser],
   // Removing the rows a retired search left behind, for the account named in the body.
   ["POST", "/api/purge", handlePurgeSearch],

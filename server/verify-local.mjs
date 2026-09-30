@@ -4433,6 +4433,57 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     (await req("POST", "/api/users", { token: plainTok, body: {
       name: plainName, password: pw, admin: true } })).status === 401);
 
+  console.log("\n== granting the flag costs nothing else ==");
+  // The upsert can set the flag too, but it writes a password on every call -
+  // it has to, since its other job is resetting one nobody can supply. So
+  // granting through it costs the person their password, and revoking costs
+  // the same, which is how a flag stops being taken back. This route changes
+  // the one field.
+  const promoted = await req("POST", `/api/users/${plainId}/admin`, { admin: true, body: {
+    name: plainName, admin: true } });
+  check("the flag can be set on its own, and the answer says what the row holds",
+    promoted.status === 200 && promoted.json?.admin === true && promoted.json?.name === plainName,
+    JSON.stringify(promoted.json));
+  check("and that account now reaches an admin route",
+    (await req("GET", "/api/admin/overview", { token: plainTok })).status === 200);
+  // The point of the route: the password is untouched, so the session they
+  // already hold still works and they were never told to pick a new one.
+  check("their password still works - granting is not a reset",
+    (await req("POST", "/api/login", { body: { name: plainName, password: pw } })).status === 200);
+  check("and the session they already had is still theirs",
+    (await req("GET", "/api/data", { token: plainTok })).status === 200);
+
+  const demoted = await req("POST", `/api/users/${plainId}/admin`, { admin: true, body: {
+    name: plainName, admin: false } });
+  check("clearing it costs nothing either, and takes the reach back at once",
+    demoted.json?.admin === false &&
+    (await req("GET", "/api/admin/overview", { token: plainTok })).status === 401 &&
+    (await req("POST", "/api/login", { body: { name: plainName, password: pw } })).status === 200,
+    JSON.stringify(demoted.json));
+
+  // Two references to the same person, as on the delete route: a mistyped id
+  // promotes nobody.
+  check("an id nobody has is a 404",
+    (await req("POST", "/api/users/no-such-id/admin", { admin: true, body: {
+      name: plainName, admin: true } })).status === 404);
+  const wrongName = await req("POST", `/api/users/${plainId}/admin`, { admin: true, body: {
+    name: `not-${plainName}`, admin: true } });
+  check("a name that isn't that account's is refused, and nobody is promoted",
+    wrongName.status === 409 &&
+    (await req("GET", "/api/me", { token: plainTok })).json.admin === false,
+    JSON.stringify(wrongName.json));
+  check("a missing name, or an admin that isn't a boolean, is a 400",
+    (await req("POST", `/api/users/${plainId}/admin`, { admin: true, body: { admin: true } })).status === 400 &&
+    (await req("POST", `/api/users/${plainId}/admin`, { admin: true, body: {
+      name: plainName, admin: "true" } })).status === 400);
+  // Machine-only, like the upsert: an account that could grant itself the flag
+  // has a flag that means nothing.
+  check("and no session reaches it, admin's or otherwise",
+    (await req("POST", `/api/users/${plainId}/admin`, { token: opTok, body: {
+      name: plainName, admin: true } })).status === 401 &&
+    (await req("POST", `/api/users/${plainId}/admin`, { token: plainTok, body: {
+      name: plainName, admin: true } })).status === 401);
+
   console.log("\n== each list is opened by its own credential, all of it ==");
   // Walked over the route tables themselves rather than a sample. Five scripts
   // authenticate with the token and one is the nightly onboarding run, which
