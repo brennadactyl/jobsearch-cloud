@@ -24,6 +24,7 @@ import {
   getUserByName,
   PASSWORD_MIN_LENGTH,
   SESSION_LABEL,
+  setUserAdmin,
   setUserPassword,
   upsertUser,
   verifyPassword,
@@ -124,6 +125,62 @@ export async function handleUpsertUser({ request, env }) {
 
   const result = await upsertUser(env.DB, name, password, demo, admin);
   return json(result, result.created ? 201 : 200);
+}
+
+/**
+ * POST /api/users/<id>/admin - in S2S_ROUTES, so the router has already
+ * required the deployment's token. Body `{ name, admin }` ->
+ * `{ id, name, admin }`; 400 for a missing name or an `admin` that isn't a
+ * boolean, 404 for an id nobody has, 409 when the name is not that account's.
+ *
+ * Who may use the admin routes, changed on its own. `POST /api/users` can also
+ * set the flag, but it writes a password on every call - it has to, since its
+ * other job is resetting one nobody can supply - so granting through it costs
+ * the person their password. A grant that expensive is one nobody performs
+ * twice, and revoking costs the same, which is how a flag quietly stops being
+ * taken back.
+ *
+ * Machine-only, like `POST /api/users` and for the same reason: an account
+ * that could grant itself the flag has a flag that means nothing, and one that
+ * could grant it to another has made a second admin nobody chose.
+ *
+ * The id is in the path and the name in the body, as on the delete below: a
+ * privilege change should take two independent references to the same person,
+ * so a mistyped id promotes nobody - it either doesn't resolve, or resolves to
+ * an account whose name won't match.
+ *
+ * `admin` must be a real boolean. Absent would have to mean "leave it", and a
+ * route whose whole purpose is this one field has nothing to do in that case;
+ * a string would let "false" read as true.
+ */
+export async function handleSetUserAdmin({ request, env, params }) {
+  const id = params[0];
+  const body = await readJson(request);
+  if (body instanceof Response) {
+    return body;
+  }
+
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) {
+    return json({ error: "name is required - it names the same account as the id, so a wrong id promotes nobody" }, 400);
+  }
+  if (typeof body.admin !== "boolean") {
+    return json({ error: "admin must be true or false" }, 400);
+  }
+
+  const user = await getUserById(env.DB, id);
+  if (!user) {
+    return json({ error: `no account with id "${id}"` }, 404);
+  }
+  if (user.name !== name) {
+    return json({ error: `"${name}" is not the name of account ${id}`, name: user.name }, 409);
+  }
+
+  await setUserAdmin(env.DB, id, body.admin);
+  // Read back rather than echoing what was asked for: the answer says what the
+  // row holds, which is what a caller checking a revocation needs.
+  const after = await getUserById(env.DB, id);
+  return json({ id: after.id, name: after.name, admin: Number(after.admin) === 1 });
 }
 
 /**
