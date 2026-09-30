@@ -10,7 +10,8 @@ clean test run is also what a check that tests nothing looks like. Every tool
 here lives in `tools/` and needs no install beyond the repo's own.
 
 `verify-and-deploy` covers proving a change that *does* alter behaviour - new
-checks in `verify-local.mjs`, and breaking a guard on purpose to see them fail.
+checks in `verify-local.mjs`, and, for a guard keeping one account out of
+another's rows or files alone, breaking it on purpose to see them fail.
 
 ## The tools
 
