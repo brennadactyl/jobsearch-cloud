@@ -78,8 +78,12 @@ export function lastNight(searches) {
  * @returns {'ran'|'reported_nothing'|'never_run'}
  */
 export function nightState(search, night) {
-  if (!search.last_run_on) return "never_run";
-  if (night && search.last_run_on === night) return "ran";
+  if (!search.last_run_on) {
+    return "never_run";
+  }
+  if (night && search.last_run_on === night) {
+    return "ran";
+  }
   return "reported_nothing";
 }
 

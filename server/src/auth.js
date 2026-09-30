@@ -193,7 +193,9 @@ export async function isAdminRequest(request, env) {
  */
 export async function adminSessionUser(request, env) {
   const user = await getSessionUser(env.DB, bearer(request));
-  if (!user || !Number(user.admin)) return null;
+  if (!user || !Number(user.admin)) {
+    return null;
+  }
   return { id: user.id, name: user.name };
 }
 

@@ -4451,7 +4451,9 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     for (const [method, path] of table) {
       const url = asPath(path);
       const res = await req(method, url, { ...creds, body: method === "GET" ? undefined : {} });
-      if (res.status === 401) shut.push(`${method} ${url}`);
+      if (res.status === 401) {
+        shut.push(`${method} ${url}`);
+      }
     }
     return shut;
   };
@@ -4469,9 +4471,13 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   const crossed = [];
   for (const [method, path] of S2S_ROUTES) {
     const url = asPath(path);
-    if (overlap.has(`${method} ${url}`)) continue;
+    if (overlap.has(`${method} ${url}`)) {
+      continue;
+    }
     const res = await req(method, url, { token: opTok, body: method === "GET" ? undefined : {} });
-    if (res.status !== 401) crossed.push(`${method} ${url} -> ${res.status}`);
+    if (res.status !== 401) {
+      crossed.push(`${method} ${url} -> ${res.status}`);
+    }
   }
   check("and an admin's session opens no machine route beyond the shared invites",
     crossed.length === 0, crossed.join(", "));

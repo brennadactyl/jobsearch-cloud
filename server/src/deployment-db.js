@@ -104,7 +104,9 @@ export class DeploymentDb {
    * @returns {Promise<number>}
    */
   async screenedCountSince(since, kinds, { excludeDemo = false } = {}) {
-    if (!kinds.length) return 0;
+    if (!kinds.length) {
+      return 0;
+    }
     const holes = kinds.map(() => "?").join(", ");
     const res = await this.d1
       .prepare(`SELECT COUNT(*) AS n FROM screened s JOIN users u ON u.id = s.user_id

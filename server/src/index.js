@@ -101,7 +101,9 @@ export default {
     // Matched one of the two lists but brought the wrong credential. Refused
     // here rather than falling through to the session routes, where the path
     // would 404 and say something about which routes exist.
-    if (s2s || admin) return unauthorized();
+    if (s2s || admin) {
+      return unauthorized();
+    }
 
     // Resolve the session before matching the path, so an unauthenticated
     // caller gets 401 for every path and learns nothing about which exist.
