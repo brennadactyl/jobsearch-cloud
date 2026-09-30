@@ -90,10 +90,13 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 /* A tab holding nothing to act on, until it's the one you're reading. */
 .tab.quiet:not([aria-selected="true"]){color:var(--ink3);font-weight:400}
 .tab.quiet:hover{color:var(--ink2)}
-.tab .tabwarn{width:6px;height:6px;border-radius:50%;flex:none;margin-left:-2px}
-.tab .tabwarn.stale{background:var(--warn)}
-.tab .tabwarn.error{background:var(--crit)}
-.tab .tabwarn.fill{background:var(--warn)}
+/* One dot on a tab, coloured by what it says: amber for a run needing
+   attention, red for one that failed, green for one that found something. The
+   geometry is the dot, the modifier is the news. */
+.tab .tabdot{width:6px;height:6px;border-radius:50%;flex:none;margin-left:-2px}
+.tab .tabdot.stale,.tab .tabdot.fill{background:var(--warn)}
+.tab .tabdot.error{background:var(--crit)}
+.tab .tabdot.found{background:var(--good)}
 .tab:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 

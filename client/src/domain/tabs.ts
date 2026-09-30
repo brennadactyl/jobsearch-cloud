@@ -7,6 +7,7 @@ import type { Application, Lead, Settings, Track } from "../api/schema";
 import type { DrillTarget } from "./drills";
 import { ALL_LEADS } from "./constants";
 import { fillState } from "./rows";
+import { isoDay } from "./format";
 import { SCREENED } from "./screened";
 import { trackWarn, type TabWarning } from "./runs";
 
@@ -25,6 +26,15 @@ export interface Tab {
    * looking like a search that simply went quiet.
    */
   paused: string;
+  /**
+   * How many postings this search found today, 0 for none and for every tab
+   * that isn't a search. Today only: a search whose last run was days ago has
+   * nothing new this morning, however recently those finds were its latest.
+   *
+   * Searches only. The pooled tab would carry a dot on any morning any search
+   * ran, which is most of them, and a light that is always on says nothing.
+   */
+  fresh: number;
   path: string;
 }
 
@@ -62,11 +72,20 @@ export function pathWithoutDrill(id: string, params: URLSearchParams): string {
   return pathForTab(id) + (query ? `?${query}` : "");
 }
 
+/**
+ * `day` is today as a calendar date, taken apart so a test can say which day it
+ * is. Local, not `toISOString()`: a run stamps its own local Pacific date, and
+ * a UTC day rolls over at 5pm PT. A UTC today would match that stamp all
+ * morning and stop matching mid-afternoon, so every dot would go dark for the
+ * rest of the day - and a dark dot reads as "this search found nothing", not
+ * as a clock bug.
+ */
 export function buildTabs(
   leads: readonly Lead[],
   applications: readonly Application[],
   tracks: Record<string, Track>,
   settings: Settings,
+  day: string = isoDay(new Date()),
 ): Tab[] {
   const tabs: Tab[] = [
     {
@@ -76,6 +95,7 @@ export function buildTabs(
       n: null,
       warn: null,
       paused: "",
+      fresh: 0,
       path: pathForTab("dashboard"),
     },
     {
@@ -89,6 +109,7 @@ export function buildTabs(
         ? { cls: "fill", title: "A posting couldn’t be read — a row here needs filling in by hand" }
         : null,
       paused: "",
+      fresh: 0,
       path: pathForTab("applications"),
     },
     {
@@ -100,6 +121,7 @@ export function buildTabs(
       n: leads.filter((l) => l.status === "New").length,
       warn: null,
       paused: "",
+      fresh: 0,
       path: pathForTab(ALL_LEADS),
     },
   ];
@@ -114,6 +136,10 @@ export function buildTabs(
       n: leads.filter((l) => l.search === key && l.status === "New").length,
       warn: trackWarn(tracks[key], settings),
       paused: tracks[key].paused,
+      // Dated today, not "dated on this search's last run day": a run that
+      // failed or never started leaves older finds as the newest there are,
+      // and those are not news this morning.
+      fresh: leads.filter((l) => l.search === key && l.found === day).length,
       path: pathForTab(key),
     });
   }
@@ -128,6 +154,7 @@ export function buildTabs(
     n: null,
     warn: null,
     paused: "",
+    fresh: 0,
     path: pathForTab(SCREENED),
   });
 

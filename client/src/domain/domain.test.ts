@@ -249,6 +249,35 @@ describe("buildTabs", () => {
     expect(tabs.find((t) => t.id === ALL_LEADS)?.n).toBe(3);
   });
 
+  it("counts what a search found today, and only for searches", () => {
+    // Every fixture lead is a day old, so the quiet case is the starting point.
+    const today = "2026-09-10";
+    expect(buildTabs(leads, applications, tracks, settings, today).filter((t) => t.fresh > 0)).toEqual([]);
+
+    const found = [
+      ...leads,
+      { ...leads[0], id: 901, company: "Fresh One", found: today },
+      { ...leads[0], id: 902, company: "Fresh Two", found: today },
+      { ...leads[0], id: 903, company: "Other", search: "beta", found: today },
+    ];
+    const tabs = buildTabs(found, applications, tracks, settings, today);
+    expect(tabs.find((t) => t.id === "alpha")?.fresh).toBe(2);
+    expect(tabs.find((t) => t.id === "beta")?.fresh).toBe(1);
+    // The pooled tab would light on any morning any search ran.
+    expect(tabs.find((t) => t.id === ALL_LEADS)?.fresh).toBe(0);
+  });
+
+  it("counts nothing from a run that isn't today's, however recent it is", () => {
+    // Beta's last run was eight days ago. What it found then is still the
+    // newest it has, and none of it is news this morning.
+    const staleDay = trackList[1].last_run.on;
+    const found = [{ ...leads[0], id: 904, search: "beta", found: staleDay }];
+    const tabs = buildTabs(found, applications, tracks, settings, "2026-09-10");
+    expect(tabs.find((t) => t.id === "beta")?.fresh).toBe(0);
+    // And the same leads do count on the day they were found.
+    expect(buildTabs(found, applications, tracks, settings, staleDay).find((t) => t.id === "beta")?.fresh).toBe(1);
+  });
+
   it("marks the Applications tab when a posting could not be read", () => {
     const tabs = buildTabs(leads, applications, tracks, settings);
     expect(tabs.find((t) => t.id === "applications")?.warn?.cls).toBe("fill");

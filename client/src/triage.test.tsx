@@ -42,6 +42,47 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("a search that found something today", () => {
+  const today = fixture.tracks[0].last_run.on;
+  const withFresh: TrackerData = {
+    ...fixture,
+    leads: [...fixture.leads, { ...fixture.leads[0], id: 905, company: "Fresh", found: today }],
+  };
+  const tab = (name: string) => screen.getByRole("tab", { name: new RegExp(`^${name}`) });
+
+  it("says so on its tab, and says how much", async () => {
+    await renderAt("/all-leads", withFresh);
+
+    expect(within(tab("Alpha roles")).getByRole("img", { name: "1 found today" })).toBeInTheDocument();
+    // Beta ran eight days ago. It carries a dot, but the one saying its run
+    // errored - not this one.
+    expect(within(tab("Beta roles")).queryByRole("img", { name: /found today/ })).toBeNull();
+    expect(within(tab("Beta roles")).getByRole("img", { name: /reported an error/ })).toBeInTheDocument();
+    // The pooled tab holds the same lead and stays quiet: it would light on
+    // any morning any search ran.
+    expect(within(tab("All leads")).queryByRole("img")).toBeNull();
+  });
+
+  it("stays quiet for a search whose last run was days ago", async () => {
+    // Beta ran eight days ago. What it found then is still the newest it has,
+    // and none of it is news this morning - so no dot, and the label can't
+    // claim a day it doesn't mean.
+    const stale: TrackerData = {
+      ...fixture,
+      leads: [...fixture.leads, { ...fixture.leads[0], id: 906, search: "beta", found: fixture.tracks[1].last_run.on }],
+    };
+    await renderAt("/all-leads", stale);
+
+    expect(within(tab("Beta roles")).queryByRole("img", { name: /found today/ })).toBeNull();
+  });
+
+  it("stays quiet where the run found nothing", async () => {
+    await renderAt("/all-leads");
+
+    expect(screen.queryByRole("img", { name: /found today/ })).toBeNull();
+  });
+});
+
 describe("triage-covers-status", () => {
   it("offers every status a person sets, and only New is left out", () => {
     expect([...LEAD_TRIAGE].sort()).toEqual(LEAD_STATUS.filter((s) => s !== LEAD_NEW).sort());
