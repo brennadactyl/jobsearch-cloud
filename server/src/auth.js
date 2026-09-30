@@ -31,6 +31,14 @@ export const PASSWORD_MIN_LENGTH = 12;
  * Where a session token lives, stored as its label. Revoking by label is how
  * "sign out other browsers" leaves a machine's search token alone, so every
  * insert and every filter on a label uses these rather than a typed string.
+ *
+ * A label says where a token lives and nothing about who holds it. In
+ * particular **there is no admin label**: whether someone may use the admin
+ * routes is `users.admin`, read on every request (getSessionUser). Marking it
+ * here would record at sign-in a fact that changes afterwards - a cleared flag
+ * leaving a session still labelled an admin's, a granted one leaving a live
+ * session labelled ordinary - and the next reader would take the label for the
+ * answer because it is cheaper to reach.
  */
 export const SESSION_LABEL = Object.freeze({
   browser: "browser",
@@ -162,6 +170,35 @@ export async function isAdminRequest(request, env) {
   return timingSafeEqual(await hashToken(given), await hashToken(env.ADMIN_TOKEN));
 }
 
+/**
+ * The person behind an admin route, when one signed in for it: a session whose
+ * account carries `users.admin` (migrations/0030), or null for anyone else.
+ *
+ * The flag is read here, from this request's own session lookup, and is never
+ * copied anywhere - so clearing it ends that reach on the caller's next
+ * request, on every device, without touching their session or their rows.
+ *
+ * An ordinary session is refused by the router rather than by a handler, and
+ * is told nothing about why: an admin area nobody else can see is the point
+ * (docs/admin-dashboard-plan.md).
+ *
+ * What comes back is for attribution - saying who did something - and a
+ * handler must never scope a query by it. Admin handlers get no `Db` at all
+ * (routes/index.js), which is what makes that rule keep itself: with nothing
+ * to reach for, a handler has to name the account it acts on.
+ *
+ * @param {Request} request
+ * @param {{DB?: D1Database}} env
+ * @returns {Promise<{id: string, name: string}|null>}
+ */
+export async function adminSessionUser(request, env) {
+  const user = await getSessionUser(env.DB, bearer(request));
+  if (!user || !Number(user.admin)) {
+    return null;
+  }
+  return { id: user.id, name: user.name };
+}
+
 export function bearer(request) {
   const header = request.headers.get("Authorization") || "";
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -175,9 +212,16 @@ export function bearer(request) {
  * `demo` is included because a route has to refuse a demo account before it
  * writes anything shared (demo account, docs/glossary.md#accounts), and this is the
  * one lookup every request already makes.
+ *
+ * `admin` rides along for the same reason, and that is the whole of how a
+ * person's admin reach is checked: read here, on every request, never copied
+ * anywhere. Clearing the flag ends that reach into the admin routes on their
+ * next request, on every device, without touching their session or their rows.
+ * A copy kept on the session would be a fact that moves after it is written -
+ * stale in both directions, and stale silently.
  * @param {D1Database} d1
  * @param {string} token
- * @returns {Promise<{id: string, name: string, demo: number, session_id: string}|null>}
+ * @returns {Promise<{id: string, name: string, demo: number, admin: number, session_id: string}|null>}
  */
 export async function getSessionUser(d1, token) {
   if (!token) {
@@ -185,7 +229,7 @@ export async function getSessionUser(d1, token) {
   }
   const row = await d1
     .prepare(
-      `SELECT u.id AS id, u.name AS name, u.demo AS demo, s.id AS session_id
+      `SELECT u.id AS id, u.name AS name, u.demo AS demo, u.admin AS admin, s.id AS session_id
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.id = ?`
     )
@@ -236,29 +280,38 @@ export async function deleteSession(d1, token) {
  * @param {boolean} [demo] whether the account's data is invented
  *   (docs/glossary.md#accounts). Omitted, a new account is a person and
  *   an existing one keeps what it was, so a password reset never changes it.
- * @returns {Promise<{id: string, name: string, created: boolean, demo: boolean}>}
+ * @param {boolean} [admin] whether the account may use the admin routes by
+ *   signing in (migrations/0030). Omitted behaves as `demo` does, so a
+ *   password reset neither grants nor revokes. Passing `false` revokes, which
+ *   is the only way back out: a reach that cannot be taken back is not one
+ *   worth granting. This route needs the admin token, so the token is what
+ *   makes the first admin on a database with none, and what recovers from
+ *   losing the last.
+ * @returns {Promise<{id: string, name: string, created: boolean, demo: boolean, admin: boolean}>}
  */
-export async function upsertUser(d1, name, password, demo) {
+export async function upsertUser(d1, name, password, demo, admin) {
   const { hash, salt, iterations } = await hashPassword(password);
   const existing = await getUserByName(d1, name);
   if (existing) {
     const flag = demo === undefined ? (Number(existing.demo) ? 1 : 0) : demo ? 1 : 0;
+    const adm = admin === undefined ? (Number(existing.admin) ? 1 : 0) : admin ? 1 : 0;
     await d1
-      .prepare("UPDATE users SET password_hash = ?, password_salt = ?, iterations = ?, demo = ? WHERE id = ?")
-      .bind(hash, salt, iterations, flag, existing.id)
+      .prepare("UPDATE users SET password_hash = ?, password_salt = ?, iterations = ?, demo = ?, admin = ? WHERE id = ?")
+      .bind(hash, salt, iterations, flag, adm, existing.id)
       .run();
-    return { id: existing.id, name: existing.name, created: false, demo: flag === 1 };
+    return { id: existing.id, name: existing.name, created: false, demo: flag === 1, admin: adm === 1 };
   }
   const id = crypto.randomUUID();
   const flag = demo ? 1 : 0;
+  const adm = admin ? 1 : 0;
   await d1
     .prepare(
-      `INSERT INTO users (id, name, password_hash, password_salt, iterations, created_at, demo)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO users (id, name, password_hash, password_salt, iterations, created_at, demo, admin)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(id, name, hash, salt, iterations, new Date().toISOString().slice(0, 10), flag)
+    .bind(id, name, hash, salt, iterations, new Date().toISOString().slice(0, 10), flag, adm)
     .run();
-  return { id, name, created: true, demo: flag === 1 };
+  return { id, name, created: true, demo: flag === 1, admin: adm === 1 };
 }
 
 /**

@@ -674,5 +674,33 @@ VALUES ('u1', '', 'Initech', 'Staff', '2026-09-03', 'Applied', '');
   db.close();
 }
 
+console.log("\n== 0030 makes nobody an admin, including whoever held the token ==");
+{
+  // Nothing is inferred. Holding the deployment's token is not a property of
+  // any account - it lives in a scheduled task - so there is no row this can
+  // be read off, and guessing would hand the reach to whichever account looked
+  // most like an operator. The first one is granted deliberately, through the
+  // route, with the token.
+  const STOP30 = MIGRATIONS.find((f) => f.startsWith("0030_"));
+  const db = migratedThrough(STOP30, `
+INSERT INTO users (id, name, demo) VALUES ('u1', 'One', 0);
+INSERT INTO users (id, name, demo) VALUES ('u2', 'Demo', 1);
+INSERT INTO sessions (id, user_id, created_at, label) VALUES ('s1', 'u1', '2026-09-01T00:00:00.000Z', 'browser');
+`);
+  const users = db.prepare("SELECT id, name, demo, admin FROM users ORDER BY id").all();
+  check("every existing account starts as no admin, with no NULLs to read around",
+    users.length === 2 && users.every((u) => u.admin === 0));
+  check("and keeps what it already was",
+    users[0].name === "One" && users[0].demo === 0 && users[1].demo === 1);
+  // The flag lives on the account, never on the session, so that clearing it
+  // is the whole of revocation. A session column would be a second place to
+  // keep in step, and the one that goes stale silently.
+  // node:sqlite hands back null-prototype rows, so ask Object rather than the
+  // row - a row with no prototype has no hasOwnProperty of its own.
+  check("a session records nothing about it",
+    !Object.hasOwn(db.prepare("SELECT * FROM sessions WHERE id = 's1'").get(), "admin"));
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

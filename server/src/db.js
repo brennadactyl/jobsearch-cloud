@@ -14,7 +14,14 @@
  *
  * Users and sessions live in auth.js: resolving which user is calling has to
  * happen before a user-scoped Db exists. The company list every account shares
- * lives in companies.js, whose rows belong to no user.
+ * lives in companies.js, whose rows belong to no user. Reads that span
+ * accounts live in deployment-db.js, for the same reason from the other
+ * direction: they belong to every user, so there is no id to bind.
+ *
+ * That is the whole test for whether something belongs here. A query this file
+ * cannot scope is a query this file should not hold - adding one would mean a
+ * `Db` built without a user, which matches nothing or everything depending on
+ * the statement, and tells you which only in production.
  *
  * There is no build step, so the @typedef blocks below are the type contract
  * that editors and `tsc --checkJs` read.

@@ -28,6 +28,7 @@ import {
   handleUpsertUser,
 } from "./accounts.js";
 import { handleCleanUpCompanies, handlePurgeSearch } from "./admin.js";
+import { handleAdminOverview } from "./overview.js";
 import {
   handleDeleteApplication,
   handleGetAutofillQueue,
@@ -86,19 +87,38 @@ export const PUBLIC_ROUTES = [
 ];
 
 /**
- * The routes only the operator's scripts and the onboarding run call. Every one
- * requires ADMIN_TOKEN as the bearer, checked by ../index.js before dispatch, so
- * a handler here cannot forget it and a session token is refused whoever it
- * belongs to. None is called by the person it concerns: they work across
- * accounts through ../onboarding.js, or name their subject - deleting an
- * account names it twice, in the path and the body.
+ * **Machine routes: the deployment's own credential, and nothing else.**
+ * ADMIN_TOKEN as the bearer, checked by ../index.js once for the whole list
+ * before dispatch, so a handler here cannot forget it.
+ *
+ * These are what the operator scripts and the nightly onboarding run call. The
+ * token lives in a scheduled task on a machine, never in a browser, and a
+ * person's session - whatever their account carries - is refused here.
+ *
+ * That refusal is the point rather than an accident of history. `/api/tokens`
+ * mints a search token for a named account, which reaches everything that
+ * account owns; a browser credential that could call it would turn every admin
+ * into a reader of everyone's tracker. Keeping the lists apart means an admin's
+ * reach is decided by which list a route is in, rather than by anyone
+ * remembering that one of them is different.
+ *
+ * A route a person should also be able to call gets **its own entry in
+ * ADMIN_ROUTES below, sharing this one's logic** - not a second credential on
+ * this one. Two routes over one function say who may do what; one route with
+ * two doors says only "somebody may".
  *
  * @type {Array<[string, string|RegExp, Function]>}
  */
-export const ADMIN_ROUTES = [
+export const S2S_ROUTES = [
+  // Invites are in both lists for now, the one place a path is reachable by
+  // either credential. The portal takes invites over entirely in a later
+  // chunk (docs/admin-dashboard-plan.md), and `new-invite.ps1` stops being the
+  // way in; until then both callers are real and the duplication is the
+  // honest description of that.
   ["POST", "/api/invites", handleMintInvite],
   ["GET", "/api/invites", handleListInvites],
   ["POST", "/api/invites/revoke", handleRevokeInvite],
+  // The onboarding run's own three. No human does any of this from a page.
   ["GET", "/api/intake/pending", handlePendingIntakes],
   ["POST", "/api/intake/complete", handleCompleteIntake],
   ["POST", "/api/tokens", handleMintSearchToken],
@@ -111,6 +131,41 @@ export const ADMIN_ROUTES = [
   // Merging duplicate companies and renaming acquired ones, on the list every
   // account shares.
   ["POST", "/api/companies/cleanup", handleCleanUpCompanies],
+];
+
+/**
+ * **Admin routes: a person, signed in, whose account carries `users.admin`.**
+ * The flag is read from the database on every request (../auth.js
+ * adminSessionUser), so clearing it ends that reach at once and on every
+ * device. ADMIN_TOKEN does not open these: a machine has its own list above.
+ *
+ * **Every handler here receives `user: null` and `db: null`,** as in
+ * S2S_ROUTES. None of these is called by the person it concerns: they name
+ * their subject, or read across accounts through `ctx.deploymentDb`. With no
+ * `Db` to reach for, a handler cannot quietly act on the caller's own rows,
+ * and a route added later inherits that rather than remembering it.
+ *
+ * Setting `users.admin` is not reachable from here at all: it lives on
+ * `POST /api/users`, which is machine-only, so granting and revoking stay with
+ * the token by structure rather than by a check.
+ *
+ * The destructive ones - deleting an account, purging a search - are
+ * deliberately absent until the portal needs them, and when it does they
+ * arrive as their own entries over the same functions the machine list uses.
+ * An auth-bearing route with no caller is a liability, and the way to add one
+ * is not to put a second credential on the machine's.
+ *
+ * @type {Array<[string, string|RegExp, Function]>}
+ */
+export const ADMIN_ROUTES = [
+  // Invites: the temporary overlap described above.
+  ["POST", "/api/invites", handleMintInvite],
+  ["GET", "/api/invites", handleListInvites],
+  ["POST", "/api/invites/revoke", handleRevokeInvite],
+  // The Overview, counted across every account. The one read here that isn't
+  // about a named subject, so it is the one route handed `ctx.deploymentDb`
+  // (../deployment-db.js) rather than naming an account itself.
+  ["GET", "/api/admin/overview", handleAdminOverview],
 ];
 
 /**

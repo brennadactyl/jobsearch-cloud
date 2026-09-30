@@ -75,14 +75,26 @@ export async function handleLogout({ env, token }) {
 }
 
 /**
- * POST /api/users - requires the ADMIN_TOKEN secret as Bearer. Body
- * `{ name, password, demo? }` -> `{ id, name, created, demo }`, 201 when
- * created and 200 when an existing account's password was set; 400 for a
- * missing name or a password under 12 characters, 401 without the admin token.
+ * POST /api/users - in ADMIN_ROUTES, so the router has already admitted the
+ * caller. Body `{ name, password, demo?, admin? }` ->
+ * `{ id, name, created, demo, admin }`, 201 when created and 200 when an
+ * existing account's password was set; 400 for a missing name or a password
+ * under 12 characters.
  *
- * Gated by the ADMIN_TOKEN rather than a session: there is no self-signup, and
- * whoever operates the deployment provisions people. It is also the reset for
- * a forgotten password, which /api/password can't do without the current one.
+ * Not open to an ordinary session: there is no self-signup, and whoever
+ * operates the deployment provisions people. It is also the reset for a
+ * forgotten password, which /api/password can't do without the current one.
+ *
+ * **`admin` can only be set from here, and here is machine-only.** This route
+ * is in S2S_ROUTES and nowhere else, so a person's session cannot reach it at
+ * all, whatever their account carries. That is the whole of the protection:
+ * an account that could grant itself the flag has a flag that means nothing,
+ * and one that could grant it to another has made a second admin nobody chose.
+ * Keeping the route out of the admin list says so structurally, where a check
+ * inside the handler would say it only as long as someone kept the check.
+ *
+ * It is also what makes the first admin on a database with none, and what
+ * recovers from losing the last.
  */
 export async function handleUpsertUser({ request, env }) {
   const body = await readJson(request);
@@ -104,7 +116,13 @@ export async function handleUpsertUser({ request, env }) {
   // Anything but a boolean means "not saying", and leaves an existing account
   // as it was.
   const demo = typeof body.demo === "boolean" ? body.demo : undefined;
-  const result = await upsertUser(env.DB, name, password, demo);
+
+  // Anything but a boolean means "not saying", as with `demo`, so a password
+  // reset neither grants nor revokes. Only the deployment's token reaches this
+  // route at all (see above), so there is no caller to refuse here.
+  const admin = typeof body.admin === "boolean" ? body.admin : undefined;
+
+  const result = await upsertUser(env.DB, name, password, demo, admin);
   return json(result, result.created ? 201 : 200);
 }
 
@@ -168,9 +186,20 @@ export async function handleDeleteUser({ request, env, params }) {
   return json({ deleted: { ...deleted, documents, logs } });
 }
 
-/** GET /api/me - requires a Bearer token -> `{ id, name }`. */
+/**
+ * GET /api/me - requires a Bearer token -> `{ id, name, admin }`.
+ *
+ * `admin` is what lets the page decide whether to offer an admin area. It is
+ * presentation, not the gate: every admin route checks the same flag itself on
+ * every request (auth.js adminCaller), so a page that showed the entry to the
+ * wrong person would reveal an area and open none of it.
+ *
+ * It is read from this request's own session lookup, so it is current rather
+ * than whatever was true when the page loaded. A page holding it across a
+ * revocation will find the routes refusing before it notices.
+ */
 export function handleGetMe({ user }) {
-  return json({ id: user.id, name: user.name });
+  return json({ id: user.id, name: user.name, admin: Number(user.admin) === 1 });
 }
 
 /**
