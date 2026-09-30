@@ -14,7 +14,7 @@ export const LEAD_NEW = "New";
  * The verdicts the grid offers as buttons, in the order a row is scanned: the
  * two that answer "is this worth my time" first, then the one that acts on the
  * answer. Every status but LEAD_NEW, which a row is returned to rather than
- * moved to - `triage-covers-status` in leads.test.tsx keeps the two in step.
+ * moved to - `triage-covers-status` in triage.test.tsx keeps the two in step.
  */
 export const LEAD_TRIAGE: readonly string[] = ["Reviewing", "Not a fit", "Applied"];
 

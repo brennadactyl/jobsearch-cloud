@@ -135,9 +135,12 @@ describe("a grid row's status buttons", () => {
 
 describe("a verdict that takes the row out of the list", () => {
   it("says where it went, since the buttons go with it", async () => {
-    // The one case a second tap can't reach: under Open, Not a fit hides the
-    // row, so the button that would take it back is gone. The sentence is what
-    // is left saying anything happened.
+    // Un-clicking needs the row still on screen, and two cases take it away:
+    // Not a fit under a chip that excludes it, and Applied under any chip at
+    // all, since leadRows drops Applied from every leads tab. Applied also
+    // creates the application row, which setting the lead back would not
+    // remove - that one is undone from Applications, not from here. The
+    // sentence is what is left saying anything happened.
     setPrefs({ view: "grid", leadSort: "company-asc" });
     await renderAt("/t/alpha");
     vi.spyOn(client, "setLeadStatus").mockResolvedValue({ lead: { ...lead("Bolt"), status: "Not a fit" }, application: null });
