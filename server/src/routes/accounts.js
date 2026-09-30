@@ -176,7 +176,15 @@ export async function handleSetUserAdmin({ request, env, params }) {
     return json({ error: `"${name}" is not the name of account ${id}`, name: user.name }, 409);
   }
 
-  await setUserAdmin(env.DB, id, body.admin);
+  // SQLite counts a matched row as changed even when the value is already what
+  // was asked for, so this says the account was still there rather than that
+  // the flag moved - and that is the fact the read-back below needs. Without
+  // it, a row deleted between the lookup and the write answers 500 instead of
+  // the 404 this route already knows how to give.
+  if (!(await setUserAdmin(env.DB, id, body.admin))) {
+    return json({ error: `no account with id "${id}"` }, 404);
+  }
+
   // Read back rather than echoing what was asked for: the answer says what the
   // row holds, which is what a caller checking a revocation needs.
   const after = await getUserById(env.DB, id);
