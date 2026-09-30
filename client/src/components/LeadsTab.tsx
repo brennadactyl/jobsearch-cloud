@@ -7,7 +7,7 @@ import { Fragment } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { Lead, TrackerData } from "../api/schema";
 import { useDeleteLead, useMoveLead, type LeavingView } from "../api/mutations";
-import { ALL_LEADS, LABELS, LEAD_STATUS } from "../domain/constants";
+import { ALL_LEADS, LABELS, LEAD_GRID_FIELDS, LEAD_STATUS } from "../domain/constants";
 import { ALL_FILTER, OPEN_FILTER, drillKeeps, leadFilterKeeps, leadRows, resolveLeadFilter } from "../domain/drills";
 import { leadColumns } from "../domain/export";
 import { safeUrl } from "../domain/format";
@@ -282,14 +282,6 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
     </>
   );
 }
-
-/**
- * The grid is for a fast scan without scrolling, so it shows a deliberately
- * short list of columns - Detail view has the rest. Comp earns the one extra
- * because it is the field most likely to change whether a posting is worth a
- * second look.
- */
-const LEAD_GRID_FIELDS: readonly (readonly [string, string])[] = [["comp", "Comp range"]];
 
 function LeadsGrid({
   rows,
