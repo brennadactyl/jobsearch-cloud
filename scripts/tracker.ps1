@@ -509,7 +509,16 @@ function Invoke-LeadsCommand {
     }
     if ($send.Count -eq 0) { Write-TrackerLine "leads: nothing to send (refused=$($script:Refused))"; exit 0 }
     $res = Invoke-Tracker "POST" "/api/leads" @{ on = $Today; leads = @($send) }
-    Write-TrackerLine "leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) refused=$($script:Refused) area_cleared=$($script:AreaCleared) on=$Today"
+    # Two counts about areas, from two places, and they are not a split of the
+    # batch: `area_cleared` is this helper dropping an area a run sent that names
+    # no ranked place, and `area_filled` is the tracker working one out from a
+    # location where the run sent none. One lead can be both - this helper drops
+    # a bad area, the tracker then reads the location - so they are printed as
+    # what each layer did rather than as shares of a total. `filled` staying 0
+    # night after night says runs are naming areas themselves; `named` falling to
+    # 0 says they have stopped and the tracker is carrying it.
+    Write-TrackerLine ("leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) " +
+        "refused=$($script:Refused) area_cleared=$($script:AreaCleared) area_filled=$([int]$res.area_filled) on=$Today")
     # Every area sent was checked above, so the route clearing one means the
     # two copies of the split rule disagree.
     if ([int]$res.area_cleared -gt 0) {
