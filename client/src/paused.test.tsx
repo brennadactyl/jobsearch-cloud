@@ -81,12 +81,12 @@ describe("a paused search's tab", () => {
     };
     await renderAt("/t/gamma", fed);
     expect(document.querySelector(".runstamp")).toHaveClass("paused");
-    expect(tab("Gamma roles").querySelector(".tabwarn")).toBeNull();
+    expect(tab("Gamma roles").querySelector(".tabdot")).toBeNull();
   });
 
   it("has no warning dot on its tab, where the same search running would", async () => {
     await renderAt("/", pausedBeta);
-    expect(tab("Beta roles").querySelector(".tabwarn")).toBeNull();
+    expect(tab("Beta roles").querySelector(".tabdot")).toBeNull();
   });
 
   it("greys the tab itself, so a quiet search isn't quiet for no visible reason", async () => {

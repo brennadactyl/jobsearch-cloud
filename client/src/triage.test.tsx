@@ -54,7 +54,10 @@ describe("a search that found something today", () => {
     await renderAt("/all-leads", withFresh);
 
     expect(within(tab("Alpha roles")).getByRole("img", { name: "1 found today" })).toBeInTheDocument();
-    expect(within(tab("Beta roles")).queryByRole("img")).toBeNull();
+    // Beta ran eight days ago. It carries a dot, but the one saying its run
+    // errored - not this one.
+    expect(within(tab("Beta roles")).queryByRole("img", { name: /found today/ })).toBeNull();
+    expect(within(tab("Beta roles")).getByRole("img", { name: /reported an error/ })).toBeInTheDocument();
     // The pooled tab holds the same lead and stays quiet: it would light on
     // any morning any search ran.
     expect(within(tab("All leads")).queryByRole("img")).toBeNull();

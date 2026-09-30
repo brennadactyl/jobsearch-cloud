@@ -91,8 +91,8 @@ describe("the shell", () => {
     await screen.findByRole("heading", { name: "Fixture Search" });
     const beta = screen.getAllByRole("tab").find((t) => t.textContent?.startsWith("Beta roles"))!;
     const alpha = screen.getAllByRole("tab").find((t) => t.textContent?.startsWith("Alpha roles"))!;
-    expect(beta.querySelector(".tabwarn.error")).toBeTruthy();
-    expect(alpha.querySelector(".tabwarn")).toBeFalsy();
+    expect(beta.querySelector(".tabdot.error")).toBeTruthy();
+    expect(alpha.querySelector(".tabdot")).toBeFalsy();
   });
 
   it("selects only the open tab, even when one track key starts another", async () => {
@@ -113,7 +113,7 @@ describe("the shell", () => {
     renderApp();
     await screen.findByRole("heading", { name: "Fixture Search" });
     const apps = screen.getAllByRole("tab").find((t) => t.textContent?.startsWith("Applications"))!;
-    expect(apps.querySelector(".tabwarn.fill")).toBeTruthy();
+    expect(apps.querySelector(".tabdot.fill")).toBeTruthy();
   });
 
   it("offers a real button to log out", async () => {

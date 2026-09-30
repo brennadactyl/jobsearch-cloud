@@ -20,7 +20,16 @@ function pausedTitle(paused: string): string {
   return `Paused${day ? ` since ${day}` : ""}: this search doesn't run until it's resumed. Its leads stay here.`;
 }
 
-/** What the dot says: the count, because a dot alone doesn't say how much is behind it. */
+/**
+ * What a tab says without being opened: a run that needs attention, or one
+ * that found something. Named rather than left as decoration, because a colour
+ * is nothing to a screen reader and on a tab the dot is the whole message.
+ */
+function TabDot({ cls, title }: { cls: string; title: string }) {
+  return <i className={`tabdot ${cls}`} role="img" aria-label={title} title={title} />;
+}
+
+/** What the found dot says: the count, because a dot alone doesn't say how much is behind it. */
 function freshTitle(n: number): string {
   return `${n} found today`;
 }
@@ -145,13 +154,8 @@ export default function Shell({
                 {/* Said on the tab, not only inside it: a paused search's tab
                     is quiet for a reason, and the reason should be visible
                     without opening it. */}
-                {t.warn && <i className={`tabwarn ${t.warn.cls}`} title={t.warn.title} />}
-                {/* Named rather than left as decoration: a colour is nothing
-                    to a screen reader, and this one is the only thing saying
-                    the search found anything last night. */}
-                {t.fresh > 0 && (
-                  <i className="tabnew" role="img" aria-label={freshTitle(t.fresh)} title={freshTitle(t.fresh)} />
-                )}
+                {t.warn && <TabDot cls={t.warn.cls} title={t.warn.title} />}
+                {t.fresh > 0 && <TabDot cls="found" title={freshTitle(t.fresh)} />}
                 {t.n !== null && <span className="n">{t.n}</span>}
               </Link>
             ))}
