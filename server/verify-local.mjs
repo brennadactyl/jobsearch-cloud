@@ -1175,6 +1175,17 @@ check("step 9d names every field a sweep can carry, wall included",
 // fetch failed deletes a true wall, and nothing downstream can tell.
 check("step 9d forbids echoing a known board or endpoint back from companies.json",
   /Never copy `board`, `endpoint` or `url_shape` out of `companies\.json`/.test(sweSteps));
+// Those three fields are read by every search as this company's facts, so a
+// sentence written into one is stored as the fact. The step has to say they hold
+// a value only, and say where the account of tonight's fetch goes instead.
+check("step 9d says the shared fetch fields hold a value and nothing else",
+  sweSteps.includes("is a value and nothing else") && sweSteps.includes('no "confirmed\n   tonight"') &&
+  sweSteps.includes("belongs in your step-10 report"));
+// url_shape names the address a person opens, which is the same address step 9
+// asks a lead to carry: a mirror that serves no postings is not one.
+check("step 9d ties url_shape to the address a person opens",
+  sweSteps.includes("the form of the address a person opens to read a job") &&
+  sweSteps.includes("A mirror on\n   another host counts only if postings actually open there"));
 // The cap has to hold on a freshly seeded list, where every row is
 // never-swept, and it has to be the *server's* cap, not one the prompt describes.
 // Seeded as A, never as B - B is the account that has never swept anything.
