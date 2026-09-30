@@ -197,6 +197,12 @@ export async function openEdge({ width = 1280, height = 900, port = 9340 } = {})
         })()`);
         if (!box) throw new Error(`nothing to screenshot: ${selector}`);
         params.clip = { x: Math.max(0, box.x - pad), y: Math.max(0, box.y - pad), width: box.w + pad * 2, height: box.h + pad * 2, scale: 1 };
+        // Right coordinates are not enough on their own: a clip reaching past
+        // what is on screen is otherwise rendered blank rather than refused, so
+        // an element below the fold comes back the right size and white. An
+        // element taller than the viewport has no on-screen state to fall back
+        // on, so this is the only way to shoot one whole.
+        params.captureBeyondViewport = true;
       }
       const r = await cdp("Page.captureScreenshot", params);
       mkdirSync(dirname(resolve(path)), { recursive: true });
