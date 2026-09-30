@@ -239,6 +239,22 @@ tr.pri4 td:first-child{border-left-color:var(--pri-4)}
 td select{padding:5px 7px;font-size:13px;min-width:112px}
 td input[type=text],td input[type=date]{font-size:13px;min-width:104px}
 td textarea{font-size:13px;min-height:32px;min-width:130px}
+/* The grid's status cell. The pressed button wears the colour that status's
+   pill wears everywhere else, so the cell says what it did without a second
+   thing to read; an unpressed one stays quiet, since a row full of shouting
+   buttons is what a scan has to look past. */
+.triage{display:flex;gap:2px}
+.triage button{font:inherit;font-size:12px;padding:5px 8px;background:none;cursor:pointer;
+  border:1px solid var(--line);color:var(--ink3);white-space:nowrap}
+.triage button:first-child{border-radius:7px 0 0 7px}
+.triage button:last-child{border-radius:0 7px 7px 0}
+.triage button:hover{color:var(--ink);border-color:var(--ink3)}
+.triage button:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+.triage button[aria-pressed="true"]{background:var(--surface2);font-weight:600;color:var(--ink)}
+.triage button.hot[aria-pressed="true"]{color:var(--warn);border-color:var(--warn)}
+.triage button.go[aria-pressed="true"]{color:var(--good);border-color:var(--good)}
+.triage button.no[aria-pressed="true"]{border-color:var(--ink3)}
+
 .grid-wrap tbody tr[data-expand]{cursor:pointer}
 .grid-wrap tbody tr.gr-sel{background:var(--accent-soft)}
 .grid-wrap tbody tr.gr-sel:hover{background:var(--accent-soft)}

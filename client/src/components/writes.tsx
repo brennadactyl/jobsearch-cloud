@@ -5,7 +5,7 @@
 import { useEffect, useState, type ChangeEvent, type FocusEvent } from "react";
 import type { Application, Lead } from "../api/schema";
 import { useSetApplicationStatus, useSetLeadStatus, useUpdateField, type LeavingView } from "../api/mutations";
-import { APP_STAGE_DATE_MAP, APP_STATUS, LEAD_STATUS } from "../domain/constants";
+import { APP_STAGE_DATE_MAP, APP_STATUS, LEAD_NEW, LEAD_STATUS, LEAD_TRIAGE, pillFor } from "../domain/constants";
 import { today } from "../domain/format";
 
 /** Stages booked ahead, so the date logged is often in the future; the dialog asks accordingly. */
@@ -111,6 +111,46 @@ export function LeadStatusSelect({
         <option key={s}>{s}</option>
       ))}
     </select>
+  );
+}
+
+/**
+ * The grid's status cell: one button per verdict, side by side, so marking a
+ * row costs one tap while scanning rather than opening a select and finding an
+ * option in it. The pressed button is the row's status, so the cell says what
+ * it did without a separate display.
+ *
+ * Detail view keeps the select. It is read one posting at a time, where the
+ * cost this replaces isn't being paid.
+ */
+export function LeadTriageButtons({
+  lead,
+  onLeave,
+}: {
+  lead: Lead;
+  onLeave?: (lead: Lead, status: string) => LeavingView | undefined;
+}) {
+  const setStatus = useSetLeadStatus();
+  return (
+    <div className="triage" role="group" aria-label="Status">
+      {LEAD_TRIAGE.map((verdict) => {
+        const pressed = lead.status === verdict;
+        // Tapping the verdict a row already carries takes it back to New, which
+        // is the way out of a mis-tap for the two that leave the row in place.
+        const status = pressed ? LEAD_NEW : verdict;
+        return (
+          <button
+            key={verdict}
+            type="button"
+            className={pillFor(verdict)}
+            aria-pressed={pressed}
+            onClick={() => setStatus.mutate({ id: lead.id, status, leaving: onLeave?.(lead, status) })}
+          >
+            {verdict}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
