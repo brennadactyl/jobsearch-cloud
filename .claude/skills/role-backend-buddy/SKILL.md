@@ -63,11 +63,11 @@ check it matches what the backup predicted.
   one listener, prove the worker is yours with a route or field only your tree
   has, apply migrations with `--local`. Add checks for the new behaviour,
   including that one account can't reach another's rows or files.
-- When the change adds a guard keeping one account out of another's rows or
-  files, and only then: break it on purpose from a committed state, confirm the
-  new checks fail, and restore with `git checkout -- src`. One broken run, and
-  no clean rerun after it - the restored tree already passed. For every other
-  change a new check that passes is the proof.
+- Check both paths for every new behaviour: the one where it works and the one
+  where it refuses. Assert what only the new code can produce - the value
+  written, the field returned, the reason given - not a status the old code
+  also returned. Never break or remove the new code to prove a check works; a
+  check that needs that is one to rewrite.
 - `verify-migration.mjs` when migrations changed; `verify-schema-doc.mjs` always.
 - Stop the worker by killing the wrangler parent's process tree, and confirm the
   port is free.
