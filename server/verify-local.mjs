@@ -1207,9 +1207,20 @@ check("step 6b leaves an unstated field out rather than sending it empty",
 // the arithmetic happens once instead of differently every night.
 check("step 6b asks for a posted date or an age in days, and forbids doing the sum",
   sweSteps.includes("`posted_date` when it prints a date") && sweSteps.includes("`posted_days` when it gives an age") &&
-  sweSteps.includes("don't work out a date from an age yourself"));
+  /on't work out a date from an age yourself/.test(sweSteps));
 check("and leaves both out when the posting only says it was recent",
   sweSteps.includes("both fields are left out"));
+// Three ways a run's row is dropped rather than read, each worth stating because
+// each is what a model reaches for by default: a quoted count, both fields at
+// once, and a date the board labelled something else.
+check("step 6b says a count is a bare number and a quoted one is dropped",
+  sweSteps.includes("a bare number, not text") && sweSteps.includes('never `"3"`') &&
+  sweSteps.includes("a quoted count is dropped"));
+check("step 6b drops a row that carries both posted fields",
+  sweSteps.includes("a row carrying both is dropped entire"));
+check("step 6b counts only a date the posting labels as posted",
+  sweSteps.includes("a closing date, a start date, an \"updated\" stamp") &&
+  sweSteps.includes("confidently wrong is worse"));
 check("step 9 names both posted fields in the row it asks for",
   sweSteps.includes("comp, posted_date, posted_days"));
 check("step 9e stops after a stated number of extra slices, not an effort",
