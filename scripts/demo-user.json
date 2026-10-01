@@ -138,6 +138,8 @@
   ],
 
   "screened": [
+    { "search": "engineering", "company": "Pinehurst Cloud", "title": "Senior Engineer, Platform", "location": "Remote (US)", "url": "https://careers.pinehurst.example.com/jobs/739455", "reason": "range entirely below $180K ($150,000-$172,000)", "kind": "pay-below-floor", "daysAgo": 0 },
+    { "search": "engineering", "company": "Meridian Freight", "title": "Staff Engineer, Routing", "location": "Dublin, Ireland", "url": "https://careers.meridianfreight.example.com/jobs/396510", "reason": "Dublin only - the posting rules out remote outside Ireland", "kind": "out-of-scope", "daysAgo": 0 },
     { "search": "engineering", "company": "Wavelet Labs", "title": "Engineering Program Manager", "location": "Remote (US)", "url": "https://careers.wavelet.example.com/jobs/609221", "reason": "program management rather than an engineering role - the posting owns schedules and status, not the code", "kind": "wrong-role", "daysAgo": 1 },
     { "search": "engineering", "company": "Northwind Systems", "title": "Staff Engineer, Ledger Core", "location": "Seattle, WA", "url": "https://careers.northwind.example.com/jobs/492118", "reason": "asks for eight years on a general ledger and names it as a hard requirement", "kind": "wrong-level", "daysAgo": 1 },
     { "search": "engineering", "company": "Pinehurst Cloud", "title": "Support Engineer, Tier 2", "location": "Seattle, WA", "url": "https://careers.pinehurst.example.com/jobs/732118", "reason": "a support queue role: the day is tickets and escalations, with no product work described", "kind": "wrong-role", "daysAgo": 2 },
