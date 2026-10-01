@@ -368,8 +368,10 @@ it in the same change.
 
 **Never edit the statements of a migration that has been applied.** Wrangler
 skips a file that has already run, so the change silently never lands. The
-comment beside them is prose nothing re-executes and can be corrected; it can't
-be kept current, so the schema as it stands is `docs/schema.md`.
+comment beside them is prose nothing re-executes and can be corrected, or a line
+removed; it can't be kept current, so the schema as it stands is
+[`../docs/schema.md`](../docs/schema.md) and a rule about a route belongs with
+that route.
 
 A schema or API change only requires redeploying `server/`; `client/` needs a
 redeploy only if it uses the new field or route. Keep the API additive (new
