@@ -270,7 +270,9 @@ describe("exporting everything a tab holds", () => {
 
   it.each([
     ["a leads tab under All, unfiltered", "/all-leads?filter=All"],
-    ["Applications with no drill", "/applications"],
+    // Under All, since Applications now opens on Live and a tab whose chip
+    // hides rows offers shown-or-all, the same as a leads tab does.
+    ["Applications under All, undrilled", "/applications?filter=All"],
   ])("downloads everything straight from the button, with no menu, on %s", async (_, path) => {
     await renderAt(path);
     expect(exportButton()).toHaveTextContent(/^Export$/);

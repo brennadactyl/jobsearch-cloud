@@ -190,7 +190,9 @@ describe("drill-downs: the number and the rows it opens", () => {
     await userEvent.click(screen.getAllByRole("link").find((el) => /Gone quiet/.test(el.textContent ?? ""))!);
     await waitFor(() => {
       expect(window.location.pathname).toBe("/applications");
-      expect(window.location.search).toBe("?drill=gone-quiet");
+      // The chip rides along so the list matches the figure that opened it: the
+      // tab's own default is Live, and Gone quiet counts rows Live would hide.
+      expect(window.location.search).toBe("?filter=All&drill=gone-quiet");
     });
   });
 
