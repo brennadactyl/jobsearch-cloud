@@ -514,9 +514,9 @@ function Invoke-LeadsCommand {
     # no ranked place, and `area_filled` is the tracker working one out from a
     # location where the run sent none. One lead can be both - this helper drops
     # a bad area, the tracker then reads the location - so they are printed as
-    # what each layer did rather than as shares of a total. `filled` staying 0
-    # night after night says runs are naming areas themselves; `named` falling to
-    # 0 says they have stopped and the tracker is carrying it.
+    # what each layer did rather than as shares of a total. `area_filled` rising
+    # night after night is the thing to read: it means runs have stopped naming
+    # areas and the tracker is working them out instead.
     Write-TrackerLine ("leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) " +
         "refused=$($script:Refused) area_cleared=$($script:AreaCleared) area_filled=$([int]$res.area_filled) on=$Today")
     # Every area sent was checked above, so the route clearing one means the

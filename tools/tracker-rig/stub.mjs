@@ -31,8 +31,11 @@ http.createServer((req, res) => {
     if (path === "/api/coverage/SWE") return J(res, 200, {batch:3,cursor:40,total:300,companies:[{company:"Acme",board:"greenhouse",note:" slow "},{company:"Béta Co"},{company:"Gamma",note:"x"}]});
     if (path.startsWith("/api/coverage/SWE?all=1")) return J(res, 200, {companies:[{company:"Initech (Globex)",aliases:["Initrode","Initech Corp."]},{company:"Acme"}]});
     if (path === "/api/leads") {
-      // `filled` serves the counts the tracker answers with when it worked an
-      // area out from a location itself, which the helper only reports.
+      // `filled` serves both counts the tracker answers with: one area it worked
+      // out from a location, and one it cleared. Both at once on purpose - that
+      // is the case the helper's line has to read correctly, since the two are
+      // not shares of the batch, and a cleared area the helper itself accepted
+      // also trips its drift warning.
       return J(res, 200, {added:2,duplicates:1,excluded:0,...(scen==="filled"?{area_filled:2,area_cleared:1}:{})});
     }
     if (path === "/api/screened") return J(res, 200, {added:2,duplicates:1,excluded:0,
