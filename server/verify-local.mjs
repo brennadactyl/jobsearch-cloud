@@ -3999,6 +3999,137 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
 
 
 {
+  console.log("\n== correcting the address a posting is stored under ==");
+  // A board answers one posting at two addresses: the page a person opens, and
+  // the JSON its listing API serves. A run that stored the second leaves a row
+  // that answers 200 to every check and shows raw JSON to whoever clicks it.
+  // Repairing those is the only reason `url` is writable, and what is checked
+  // here is mostly the two things that go stale when it moves.
+  const uxStamp = Date.now().toString(36);
+  const uxName = `Urls ${uxStamp}`;
+  const uxPw = "urls-long-password-x";
+  await req("POST", "/api/users", { admin: true, body: { name: uxName, password: uxPw } });
+  const UX = (await req("POST", "/api/login", { body: { name: uxName, password: uxPw } })).json.token;
+  await req("POST", "/api/config", { token: UX, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+
+  const apiUrl = `https://boards.example.com/wday/cxs/${uxStamp}/job`;
+  const pageUrl = `https://boards.example.com/careers/${uxStamp}/job`;
+  await req("POST", "/api/leads", { token: UX, body: { leads: [
+    { search: "SWE", company: "Acme", title: "SDE", location: "Remote", url: apiUrl }] } });
+  const uxLead = (await req("GET", "/api/data", { token: UX })).json.leads.find((l) => l.url === apiUrl);
+
+  const fixed = await req("POST", "/api/update", { token: UX, body: {
+    type: "lead", id: uxLead.id, url: pageUrl } });
+  check("a lead's address can be corrected",
+    fixed.json?.ok === true && fixed.json?.lead?.url === pageUrl,
+    JSON.stringify(fixed.json).slice(0, 140));
+
+  // The point of remembering it: a lead's url is what the next run dedups
+  // against, so moving it would hand the old address back as findable.
+  const reFound = await req("POST", "/api/leads", { token: UX, body: { leads: [
+    { search: "SWE", company: "Acme", title: "SDE", url: apiUrl }] } });
+  check("and the address it came from is still skipped, so the posting can't return",
+    fixed.json?.remembered === true && reFound.json?.added === 0 && reFound.json?.duplicates === 1,
+    JSON.stringify(reFound.json));
+  check("nor can the corrected address be added a second time",
+    (await req("POST", "/api/leads", { token: UX, body: { leads: [
+      { search: "SWE", company: "Acme", title: "SDE", url: pageUrl }] } })).json?.added === 0);
+  // Remembered as the person's own removal, so it doesn't read as a search
+  // turning the posting away - and so it stays off the Screened tab.
+  const remembered = (await req("GET", "/api/data?screened=all", { token: UX }))
+    .json.screened.find((s) => s.url === apiUrl);
+  check("the remembered address is filed as nobody's rejection",
+    remembered?.added_by === "hand" && remembered?.kind === "",
+    JSON.stringify(remembered));
+  // It is sent, like every row someone set aside by hand: whether the Screened
+  // tab displays it is the page's rule and not this route's, so that is not a
+  // claim the API can be asked to make (routes/data.js says which of the three
+  // sets is which).
+  check("and is sent, so a person asking for everything can still find it",
+    (await req("GET", "/api/data", { token: UX })).json.screened.some((s) => s.url === apiUrl));
+
+  // The other thing that goes stale: an application made from the lead carries
+  // its url, so a correction that stopped at the lead would leave the person
+  // clicking the API address from the other tab.
+  const uxApplied = await req("POST", `/api/leads/${uxLead.id}/status`, { token: UX, body: { status: "Applied" } });
+  const secondUrl = `https://boards.example.com/careers/${uxStamp}/job-moved`;
+  const withApp = await req("POST", "/api/update", { token: UX, body: {
+    type: "lead", id: uxLead.id, url: secondUrl } });
+  const uxApps = (await req("GET", "/api/data", { token: UX })).json.applications;
+  check("an application carrying the old address follows the correction",
+    withApp.json?.application === true &&
+    uxApps.find((a) => a.id === uxApplied.json.application.id)?.link === secondUrl,
+    JSON.stringify([withApp.json?.application, uxApps.find((a) => a.id === uxApplied.json.application.id)?.link]));
+
+  // A link the person edited is theirs. The repair only replaces the copy.
+  const thirdUrl = `https://boards.example.com/careers/${uxStamp}/job-again`;
+  const mine = `https://example.com/my-own-note-${uxStamp}`;
+  await req("POST", "/api/update", { token: UX, body: {
+    type: "application", id: uxApplied.json.application.id, link: mine } });
+  const notMine = await req("POST", "/api/update", { token: UX, body: {
+    type: "lead", id: uxLead.id, url: thirdUrl } });
+  check("but a link they have since edited is left alone",
+    notMine.json?.application === false &&
+    (await req("GET", "/api/data", { token: UX })).json.applications
+      .find((a) => a.id === uxApplied.json.application.id)?.link === mine,
+    JSON.stringify(notMine.json));
+
+  // A screened row's address is a link on that tab too, and its whole job is
+  // telling the next run to skip the posting - so the same rule applies.
+  const scApi = `https://boards.example.com/wday/cxs/${uxStamp}/screened`;
+  const scPage = `https://boards.example.com/careers/${uxStamp}/screened`;
+  await req("POST", "/api/screened", { token: UX, body: { search: "SWE", screened: [
+    { search: "SWE", url: scApi, company: "Acme", title: "PM", reason: "wrong role", kind: "wrong-role" }] } });
+  const scRow = (await req("GET", "/api/data?screened=all", { token: UX })).json.screened.find((s) => s.url === scApi);
+  const scFixed = await req("POST", "/api/update", { token: UX, body: {
+    type: "screened", id: scRow.id, url: scPage } });
+  check("a screened row's address can be corrected too",
+    scFixed.json?.ok === true && scFixed.json?.screened?.url === scPage,
+    JSON.stringify(scFixed.json).slice(0, 140));
+  check("it keeps the kind and the author it had, so it still reads as the search's rejection",
+    scFixed.json?.screened?.kind === "wrong-role" && scFixed.json?.screened?.added_by === "run");
+  check("and both addresses are still skipped",
+    (await req("POST", "/api/leads", { token: UX, body: { leads: [
+      { search: "SWE", company: "Acme", title: "PM", url: scApi }] } })).json?.added === 0 &&
+    (await req("POST", "/api/leads", { token: UX, body: { leads: [
+      { search: "SWE", company: "Acme", title: "PM", url: scPage }] } })).json?.added === 0);
+
+  // A correction that changes nothing dropKnownUrls can see has nothing to
+  // remember: the new address already blocks what the old one did.
+  const cosmetic = await req("POST", "/api/update", { token: UX, body: {
+    type: "lead", id: uxLead.id, url: `${thirdUrl}?utm_source=email` } });
+  check("a cosmetic change remembers nothing - the same posting blocks itself",
+    cosmetic.json?.ok === true && cosmetic.json?.remembered === false,
+    JSON.stringify(cosmetic.json));
+
+  check("an address that isn't one is refused rather than stored",
+    (await req("POST", "/api/update", { token: UX, body: {
+      type: "lead", id: uxLead.id, url: "not a url" } })).status === 400);
+  check("a row nobody has is a 404",
+    (await req("POST", "/api/update", { token: UX, body: {
+      type: "lead", id: 999999, url: pageUrl } })).status === 404 &&
+    (await req("POST", "/api/update", { token: UX, body: {
+      type: "screened", id: 999999, url: pageUrl } })).status === 404);
+  // Another account's row doesn't resolve, so correcting one is a 404 rather
+  // than a refusal that says it exists.
+  // A second account made here rather than reusing one from the top of the
+  // file: those sessions are revoked and reset by the checks in between, and a
+  // dead token answers 401, which would pass a test for "refused" while
+  // proving nothing about whose row it is.
+  const uxOtherName = `Urls other ${uxStamp}`;
+  await req("POST", "/api/users", { admin: true, body: { name: uxOtherName, password: uxPw } });
+  const UX_OTHER = (await req("POST", "/api/login", { body: { name: uxOtherName, password: uxPw } })).json.token;
+  const crossAccount = await req("POST", "/api/update", { token: UX_OTHER, body: {
+    type: "lead", id: uxLead.id, url: pageUrl } });
+  const stillTheirs = (await req("GET", "/api/data", { token: UX })).json.leads
+    .find((l) => l.id === uxLead.id);
+  check("and another account's row cannot be corrected",
+    crossAccount.status === 404 && stillTheirs !== undefined,
+    JSON.stringify({ status: crossAccount.status, body: crossAccount.json, stillTheirs: stillTheirs?.url }));
+}
+
+
+{
   console.log("\n== pausing a search ==");
   // A paused search runs nothing and keeps everything it found
   // (migrations/0025_track_paused.sql, docs/pause-search-plan.md).

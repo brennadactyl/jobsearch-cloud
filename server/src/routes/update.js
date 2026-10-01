@@ -17,17 +17,22 @@ import { applicationFromLead } from "./leads.js";
 
 /**
  * POST /api/update - requires a Bearer token. Body
- * `{ type: "lead"|"application", ... }` -> `{ ok, lead }`, or
+ * `{ type: "lead"|"application"|"screened", ... }` -> `{ ok, lead }`, or
  * `{ ok, application, moved, existing }` for an application; 400 for an
- * unknown type or a `delistedOn` that isn't YYYY-MM-DD, 404 for an unknown
- * lead, application or destination track, 409 when the destination tab
- * already holds the lead's url. A lead with `delistedOn` answers as
- * ./delisting.js's removeDelistedLead.
+ * unknown type, a `delistedOn` that isn't YYYY-MM-DD or a `url` that isn't an
+ * address, 404 for an unknown lead, application, screened row or destination
+ * track, 409 when the destination tab already holds the lead's url. A lead
+ * with `delistedOn` answers as ./delisting.js's removeDelistedLead.
  *
  * An application without an `id` is a new one, and its `link` may be a posting
  * this person already has - see createApplication below. `moved` and
  * `existing` describe what happened to it and are always present on that
  * answer; an update by `id` carries neither.
+ *
+ * `url` on a lead, and `type: "screened"`, correct the address a posting is
+ * stored under - see changeUrl below. `type: "screened"` writes nothing else:
+ * a screened row is a run's record of what it turned away, and the only thing
+ * worth repairing on one is an address nobody can open.
  */
 export async function handleUpdate({ request, db }) {
   const body = await readJson(request);
@@ -52,6 +57,18 @@ export async function handleUpdate({ request, db }) {
         return json({ error: "delistedOn must be YYYY-MM-DD" }, 400);
       }
       return removeDelistedLead(db, body.id, on);
+    }
+
+    // `url` corrects the address the posting is stored under. Handled here
+    // rather than in updateLead's whitelist because moving a url has two
+    // consequences that must land with it (db.js changeLeadUrl), and a plain
+    // field write would do neither.
+    //
+    // It is a repair, not an edit anyone does casually: a board answers one
+    // posting at a page address and at the JSON its listing API serves, and a
+    // row stored under the second shows raw JSON to whoever clicks it.
+    if (typeof body.url === "string" && body.url.trim()) {
+      return changeUrl(db, body);
     }
 
     // `search` moves the lead to another of this user's tabs. It's the one
@@ -93,7 +110,66 @@ export async function handleUpdate({ request, db }) {
     return createApplication(db, body);
   }
 
+  if (body.type === "screened") {
+    return changeUrl(db, body, true);
+  }
+
   return json({ error: "unknown update type" }, 400);
+}
+
+/** Longest `reason` written on a remembered address. It's a line on a row. */
+const MAX_REASON = 200;
+
+/** What the remembered row says when the caller doesn't. */
+const DEFAULT_REASON = "replaced by a corrected address for the same posting";
+
+/**
+ * Correcting the address a lead or a screened row is stored under.
+ *
+ * One path for both because the rule is the same either way: the old address
+ * is remembered so the next run still skips it, and only the row's own
+ * `search` is touched. What differs is which table, and that a lead can also
+ * have an application carrying its url.
+ *
+ * Refused rather than stored when the address isn't one: a row whose url
+ * doesn't parse is a row nobody can click and dropKnownUrls can't match on,
+ * which is the failure this route exists to repair rather than to spread.
+ *
+ * A url that collides with another row of the same search is a 409 -
+ * `UNIQUE(user_id, search, url)` refuses it, and the collision is usually the
+ * useful answer: the corrected address is already there, so the row being
+ * fixed is a duplicate to remove rather than to move.
+ */
+async function changeUrl(db, body, screened = false) {
+  const url = body.url.trim();
+  if (!/^https?:\/\/\S+$/i.test(url)) {
+    return json({ error: "url must be an http or https address" }, 400);
+  }
+  const reason = String(body.reason || DEFAULT_REASON).trim().slice(0, MAX_REASON);
+
+  const row = screened ? await db.getScreened(body.id) : await db.getLead(body.id);
+  if (!row) {
+    return json({ error: screened ? "screened row not found" : "lead not found" }, 404);
+  }
+
+  try {
+    if (screened) {
+      const { remembered } = await db.changeScreenedUrl(row, url, reason);
+      await db.touchUpdated();
+      return json({ ok: true, screened: await db.getScreened(row.id), remembered });
+    }
+    const { lead, remembered, application } = await db.changeLeadUrl(row, url, reason);
+    await db.touchUpdated();
+    // `application` says whether one was carrying the old address and now
+    // carries this one, so a caller repairing rows knows the other tab is
+    // fixed too rather than having to look.
+    return json({ ok: true, lead, remembered, application });
+  } catch (err) {
+    if (/UNIQUE|constraint/i.test(String((err && err.message) || ""))) {
+      return json({ error: `"${row.search}" already has a row for that url` }, 409);
+    }
+    throw err;
+  }
 }
 
 /**
