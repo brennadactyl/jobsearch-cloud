@@ -11,7 +11,8 @@ here lives in `tools/` and needs no install beyond the repo's own.
 
 `verify-and-deploy` covers proving a change that *does* alter behaviour - new
 checks in `verify-local.mjs` covering both the path where it works and the path
-where it refuses, each asserting what only the new code can produce.
+where it refuses, each asserting what only the new code can produce. Never by
+removing or breaking that code to watch a check fail.
 
 ## The tools
 

@@ -145,8 +145,14 @@ as happily against code that accepts everything.
 
 Assert something only the new behaviour can produce - the value written, the
 field returned, the reason given - rather than a status code the old code also
-returned. A check written that way cannot pass against code that doesn't do the
-thing, so there is nothing left for a broken run to find.
+returned. A check written that way cannot pass against code that doesn't do what
+it asserts.
+
+Which is narrower than the behaviour it was written for, and that gap is the
+failure left. An assertion reaching one step of a composed prompt, or one field
+of a response, says nothing about the property the check is named after: another
+step can contradict it and the check still passes. So assert over the whole of
+whatever the rule is about.
 
 **Never remove or break the new code to verify a check.** If a check can only be
 trusted by deleting what it tests, the check is the problem: rewrite it until it
