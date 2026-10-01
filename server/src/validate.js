@@ -120,11 +120,14 @@ export function storedArea(area, list) {
  * its shape, which is a fixable instruction, and `future` means an age or a
  * date arrived from the wrong side of the night, which is a reading gone wrong.
  *
- * **A count must be a number, not a numeric string.** Coercing `"14"` means
- * deciding which text is a number, and `"14 days"` and `"two weeks"` are the
- * next things a model sends - that is a parser over prose, which is the whole
- * thing this design moved out of the run. Refused visibly on the first night
- * instead.
+ * **A count must be a number, not a numeric string.** Not because `"14"` is
+ * hard to read - it isn't, and `posted_date` is accepted by exactly that kind
+ * of closed rule - but because of the shape of being wrong either way. A
+ * refusal warns on the night it happens, names itself `malformed`, and costs no
+ * lead: if runs do quote their counts, that is one night's evidence and a
+ * one-line fix. A coercion that silently works produces nothing to learn from,
+ * so the day it reads something it shouldn't there is no record of when it
+ * started.
  *
  * Both fields present is malformed: a row carrying a date *and* a count is a
  * run that didn't settle which the posting gave, and picking one would be this
