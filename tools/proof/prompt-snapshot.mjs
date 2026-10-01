@@ -163,14 +163,19 @@ if (configDir) {
 // override sat here composing nothing.
 //
 // A read is counted through a Proxy rather than found by reading the source, so
-// the answer comes from what the prompt does. That sets two ceilings. Any truthy
+// the answer comes from what the prompt does. That sets three ceilings. Any truthy
 // value counts as covered, so this catches "no shape composes this at all" and
 // nothing finer - not which branch a value took. And a field read only inside a
 // branch no shape reaches is never accessed, so the first list cannot name it
 // yet: a clean run means nothing is missing among the branches these shapes
 // reach. The field gating that branch is named instead, so adding a shape for it
 // surfaces the inner one on the next run - re-run after adding a shape rather
-// than reading one clean result as the end of it.
+// than reading one clean result as the end of it. And the reads are named
+// property accesses: prompt.js reaches for its fields one at a time today, and
+// the day it spreads or stringifies a track or the settings instead, every own
+// key counts as read and the second list empties for good, reporting clean. A
+// gate that can go quiet is worth knowing about, so if you add a spread there,
+// this is the file that needs a different way to count.
 function coverage() {
   const read = new Set();
   const gaveAValue = new Set();
