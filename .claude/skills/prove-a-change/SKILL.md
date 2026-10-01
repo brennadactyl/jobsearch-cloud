@@ -51,6 +51,11 @@ output.
   line-by-line read of the diff.
 - **`server/src/prompt.js` (Prompt Bro):** `prompt-snapshot.mjs` run from main
   and from the branch, then diffed.
+  - Both runs exit 0. A non-zero exit names a field the prompt reads that no
+    shape gives a value to, or one a shape sets that the prompt no longer reads:
+    the branch it belongs to composes the same text in both runs, so its empty
+    diff proves nothing. Add a shape, or drop the dead field, before reading the
+    diff as proof.
   - A refactor: zero difference.
   - A behaviour change: the diff touches only the intended step lines, with a
     count of other changed lines, which must be 0.
