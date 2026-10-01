@@ -448,6 +448,14 @@ check("the fill prompt is served as its own reserved key, not as a track",
 check("the fill run reads each account's ranked places and files an area from them, copied as written",
   fillPrompt.text.includes("settings.priority_locations") && fillPrompt.text.includes('"area":"..."') &&
   fillPrompt.text.includes("copied as written") && fillPrompt.text.includes("area_cleared"));
+// The reply carries both area counts, and a run told to report one and not the
+// other reads the second as a fault of its own.
+check("the fill run is told the reply's area_filled as well as area_cleared",
+  fillPrompt.text.includes('"area_filled":N') && fillPrompt.text.includes("worked out itself"));
+// A note over the cap loses its tail silently, and the tail is the half that
+// says what to do about the row.
+check("the fill run is told the length its note and reasons are kept to",
+  /200 characters or fewer/.test(fillPrompt.text));
 
 console.log("\n== pasting a link for a posting already here ==");
 // Someone logging an application usually has the posting already: it is on
@@ -975,6 +983,10 @@ const listed = buildSearchPrompt({
     });
     return p.split("\n").find((l) => l.startsWith("7. ")) || "";
   };
+  // A search with no fit clause, no floor and no locations is left with two
+  // things to say, and a serial comma on two reads as a list with a part missing.
+  check("a finding built from two requirements joins them without a comma",
+    step7({}).includes("genuinely new and verified live"));
   const annual = step7({
     fit_clause: "a Senior or above product role",
     fit_disqualifier: "below Senior",
@@ -1029,8 +1041,21 @@ const listed = buildSearchPrompt({
   check("step 9 asks for an area copied exactly from the ranked list, as typed",
     withRanked.includes("comp, area}") && withRanked.includes('one entry from "Seattle area, Portland OR, Remote US"') &&
     withRanked.includes("copied as written") && withRanked.includes("leave it out when the posting falls in none"));
-  check("a person with nothing ranked is asked for no area",
-    !/area/.test(syncStep({ priority_locations: "" })) && !/area/.test(syncStep({})));
+  check("step 9 says each comma starts a new entry, since the list is split on them",
+    withRanked.includes("Each comma starts a new entry"));
+  // Asked of the whole prompt, not of step 9 alone: the field was named in step
+  // 6 while step 9 asked for nothing, and a check that slices one step cannot
+  // see that.
+  const wholePrompt = (settings) => buildSearchPrompt({
+    user: { id: "u", name: "Nobody" },
+    track: { key: "T", label: "T", full_description: "t", role_search_line: "r" },
+    settings,
+    feeds: [],
+  });
+  check("a person with nothing ranked is asked for no area, anywhere in the prompt",
+    !/`area`/.test(wholePrompt({ priority_locations: "" })) && !/`area`/.test(wholePrompt({})));
+  check("and a person with ranked places is pointed at it from the location forms",
+    wholePrompt({ priority_locations: "Seattle area" }).includes("goes in `area` (step 9), not in the location text"));
   // A lead's url is the one field a person clicks, and a board answers a posting
   // at two addresses that both return 200. Nothing downstream can tell them
   // apart, so the step says so plainly and names the API forms - this wording is
@@ -1165,6 +1190,20 @@ check("a track that has never swept anything still gets both rotation commands",
 // Step 9d has to name every field a run can send, or the field reaches no run.
 // `wall` is the one whose absence costs most: an obstacle with nowhere shared
 // to go is rediscovered by every search.
+// Each of these states the shape of a file the helper writes, or a limit the
+// run is held to. A stated shape that omits a field is how a run comes to be
+// told about something it was never shown - step 9e refers to a `wall` that step
+// 1c's shape didn't mention.
+check("step 1c states the pooled facts companies.json actually carries",
+  sweSteps.includes("{company, position, last_swept, board, note, known, aliases}") &&
+  sweSteps.includes("{board, endpoint, url_shape, wall, dead_signal, verified_on}") &&
+  sweSteps.includes("appear twice and mean different things"));
+check("step 1b says a tracked posting names the tab that holds it",
+  sweSteps.includes("{url, status, search}") && sweSteps.includes("the tab that already holds it"));
+check("step 6b leaves an unstated field out rather than sending it empty",
+  sweSteps.includes("Leave any of these out entirely when the posting doesn't say"));
+check("step 9e stops after a stated number of extra slices, not an effort",
+  sweSteps.includes("two extra slices is the limit") && !sweSteps.includes("effort a run should"));
 check("step 9d names every field a sweep can carry, wall included",
   sweSteps.includes("{company, board, endpoint, url_shape, wall, note}"));
 // A reported board or endpoint clears a company's wall for every search

@@ -7,9 +7,12 @@
  * the text says only what the run alone knows: which postings are new, which
  * it confirmed dead, which companies it managed to read.
  *
- * A rule's rationale goes in a comment beside it, not in the emitted text. The
- * exception is step 4's verification requirement, stated in full because the
- * whole system rests on it.
+ * A rule's rationale goes in a comment beside it, except where a run's mistake
+ * is silent or cannot be taken back: there the text says why, because a rule a
+ * run understands is one it applies to the case nobody wrote down. That is what
+ * steps 4, 8, 9, 9c, 9d and 9e argue their case for, and those sentences are
+ * load-bearing rather than padding - shortening one shortens what a night gets
+ * right. Everywhere else, brevity wins.
  *
  * Only fields the app reads are structured (key, label, sort_order,
  * schedule_time); everything only the model reads is stored
@@ -29,11 +32,17 @@ export const PRONOUNS = {
   "they/them": { subj: "they", obj: "them", poss: "their" },
 };
 
-// "a, b, and c" - the serial comma a plain join can't produce.
+// "a, b, and c" - the serial comma a plain join can't produce. Two parts take no
+// comma at all: a search with no fit clause, pay floor or locations is left with
+// two, and "genuinely new, and verified live" reads as a list with something
+// missing from it.
 function joinAnd(parts) {
   const p = parts.filter(Boolean);
   if (p.length <= 1) {
     return p[0] || "";
+  }
+  if (p.length === 2) {
+    return p.join(" and ");
   }
   return p.slice(0, -1).join(", ") + ", and " + p[p.length - 1];
 }
@@ -49,15 +58,24 @@ export const DEFAULT_DOC_BUDGET_BYTES = 1000;
 // which ranked place a lead falls in is its `area` (step 9), and the page tiers
 // by that. The forms are the ones in client/src/domain/location-forms.json,
 // which verify-local checks this sentence against.
-const LOCATION_FORMS_STEP =
+const LOCATION_FORMS =
   "Write each lead's `location` in one of these forms, as the posting gives it: " +
   "\"City, ST\" for a US city (\"Seattle, WA\"); \"City, Country\" anywhere else " +
   "(\"Toronto, Canada\"); \"Remote (US)\" or \"Remote (<country>)\" for a remote role " +
   "(\"Remote (Canada)\"); \"Remote (US - CA/TX/WA)\" for a remote role open only in the " +
   "states it names, so the limit shows; and several locations joined with \"; \" " +
   "(\"Seattle, WA; Remote (US)\"). Not a bare \"Remote\", and not a bare state or country: " +
-  "neither says where the role is. Which of the places ranked first it falls in goes in " +
-  "`area` (step 9), not in the location text.";
+  "neither says where the role is.";
+
+// The sentence that sends a lead's ranked place to `area` belongs to this step
+// but depends on another: a person with nothing ranked is asked for no `area` in
+// step 9, so pointing at the field there would name one the run is never asked
+// to send.
+const locationFormsStep = (asksForArea) =>
+  LOCATION_FORMS +
+  (asksForArea
+    ? " Which of the places ranked first it falls in goes in `area` (step 9), not in the location text."
+    : "");
 
 const DEFAULT_SCREENED_EXAMPLES =
   '"outside scope: London, UK", "404 - closed", "duplicate of req 7829580003", "below target level"';
@@ -72,7 +90,7 @@ const DEFAULT_REPORT_LINE =
 // Steps 1c, 9d and 9e go to every search, even with an empty company list:
 // 9d is the only step that adds a company. Cursor mechanics live in
 // routes/coverage.js; 9e states only their consequence.
-const COVERAGE_STEP = `1c. Get this run's companies: \`./tracker companies\`. It writes \`companies.json\` - \`{companies: [{company, last_swept, board, note}], total, batch, cursor}\` - and lists them. The server picks them, capped at what one run can actually verify. **Cover exactly these, all of them**, and don't reach past them into the rest of the list in step 3: that list is longer than one run can do properly, and the failure mode isn't a company going uncovered for a day, it's every company being skimmed. They come back round - everything is reached once per cycle before anything is reached twice. \`board\` is a JSON endpoint already confirmed for that company (\`greenhouse\`, \`ashby\`, \`workday cxs\`, ...); it makes a company cheap to cover, not privileged - use it where it's there. The cap is about *this* list: "don't reach past them" means don't help yourself to the rest of the rotation early, and step 3b sends you outside it on purpose.
+const COVERAGE_STEP = `1c. Get this run's companies: \`./tracker companies\`. It writes \`companies.json\` - \`{companies: [{company, position, last_swept, board, note, known, aliases}], total, batch, cursor}\` - and lists them. \`known\` is what every search has established about that company: \`{board, endpoint, url_shape, wall, dead_signal, verified_on}\`, any of them absent when nobody has, and \`aliases\` the other names it goes by, so a posting under one of those is this same company rather than a new one. So \`board\` and \`note\` each appear twice and mean different things - the top-level pair is this search's own record of covering the company, and the pair inside \`known\` is what the searches share. The server picks them, capped at what one run can actually verify. **Cover exactly these, all of them**, and don't reach past them into the rest of the list in step 3: that list is longer than one run can do properly, and the failure mode isn't a company going uncovered for a day, it's every company being skimmed. They come back round - everything is reached once per cycle before anything is reached twice. \`board\` is a JSON endpoint already confirmed for that company (\`greenhouse\`, \`ashby\`, \`workday cxs\`, ...); it makes a company cheap to cover, not privileged - use it where it's there. The cap is about *this* list: "don't reach past them" means don't help yourself to the rest of the rotation early, and step 3b sends you outside it on purpose.
 `;
 
 // 9d omits dead_signal until the warning migrations/0010 asks writers to read
@@ -149,9 +167,11 @@ const SWEEP_STEP = `9d. RECORD WHAT YOU COVERED. Write every company this run ac
 
    If that count is more than zero, run \`./tracker companies\` again and cover
    that many companies from what comes back, then record those with 9d and
-   repeat until nothing in a slice was unreadable, or until you have spent the
-   effort a run should. This is a replacement for wasted work, not a licence to
-   run all night. Record first, then fetch, in that order: 9d is what moves the
+   repeat until nothing in a slice was unreadable, or until you have done this
+   twice - two extra slices is the limit, whatever is still unreadable after
+   them. This is a replacement for wasted work, not a licence to run all night,
+   and a number is the only version of that a night can follow the same way
+   twice. Record first, then fetch, in that order: 9d is what moves the
    cursor, so what comes back is further along the list rather than the names
    you just did, and there is nothing to filter out.
 
@@ -265,6 +285,12 @@ function findingIs(track, settings) {
   const where = hasLocations(settings) ? "somewhere step 5 says qualifies" : "";
   return joinAnd(["genuinely new", "verified live", where, track.fit_clause, payFloor(track).finding]);
 }
+// "wrong level" is fixed and stays even beside a track that states its own level
+// rule, so such a track's list says level twice, on purpose: it is the floor for
+// a track whose prose says nothing about level, and deciding whether a person's
+// own sentence already covers it would mean reading prose to make a rule. A
+// search silently accepting any seniority is worse than a list that repeats
+// itself.
 function disqualifiedReasons(track, settings) {
   return [
     "dead-on-arrival",
@@ -375,8 +401,10 @@ function areaStep(settings, name) {
     areaKey: ", area",
     areaRule:
       ` \`area\` is the one place ${name} ranked first that the posting falls in - one entry from "${ranked}", ` +
-      "copied as written - or leave it out when the posting falls in none of them. The posting's real " +
-      "location stays in `location`; `area` only files it, and anything but one of those entries is dropped.",
+      "copied as written - or leave it out when the posting falls in none of them. Each comma starts a new " +
+      "entry, so a place written with one is two entries and neither half is what step 6 taught you to write " +
+      "in `location`. The posting's real location stays in `location`; `area` only files it, and anything but " +
+      "one of those entries is dropped.",
   };
 }
 
@@ -540,10 +568,10 @@ same arguments.)
 ${intro}Do the following:
 
 1. Read \`${doc}\` - ${docSummary}. Follow its numbered process. The doc doesn't keep a found-postings table or a screened/dead-link list - dedup data comes from step 1b instead.
-1b. Fetch what this track has already seen: \`./tracker dedup\`. It writes \`dedup.json\`: \`leads[]\` as \`{url, status}\`, with \`recheck: true\` on the ones due a re-check tonight - postings already tracked, where \`url\` is what step 8 reports back and \`status\` is context for your report (that's how you tell a stale lead nobody's touched from one ${name} has already applied to) - and \`screened[]\`, urls already looked at and rejected at tonight's companies or in the last few days, which is what stops you re-verifying the same dead or out-of-scope candidate. Older rejections at other companies aren't in it; if you verify one of those and report it, the tracker recognises it, so it costs a check and never a duplicate.${dedup}
+1b. Fetch what this track has already seen: \`./tracker dedup\`. It writes \`dedup.json\`: \`leads[]\` as \`{url, status, search}\`, with \`recheck: true\` on the ones due a re-check tonight - \`search\` being the tab that already holds it - postings already tracked, where \`url\` is what step 8 reports back and \`status\` is context for your report (that's how you tell a stale lead nobody's touched from one ${name} has already applied to) - and \`screened[]\`, urls already looked at and rejected at tonight's companies or in the last few days, which is what stops you re-verifying the same dead or out-of-scope candidate. Older rejections at other companies aren't in it; if you verify one of those and report it, the tracker recognises it, so it costs a check and never a duplicate.${dedup}
 ${COVERAGE_STEP}2. ${resume}
 ${profileRefresh}3. Search the step-1c companies' careers sites (web search as backup) for current ${roleLine}.${searchNote}${exclusion}
-3b. NOW LOOK OUTSIDE THAT LIST. Step 3 is the companies already known to be worth checking; this step is how that list ever grows, and it is not optional. Search for ${roleLine} at companies **not already on the shared list** - including outside tech entirely: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities, manufacturing, and sports (leagues and the larger franchises, plus the data, streaming and betting companies built around them). All of them run real engineering orgs and all of them are easy to miss when the named list reads as big tech. Rotate through a couple of verticals per run rather than attempting all of them.
+3b. NOW LOOK OUTSIDE THAT LIST. Step 3 is the companies already known to be worth checking; this step is how that list ever grows, and it is not optional. Search for ${roleLine} at companies **not already on the shared list** - including outside tech entirely: travel, insurance, hotels, food service, grocery and retail, healthcare systems, logistics, banking, utilities, manufacturing, and sports (leagues and the larger franchises, plus the data, streaming and betting companies built around them). All of them run real engineering orgs and all of them are easy to miss when a search's attention sits on the companies everyone names. Rotate through a couple of verticals per run rather than attempting all of them.
 
    **Check each company before you spend anything on it: \`./tracker known "<company>"\`.** Tonight's slice is a small part of the list, and another search may have added a company earlier tonight. If it says the company is on the list, skip it - its turn comes in the rotation.
 
@@ -558,8 +586,8 @@ ${profileRefresh}3. Search the step-1c companies' careers sites (web search as b
 
    **And tell a truncated page apart from an empty one.** A fetch that returned a megabyte of navigation and got cut off before the description is a size problem, not a block - the content is there, and the workaround for that domain (a reader-proxy, an ATS JSON endpoint, a different URL format) goes in step 9d as an \`endpoint\` or \`url_shape\`. Recording "truncated" as "blocked" is how a company that is perfectly readable ends up skipped for weeks.
 5. ${geo}
-6. ${LOCATION_FORMS_STEP}
-${fitFilterStep}${captureNum}. While the posting is open, also capture - only when it's stated plainly, never inferred or guessed - the team/org named for the role (\`team\`), the stated work arrangement (\`setup\`, e.g. "Remote", "Hybrid - 3 days/week onsite", "Onsite"), and any posted compensation range (\`comp\`, e.g. "$180,000-$230,000/yr"; many US states disclose this by law). Leave any of these as an empty string when the posting doesn't say. These land in the tracker's per-lead "Details" panel alongside referral/resume/next-action fields that are ${name}'s alone to fill in by hand - this search never touches those.
+6. ${locationFormsStep(Boolean(areaKey))}
+${fitFilterStep}${captureNum}. While the posting is open, also capture - only when it's stated plainly, never inferred or guessed - the team/org named for the role (\`team\`), the stated work arrangement (\`setup\`, e.g. "Remote", "Hybrid - 3 days/week onsite", "Onsite"), and any posted compensation range (\`comp\`, e.g. "$180,000-$230,000/yr"; many US states disclose this by law). Leave any of these out entirely when the posting doesn't say, the same as step 9 asks - a field written as an empty string reads on the page as one still to be filled in. These land in the tracker's per-lead "Details" panel alongside referral/resume/next-action fields that are ${name}'s alone to fill in by hand - this search never touches those.
 7. Compare candidate URLs against \`leads[]\` and \`screened[]\` from step 1b (not a doc table). Sort each candidate into: (a) already tracked or already screened - skip it; (b) ${finding} - a finding, goes to step 9; (c) genuinely new but disqualified (${disqualified}) - goes to step 9b instead of being dropped silently.
 ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open every lead step 1b marked \`recheck: true\`, and only those: the tracker picks them, longest-unconfirmed first, so every lead gets its turn without any run re-checking the whole list. If none are marked, there is nothing to re-check tonight. A tracked posting you happen to open for another reason can be reported too. For the postings you re-checked, **never delete or move anything yourself** - report what you saw and let the tracker decide what to do with it. Both reports are a JSON array of the urls you actually opened; send the URL you opened rather than matching it against step 1b's spelling first, because the tracker matches on posting identity, so a \`?gh_jid=\` suffix, a tracking param or a missing slug still finds the right lead.${delistTab}
 
@@ -831,7 +859,9 @@ Do the following, for each account in turn:
    the person doesn't have to type.
 
    Pass \`note\` and \`failed\` reasons through as the subagent wrote them rather
-   than summarising, because **both are shown to the person on that row** -
+   than summarising, in 200 characters or fewer: the tracker keeps the first 200
+   and drops the rest, so a second sentence is a sentence nobody reads. Both are
+   passed through because **both are shown to the person on that row** -
    they are the only thing this whole job ever says on their page. A note
    explains why a filled-in row is still missing something; a \`failed\` reason
    explains why a row is blank and going to stay that way, since nothing
@@ -852,9 +882,12 @@ Do the following, for each account in turn:
    to work out what is already in the row - you were not told, and that is
    deliberate.
 
-   The response is \`{"filled":N,"failed":N,"unmatched":[id,...],"area_cleared":N}\`.
+   The response is
+   \`{"filled":N,"failed":N,"unmatched":[id,...],"area_cleared":N,"area_filled":N}\`.
    \`area_cleared\` counts areas that matched none of that account's ranked places
-   and were dropped; say so in your report when it isn't 0. An id in
+   and were dropped; say so in your report when it isn't 0. \`area_filled\` counts
+   the ones the tracker worked out itself from a row's location when you sent
+   none, which is not a failure of yours - the two answer different questions. An id in
    \`unmatched\` means that row was dealt with or deleted between step 1 and
    now - ordinary, and nothing to retry or work around.
 
