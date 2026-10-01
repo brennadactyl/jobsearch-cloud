@@ -82,7 +82,10 @@ function Fail($msg) {
 # run's rows with tomorrow. It is also what the tracker counts back from for a
 # lead's `posted_days`, so a call that stopped sending it wouldn't fail - every
 # age would quietly be measured from the worker's UTC day instead, a day out for
-# any run after 5pm Pacific. Keep it on every leads write.
+# any run after 5pm Pacific. No separate guard for that: this date already stamps
+# `found` and `verified`, so dropping it would date every lead a day ahead in a
+# column someone reads each morning, and that is the louder alarm on the same
+# door.
 $Today = (Get-Date).ToString("yyyy-MM-dd")
 
 $Base = $env:TRACKER_URL
