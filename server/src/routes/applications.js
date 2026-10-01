@@ -7,7 +7,7 @@
  */
 
 import { json, readJson } from "../http.js";
-import { areaToStore, isoDate } from "../validate.js";
+import { areaToStore, isoDate, postedToStore } from "../validate.js";
 
 // Duplicated in client/src/domain/constants.ts's APP_STATUS: client and server
 // share no code.
@@ -157,6 +157,7 @@ export async function handleReportAutofill({ request, db }) {
   let failedCount = 0;
   let areaCleared = 0;
   let areaFilled = 0;
+  const postedDropped = { malformed: 0, future: 0 };
   const { priority_locations: ranked } = filled.length ? (await db.getTracksAndSettings()).settings : {};
 
   for (const row of filled) {
@@ -177,7 +178,15 @@ export async function handleReportAutofill({ request, db }) {
     if (fromLocation) {
       areaFilled++;
     }
-    if (await db.applyAutofill(row.id, { ...row, area, note })) {
+    // The same two fields a lead's route takes, settled the same way. A fill
+    // reads the posting, and a posting states its date - which is the one way
+    // `posted` is unlike `fit`, where a run reports a judgement no posting
+    // could make and the fill is therefore never allowed to supply one.
+    const { posted, why } = postedToStore(row.posted_date, row.posted_days, body.on);
+    if (why) {
+      postedDropped[why]++;
+    }
+    if (await db.applyAutofill(row.id, { ...row, area, posted, note })) {
       filledCount++;
     } else {
       unmatched.push(row.id);
@@ -204,7 +213,7 @@ export async function handleReportAutofill({ request, db }) {
   }
   return json({
     filled: filledCount, failed: failedCount, unmatched,
-    area_cleared: areaCleared, area_filled: areaFilled,
+    area_cleared: areaCleared, area_filled: areaFilled, posted_dropped: postedDropped,
   });
 }
 

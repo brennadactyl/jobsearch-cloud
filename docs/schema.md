@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0030_user_admin.sql` applied in order. This is the
+`0001_schema.sql` through `0031_posted_date.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -152,6 +152,7 @@ erDiagram
         TEXT referral
         TEXT comp
         TEXT area
+        TEXT posted
     }
     screened {
         INTEGER id PK
@@ -197,6 +198,7 @@ erDiagram
         TEXT autofill_note
         TEXT area
         TEXT fit
+        TEXT posted
     }
     meta {
         TEXT user_id PK, FK
@@ -380,6 +382,17 @@ One row per posting a search found and verified live. Unique on
 `(user_id, search, url)`; adding leads dedups on that with `INSERT OR IGNORE`.
 
 - `found` and `verified` are `YYYY-MM-DD`: first found, and last confirmed live.
+- `posted` is `YYYY-MM-DD`, the day the posting says it went up, or `''` when it
+  says nothing. A run reports whichever field the posting gave - a printed date,
+  or an age in whole days - and the route does the subtraction from the run's own
+  local date, because that is a comparison rather than a judgement
+  (`postedToStore` in `server/src/validate.js`). A value it can't use is dropped
+  rather than refusing the lead, and reported split by reason: a shape that
+  slipped, or a date from the wrong side of the night. `''` means no posting
+  stated one, not that nobody has looked - nothing estimates it, since an
+  invented date can't be told from a read one and no later run re-reads the
+  posting. An application made from the lead carries it, for the reason `fit`
+  is carried.
 - `area` is the entry of the person's ranked `priority_locations` the posting
   falls in, spelled as they typed it, or `''`. The page tiers leads by it.
   Only a ranked entry is stored, matched ignoring case; anything else is stored
