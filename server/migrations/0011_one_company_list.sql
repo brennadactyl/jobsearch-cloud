@@ -1,10 +1,10 @@
 -- One company list for every search, and a shared wall with an expiry.
 --
--- Each search used to own its own rotation. The four live ones had drifted to
--- 56, 66, 71 and 79 companies - 272 rows over 139 distinct companies, 22 of
--- them in all four - and one fact about a careers site could be written into
--- four separate rows. Brenna's call on 2026-09-11: one list, and a search keeps
--- an index into it rather than a copy of it. Global, across every person.
+-- Each search used to own its own rotation, and they had drifted apart: lists
+-- of different lengths, most companies on more than one of them, and one fact
+-- about a careers site written into as many rows as there were searches that
+-- knew the company. So: one list, and a search keeps an index into it rather
+-- than a copy of it. Global, across every person.
 --
 -- ---- The list is company_fetch
 --
@@ -12,7 +12,8 @@
 -- is on the list when it has a row there. `position` moves here, so every
 -- search's cursor indexes the same log. company_sweeps keeps what is genuinely
 -- per search: last_swept, when this search last tried a company, and note, what
--- this search learned there for itself - 243 of the 272 rows carry one.
+-- this search learned there for itself - which most rows carry, so it is not a
+-- field the merge can discard.
 --
 -- This file only adds. company_sweeps keeps `company`, `board` and `position`
 -- physically and they are kept in step, so the worker from before this change
@@ -46,9 +47,9 @@
 -- lower() is ASCII-only, so a name containing a non-ASCII letter would get a
 -- key the JS side never produces, and would appear on the list twice.
 --
--- On the live data this merges exactly one pair: "Cursor (Anysphere)" and
--- "Cursor Anysphere" become one company. Both rows stay in company_sweeps until
--- the rebuild, and readers take the most recent last_swept.
+-- Where two spellings of one employer differ only by punctuation, they become
+-- one company. Both rows stay in company_sweeps until the rebuild, and readers
+-- take the most recent last_swept.
 --
 -- ---- Positions and cursors
 --

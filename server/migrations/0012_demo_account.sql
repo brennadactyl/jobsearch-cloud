@@ -5,11 +5,10 @@
 -- rotation a company came from. One account's rotation is not a job search:
 -- the demo account (scripts/seed-demo-user.ps1) is filled from
 -- scripts/demo-user.json, whose companies are invented - Northwind Systems,
--- Kestrel Analytics and nineteen more. On the deployment this was written
--- against, 0011 put all 21 on the list, taking it from 139 real companies to
--- 160, and the first searches afterwards were handed them like any other: SWE's
--- run met 8 in its first 48, searched the web for each, and noted that no such
--- company could be identified.
+-- Kestrel Analytics and the rest. 0011 put every one of them on the shared
+-- list, and the searches afterwards were handed them like any other: a run
+-- meets an invented company, searches the web for it, and reports that no such
+-- company could be identified. Every search pays for that, every rotation.
 --
 -- ---- users.demo
 --
