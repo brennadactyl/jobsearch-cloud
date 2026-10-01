@@ -1935,7 +1935,16 @@ export class Db {
    * so the old one goes there rather than into a column invented for it. Filed
    * as a person's own removal - `added_by = 'hand'`, no kind - because no
    * search rejected it: that also keeps it off the Screened tab, which is for
-   * what someone's settings cost them.
+   * what someone's settings cost them, and out of the per-search counts, which
+   * ask what their own rules turned away.
+   *
+   * It is still *sent*, as every hand-set-aside row is, so it reaches one place
+   * a reader looks: `?screened=all`, whose question is what is in the table. It
+   * also ages into `screened_window.older`, so after the window closes the
+   * tab's count of rows not shown includes corrections among the rejections -
+   * a true sentence about a slightly wrong population. Narrowing that would
+   * mean a kind for "this was only ever an address", which is a column's worth
+   * of machinery for a count nobody acts on.
    *
    * **An application's `link` follows, but only if it is still the copy.** An
    * application made from a lead carries its url, so a lead corrected after
