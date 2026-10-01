@@ -64,10 +64,10 @@ check it matches what the backup predicted.
   has, apply migrations with `--local`. Add checks for the new behaviour,
   including that one account can't reach another's rows or files.
 - Check both paths for every new behaviour: the one where it works and the one
-  where it refuses. Assert what only the new code can produce - the value
-  written, the field returned, the reason given - not a status the old code
-  also returned. Never break or remove the new code to prove a check works; a
-  check that needs that is one to rewrite.
+  where it refuses. Before writing each assertion, ask what the old code would
+  have returned there; the same answer means the check isn't about your change,
+  whether it reads a value or a status. Never break or remove the new code to
+  prove a check works; a check that needs that is one to rewrite.
 - `verify-migration.mjs` when migrations changed; `verify-schema-doc.mjs` always.
 - Stop the worker by killing the wrangler parent's process tree, and confirm the
   port is free.

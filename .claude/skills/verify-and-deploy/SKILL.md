@@ -144,9 +144,12 @@ away are two different claims, and a check that only makes the first passes just
 as happily against code that accepts everything.
 
 Assert something only the new behaviour can produce - the value written, the
-field returned, the reason given - rather than a status code the old code also
-returned. A check written that way cannot pass against code that doesn't do what
-it asserts.
+field returned, the reason given. Before writing the assertion, ask what the old
+code would have returned here: the same answer means the check is not about your
+change. That is the whole test, and it is about the assertion discriminating
+rather than about what kind of thing it reads - a status code can discriminate,
+and a value can fail to, when the old code reached it by another route. A check
+that passes the test cannot pass against code that doesn't do what it asserts.
 
 What it asserts is narrower than the behaviour it was written for, and that gap
 is the failure left. An assertion reaching one step of a composed prompt, or one
