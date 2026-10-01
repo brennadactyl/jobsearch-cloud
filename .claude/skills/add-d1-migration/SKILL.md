@@ -23,9 +23,9 @@ recorded, so the number is the identity: **never renumber a migration, and never
 edit the statements of one that has been applied anywhere.**
 
 **The header comment is the permanent record of why** - nothing re-reads it once
-the migration is applied, so it is never where today's behaviour belongs. It can
-be corrected, being prose in a file nothing re-executes; it cannot be kept
-current. Cover only:
+the migration is applied, so it is never where today's behaviour belongs. A line
+in it can be corrected or removed, being prose in a file nothing re-executes; it
+cannot be kept current. Cover only:
 
 - **What changed**, in one or two sentences.
 - **Why**: the current problem it solves, stated as a present-tense reason.
