@@ -79,7 +79,10 @@ function Fail($msg) {
 }
 
 # Local date, sent on every call: the server's UTC default stamps an evening
-# run's rows with tomorrow.
+# run's rows with tomorrow. It is also what the tracker counts back from for a
+# lead's `posted_days`, so a call that stopped sending it wouldn't fail - every
+# age would quietly be measured from the worker's UTC day instead, a day out for
+# any run after 5pm Pacific. Keep it on every leads write.
 $Today = (Get-Date).ToString("yyyy-MM-dd")
 
 $Base = $env:TRACKER_URL
@@ -545,7 +548,7 @@ function Invoke-LeadsCommand {
         Write-TrackerLine "WARNING: the tracker dropped $malformed posted date(s) that weren't a plain YYYY-MM-DD - those leads are stored with no date"
     }
     if ($future -gt 0) {
-        Write-TrackerLine "WARNING: the tracker dropped $future posted date(s) later than tonight - a posting cannot have gone up after the run that found it, so an age was counted back wrongly"
+        Write-TrackerLine "WARNING: the tracker dropped $future posted date(s) from after tonight - a date ahead of this run, or an age counted back the wrong way; a posting cannot have gone up after the run that found it"
     }
 }
 
