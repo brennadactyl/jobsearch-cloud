@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "../api/schema";
-import { ALL_LEADS } from "./constants";
+import { ALL_LEADS, APP_STATUS } from "./constants";
+import { ALL_FILTER, APP_ALL_ONLY, APP_FILTERS, LIVE_FILTER, TALKING_FILTER, appFilterKeeps } from "./drills";
 import { NOW, applications, leads, settings, tracks as trackList } from "./fixture";
 import { daysSince, hostOf, relWhen, safeUrl } from "./format";
 import { tierCssClass, tierOf, tierRank } from "./geo";
@@ -276,6 +277,38 @@ describe("buildTabs", () => {
     expect(tabs.find((t) => t.id === "beta")?.fresh).toBe(0);
     // And the same leads do count on the day they were found.
     expect(buildTabs(found, applications, tracks, settings, staleDay).find((t) => t.id === "beta")?.fresh).toBe(1);
+  });
+
+  it("app-chips-cover-status: only the listed stages are All-only", () => {
+    // All holds everything, so it can't be what proves a stage is reachable.
+    // Asserting the gap exactly, rather than allowing any gap, is what makes a
+    // stage added server-side fail here until someone decides where it goes.
+    const named = APP_FILTERS.filter((f) => f !== ALL_FILTER);
+    const uncovered = APP_STATUS.filter(
+      (status) => !named.some((f) => appFilterKeeps(f, { ...applications[0], status })),
+    );
+    expect(uncovered).toEqual([...APP_ALL_ONLY]);
+  });
+
+  it("sorts each stage into the chip that describes it", () => {
+    const of = (filter: string) =>
+      applications.filter((a) => appFilterKeeps(filter, a)).map((a) => a.status);
+
+    // Live is everything still going: a withdrawn or rejected row is over.
+    expect(of(LIVE_FILTER)).not.toContain("Rejected");
+    expect(of(LIVE_FILTER)).not.toContain("Withdrawn");
+    expect(of(LIVE_FILTER)).toContain("To Apply");
+
+    // In conversation is the stages where someone is talking to you, offer
+    // included - an offer ends a conversation rather than being another kind.
+    expect([...new Set(of(TALKING_FILTER))].sort()).toEqual(
+      ["Offer", "Onsite / Loop", "Recruiter Screen", "Tech Screen"],
+    );
+
+    // The two that name one status mean exactly it.
+    expect([...new Set(of("Applied"))]).toEqual(["Applied"]);
+    expect([...new Set(of("Rejected"))]).toEqual(["Rejected"]);
+    expect(of(ALL_FILTER)).toHaveLength(applications.length);
   });
 
   it("marks the Applications tab when a posting could not be read", () => {

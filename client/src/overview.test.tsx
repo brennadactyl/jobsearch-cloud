@@ -365,7 +365,7 @@ describe("waiting longest", () => {
   it("opens every waiting application without touching the saved sort", async () => {
     await renderOverview();
     const all = screen.getByRole("link", { name: "See all waiting ›" });
-    expect(all).toHaveAttribute("href", "/applications?drill=waiting");
+    expect(all).toHaveAttribute("href", "/applications?filter=All&drill=waiting");
     await userEvent.click(all);
     expect(await screen.findByRole("link", { name: "Clear filter: Waiting to hear back" })).toBeInTheDocument();
     expect(localStorage.getItem("bjs.appSort")).toBeNull();

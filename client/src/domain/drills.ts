@@ -350,6 +350,59 @@ export function leadFilterKeeps(filter: string, lead: Lead): boolean {
   return lead.status === filter;
 }
 
+/** The chip an applications view shows when its URL names none: everything still going. */
+export const LIVE_FILTER = "Live";
+/**
+ * The one chip covering several statuses: a reply has come and the thread is
+ * still going. An offer is the end of a conversation rather than a different
+ * kind of one, so it sits here instead of alone.
+ */
+export const TALKING_FILTER = "In conversation";
+const TALKING: readonly string[] = [...ACTIVE, "Offer"];
+/** Over: nothing further comes of these, and only the All chip holds them. */
+const CLOSED: readonly string[] = ["Rejected", "Withdrawn"];
+
+/**
+ * The chips an applications tab offers, in the order a row travels through
+ * them. Live first because it is the default, All last because it is the way
+ * back - the shape the leads tab's chips already have.
+ *
+ * `app-chips-cover-status` in domain.test.ts holds these against APP_STATUS, so
+ * a stage added server-side has to be given a chip rather than quietly turning
+ * up only under All.
+ */
+export const APP_FILTERS: readonly string[] = [LIVE_FILTER, "Applied", TALKING_FILTER, "Rejected", ALL_FILTER];
+
+/**
+ * The stages no named chip claims, reachable under All and nowhere else.
+ *
+ * Withdrawn is here because you ended it yourself: it is neither waiting on
+ * anyone nor a decision that went against you, and a chip for the rare row
+ * someone walked away from would cost a chip's width every day to be used
+ * twice a year. The test pins this list rather than allowing any gap, so a
+ * stage added server-side fails until someone decides where it goes.
+ */
+export const APP_ALL_ONLY: readonly string[] = ["Withdrawn"];
+
+/** An applications view with no filter shows Live. */
+export function resolveAppFilter(filter: string | null | undefined): string {
+  return filter || LIVE_FILTER;
+}
+
+/** Whether an application shows under a resolved applications filter. */
+export function appFilterKeeps(filter: string, app: Application): boolean {
+  if (filter === ALL_FILTER) {
+    return true;
+  }
+  if (filter === LIVE_FILTER) {
+    return !CLOSED.includes(app.status);
+  }
+  if (filter === TALKING_FILTER) {
+    return TALKING.includes(app.status);
+  }
+  return app.status === filter;
+}
+
 /** What a tile or chart mark links to: a tab, plus at most one narrowing of it. */
 export interface DrillTarget {
   tab: string;
@@ -369,8 +422,13 @@ export function drillRows(t: DrillTarget, src: RowSource): (Lead | Application)[
   let rows: (Lead | Application)[];
   if (isApps) {
     rows = appRows(src.applications);
+    // No chip here means every application, not the tab's Live default. These
+    // are the Overview's own figures: resolving a missing chip would quietly
+    // drop closed rows from counts that have always held them, and "Applied"
+    // on a tile means every application sent, rejections included. A target
+    // that is linked says ALL_FILTER so the tab it opens shows what it counted.
     if (t.filter) {
-      rows = rows.filter((r) => r.status === t.filter);
+      rows = rows.filter((r) => appFilterKeeps(t.filter!, r as Application));
     }
   } else {
     const filter = resolveLeadFilter(t.filter);
