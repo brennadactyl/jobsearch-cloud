@@ -311,6 +311,15 @@
     }
   ],
 
+  "_runs_comment": [
+    "A run per search, recorded with the day the seed runs - these carry no date",
+    "of their own. That is load-bearing rather than incidental: the Screened tab's",
+    "'today' window is the newest run's day, not the reader's, so the rows above",
+    "at daysAgo 0 are today's only because a run record and daysAgo 0 land on the",
+    "same day. Giving a run its own earlier date would move 'today' backwards and",
+    "empty that window, with those rows still in this file and still dated right."
+  ],
+
   "runs": [
     { "search": "engineering", "status": "ok", "note": "Swept 12 companies. New postings on the Engineering and Eng Leadership tabs; one program-management posting screened out." },
     { "search": "data", "status": "ok", "note": "Swept 10 companies. One new ML platform posting; nothing screened." }
