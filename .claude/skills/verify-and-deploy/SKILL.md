@@ -148,11 +148,13 @@ field returned, the reason given - rather than a status code the old code also
 returned. A check written that way cannot pass against code that doesn't do what
 it asserts.
 
-Which is narrower than the behaviour it was written for, and that gap is the
-failure left. An assertion reaching one step of a composed prompt, or one field
-of a response, says nothing about the property the check is named after: another
-step can contradict it and the check still passes. So assert over the whole of
-whatever the rule is about.
+What it asserts is narrower than the behaviour it was written for, and that gap
+is the failure left. An assertion reaching one step of a composed prompt, or one
+field of a response, says nothing about the property the check is named after:
+another step can contradict it and the check still passes. So take the
+assertion's subject from the rule's subject - the whole prompt where the rule is
+about the prompt - which is not the same as pinning every byte of it, a check
+that fails on a reword changing no behaviour.
 
 **Never remove or break the new code to verify a check.** If a check can only be
 trusted by deleting what it tests, the check is the problem: rewrite it until it
