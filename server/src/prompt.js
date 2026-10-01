@@ -91,9 +91,19 @@ const SWEEP_STEP = `9d. RECORD WHAT YOU COVERED. Write every company this run ac
    (\`nflcareers\`, \`wd504\`, \`https://boards-api.greenhouse.io/v1/boards/roblox/jobs\`);
    "workday cxs" saves nobody anything while the tenant slug still has to be
    guessed. \`url_shape\` is how one posting's URL is built when the endpoint
-   doesn't give it (\`apply.careers.microsoft.com/careers/job/<19-digit id>\`).
+   doesn't give it (\`apply.careers.microsoft.com/careers/job/<19-digit id>\`),
+   and it is the form of the address a person opens to read a job - the same
+   address step 9 asks for - with the part that varies marked. A mirror on
+   another host counts only if postings actually open there.
    Send both whenever this run's own fetch established them - including for a
    company with no matching roles, since a fetch that worked is true either way.
+
+   **Each of those three is a value and nothing else:** no date, no "confirmed
+   tonight", no account of what you tried. Every search reads them as this
+   company's facts, and a sentence in one is stored as the fact itself - so the
+   next run inherits your prose where it expected a slug or an address. What you
+   want to say about tonight's fetch belongs in your step-10 report, where a
+   person reads it once.
    Those two and \`board\` are pooled across every search here, so saying it once
    spares everyone the same fetch; \`note\` is not, and stays on this search's row.
 
