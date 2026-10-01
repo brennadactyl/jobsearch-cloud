@@ -134,6 +134,12 @@ const shapes = {
 
 // Each real config twice, as it is and with a stale profile, since the refresh
 // step is the other half of the prompt a live config reaches.
+// Captured before any real config joins them: the gate judges the shapes this
+// file is responsible for, on every run. A real config fills whatever that
+// person happens to have set, so a field nobody has set yet would read as this
+// tool's fault - but leaving them out must not mean leaving the gate out, which
+// is what `--configs` would otherwise do on the one run that matters most.
+const inventedShapes = { ...shapes };
 const configDir = flag("--configs");
 if (configDir) {
   for (const file of readdirSync(configDir).filter((f) => f.endsWith(".json"))) {
@@ -157,9 +163,14 @@ if (configDir) {
 // override sat here composing nothing.
 //
 // A read is counted through a Proxy rather than found by reading the source, so
-// the answer comes from what the prompt does. That also sets the ceiling: any
-// truthy value counts as covered, so this catches "no shape composes this at
-// all" and nothing finer - not which branch a value took.
+// the answer comes from what the prompt does. That sets two ceilings. Any truthy
+// value counts as covered, so this catches "no shape composes this at all" and
+// nothing finer - not which branch a value took. And a field read only inside a
+// branch no shape reaches is never accessed, so the first list cannot name it
+// yet: a clean run means nothing is missing among the branches these shapes
+// reach. The field gating that branch is named instead, so adding a shape for it
+// surfaces the inner one on the next run - re-run after adding a shape rather
+// than reading one clean result as the end of it.
 function coverage() {
   const read = new Set();
   const gaveAValue = new Set();
@@ -177,7 +188,7 @@ function coverage() {
         return target[prop];
       },
     });
-  for (const shape of Object.values(shapes)) {
+  for (const shape of Object.values(inventedShapes)) {
     for (const key of Object.keys(shape.track || {})) setByAShape.add(key);
     for (const key of Object.keys(shape.settings || {})) setByAShape.add(key);
     buildSearchPrompt({ user, ...shape, track: watch(shape.track || {}), settings: watch(shape.settings || {}) });
@@ -197,19 +208,14 @@ console.log(`${Object.keys(shapes).length + 1} prompts from ${root} -> ${outDir}
 
 // Reported after the snapshots are written, so a run with a gap still leaves the
 // folder to diff - the gap is a hole in the proof, not a reason to withhold it.
-// Only the invented shapes are judged: a real config from --configs fills
-// whatever that person happens to have set, and a field nobody has set yet would
-// read as the tool's fault.
-if (!configDir) {
-  const { neverGivenAValue, neverRead } = coverage();
-  for (const [label, fields] of [
-    ["read by prompt.js, given a value by no shape", neverGivenAValue],
-    ["set by a shape, read by prompt.js nowhere", neverRead],
-  ]) {
-    console.log(`${label}: ${fields.length ? fields.join(", ") : "none"}`);
-  }
-  if (neverGivenAValue.length || neverRead.length) {
-    console.log("A diff of these snapshots proves nothing about those fields - add a shape, or drop the dead one.");
-    process.exitCode = 1;
-  }
+const { neverGivenAValue, neverRead } = coverage();
+for (const [label, fields] of [
+  ["read by prompt.js, given a value by no shape", neverGivenAValue],
+  ["set by a shape, read by prompt.js nowhere", neverRead],
+]) {
+  console.log(`${label}: ${fields.length ? fields.join(", ") : "none"}`);
+}
+if (neverGivenAValue.length || neverRead.length) {
+  console.log("A diff of these snapshots proves nothing about those fields - add a shape, or drop the dead one.");
+  process.exitCode = 1;
 }
