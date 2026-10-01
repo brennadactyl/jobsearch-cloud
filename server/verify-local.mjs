@@ -1039,7 +1039,7 @@ const listed = buildSearchPrompt({
   };
   const withRanked = syncStep({ priority_locations: "Seattle area, Portland OR, Remote US" });
   check("step 9 asks for an area copied exactly from the ranked list, as typed",
-    withRanked.includes("comp, area}") && withRanked.includes('one entry from "Seattle area, Portland OR, Remote US"') &&
+    withRanked.includes("posted_days, area}") && withRanked.includes('one entry from "Seattle area, Portland OR, Remote US"') &&
     withRanked.includes("copied as written") && withRanked.includes("leave it out when the posting falls in none"));
   check("step 9 says each comma starts a new entry, since the list is split on them",
     withRanked.includes("Each comma starts a new entry"));
@@ -1202,6 +1202,16 @@ check("step 1b says a tracked posting names the tab that holds it",
   sweSteps.includes("{url, status, search}") && sweSteps.includes("the tab that already holds it"));
 check("step 6b leaves an unstated field out rather than sending it empty",
   sweSteps.includes("Leave any of these out entirely when the posting doesn't say"));
+// A posting states its age two ways, and the run reports which one it read
+// rather than converting: the tracker counts back from the night of the run, so
+// the arithmetic happens once instead of differently every night.
+check("step 6b asks for a posted date or an age in days, and forbids doing the sum",
+  sweSteps.includes("`posted_date` when it prints a date") && sweSteps.includes("`posted_days` when it gives an age") &&
+  sweSteps.includes("don't work out a date from an age yourself"));
+check("and leaves both out when the posting only says it was recent",
+  sweSteps.includes("both fields are left out"));
+check("step 9 names both posted fields in the row it asks for",
+  sweSteps.includes("comp, posted_date, posted_days"));
 check("step 9e stops after a stated number of extra slices, not an effort",
   sweSteps.includes("two extra slices is the limit") && !sweSteps.includes("effort a run should"));
 check("step 9d names every field a sweep can carry, wall included",

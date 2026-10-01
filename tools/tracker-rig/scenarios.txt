@@ -45,3 +45,4 @@ e400|e400|screened screened.json
 e503|e503|companies
 leads-reallinks|ok|leads leads-reallinks.json
 leads-filled|filled|leads leads-area.json
+leads-posted|posted|leads leads-posted.json

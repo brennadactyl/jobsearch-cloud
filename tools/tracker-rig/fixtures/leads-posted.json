@@ -1,0 +1,6 @@
+[{"url":"https://a/30","company":"Acme","title":"An explicit date","location":"Remote US","posted_date":"2026-09-28"},
+ {"url":"https://a/31","company":"Acme","title":"An age in days","location":"Remote US","posted_days":3},
+ {"url":"https://a/32","company":"Acme","title":"An age the run quoted","location":"Remote US","posted_days":"14"},
+ {"url":"https://a/33","company":"Acme","title":"A date the board reworded","location":"Remote US","posted_date":"28 September 2026"},
+ {"url":"https://a/34","company":"Acme","title":"A close date in the posted slot","location":"Remote US","posted_date":"2027-01-15"},
+ {"url":"https://a/35","company":"Acme","title":"The posting says nothing","location":"Remote US"}]

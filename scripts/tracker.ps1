@@ -484,9 +484,17 @@ function Invoke-LeadsCommand {
         $row = @{ search = $Search; company = $company; title = $title; url = $url }
         $rowSearch = Get-TrimmedField $inputRow "search"
         if ($rowSearch) { $row["search"] = $rowSearch }
-        foreach ($fieldName in @("location", "fit", "team", "setup", "comp")) {
+        foreach ($fieldName in @("location", "fit", "team", "setup", "comp", "posted_date")) {
             $fieldValue = Get-TrimmedField $inputRow $fieldName
             if ($fieldValue) { $row[$fieldName] = $fieldValue }
+        }
+        # `posted_days` is a count, so it is forwarded as a number rather than
+        # through the text path: the tracker counts back from the run's own date
+        # with it, and a quoted "3" would arrive as a string for that sum. What a
+        # date may look like, and what a count may be, are the tracker's to say -
+        # a second copy of either rule here is the drift the area rule costs us.
+        if ($null -ne $inputRow.posted_days -and "$($inputRow.posted_days)".Trim()) {
+            $row["posted_days"] = $inputRow.posted_days
         }
         # An area is one of the ranked places or nothing: a near-miss like
         # "Seattle" for "Seattle area" would give the lead no tier while
@@ -518,11 +526,26 @@ function Invoke-LeadsCommand {
     # night after night is the thing to read: it means runs have stopped naming
     # areas and the tracker is working them out instead.
     Write-TrackerLine ("leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) " +
-        "refused=$($script:Refused) area_cleared=$($script:AreaCleared) area_filled=$([int]$res.area_filled) on=$Today")
+        "refused=$($script:Refused) area_cleared=$($script:AreaCleared) area_filled=$([int]$res.area_filled) " +
+        "posted_dropped=$([int]$res.posted_dropped.malformed + [int]$res.posted_dropped.future) on=$Today")
     # Every area sent was checked above, so the route clearing one means the
     # two copies of the split rule disagree.
     if ([int]$res.area_cleared -gt 0) {
         Write-TrackerLine "WARNING: the tracker cleared $($res.area_cleared) area(s) this helper accepted - its ranked-place rule and this one have drifted apart"
+    }
+    # A dropped posted date is counted on the line and warned about per reason,
+    # because the two reasons want different people: `malformed` means a run's
+    # own output wasn't a plain date, and `future` means a run counted back from
+    # the wrong day - one is a shape, the other is arithmetic, and a single
+    # number would read as one problem.
+    $dropped = $res.posted_dropped
+    $malformed = [int]$dropped.malformed
+    $future = [int]$dropped.future
+    if ($malformed -gt 0) {
+        Write-TrackerLine "WARNING: the tracker dropped $malformed posted date(s) that weren't a plain YYYY-MM-DD - those leads are stored with no date"
+    }
+    if ($future -gt 0) {
+        Write-TrackerLine "WARNING: the tracker dropped $future posted date(s) later than tonight - a posting cannot have gone up after the run that found it, so an age was counted back wrongly"
     }
 }
 
