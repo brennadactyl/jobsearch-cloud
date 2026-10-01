@@ -1195,7 +1195,7 @@ check("a track that has never swept anything still gets both rotation commands",
 // told about something it was never shown - step 9e refers to a `wall` that step
 // 1c's shape didn't mention.
 check("step 1c states the pooled facts companies.json actually carries",
-  sweSteps.includes("{company, position, last_swept, board, note, known}") &&
+  sweSteps.includes("{company, position, last_swept, board, note, known, aliases}") &&
   sweSteps.includes("{board, endpoint, url_shape, wall, dead_signal, verified_on}") &&
   sweSteps.includes("appear twice and mean different things"));
 check("step 1b says a tracked posting names the tab that holds it",
