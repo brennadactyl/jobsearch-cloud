@@ -393,6 +393,14 @@ One row per posting a search found and verified live. Unique on
   invented date can't be told from a read one and no later run re-reads the
   posting. An application made from the lead carries it, for the reason `fit`
   is carried.
+
+  **What it can be trusted for.** `posted` is what the posting said about
+  itself, checked only for being a real date no later than the run that found
+  it. A board that labels a closing date, a start date or an "updated" stamp as
+  when the posting went up lands here undetected whenever that date is in the
+  past - the prompt tells runs not to read those as posted dates, and nothing
+  downstream verifies that they didn't. So it is sound for sorting and ageing,
+  and not evidence about a single row.
 - `area` is the entry of the person's ranked `priority_locations` the posting
   falls in, spelled as they typed it, or `''`. The page tiers leads by it.
   Only a ranked entry is stored, matched ignoring case; anything else is stored
