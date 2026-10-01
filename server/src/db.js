@@ -1917,6 +1917,135 @@ export class Db {
   // ------------------------------------------------------- composite --
 
   /**
+   * Corrects the address a lead is stored under, and the two things that go
+   * stale when it moves - in one D1 batch, because a half-applied correction
+   * is worse than none.
+   *
+   * A board answers one posting at two addresses: the page a person opens, and
+   * the JSON its listing API serves. A run that stored the second one leaves a
+   * row that answers 200 to every check and shows raw JSON to whoever clicks
+   * it. Nothing else can repair those: `url` is outside updateLead's whitelist,
+   * and re-posting the right address is an INSERT OR IGNORE that reports a
+   * duplicate.
+   *
+   * **The old address is remembered as a screened row.** A lead's url is what
+   * the next run dedups against (dropKnownUrls), so moving it makes the old one
+   * unknown again and a run that still finds it adds the posting a second time.
+   * The screened table is already the runs' memory of addresses not to re-add,
+   * so the old one goes there rather than into a column invented for it. Filed
+   * as a person's own removal - `added_by = 'hand'`, no kind - because no
+   * search rejected it: that also keeps it off the Screened tab, which is for
+   * what someone's settings cost them, and out of the per-search counts, which
+   * ask what their own rules turned away.
+   *
+   * It is still *sent*, as every hand-set-aside row is, so it reaches one place
+   * a reader looks: `?screened=all`, whose question is what is in the table. It
+   * also ages into `screened_window.older`, so after the window closes the
+   * tab's count of rows not shown includes corrections among the rejections -
+   * a true sentence about a slightly wrong population. Narrowing that would
+   * mean a kind for "this was only ever an address", which is a column's worth
+   * of machinery for a count nobody acts on.
+   *
+   * **An application's `link` follows, but only if it is still the copy.** An
+   * application made from a lead carries its url, so a lead corrected after
+   * someone applied would leave them clicking the API address from the other
+   * tab. It is updated only where it still equals the old url: a link the
+   * person has since edited is theirs, and this is a repair, not an
+   * overwrite.
+   *
+   * @param {Lead} lead - the already-fetched row, so this doesn't re-read it
+   * @param {string} url - the corrected address
+   * @param {string} reason - what to write on the remembered row
+   * @returns {Promise<{lead: Lead|null, remembered: boolean, application: boolean}>}
+   */
+  async changeLeadUrl(lead, url, reason) {
+    // Nothing to remember when the two addresses are the same posting to
+    // dropKnownUrls: the new one already blocks what the old one did, and a
+    // screened row would only be a second name for a url still present.
+    const remember = canonicalUrl(lead.url) !== canonicalUrl(url);
+
+    const batch = [
+      this.d1
+        .prepare("UPDATE leads SET url = ? WHERE id = ? AND user_id = ?")
+        .bind(url, lead.id, this.userId),
+      this.d1
+        .prepare(
+          `UPDATE applications SET link = ?
+            WHERE user_id = ? AND leadId = ? AND link = ?`
+        )
+        .bind(url, this.userId, String(lead.id), lead.url),
+    ];
+    if (remember) {
+      batch.push(
+        this.d1
+          .prepare(
+            `INSERT OR IGNORE INTO screened
+               (user_id, search, url, company, title, location, reason, date, added_by, found, kind)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'hand', ?, '')`
+          )
+          .bind(
+            this.userId, lead.search, lead.url, lead.company || "", lead.title || "",
+            lead.location || "", reason, today(), lead.found || ""
+          )
+      );
+    }
+
+    const results = await this.d1.batch(batch);
+    return {
+      lead: await this.getLead(lead.id),
+      remembered: remember,
+      application: (results[1].meta.changes || 0) > 0,
+    };
+  }
+
+  /**
+   * Corrects the address a screened row is stored under, remembering the old
+   * one the same way changeLeadUrl does and for the same reason: the row's
+   * whole job is telling the next run not to re-add that posting, and moving
+   * the address would hand the old one back.
+   *
+   * The corrected row keeps its kind and who added it, so a run's rejection
+   * still reads as one and still appears wherever it did.
+   *
+   * @param {ScreenedItem} row - the already-fetched row
+   * @param {string} url
+   * @param {string} reason - what to write on the remembered row
+   * @returns {Promise<{remembered: boolean}>}
+   */
+  async changeScreenedUrl(row, url, reason) {
+    const remember = canonicalUrl(row.url) !== canonicalUrl(url);
+    const batch = [
+      this.d1
+        .prepare("UPDATE screened SET url = ? WHERE id = ? AND user_id = ?")
+        .bind(url, row.id, this.userId),
+    ];
+    if (remember) {
+      batch.push(
+        this.d1
+          .prepare(
+            `INSERT OR IGNORE INTO screened
+               (user_id, search, url, company, title, location, reason, date, added_by, found, kind)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'hand', ?, '')`
+          )
+          .bind(
+            this.userId, row.search, row.url, row.company || "", row.title || "",
+            row.location || "", reason, today(), row.found || ""
+          )
+      );
+    }
+    await this.d1.batch(batch);
+    return { remembered: remember };
+  }
+
+  /** @param {number|string} id @returns {Promise<ScreenedItem|null>} */
+  async getScreened(id) {
+    return this.d1
+      .prepare("SELECT * FROM screened WHERE id = ? AND user_id = ?")
+      .bind(id, this.userId)
+      .first();
+  }
+
+  /**
    * What this person already has for a posting, matched by canonical URL
    * (./url.js).
    *
