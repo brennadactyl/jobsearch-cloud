@@ -702,5 +702,32 @@ INSERT INTO sessions (id, user_id, created_at, label) VALUES ('s1', 'u1', '2026-
   db.close();
 }
 
+console.log("\n== 0031 leaves every row saying no posting date was given ==");
+{
+  // Nothing is inferred from `found`. The day a search found a posting is not
+  // the day it went up - that is the whole distinction the column exists for -
+  // so seeding it from `found` would fill the table with dates that look read
+  // and were guessed, which is the one thing worse than ''.
+  const STOP31 = MIGRATIONS.find((f) => f.startsWith("0031_"));
+  const db = migratedThrough(STOP31, `
+INSERT INTO users (id, name) VALUES ('u1', 'One');
+INSERT INTO leads (user_id, search, found, company, title, location, url, verified, fit, status, notes)
+VALUES ('u1', 'SWE', '2026-09-01', 'Acme', 'SDE', 'Remote', 'https://example.com/a', '2026-09-02', 'close fit', 'New', '');
+INSERT INTO applications (user_id, leadId, company, title, dateApplied, status, notes)
+VALUES ('u1', '1', 'Acme', 'SDE', '2026-09-03', 'Applied', '');
+`);
+  const lead = db.prepare("SELECT found, posted, fit FROM leads WHERE user_id = 'u1'").get();
+  check("a lead starts with no posted date, with no NULLs to read around",
+    lead.posted === "");
+  check("and it is not seeded from the day the search found it",
+    lead.found === "2026-09-01" && lead.posted !== lead.found);
+  check("the lead keeps everything else it had",
+    lead.fit === "close fit");
+  const app = db.prepare("SELECT company, posted FROM applications WHERE user_id = 'u1'").get();
+  check("an application starts with none either, and keeps what it had",
+    app.posted === "" && app.company === "Acme");
+  db.close();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

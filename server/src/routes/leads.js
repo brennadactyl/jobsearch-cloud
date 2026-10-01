@@ -11,7 +11,7 @@
 import { DELISTED_REASON } from "../db.js";
 import { excludedCompanyMatcher } from "../exclude.js";
 import { json, readJson } from "../http.js";
-import { areaToStore, isoDate, today, unknownTrackResponse } from "../validate.js";
+import { areaToStore, isoDate, postedToStore, today, unknownTrackResponse } from "../validate.js";
 
 // Duplicated in client/src/domain/constants.ts's LEAD_STATUS: client and server
 // share no code. Only handleSetLeadStatus validates against it;
@@ -77,7 +77,7 @@ export async function handleAddLeads({ request, db }) {
   const allowed = valid.filter((lead) => !isExcluded(lead.company));
   const excluded = valid.length - allowed.length;
   if (allowed.length === 0) {
-    return json({ added: 0, duplicates: 0, excluded, area_cleared: 0, area_filled: 0 });
+    return json({ added: 0, duplicates: 0, excluded, area_cleared: 0, area_filled: 0, posted_dropped: { malformed: 0, future: 0 } });
   }
 
   // A lead's area is kept only when it is exactly one of the person's ranked
@@ -90,8 +90,16 @@ export async function handleAddLeads({ request, db }) {
   // a run doesn't always answer - and a lead with no area sits untiered on the
   // page however plainly its location names a ranked place. `area_filled` says
   // how many the route worked out, so a night can see how often it had to.
+  //
+  // `posted` arrives as whichever field the posting gave - a date it printed or
+  // an age in days - and the subtraction is done here rather than by the run,
+  // since that is a comparison (validate.js postedToStore). Dropped rather than
+  // refused for the same reason as an area, and `posted_dropped` splits the two
+  // kinds: a shape that slipped is a fixable instruction, a date from the wrong
+  // side of the night is a reading gone wrong.
   let areaCleared = 0;
   let areaFilled = 0;
+  const postedDropped = { malformed: 0, future: 0 };
   const filed = allowed.map((lead) => {
     const { area, cleared, filled } = areaToStore(lead.area, lead.location, settings.priority_locations);
     if (cleared) {
@@ -100,7 +108,11 @@ export async function handleAddLeads({ request, db }) {
     if (filled) {
       areaFilled++;
     }
-    return { ...lead, area };
+    const { posted, why } = postedToStore(lead.posted_date, lead.posted_days, on);
+    if (why) {
+      postedDropped[why]++;
+    }
+    return { ...lead, area, posted };
   });
 
   const { added, duplicates } = await db.addLeads(filed, on);
@@ -110,7 +122,7 @@ export async function handleAddLeads({ request, db }) {
 
   // `duplicates` is reported so a run's own report says what it actually added,
   // not how many rows it posted.
-  return json({ added, duplicates, excluded, area_cleared: areaCleared, area_filled: areaFilled });
+  return json({ added, duplicates, excluded, area_cleared: areaCleared, area_filled: areaFilled, posted_dropped: postedDropped });
 }
 
 /**
@@ -145,6 +157,7 @@ export function applicationFromLead(lead) {
     status: "Applied",
     notes: lead.notes || "",
     fit: lead.fit || "",
+    posted: lead.posted || "",
     link: lead.url || "",
     referral: lead.referral || "",
     comp: lead.comp || "",

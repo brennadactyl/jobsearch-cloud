@@ -104,6 +104,90 @@ export function storedArea(area, list) {
  * @param {unknown} list the stored `priority_locations`
  * @returns {{area: string, cleared: boolean, filled: boolean}}
  */
+/**
+ * The posted date to store for a row, from what the caller read off the
+ * posting, and why it was dropped if it was.
+ *
+ * A posting states its age two ways and a run reports whichever it saw:
+ * `posted_date` for a date it printed, `posted_days` for a count it gave
+ * instead. The subtraction is done here rather than by the run, because
+ * subtracting a count from a date is a comparison - left to a model it is
+ * re-made differently every night and still exits 0.
+ *
+ * Dropped rather than refused, like an area: losing a posting over a malformed
+ * date is the worse failure. `why` says which kind of wrong it was, because
+ * they want different people looking - `malformed` means a run's output slipped
+ * its shape, which is a fixable instruction, and `future` means an age or a
+ * date arrived from the wrong side of the night, which is a reading gone wrong.
+ *
+ * **A count must be a number, not a numeric string.** Not because `"14"` is
+ * hard to read - it isn't, and `posted_date` is accepted by exactly that kind
+ * of closed rule - but because of the shape of being wrong either way. A
+ * refusal warns on the night it happens, names itself `malformed`, and costs no
+ * lead: if runs do quote their counts, that is one night's evidence and a
+ * one-line fix. A coercion that silently works produces nothing to learn from,
+ * so the day it reads something it shouldn't there is no record of when it
+ * started.
+ *
+ * Both fields present is malformed: a row carrying a date *and* a count is a
+ * run that didn't settle which the posting gave, and picking one would be this
+ * code deciding what the page said.
+ *
+ * `0` days is the day the run ran - a posting put up this morning, which is the
+ * commonest useful answer, so it is kept rather than read as absent.
+ *
+ * @param {unknown} date what the caller read as a printed date
+ * @param {unknown} days what the caller read as an age in days
+ * @param {string} on the run's own local date, YYYY-MM-DD
+ * @returns {{posted: string, why: ''|'malformed'|'future'}}
+ */
+export function postedToStore(date, days, on) {
+  const hasDate = date !== undefined && date !== null && date !== "";
+  const hasDays = days !== undefined && days !== null && days !== "";
+  if (!hasDate && !hasDays) {
+    return { posted: "", why: "" };
+  }
+  if (hasDate && hasDays) {
+    return { posted: "", why: "malformed" };
+  }
+
+  // The run's own date is the floor for "not from the future". Absent - a
+  // caller that sent no `on` - falls back to the worker's UTC day, which is the
+  // only other date available and never more than a day out.
+  const today = isoDate(on) || new Date().toISOString().slice(0, 10);
+
+  if (hasDate) {
+    const given = isoDate(date);
+    if (!given || !isRealDate(given)) {
+      return { posted: "", why: "malformed" };
+    }
+    return given > today ? { posted: "", why: "future" } : { posted: given, why: "" };
+  }
+
+  if (typeof days !== "number" || !Number.isInteger(days)) {
+    return { posted: "", why: "malformed" };
+  }
+  // A negative count is the same bug as a future date: it puts the posting on
+  // the wrong side of the night that found it.
+  if (days < 0) {
+    return { posted: "", why: "future" };
+  }
+  return { posted: daysBefore(today, days), why: "" };
+}
+
+/** Whether a YYYY-MM-DD string names a day that exists - isoDate checks only the shape. */
+function isRealDate(value) {
+  const [y, m, d] = value.split("-").map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d));
+  return at.getUTCFullYear() === y && at.getUTCMonth() === m - 1 && at.getUTCDate() === d;
+}
+
+/** `days` days before `from`, as YYYY-MM-DD. Both are dates, so this is calendar arithmetic with no instant in it. */
+function daysBefore(from, days) {
+  const [y, m, d] = from.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d) - days * DAY_MS).toISOString().slice(0, 10);
+}
+
 export function areaToStore(sent, location, list) {
   const area = storedArea(sent, list);
   if (area) {

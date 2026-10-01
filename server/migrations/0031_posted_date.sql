@@ -1,0 +1,42 @@
+-- leads.posted and applications.posted: the day the posting says it went up.
+--
+-- How old a posting is decides whether it is worth an evening. A req put up
+-- this morning and one sitting unfilled for three months are different
+-- propositions, and nothing stored said which was which - so a person reading
+-- their board could sort by when a search *found* a posting and never by when
+-- it appeared.
+--
+--   posted  YYYY-MM-DD, or '' when the posting doesn't say. Not NULL, so an
+--           existing row reads as "not known" rather than as a date.
+--
+-- '' is not a gap waiting to be filled. Plenty of postings state no date at
+-- all, and a run that can't settle one leaves the field out rather than
+-- estimating - an invented date is worse than none, because nothing downstream
+-- can tell the two apart and no later run re-reads the posting to correct it.
+--
+-- **A run reports what it read; the server does the arithmetic.** A posting
+-- states this two ways, and the route takes either (routes/leads.js):
+--
+--   posted_date  a date the posting printed.
+--   posted_days  a whole number, when the posting gave an age instead
+--                ("3 days ago" -> 3), counted back from the run's own local
+--                date, which is the only thing that knows the night it ran.
+--
+-- Subtracting a count from a date is a comparison, so it is not a model's to
+-- make: left to the prompt it would be re-made differently every night and
+-- still exit 0. The route drops what it cannot use rather than refusing the
+-- lead, since losing a posting over a malformed date is the worse failure, and
+-- reports how many it dropped and why.
+--
+-- On applications for the reason 0029 gives about `fit`: the application is the
+-- row that outlives the posting, and the lead is deleted when the posting goes
+-- away, so a date referenced rather than copied would empty itself exactly when
+-- someone wanted it. It differs from `fit` in one way that matters - a posting
+-- *states* a date, so the overnight fill can supply one, where it can never
+-- supply a search's judgement of a person.
+--
+-- Not on screened rows. A rejection's value is the sentence explaining it, and
+-- nothing reads a date there.
+
+ALTER TABLE leads ADD COLUMN posted TEXT NOT NULL DEFAULT '';
+ALTER TABLE applications ADD COLUMN posted TEXT NOT NULL DEFAULT '';

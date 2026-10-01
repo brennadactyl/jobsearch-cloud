@@ -4130,6 +4130,106 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
 
 
 {
+  console.log("\n== how old a posting is, as the run read it ==");
+  // A posting states its age two ways and a run reports whichever it saw: a
+  // date it printed, or a count of days. The subtraction is the route's, since
+  // it is a comparison - left to the prompt it is re-made differently every
+  // night and still exits 0. Both paths of every rule are here: the value that
+  // lands, and the value that is turned away.
+  const pdStamp = Date.now().toString(36);
+  const pdName = `Posted ${pdStamp}`;
+  const pdPw = "posted-long-password-x";
+  await req("POST", "/api/users", { admin: true, body: { name: pdName, password: pdPw } });
+  const PD = (await req("POST", "/api/login", { body: { name: pdName, password: pdPw } })).json.token;
+  await req("POST", "/api/config", { token: PD, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+
+  const pdUrl = (n) => `https://example.com/posted/${pdStamp}/${n}`;
+  const pdLead = (n, extra) => ({
+    search: "SWE", company: "Acme", title: `Role ${n}`, location: "Remote", url: pdUrl(n), ...extra,
+  });
+  // A fixed `on`, so every date below is arithmetic rather than a moving
+  // target: the route counts back from the run's own local date.
+  const ON = "2026-09-20";
+  const pdPost = await req("POST", "/api/leads", { token: PD, body: { on: ON, leads: [
+    pdLead("date", { posted_date: "2026-09-18" }),
+    pdLead("days", { posted_days: 3 }),
+    pdLead("today", { posted_days: 0 }),
+    pdLead("none", {}),
+    pdLead("bad-shape", { posted_date: "18/09/2026" }),
+    pdLead("bad-day", { posted_date: "2026-02-30" }),
+    pdLead("quoted", { posted_days: "14" }),
+    pdLead("fractional", { posted_days: 1.5 }),
+    pdLead("both", { posted_date: "2026-09-18", posted_days: 3 }),
+    pdLead("ahead", { posted_date: "2026-09-21" }),
+    pdLead("negative", { posted_days: -2 }),
+  ] } });
+  const pdRows = (await req("GET", "/api/data", { token: PD })).json.leads;
+  const postedOf = (n) => pdRows.find((l) => l.url === pdUrl(n))?.posted;
+
+  check("a printed date is stored as the posting gave it",
+    pdPost.json?.added === 11 && postedOf("date") === "2026-09-18",
+    JSON.stringify([pdPost.json?.added, postedOf("date")]));
+  // The arithmetic the run no longer does.
+  check("a count of days is counted back from the night that read it",
+    postedOf("days") === "2026-09-17", postedOf("days"));
+  check("and nought days is the day it ran, not an absent answer",
+    postedOf("today") === ON, postedOf("today"));
+  check("a posting that says nothing stores nothing, and is not estimated from when it was found",
+    postedOf("none") === "" && pdRows.find((l) => l.url === pdUrl("none"))?.found === ON,
+    JSON.stringify([postedOf("none"), pdRows.find((l) => l.url === pdUrl("none"))?.found]));
+
+  // The refusing path. Each of these stores '' and keeps the lead: losing a
+  // posting over a malformed date would be the worse failure.
+  check("a date in the wrong shape, or naming a day that doesn't exist, is dropped",
+    postedOf("bad-shape") === "" && postedOf("bad-day") === "",
+    JSON.stringify([postedOf("bad-shape"), postedOf("bad-day")]));
+  // A quoted count is a number in the shape of text. Coercing it would mean
+  // deciding which text is a number, which is a parser over a model's prose.
+  check("a count sent as text is dropped rather than coerced",
+    postedOf("quoted") === "" && postedOf("fractional") === "",
+    JSON.stringify([postedOf("quoted"), postedOf("fractional")]));
+  check("a row carrying both fields is dropped - the run didn't settle which the posting gave",
+    postedOf("both") === "", postedOf("both"));
+  check("a date after the night that read it is dropped, and so is a negative count",
+    postedOf("ahead") === "" && postedOf("negative") === "",
+    JSON.stringify([postedOf("ahead"), postedOf("negative")]));
+  // Split by reason, because they want different people looking: a shape that
+  // slipped is a fixable instruction, a date from the wrong side of the night
+  // is a reading gone wrong.
+  check("the reply counts what it dropped, split by which kind of wrong it was",
+    pdPost.json?.posted_dropped?.malformed === 5 && pdPost.json?.posted_dropped?.future === 2,
+    JSON.stringify(pdPost.json?.posted_dropped));
+
+  // The application outlives the posting, and the lead is deleted when the
+  // posting goes away.
+  const pdLeadId = pdRows.find((l) => l.url === pdUrl("date")).id;
+  const pdApplied = await req("POST", `/api/leads/${pdLeadId}/status`, { token: PD, body: { status: "Applied" } });
+  check("an application made from a lead carries its posted date",
+    pdApplied.json?.application?.posted === "2026-09-18",
+    JSON.stringify(pdApplied.json?.application?.posted));
+
+  // The one way `posted` is unlike `fit`: a posting states a date, so the fill
+  // can supply one, where it can never supply a judgement about a person.
+  const pdHand = (await req("POST", "/api/update", { token: PD, body: {
+    type: "application", link: pdUrl("by-hand"), company: "", title: "" } })).json.application;
+  await req("POST", "/api/applications/autofill", { token: PD, body: { on: ON, filled: [
+    { id: pdHand.id, company: "Initech", title: "SDE", location: "Remote", posted_days: 2, fit: "a great match" }] } });
+  const pdFilled = (await req("GET", "/api/data", { token: PD })).json.applications.find((a) => a.id === pdHand.id);
+  check("the overnight fill can set a posted date, counted back the same way",
+    pdFilled?.posted === "2026-09-18", pdFilled?.posted);
+  check("and still cannot set a fit, which no posting states",
+    pdFilled?.fit === "", pdFilled?.fit);
+  const pdHand2 = (await req("POST", "/api/update", { token: PD, body: {
+    type: "application", link: pdUrl("by-hand-2"), company: "", title: "" } })).json.application;
+  const pdFill2 = await req("POST", "/api/applications/autofill", { token: PD, body: { on: ON, filled: [
+    { id: pdHand2.id, company: "Initech", posted_date: "2026-13-01" }] } });
+  check("a fill's unusable date is dropped and counted the same way",
+    pdFill2.json?.posted_dropped?.malformed === 1,
+    JSON.stringify(pdFill2.json?.posted_dropped));
+}
+
+
+{
   console.log("\n== pausing a search ==");
   // A paused search runs nothing and keeps everything it found
   // (migrations/0025_track_paused.sql, docs/pause-search-plan.md).
