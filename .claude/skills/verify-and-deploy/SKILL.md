@@ -136,25 +136,34 @@ against the same local database is fine - it resets its own fixtures.
 **Read the failures, do not just count them.** A run where everything fails at
 once means the port is wrong, not the change.
 
-### Prove the checks catch a broken isolation guard
+### Cover both paths, and never break the code to check a check
 
-Only for a guard that keeps one account out of another's rows or files. That is
-what this suite is for, and a check that silently tests nothing there ships a
-privacy hole green. Everywhere else a new check that passes is the proof, and
-this step is skipped.
+Every new behaviour gets two checks: the path where it works, and the path where
+it refuses. A rule that accepts the good input and a rule that turns the bad one
+away are two different claims, and a check that only makes the first passes just
+as happily against code that accepts everything.
 
-A clean first run is also what a check that tests nothing looks like. So for
-that one kind of guard: commit, break it on purpose - skip the refusal, swap the
-comparison - and rerun once: the new checks must FAIL. Restore with
-`git checkout -- src`. Commit before breaking anything, or the restore takes
-your uncommitted work with it.
+Assert something only the new behaviour can produce - the value written, the
+field returned, the reason given. Before writing the assertion, ask what the old
+code would have returned here: the same answer means the check is not about your
+change. That is the whole test, and it is about the assertion discriminating
+rather than about what kind of thing it reads - a status code can discriminate,
+and a value can fail to, when the old code reached it by another route. A check
+that passes the test cannot pass against code that doesn't do what it asserts.
 
-One broken run, not one per rule: break every isolation guard the change adds in
-that one run, and every new check must fail. And no clean rerun after restoring,
-since the restored tree is byte-identical to the one that already passed, so
-running it again answers a question already answered. There is no way to run one
-check alone - every run is the whole file against a fresh worker, which is the
-cost being spent.
+What it asserts is narrower than the behaviour it was written for, and that gap
+is the failure left. An assertion reaching one step of a composed prompt, or one
+field of a response, says nothing about the property the check is named after:
+another step can contradict it and the check still passes. So take the
+assertion's subject from the rule's subject - the whole prompt where the rule is
+about the prompt - which is not the same as pinning every byte of it, a check
+that fails on a reword changing no behaviour.
+
+**Never remove or break the new code to verify a check.** If a check can only be
+trusted by deleting what it tests, the check is the problem: rewrite it until it
+fails on its own. Each run here is the whole file against a fresh worker, and a
+check that needs a demolition to be believed will be no better understood the
+next time someone reads it.
 
 A change that should alter no behaviour at all - a refactor, a comment edit - is
 proved another way: see the `prove-a-change` skill.
