@@ -1223,6 +1223,23 @@ check("step 6b counts only a date the posting labels as posted",
   sweSteps.includes("confidently wrong is worse"));
 check("step 9 names both posted fields in the row it asks for",
   sweSteps.includes("comp, posted_date, posted_days"));
+// An age gate a run could steer by omitting the date is a gate that measures
+// how a run felt about each posting. Both halves are stated: the comparison is
+// not the run's, and the two ways of dodging it are named.
+check("step 6b says an old posting is refused and the comparison isn't the run's",
+  sweSteps.includes("more than 60 days before tonight is refused") &&
+  sweSteps.includes("That comparison is the tracker's, not yours"));
+check("step 6b forbids steering the gate with a missing or supplied date",
+  sweSteps.includes("never leave a date out to get a posting past it") &&
+  sweSteps.includes("supply one to keep a posting alive"));
+check("step 6b keeps a posting that states no date",
+  sweSteps.includes("an age nobody stated is not an age"));
+// A dropped date keeps the lead and a refused one doesn't, so a run that reads
+// them as one rule reports rows it didn't store.
+check("step 9 separates a dropped date from a refused lead",
+  sweSteps.includes("is dropped while the lead is kept") &&
+  sweSteps.includes("the lead itself is refused, counted on the reply") &&
+  sweSteps.includes("report what the line says"));
 check("step 9e stops after a stated number of extra slices, not an effort",
   sweSteps.includes("two extra slices is the limit") && !sweSteps.includes("effort a run should"));
 check("step 9d names every field a sweep can carry, wall included",

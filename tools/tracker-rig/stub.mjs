@@ -30,11 +30,14 @@ http.createServer((req, res) => {
     }
     if (path === "/api/coverage/SWE") return J(res, 200, {batch:3,cursor:40,total:300,companies:[{company:"Acme",board:"greenhouse",note:" slow "},{company:"Béta Co"},{company:"Gamma",note:"x"}]});
     if (path.startsWith("/api/coverage/SWE?all=1")) return J(res, 200, {companies:[{company:"Initech (Globex)",aliases:["Initrode","Initech Corp."]},{company:"Acme"}]});
-    // `posted` serves the drop counts the tracker answers with, split by reason:
-    // a date that wasn't a plain one, and a date later than the night that found
-    // the posting.
+    // `posted` serves every count the posted date produces, in one reply,
+    // because they are three different things about one field and the line has
+    // to keep them apart: two drops, split by reason - a date that wasn't a
+    // plain one, and a date later than the night that found the posting - and
+    // `too_old`, which is not a drop at all. A dropped date keeps its lead; a
+    // refusal is the lead not being stored.
     if (path === "/api/leads" && scen === "posted") {
-      return J(res, 200, {added:3,duplicates:0,excluded:0,posted_dropped:{malformed:1,future:1}});
+      return J(res, 200, {added:3,duplicates:0,excluded:0,too_old:2,posted_dropped:{malformed:1,future:1}});
     }
     if (path === "/api/leads") {
       // `filled` serves both counts the tracker answers with: one area it worked

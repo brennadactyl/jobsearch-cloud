@@ -531,8 +531,15 @@ function Invoke-LeadsCommand {
     # what each layer did rather than as shares of a total. `area_filled` rising
     # night after night is the thing to read: it means runs have stopped naming
     # areas and the tracker is working them out instead.
+    #
+    # `too_old` is the tracker refusing a lead whose posting states a date too
+    # far back to be worth an evening. It is not a share of `added` either: the
+    # lead was sent and no row was stored, and a night where it runs high is a
+    # slice of the company list whose boards are stale rather than a search
+    # doing badly.
     Write-TrackerLine ("leads: added=$($res.added) duplicates=$($res.duplicates) excluded=$($res.excluded) " +
         "refused=$($script:Refused) area_cleared=$($script:AreaCleared) area_filled=$([int]$res.area_filled) " +
+        "too_old=$([int]$res.too_old) " +
         "posted_dropped=$([int]$res.posted_dropped.malformed + [int]$res.posted_dropped.future) on=$Today")
     # Every area sent was checked above, so the route clearing one means the
     # two copies of the split rule disagree.
@@ -562,11 +569,14 @@ function Invoke-LeadsCommand {
 # about it on the night rather than in a reply nobody reads. First that applies
 # wins, which is the order the prompt's step 9b states.
 #
-# `delisted` is the tenth kind and deliberately not here: that row is written
-# when a lead this person had is confirmed gone (/api/delist), and a run
-# calling this command is recording a candidate it rejected, which is a
-# different thing. Sent here it becomes `other`, so a month of rejections can't
-# fill up with rows claiming to be lost leads.
+# Two stored kinds are deliberately not here. `delisted` is written when a lead
+# this person had is confirmed gone (/api/delist), and a run calling this
+# command is recording a candidate it rejected, which is a different thing.
+# `too-old` is the route's answer rather than a run's: a run reports the date a
+# posting states, and the comparison against it is made where it can't be
+# re-made differently every night. Either one sent here becomes `other`, so a
+# month of rejections can't fill up with rows claiming to be lost leads or
+# postings nobody judged stale.
 $ScreenedKinds = @(
     "dead", "duplicate", "out-of-scope", "wrong-level",
     "wrong-role", "contract", "pay-below-floor", "other"
