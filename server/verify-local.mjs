@@ -4253,6 +4253,12 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   // crowds out the postings a night found that are actually open. The run
   // reports the date and the route compares it, so the threshold is one number
   // rather than a judgement re-made every night.
+  // Captured before the refusal so the count half below compares two readings
+  // rather than looking for a key. `screened_counts` is keyed by search, not by
+  // kind, so asking whether it has a "too-old" key can never be false - which
+  // is a term that reads like a guard and isn't one.
+  const countBefore = (await req("GET", "/api/data", { token: PD })).json.screened_counts?.SWE ?? 0;
+
   const old = await req("POST", "/api/leads", { token: PD, body: { on: ON, leads: [
     pdLead("stale", { posted_date: "2026-06-01" }),
     pdLead("edge-in", { posted_date: "2026-07-23" }),
@@ -4289,9 +4295,24 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   // Asked for as "not shown on the client", and true because of where the kind
   // sits rather than because of a filter written for it: the not-by-rules kinds
   // never leave the server.
-  check("and it never reaches the page, in a list or in a count",
-    !(await req("GET", "/api/data", { token: PD })).json.screened.some((s) => s.url === pdUrl("stale")) &&
-    !Object.keys((await req("GET", "/api/data", { token: PD })).json.screened_counts || {}).includes("too-old"));
+  const pageAfter = (await req("GET", "/api/data", { token: PD })).json;
+  check("and it never reaches the page's list - move the kind across the split and this fails",
+    !pageAfter.screened.some((s) => s.url === pdUrl("stale")));
+  // The count asks the narrower question, "did their own rules turn this away",
+  // so refusing a posting for its age must not move it. Two readings of the
+  // same search's number, not a search for a key that could never be there.
+  check("nor the count of what their own rules turned away",
+    (pageAfter.screened_counts?.SWE ?? 0) === countBefore,
+    JSON.stringify({ before: countBefore, after: pageAfter.screened_counts?.SWE ?? 0 }));
+  // And the number does move when it should, so the check above is comparing a
+  // live counter rather than two readings of something that never changes. A
+  // rules-caused rejection on the same search, through the same table.
+  await req("POST", "/api/screened", { token: PD, body: { search: "SWE", screened: [
+    { search: "SWE", url: pdUrl("by-a-rule"), company: "Acme", title: "SDE",
+      reason: "below the pay floor", kind: "pay-below-floor" }] } });
+  check("while a rejection their rules did cause moves it by one",
+    ((await req("GET", "/api/data", { token: PD })).json.screened_counts?.SWE ?? 0) === countBefore + 1,
+    JSON.stringify({ before: countBefore, after: (await req("GET", "/api/data", { token: PD })).json.screened_counts?.SWE }));
 }
 
 
