@@ -170,10 +170,15 @@ export const SCREENED_KINDS: readonly {
   // among the kinds a setting caused. The run can tell a posting is too old
   // before judging scope or level, which is what this order is for.
   //
-  // No row of this kind ever reaches the page - the server keeps it out of
-  // what /api/data serves - so nothing here renders. The entry earns its place
-  // by being the thing that decides if one ever does: an unheard-of kind
-  // counts as the person's own, and this one is not.
+  // Nothing of this kind is served or rendered today. The row is this file's
+  // half of the invariant above - `mine` is the complement of
+  // SCREENED_NOT_BY_RULES - and keeping that is the whole of why it is here.
+  //
+  // It is not a net for a row arriving anyway. One could only arrive if the
+  // kind moved to SCREENED_BY_RULES, and then the server would count it while
+  // this entry kept it out of the list: the same disagreement the note above
+  // warns of, reached from the other side. What catches that move is the
+  // server's own check that /api/data omits the row.
   { kind: "too-old", label: "Posted too long ago" },
   // Where, what and how senior are three different rejections, so each names
   // its own dimension: "out of scope" left someone asking which one it meant.

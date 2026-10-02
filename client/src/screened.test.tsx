@@ -198,10 +198,11 @@ describe("the screened tab", () => {
   });
 
   it("leaves out a posting refused for its age, which is a fact and not a rule of theirs", () => {
-    // Nothing of this kind reaches the page: the server keeps it out of what
-    // /api/data serves. The entry exists because an unheard-of kind counts as
-    // the person's own - so without it, a row that did arrive would be read as
-    // something their settings cost them, and inflate the number saying so.
+    // This file's half of an invariant nothing checks across the two: `mine`
+    // is the complement of SCREENED_NOT_BY_RULES, which holds `too-old`.
+    // Nothing of the kind is served today, so what this pins is the
+    // vocabulary - an unheard-of kind would count as the person's own, and
+    // age is a fact about the posting rather than anything of theirs.
     const old = [{ ...fixture.screened[0], id: 98, kind: "too-old", added_by: "run" }];
     expect(screenedFrom(old, "")).toHaveLength(0);
   });
