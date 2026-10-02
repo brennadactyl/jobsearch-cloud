@@ -11,7 +11,15 @@
 import { DELISTED_REASON } from "../db.js";
 import { excludedCompanyMatcher } from "../exclude.js";
 import { json, readJson } from "../http.js";
-import { areaToStore, isoDate, postedToStore, today, unknownTrackResponse } from "../validate.js";
+import {
+  areaToStore,
+  isoDate,
+  MAX_POSTING_AGE_DAYS,
+  postedToStore,
+  today,
+  tooOldToAdd,
+  unknownTrackResponse,
+} from "../validate.js";
 
 // Duplicated in client/src/domain/constants.ts's LEAD_STATUS: client and server
 // share no code. Only handleSetLeadStatus validates against it;
@@ -115,14 +123,52 @@ export async function handleAddLeads({ request, db }) {
     return { ...lead, area, posted };
   });
 
-  const { added, duplicates } = await db.addLeads(filed, on);
+  // A posting older than MAX_POSTING_AGE_DAYS is not added. A req advertised
+  // that long is being advertised rather than filled, and it crowds out the
+  // postings a night found that are actually open.
+  //
+  // Judged here rather than by the run: the run reports the date and this
+  // compares it, so the threshold is one number in one place instead of a
+  // judgement re-made differently every night. Only a date the posting itself
+  // stated counts - nothing estimates one (validate.js tooOldToAdd).
+  const fresh = filed.filter((lead) => !tooOldToAdd(lead.posted, on));
+  const tooOld = filed.filter((lead) => tooOldToAdd(lead.posted, on));
+
+  const { added, duplicates } = await db.addLeads(fresh, on);
+
+  // The screened row is the half that isn't about anyone's page: it is the runs'
+  // memory, so tomorrow night doesn't re-find the same posting and spend the
+  // slot again. `too-old` is a fact about the posting rather than a rule of
+  // theirs (validate.js SCREENED_NOT_BY_RULES), so the row never reaches the
+  // client - which is what was asked for, and follows from where the kind sits
+  // rather than from a filter written for it.
+  if (tooOld.length) {
+    await db.addScreened(
+      tooOld.map((lead) => ({
+        search: lead.search,
+        url: lead.url,
+        company: lead.company,
+        title: lead.title,
+        location: lead.location || "",
+        reason: `posted ${lead.posted}, more than ${MAX_POSTING_AGE_DAYS} days before this run`,
+        kind: "too-old",
+      })),
+      on
+    );
+  }
+
   if (added > 0) {
     await db.touchUpdated();
   }
 
   // `duplicates` is reported so a run's own report says what it actually added,
-  // not how many rows it posted.
-  return json({ added, duplicates, excluded, area_cleared: areaCleared, area_filled: areaFilled, posted_dropped: postedDropped });
+  // not how many rows it posted. `too_old` is counted apart from `excluded`:
+  // both are postings this route refused, but one is a company they never want
+  // and the other is a posting that has simply been open too long.
+  return json({
+    added, duplicates, excluded, too_old: tooOld.length,
+    area_cleared: areaCleared, area_filled: areaFilled, posted_dropped: postedDropped,
+  });
 }
 
 /**

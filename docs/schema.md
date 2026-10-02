@@ -425,7 +425,11 @@ Unique on `(user_id, search, url)`, as `leads` is.
   a run sends without one - a reader shows such a row without a group rather
   than inventing one. A kind a run sends that isn't on the list is stored as
   `other` rather than refused, since losing the row would let the next run
-  re-find the posting.
+  re-find the posting. Two kinds are written by the server rather than reported
+  by a run: `delisted`, stamped by `POST /api/delist`, and `too-old`, written by
+  `POST /api/leads` when the date a run reported is more than
+  `MAX_POSTING_AGE_DAYS` before that run's own day — a comparison, so not a
+  judgement left to a run.
 - `added_by` is `run` for a row a search wrote, `hand` for a posting a person
   removed from their board, and `''` for older rows that could not be
   attributed (`0007_screened_added_by.sql`). Run records count only `run`.

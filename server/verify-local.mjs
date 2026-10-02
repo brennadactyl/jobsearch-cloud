@@ -4247,6 +4247,72 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("a fill's unusable date is dropped and counted the same way",
     pdFill2.json?.posted_dropped?.malformed === 1,
     JSON.stringify(pdFill2.json?.posted_dropped));
+
+  console.log("\n== a posting open too long is not added ==");
+  // A req advertised for months is being advertised rather than filled, and it
+  // crowds out the postings a night found that are actually open. The run
+  // reports the date and the route compares it, so the threshold is one number
+  // rather than a judgement re-made every night.
+  // Captured before the refusal so the count half below compares two readings
+  // rather than looking for a key. `screened_counts` is keyed by search, not by
+  // kind, so asking whether it has a "too-old" key can never be false - which
+  // is a term that reads like a guard and isn't one.
+  const countBefore = (await req("GET", "/api/data", { token: PD })).json.screened_counts?.SWE ?? 0;
+
+  const old = await req("POST", "/api/leads", { token: PD, body: { on: ON, leads: [
+    pdLead("stale", { posted_date: "2026-06-01" }),
+    pdLead("edge-in", { posted_date: "2026-07-23" }),
+    pdLead("edge-out", { posted_date: "2026-07-21" }),
+    pdLead("undated", {}),
+  ] } });
+  const pdAfter = (await req("GET", "/api/data", { token: PD })).json.leads;
+  const present = (n) => pdAfter.some((l) => l.url === pdUrl(n));
+
+  check("a posting older than the threshold is refused, and counted apart from an excluded company",
+    old.json?.too_old === 2 && old.json?.excluded === 0 && !present("stale") && !present("edge-out"),
+    JSON.stringify(old.json));
+  // Both sides of the boundary, since a threshold off by a day is the thing a
+  // single-sided check can't see: 60 days before 2026-09-20 is 2026-07-22.
+  check("one inside the threshold is added and one outside is not",
+    present("edge-in") && !present("edge-out"),
+    JSON.stringify([present("edge-in"), present("edge-out")]));
+  // Nothing estimates a date, so a posting that states none is judged on
+  // everything else. Refusing it would cost a live posting over a date nobody
+  // read.
+  check("a posting that states no date is added rather than guessed about",
+    present("undated"), String(present("undated")));
+
+  // The half that isn't about anyone's page: the row is the runs' memory, so
+  // tomorrow night doesn't spend the slot on the same posting again.
+  const oldRows = (await req("GET", "/api/data?screened=all", { token: PD })).json.screened;
+  const oldRow = oldRows.find((s) => s.url === pdUrl("stale"));
+  check("it is remembered as screened, with the kind and the date in its reason",
+    oldRow?.kind === "too-old" && oldRow?.added_by === "run" && /2026-06-01/.test(oldRow?.reason || ""),
+    JSON.stringify(oldRow));
+  check("so a run offering it again adds nothing",
+    (await req("POST", "/api/leads", { token: PD, body: { on: ON, leads: [
+      pdLead("stale", { posted_date: "2026-06-01" })] } })).json?.added === 0);
+  // Asked for as "not shown on the client", and true because of where the kind
+  // sits rather than because of a filter written for it: the not-by-rules kinds
+  // never leave the server.
+  const pageAfter = (await req("GET", "/api/data", { token: PD })).json;
+  check("and it never reaches the page's list - move the kind across the split and this fails",
+    !pageAfter.screened.some((s) => s.url === pdUrl("stale")));
+  // The count asks the narrower question, "did their own rules turn this away",
+  // so refusing a posting for its age must not move it. Two readings of the
+  // same search's number, not a search for a key that could never be there.
+  check("nor the count of what their own rules turned away",
+    (pageAfter.screened_counts?.SWE ?? 0) === countBefore,
+    JSON.stringify({ before: countBefore, after: pageAfter.screened_counts?.SWE ?? 0 }));
+  // And the number does move when it should, so the check above is comparing a
+  // live counter rather than two readings of something that never changes. A
+  // rules-caused rejection on the same search, through the same table.
+  await req("POST", "/api/screened", { token: PD, body: { search: "SWE", screened: [
+    { search: "SWE", url: pdUrl("by-a-rule"), company: "Acme", title: "SDE",
+      reason: "below the pay floor", kind: "pay-below-floor" }] } });
+  check("while a rejection their rules did cause moves it by one",
+    ((await req("GET", "/api/data", { token: PD })).json.screened_counts?.SWE ?? 0) === countBefore + 1,
+    JSON.stringify({ before: countBefore, after: (await req("GET", "/api/data", { token: PD })).json.screened_counts?.SWE }));
 }
 
 
