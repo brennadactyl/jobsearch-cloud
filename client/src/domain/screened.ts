@@ -165,6 +165,21 @@ export const SCREENED_KINDS: readonly {
   { kind: "delisted", label: "Taken down after you saw it" },
   { kind: "dead", label: "Gone before you saw it" },
   { kind: "duplicate", label: "Already seen" },
+  // Not hers: how long a posting has been up is a fact about the posting, the
+  // same as being gone or being a repeat, so it sits with those rather than
+  // among the kinds a setting caused. The run can tell a posting is too old
+  // before judging scope or level, which is what this order is for.
+  //
+  // Nothing of this kind is served or rendered today. The row is this file's
+  // half of the invariant above - `mine` is the complement of
+  // SCREENED_NOT_BY_RULES - and keeping that is the whole of why it is here.
+  //
+  // It is not a net for a row arriving anyway. One could only arrive if the
+  // kind moved to SCREENED_BY_RULES, and then the server would count it while
+  // this entry kept it out of the list: the same disagreement the note above
+  // warns of, reached from the other side. What catches that move is the
+  // server's own check that /api/data omits the row.
+  { kind: "too-old", label: "Posted too long ago" },
   // Where, what and how senior are three different rejections, so each names
   // its own dimension: "out of scope" left someone asking which one it meant.
   { kind: "out-of-scope", label: "Location", mine: true, set: { says: "where you'd work", section: "locations" } },

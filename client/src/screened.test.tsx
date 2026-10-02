@@ -197,6 +197,16 @@ describe("the screened tab", () => {
     expect(countsByKind(shown).find((k) => k.kind === "")?.label).toBe("Not grouped");
   });
 
+  it("leaves out a posting refused for its age, which is a fact and not a rule of theirs", () => {
+    // This file's half of an invariant nothing checks across the two: `mine`
+    // is the complement of SCREENED_NOT_BY_RULES, which holds `too-old`.
+    // Nothing of the kind is served today, so what this pins is the
+    // vocabulary - an unheard-of kind would count as the person's own, and
+    // age is a fact about the posting rather than anything of theirs.
+    const old = [{ ...fixture.screened[0], id: 98, kind: "too-old", added_by: "run" }];
+    expect(screenedFrom(old, "")).toHaveLength(0);
+  });
+
   it("leaves out the catch-all kind, which the count leaves out too", () => {
     // `other` is a rejection none of the named kinds describes, so nobody can
     // say a setting caused it (SCREENED_NOT_BY_RULES in server/src/validate.js).
