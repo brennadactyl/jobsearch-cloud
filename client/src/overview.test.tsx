@@ -361,6 +361,32 @@ describe("folding sections and charts", () => {
   });
 });
 
+describe("every applications link the Overview builds", () => {
+  it("names a chip, so the figure and the list it opens are one set", async () => {
+    // The hazard no placement fixes: drillRows reads a missing chip as every
+    // application while the tab reads it as Live, and that difference is
+    // deliberate - these figures have always counted closed rows. So a link
+    // built without a chip opens a smaller set than the number labelling it,
+    // silently. This is the check that makes forgetting loud, naming the link
+    // that forgot.
+    //
+    // The waiting rows are the exception and say so in their class: each opens
+    // the tab on a row it selected rather than standing for a count.
+    await renderOverview();
+    // Scoped to the panel: the nav's own tab link carries no chip on purpose,
+    // because opening a tab is what the default chip is for.
+    const links = [
+      ...document.querySelectorAll<HTMLAnchorElement>('#panel a[href^="/applications"]'),
+    ].filter((a) => !a.classList.contains("wait-row"));
+
+    expect(links.length).toBeGreaterThan(0);
+    for (const a of links) {
+      const query = a.getAttribute("href")!.split("?")[1] ?? "";
+      expect(new URLSearchParams(query).get("filter"), `${a.textContent} names no chip`).toBeTruthy();
+    }
+  });
+});
+
 describe("waiting longest", () => {
   it("opens every waiting application without touching the saved sort", async () => {
     await renderOverview();
