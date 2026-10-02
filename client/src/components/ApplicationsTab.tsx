@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { Application, TrackerData } from "../api/schema";
 import { useAddApplication, useDeleteApplication } from "../api/mutations";
 import { LABELS } from "../domain/constants";
-import { appRows, drillKeeps } from "../domain/drills";
+import { APP_FILTERS, LIVE_FILTER, appFilterKeeps, appRows, drillKeeps, resolveAppFilter } from "../domain/drills";
 import { applicationColumns } from "../domain/export";
 import { daysSince, hostOf, safeUrl } from "../domain/format";
 import { tierOf } from "../domain/geo";
@@ -23,8 +23,19 @@ import { AppStatusSelect, EditableField, StageDateModal, type PendingStage } fro
 export default function ApplicationsTab({ data }: { data: TrackerData }) {
   const { settings } = data;
   const prefs = usePrefs();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const drill = params.get("drill");
+
+  const setParam = (k: string, v: string | null) => {
+    const next = new URLSearchParams(params);
+    if (v) {
+      next.set(k, v);
+    }
+    else {
+      next.delete(k);
+    }
+    setParams(next, { replace: true });
+  };
 
   const [link, setLink] = useState("");
   const [pending, setPending] = useState<PendingStage | null>(null);
@@ -57,7 +68,8 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
   };
 
   const all = appRows(data.applications).sort(appComparator(prefs.appSort));
-  const rows = all.filter((a) => drillKeeps(drill, "apps", a, data));
+  const filter = resolveAppFilter(params.get("filter"));
+  const rows = all.filter((a) => appFilterKeeps(filter, a) && drillKeeps(drill, "apps", a, data));
 
   const toolbar = (
     <>
@@ -105,11 +117,22 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
         {/* Rows here carry the same tier stripe the leads grids do, and a colour
             down the edge of a row says nothing without the ranking it belongs to. */}
         <GeoKey settings={settings} />
-        {drill && (
-          <div className="chips">
-            <DrillChip drill={drill} ctx={data} clearTo={pathWithoutDrill("applications", params)} />
-          </div>
-        )}
+        <div className="chips">
+          {APP_FILTERS.map((f) => (
+            <button
+              key={f}
+              className="chip"
+              type="button"
+              aria-pressed={filter === f}
+              // The default stays out of the URL, so the tab's own link and the
+              // Live chip are the same address.
+              onClick={() => setParam("filter", f === LIVE_FILTER ? null : f)}
+            >
+              {f}
+            </button>
+          ))}
+          <DrillChip drill={drill} ctx={data} clearTo={pathWithoutDrill("applications", params)} />
+        </div>
       </div>
     </>
   );
