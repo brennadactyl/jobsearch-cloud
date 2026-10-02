@@ -9,7 +9,7 @@ import { Link } from "react-router-dom";
 import type { usePinnedLayout } from "../ui/hooks";
 import type { Settings, TrackerData } from "../api/schema";
 import { ALL_LEADS, LABELS } from "../domain/constants";
-import { ALL_FILTER, GONE_QUIET_DAYS, drillCount, drillRows, type DrillTarget, type RowSource } from "../domain/drills";
+import { GONE_QUIET_DAYS, drillCount, drillRows, type DrillTarget, type RowSource } from "../domain/drills";
 import { shortDate } from "../domain/format";
 import { tierColour } from "../domain/geo";
 import {
@@ -79,31 +79,14 @@ export default function Overview({
     { title: "Untriaged", footnote: "leads marked New", highlighted: true, tab: ALL_LEADS, filter: "New" },
     { title: topLabel, footnote: "still open", color: tierColour(0), tab: ALL_LEADS, drill: "top-geo-open" },
     { title: "Open leads", footnote: `across ${trackCount} tracked search${trackCount === 1 ? "" : "es"}`, tab: ALL_LEADS },
-    // ALL_FILTER on every applications tile: the tab opens on its Live chip,
-    // and these count rows a chip would hide - "Applied" includes the ones
-    // since rejected. Saying All is what keeps the figure and the list it
-    // opens the same set.
     {
       title: "Applied",
       footnote: toApply ? `plus ${toApply} still to apply` : "in your Applications tab",
       tab: "applications",
-      filter: ALL_FILTER,
       drill: "applied",
     },
-    {
-      title: "In conversation",
-      footnote: "screen or loop stage",
-      tab: "applications",
-      filter: ALL_FILTER,
-      drill: "in-conversation",
-    },
-    {
-      title: "Gone quiet",
-      footnote: `applied ${GONE_QUIET_DAYS}+ days ago`,
-      tab: "applications",
-      filter: ALL_FILTER,
-      drill: "gone-quiet",
-    },
+    { title: "In conversation", footnote: "screen or loop stage", tab: "applications", drill: "in-conversation" },
+    { title: "Gone quiet", footnote: `applied ${GONE_QUIET_DAYS}+ days ago`, tab: "applications", drill: "gone-quiet" },
   ];
 
   return (
@@ -777,7 +760,7 @@ function WaitingList({ data }: { data: TrackerData }) {
               ))}
             </ol>
           )}
-          <Link className="jumplink ch-more" to={pathForTarget({ tab: "applications", filter: ALL_FILTER, drill: "waiting" })}>
+          <Link className="jumplink ch-more" to={pathForTarget({ tab: "applications", drill: "waiting" })}>
             See all waiting ›
           </Link>
         </>
