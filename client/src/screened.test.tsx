@@ -197,6 +197,15 @@ describe("the screened tab", () => {
     expect(countsByKind(shown).find((k) => k.kind === "")?.label).toBe("Not grouped");
   });
 
+  it("leaves out a posting refused for its age, which is a fact and not a rule of theirs", () => {
+    // Nothing of this kind reaches the page: the server keeps it out of what
+    // /api/data serves. The entry exists because an unheard-of kind counts as
+    // the person's own - so without it, a row that did arrive would be read as
+    // something their settings cost them, and inflate the number saying so.
+    const old = [{ ...fixture.screened[0], id: 98, kind: "too-old", added_by: "run" }];
+    expect(screenedFrom(old, "")).toHaveLength(0);
+  });
+
   it("leaves out the catch-all kind, which the count leaves out too", () => {
     // `other` is a rejection none of the named kinds describes, so nobody can
     // say a setting caused it (SCREENED_NOT_BY_RULES in server/src/validate.js).

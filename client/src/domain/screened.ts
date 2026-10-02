@@ -165,6 +165,16 @@ export const SCREENED_KINDS: readonly {
   { kind: "delisted", label: "Taken down after you saw it" },
   { kind: "dead", label: "Gone before you saw it" },
   { kind: "duplicate", label: "Already seen" },
+  // Not hers: how long a posting has been up is a fact about the posting, the
+  // same as being gone or being a repeat, so it sits with those rather than
+  // among the kinds a setting caused. The run can tell a posting is too old
+  // before judging scope or level, which is what this order is for.
+  //
+  // No row of this kind ever reaches the page - the server keeps it out of
+  // what /api/data serves - so nothing here renders. The entry earns its place
+  // by being the thing that decides if one ever does: an unheard-of kind
+  // counts as the person's own, and this one is not.
+  { kind: "too-old", label: "Posted too long ago" },
   // Where, what and how senior are three different rejections, so each names
   // its own dimension: "out of scope" left someone asking which one it meant.
   { kind: "out-of-scope", label: "Location", mine: true, set: { says: "where you'd work", section: "locations" } },
