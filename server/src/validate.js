@@ -318,7 +318,7 @@ export function searchProseError(field, value, max) {
 // and then vanished. It is also the kind a purge has to recognise, since that
 // row is a person's own decision rather than a run's screening.
 export const SCREENED_KINDS = [
-  "delisted", "dead", "duplicate", "out-of-scope", "pay-below-floor",
+  "delisted", "dead", "duplicate", "too-old", "out-of-scope", "pay-below-floor",
   "wrong-level", "wrong-role", "contract", "other",
 ];
 export const KIND_WHEN_UNKNOWN = "other";
@@ -341,7 +341,48 @@ export const SCREENED_BY_RULES = [
 // kinds describes: nobody can say it was a person's settings that caused it,
 // and a count that exists to answer "what did my settings turn away" should not
 // include a row we cannot attribute.
-export const SCREENED_NOT_BY_RULES = ["delisted", "dead", "duplicate", "other"];
+// `too-old` is here for the same reason as `dead` and `duplicate`: how long ago
+// a posting went up is a fact about the posting, not a setting of theirs turning
+// it down. That also decides where it shows: the not-by-rules kinds never leave
+// the server (routes/data.js), so a posting refused for its age is invisible on
+// the page without a rule saying so, and "shown is the counted set exactly"
+// survives a tenth kind.
+export const SCREENED_NOT_BY_RULES = ["delisted", "dead", "duplicate", "too-old", "other"];
+
+/**
+ * How old a posting may be and still be worth adding, counted in days.
+ *
+ * One number for every search rather than a per-search setting. A posting's age
+ * means the same thing to everyone - a req open this long is being advertised
+ * rather than filled - and a threshold someone can tune is one more answer to
+ * get wrong in a form.
+ */
+export const MAX_POSTING_AGE_DAYS = 60;
+
+/**
+ * Whether a posting is too old to add, given the day the run believes it is
+ * having.
+ *
+ * Counted back from the run's own date, not the worker's clock, for the reason
+ * every date here is (postedToStore): the worker's UTC day is not the night the
+ * run is having, and west of it they differ for part of every day.
+ *
+ * **An empty `posted` is never too old.** The rule bites only on a date the
+ * posting itself stated. Nothing estimates one, so a posting that says nothing
+ * about its age is added and judged on everything else - which is the safe
+ * direction, because the alternative is refusing a live posting over a date
+ * nobody read.
+ *
+ * @param {string} posted YYYY-MM-DD, or "" when the posting stated none
+ * @param {string} on the run's own local date, YYYY-MM-DD
+ */
+export function tooOldToAdd(posted, on) {
+  if (!posted) {
+    return false;
+  }
+  const today = isoDate(on) || new Date().toISOString().slice(0, 10);
+  return posted < daysBefore(today, MAX_POSTING_AGE_DAYS);
+}
 
 /**
  * The kind to store for what a caller sent, and whether it had to be changed.
