@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "../api/schema";
 import { ALL_LEADS, APP_STATUS } from "./constants";
-import { ALL_FILTER, APP_ALL_ONLY, APP_FILTERS, LIVE_FILTER, TALKING_FILTER, appFilterKeeps } from "./drills";
+import { ALL_FILTER, APP_FILTERS, LIVE_FILTER, TALKING_FILTER, appFilterKeeps } from "./drills";
 import { NOW, applications, leads, settings, tracks as trackList } from "./fixture";
 import { daysSince, hostOf, relWhen, safeUrl } from "./format";
 import { tierCssClass, tierOf, tierRank } from "./geo";
@@ -279,15 +279,21 @@ describe("buildTabs", () => {
     expect(buildTabs(found, applications, tracks, settings, staleDay).find((t) => t.id === "beta")?.fresh).toBe(1);
   });
 
-  it("app-chips-cover-status: only the listed stages are All-only", () => {
+  it("app-chips-cover-status: only Withdrawn is reachable from All alone", () => {
     // All holds everything, so it can't be what proves a stage is reachable.
     // Asserting the gap exactly, rather than allowing any gap, is what makes a
     // stage added server-side fail here until someone decides where it goes.
+    //
+    // Withdrawn is the gap because you ended it yourself: neither waiting on
+    // anyone nor a decision that went against you, and a chip for the rare row
+    // someone walked away from would cost a chip's width every day to be used
+    // twice a year. The leads tab makes the same call inline, in one filter
+    // with no export behind it.
     const named = APP_FILTERS.filter((f) => f !== ALL_FILTER);
     const uncovered = APP_STATUS.filter(
       (status) => !named.some((f) => appFilterKeeps(f, { ...applications[0], status })),
     );
-    expect(uncovered).toEqual([...APP_ALL_ONLY]);
+    expect(uncovered).toEqual(["Withdrawn"]);
   });
 
   it("sorts each stage into the chip that describes it", () => {

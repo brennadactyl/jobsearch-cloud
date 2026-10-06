@@ -373,16 +373,6 @@ const CLOSED: readonly string[] = ["Rejected", "Withdrawn"];
  */
 export const APP_FILTERS: readonly string[] = [LIVE_FILTER, "Applied", TALKING_FILTER, "Rejected", ALL_FILTER];
 
-/**
- * The stages no named chip claims, reachable under All and nowhere else.
- *
- * Withdrawn is here because you ended it yourself: it is neither waiting on
- * anyone nor a decision that went against you, and a chip for the rare row
- * someone walked away from would cost a chip's width every day to be used
- * twice a year. The test pins this list rather than allowing any gap, so a
- * stage added server-side fails until someone decides where it goes.
- */
-export const APP_ALL_ONLY: readonly string[] = ["Withdrawn"];
 
 /** An applications view with no filter shows Live. */
 export function resolveAppFilter(filter: string | null | undefined): string {
@@ -403,6 +393,18 @@ export function appFilterKeeps(filter: string, app: Application): boolean {
   return app.status === filter;
 }
 
+/**
+ * Whether a target opens the applications tab, which decides both the chip its
+ * link carries and the rows it counts. One function because those two are the
+ * same question: written twice, a target spelled any other way would get a
+ * link and a count that disagree, silently. "apps" is this file's own word for
+ * the same tab three lines further down, so the short spelling is the one a
+ * reader reaches for.
+ */
+export function isAppsTarget(t: DrillTarget): boolean {
+  return t.tab === "applications";
+}
+
 /** What a tile or chart mark links to: a tab, plus at most one narrowing of it. */
 export interface DrillTarget {
   tab: string;
@@ -418,7 +420,7 @@ export interface RowSource extends DrillContext {
 
 /** The rows a target opens. Nothing computes an Overview figure any other way. */
 export function drillRows(t: DrillTarget, src: RowSource): (Lead | Application)[] {
-  const isApps = t.tab === "applications";
+  const isApps = isAppsTarget(t);
   let rows: (Lead | Application)[];
   if (isApps) {
     rows = appRows(src.applications);

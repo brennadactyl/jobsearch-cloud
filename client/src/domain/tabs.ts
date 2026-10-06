@@ -4,7 +4,7 @@
  * a track key written here would be one person's search on everyone's page.
  */
 import type { Application, Lead, Settings, Track } from "../api/schema";
-import { ALL_FILTER, type DrillTarget } from "./drills";
+import { ALL_FILTER, isAppsTarget, type DrillTarget } from "./drills";
 import { ALL_LEADS } from "./constants";
 import { fillState } from "./rows";
 import { isoDay } from "./format";
@@ -178,7 +178,7 @@ export function pathForTarget(t: DrillTarget): string {
   // the list it opens are different sets. Here rather than at each target,
   // because the Overview builds a dozen of them for its tiles and chart marks
   // and one that forgot would differ silently.
-  const filter = t.tab === "applications" ? (t.filter ?? ALL_FILTER) : t.filter;
+  const filter = isAppsTarget(t) ? (t.filter ?? ALL_FILTER) : t.filter;
   if (filter) {
     params.set("filter", filter);
   }
