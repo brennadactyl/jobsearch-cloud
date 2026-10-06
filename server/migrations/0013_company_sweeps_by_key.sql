@@ -9,9 +9,9 @@
 -- them in step, so that a deploy could be rolled back to the worker that read
 -- them. That worker has been gone since 2026-09-11. Issue #2 is the `board`
 -- half: the same company's board was stored once per search and once shared,
--- with nothing keeping the copies honest. Four companies had already drifted
--- apart between searches (Amazon AWS, Netflix, World Labs, Costco), and the
--- shared row is the one every reader uses.
+-- with nothing keeping the copies honest. Copies had already drifted apart
+-- between searches by the time this ran, and the shared row is the one every
+-- reader uses.
 --
 -- The precondition issue #2 set was that company_fetch must already hold a
 -- board for every company that has one here, so that dropping the column loses

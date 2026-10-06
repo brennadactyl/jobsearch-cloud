@@ -12,8 +12,9 @@
 --
 --   What may live here: facts about the public internet. "This employer's
 --   Workday CXS slug is not the one its name would suggest." "That employer's
---   job ids changed length when it moved to a different ATS." "This board's API
---   returns the whole board in one fetch." None of that is anyone's job search.
+--   job ids went from 6 digits to 19 when it moved to a different ATS." "This
+--   board's API returns the whole board in one fetch." None of that is
+--   anyone's job search.
 --   Two strangers hitting the same careers site learn the same thing, and there
 --   is no version of it that is private to one of them.
 --
@@ -79,10 +80,10 @@ CREATE TABLE IF NOT EXISTS company_fetch (
   endpoint TEXT NOT NULL DEFAULT '',
 
   -- The URL shape an individual posting takes, when it is not derivable from
-  -- the endpoint - e.g.
-  -- 'apply.careers.microsoft.com/careers/job/<19-digit id>'. This is where a
-  -- migrated ID space gets recorded, which is the thing that made a live
-  -- domain look dead to three separate searches.
+  -- the endpoint - e.g. '<host>/careers/job/<19-digit id>'. This is where a
+  -- migrated ID space gets recorded, which is the thing that makes a live
+  -- domain look dead: runs go on testing ids in the retired format, every one
+  -- of them 404s, and the whole employer reads as gone.
   url_shape TEXT NOT NULL DEFAULT '',
 
   -- What a *stated* death looks like here: a 404, a redirect target, or exact
