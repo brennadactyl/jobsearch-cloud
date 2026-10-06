@@ -194,18 +194,21 @@ const placeText = z
   .transform((v) => v ?? "");
 
 /**
- * A place list in either shape it arrives in. The three lists are moving from
- * one comma-joined string to an array of entries, and their three readers -
- * this page, the settings routes and the nightly helper - ship three different
- * ways. So every reader has to understand both before any writer sends an
- * array: a page that read only arrays would show an empty list against a
- * server still storing strings, and say nothing, which is the same silent
- * failure the move exists to end.
+ * A place list in either shape it arrives in. An array is taken entry for
+ * entry, which is the whole point - "Vancouver, BC" is one place there and two
+ * once it has been through a comma. A string is split the one way every reader
+ * splits it.
  *
- * An array is taken entry for entry, which is the whole point - "Vancouver, BC"
- * is one place there and two once it has been through a comma. A string is
- * split the one way every reader splits it, so nothing changes until the
- * writers flip.
+ * What the string branch is for is not an unconverted row: the server decodes
+ * in db.js, so the page is served entries whatever the stored shape is. It is
+ * for a server that hasn't shipped the change yet. The page and the routes
+ * deploy separately, so this one has to read both before the one that first
+ * serves arrays goes out, or a page ahead of its server shows an empty list
+ * and says nothing about it.
+ *
+ * It is the writers, not the storage, that retire this branch: it goes when
+ * nothing can hand the page a joined list, which is a later date than the
+ * conversion and not the same event.
  */
 const placeList = z
   .union([z.string(), z.array(z.string())])
