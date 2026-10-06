@@ -14,6 +14,7 @@ import {
   DISPLAY_TITLE_MAX_CHARS,
   excludedCompaniesError,
   FIT_PROSE_MAX_CHARS,
+  locationEntries,
   locationSettingError,
   nameError,
   halfSetPayFloorError,
@@ -160,7 +161,9 @@ export async function handlePostSettings({ request, db, docs }) {
     if (problem) {
       return json({ error: problem, field: key }, 400);
     }
-    locations[key] = body[key].trim();
+    // Normalised here rather than passed on as sent, so what the reply echoes
+    // is what was stored - entries for a list, trimmed prose for the note.
+    locations[key] = key === "location_note" ? body[key].trim() : locationEntries(body[key]);
   }
   // Judged on what the write leaves, so clearing the searched list is accepted
   // while a ranked place is stored, and a save of other settings is never held

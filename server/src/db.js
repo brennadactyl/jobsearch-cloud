@@ -158,9 +158,9 @@
  * @property {string} applications_label
  * @property {string} all_leads_label
  * @property {number} stale_run_hours
- * @property {string} search_locations - where to search, as typed (docs/location-settings-plan.md)
- * @property {string} excluded_locations - where the person can't take a job, as typed
- * @property {string} priority_locations - the places to rank first, in order, as typed
+ * @property {string[]} search_locations - where to search, each entry as typed
+ * @property {string[]} excluded_locations - where the person can't take a job
+ * @property {string[]} priority_locations - the places to rank first, in order
  * @property {string} location_note - what the three lists can't say
  * @property {string[]} excluded_companies
  * @property {string} footer_note
@@ -170,7 +170,7 @@
 import { normalize as normalizeCompany } from "./exclude.js";
 import { searchRootKey, searchRootOf } from "./tracks.js";
 import { canonicalUrl } from "./url.js";
-import { SCREENED_BY_RULES, today } from "./validate.js";
+import { locationEntries, SCREENED_BY_RULES, today } from "./validate.js";
 
 // The placeholders for SCREENED_BY_RULES in a SQL IN list, built from the list
 // itself so the two can never fall out of step.
@@ -263,13 +263,46 @@ export const SETTING_KEYS = [
   "display_title", "overview_label", "applications_label", "all_leads_label",
   "stale_run_hours",
 ];
-// ...where the search looks, which both read (docs/location-settings-plan.md).
-// Each is stored exactly as the person typed it, trimmed at the ends: the
-// prompt interprets the lists and the page builds its ranking from
-// priority_locations, so nothing here splits or parses them. Written by the
-// person (POST /api/settings, POST /api/intake) or an operator (POST
-// /api/config), never by the overnight run.
+// ...where the search looks, which both read. The three lists are stored as
+// JSON arrays of entries and handed to callers as arrays, so an entry holding a
+// comma is one place; `location_note` is a sentence and stays text. This is the
+// only place that knows the stored form - every reader above it is given
+// entries and never decides what a list is. A value written before the move is
+// a bare comma-joined string, and reading it is the one job the old split rule
+// still has (validate.js locationEntries). Written by the person (POST
+// /api/settings, POST /api/intake) or an operator (POST /api/config), never by
+// the overnight run.
 export const LOCATION_SETTING_KEYS = ["search_locations", "excluded_locations", "priority_locations", "location_note"];
+// The three of those that are lists. `location_note` is the fourth setting and
+// is prose, so it is stored and served as text.
+export const LOCATION_LIST_KEYS = LOCATION_SETTING_KEYS.filter((k) => k !== "location_note");
+
+/**
+ * A stored location list, as entries. A JSON array is what is written now. A
+ * bare comma-joined string is a value written before the lists held entries,
+ * and the old split rule is the only thing that says what it meant - which is
+ * why a list whose own first entry starts with "[" is still read that way when
+ * it doesn't parse.
+ * @param {unknown} value the `meta` value as stored
+ * @returns {string[]}
+ */
+function storedLocationList(value) {
+  if (typeof value !== "string") {
+    return [];
+  }
+  const text = value.trim();
+  if (text.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        return locationEntries(parsed);
+      }
+    } catch {
+      // Not JSON, so it is a list that happens to start with a bracket.
+    }
+  }
+  return locationEntries(text);
+}
 // ...and settings only prompt.js reads: the per-user half of the search config
 // (TRACK_CONFIG_FIELDS is the per-track half). Stored as verbatim prose - don't
 // rebuild these sentences from keywords, which would drop hand-written detail
@@ -285,9 +318,9 @@ export const DEFAULT_SETTINGS = {
   // The page falls back to the same number (DEFAULT_STALE_RUN_HOURS in
   // client/src/api/schema.ts).
   stale_run_hours: 36,
-  search_locations: "",
-  excluded_locations: "",
-  priority_locations: "",
+  search_locations: [],
+  excluded_locations: [],
+  priority_locations: [],
   location_note: "",
   // A list rather than a sentence in a track's prose, so "is X excluded?" is a
   // lookup and adding a company is an append.
@@ -893,7 +926,9 @@ export class Db {
 
     const settings = { ...DEFAULT_SETTINGS };
     for (const row of settingsRows.results) {
-      if (row.key === "excluded_companies") {
+      if (LOCATION_LIST_KEYS.includes(row.key)) {
+        settings[row.key] = storedLocationList(row.value);
+      } else if (row.key === "excluded_companies") {
         try {
           settings.excluded_companies = JSON.parse(row.value);
         } catch {
@@ -1158,10 +1193,17 @@ export class Db {
     if (patch.stale_run_hours != null) {
       await this.setSetting("stale_run_hours", String(patch.stale_run_hours));
     }
-    for (const key of LOCATION_SETTING_KEYS) {
-      if (typeof patch[key] === "string") {
-        await this.setSetting(key, patch[key].trim());
+    // The lists are stored as JSON, whichever shape the caller sent: a string
+    // from a caller written against the old contract is read by the same rule
+    // that reads a stored one, so one write converts it. An empty list is a
+    // real instruction ("only the ranked places"), so it is written.
+    for (const key of LOCATION_LIST_KEYS) {
+      if (Array.isArray(patch[key]) || typeof patch[key] === "string") {
+        await this.setSetting(key, JSON.stringify(locationEntries(patch[key])));
       }
+    }
+    if (typeof patch.location_note === "string") {
+      await this.setSetting("location_note", patch.location_note.trim());
     }
     // An empty array is a real instruction ("exclude no one"), so any array is written.
     if (Array.isArray(patch.excluded_companies)) {
