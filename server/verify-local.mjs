@@ -1039,23 +1039,38 @@ const listed = buildSearchPrompt({
   };
   const withRanked = syncStep({ priority_locations: ["Seattle area", "Portland OR", "Remote US"] });
   check("step 9 asks for an area copied exactly from the ranked list, as typed",
-    withRanked.includes("posted_days, area}") && withRanked.includes('one of "Seattle area", "Portland OR", "Remote US"') &&
-    withRanked.includes("copied as written") && withRanked.includes("leave it out when the posting falls in none"));
-  // Each entry is printed quoted, because an entry may hold a comma: a place
-  // written with one is one place, and a comma-joined line couldn't be read
-  // back as the entries it came from.
-  check("step 9 quotes each ranked entry, so one holding a comma is one place",
-    syncStep({ priority_locations: ["Vancouver, BC", "Remote Canada"] })
-      .includes('one of "Vancouver, BC", "Remote Canada"'));
-  check("and tells a run a quoted entry is one place however many commas are in it",
-    withRanked.includes("Each quoted entry is one place however many commas are inside it") &&
-    withRanked.includes("quotes and all removed"));
-  // The older comma-joined form still reads: this prompt ships on a deploy and
-  // the helper ships when the checkout is pulled, so for a while either shape
-  // arrives, and a reader that understood one would compose a night with no
-  // places in it and raise nothing.
-  check("a list given as a comma-joined string composes the same as the array",
+    withRanked.includes("posted_days, area}") && withRanked.includes("     - Seattle area\n     - Portland OR\n     - Remote US") &&
+    withRanked.includes("copied as one of these lines exactly") &&
+    withRanked.includes("left out when the posting falls in none"));
+  // One entry to a line, with the entry's own characters and nothing around
+  // them. The area a run sends is matched by exact equality, so a delimiter it
+  // has to strip first is a comparison left to a model: a value arriving still
+  // wrapped equals no entry, the area is cleared, and the night reports a tidy
+  // count for having done it. These three checks are what that costs.
+  const comma = syncStep({ priority_locations: ["Vancouver, BC", "Remote Canada"] });
+  check("step 9 gives an entry holding a comma a line of its own",
+    comma.includes("     - Vancouver, BC\n     - Remote Canada"));
+  check("and asks a run to strip nothing, since nothing is printed around an entry",
+    withRanked.includes("there is nothing to strip or tidy: send the line's own characters") &&
+    !/quotes and all|["'`]Seattle area["'`]/.test(withRanked.slice(withRanked.indexOf("`area` is the one place"))));
+  // Each is true in one of the two states this ships through: until the stored
+  // lists are arrays, a place typed with a comma still arrives as two entries,
+  // and a run told only "a line is one place" is told about a case that cannot
+  // happen yet.
+  check("and keeps both true sentences: a line is one place, and an entry may be half of one",
+    withRanked.includes("A line is one place, commas and all") &&
+    withRanked.includes("somewhere typed with a comma may reach you as two of these lines") &&
+    withRanked.includes("`location` keeps the posting's own words"));
+  // Pins the benign overlap only: the two shapes compose identically exactly
+  // when no entry holds a comma, which is when the array buys nothing. For the
+  // case this change exists for they differ - that is the point - so this
+  // cannot fail on the interesting input and is not evidence about it.
+  check("a list of plain entries composes the same given as a string or an array",
     syncStep({ priority_locations: "Seattle area, Portland OR, Remote US" }) === withRanked);
+  // What the string form still means while it is what is stored: the halves,
+  // each on its own line, which is the case the sentence above warns about.
+  check("and a comma inside a stored string is still two entries, as that form has always meant",
+    syncStep({ priority_locations: "Vancouver, BC" }).includes("     - Vancouver\n     - BC"));
   // Asked of the whole prompt, not of step 9 alone: the field was named in step
   // 6 while step 9 asked for nothing, and a check that slices one step cannot
   // see that.
@@ -1129,10 +1144,10 @@ const listed = buildSearchPrompt({
     location_note: "Open to relocating for the right team.",
   });
   const five = stepOf5(full);
-  check("step 5 prints each location list's entries as typed, one quoted entry each",
-    five.includes('always searched:** "Seattle", "Portland OR", "Vancouver, BC"') &&
-    five.includes('Also searched:** "US", "Greater Toronto area"') &&
-    five.includes('Ruled out:** "Texas"'));
+  check("step 5 prints each location list's entries as typed, one to a line",
+    five.includes("always searched:**\n     - Seattle\n     - Portland OR\n     - Vancouver, BC") &&
+    five.includes("Also searched:**\n     - US\n     - Greater Toronto area") &&
+    five.includes("Ruled out:**\n     - Texas"));
   // The note is a sentence rather than a list, so it is printed as written -
   // quoting it would read as a place.
   check("and prints the person's own note as prose, unquoted",

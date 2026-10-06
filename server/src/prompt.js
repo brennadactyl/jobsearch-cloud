@@ -351,20 +351,25 @@ function listEntries(value) {
   return parts.map((entry) => entry.trim()).filter(Boolean);
 }
 
-// One entry at a time, each quoted, because an entry may contain a comma -
-// "Vancouver, BC" is one place. A comma-joined line can't be read back as the
-// entries it was built from, and a run copying an `area` has to see where each
-// one ends.
-function printEntries(value) {
-  return listEntries(value).map((entry) => `"${entry}"`).join(", ");
+// One entry to a line. An entry may contain a comma - "Vancouver, BC" is one
+// place - so nothing inside an entry can be what separates them, and the line
+// break is the only separator a place name cannot hold.
+//
+// Nothing is quoted or bracketed. A run copying an `area` has to reproduce an
+// entry exactly, and a delimiter it must strip first is a comparison left to a
+// model: a value arriving with the quotes still attached equals no entry, so
+// the area is cleared and the night reports a tidy count for having done it.
+// Printed this way there is nothing to strip.
+function printEntries(value, indent) {
+  return listEntries(value).map((entry) => `${indent}- ${entry}`).join("\n");
 }
 
 function locationLists(settings) {
   const text = (v) => (typeof v === "string" ? v.trim() : "");
   return {
-    preferred: printEntries(settings.priority_locations),
-    searched: printEntries(settings.search_locations),
-    excluded: printEntries(settings.excluded_locations),
+    preferred: printEntries(settings.priority_locations, "     "),
+    searched: printEntries(settings.search_locations, "     "),
+    excluded: printEntries(settings.excluded_locations, "     "),
     note: text(settings.location_note),
   };
 }
@@ -379,13 +384,13 @@ function geoStep(settings, name) {
   }
   const lines = ["WHERE THIS SEARCH LOOKS. " + name + " listed these places, exactly as typed - read each entry as the place it names:"];
   if (preferred) {
-    lines.push(`   - **Wanted first, in this order, and always searched:** ${preferred}`);
+    lines.push(`   - **Wanted first, in this order, and always searched:**\n${preferred}`);
   }
   if (searched) {
-    lines.push(`   - **Also searched:** ${searched}`);
+    lines.push(`   - **Also searched:**\n${searched}`);
   }
   if (excluded) {
-    lines.push(`   - **Ruled out:** ${excluded}`);
+    lines.push(`   - **Ruled out:**\n${excluded}`);
   }
   if (note) {
     lines.push(`   - **In ${name}'s words:** ${note}`);
@@ -414,17 +419,19 @@ function geoStep(settings, name) {
 // it equals an entry, ignoring case, so the wording asks for a copy, never a
 // paraphrase. A person with nothing ranked gets no area at all.
 function areaStep(settings, name) {
-  const ranked = printEntries(settings.priority_locations);
+  const ranked = printEntries(settings.priority_locations, "     ");
   if (!ranked) {
     return { areaKey: "", areaRule: "" };
   }
   return {
     areaKey: ", area",
     areaRule:
-      ` \`area\` is the one place ${name} ranked first that the posting falls in - one of ${ranked}, ` +
-      "copied as written, quotes and all removed - or leave it out when the posting falls in none of them. " +
-      "Each quoted entry is one place however many commas are inside it. The posting's real location stays " +
-      "in `location`; `area` only files it, and anything but one of those entries is dropped.",
+      ` \`area\` is the one place ${name} ranked first that the posting falls in, copied as one of these ` +
+      `lines exactly:\n${ranked}\n   or left out when the posting falls in none of them. A line is one ` +
+      "place, commas and all, and there is nothing to strip or tidy: send the line's own characters. An " +
+      "entry can also be narrower than a place a person would name - somewhere typed with a comma may " +
+      "reach you as two of these lines - so `area` is filed from these lines alone, while `location` keeps " +
+      "the posting's own words as step 6 asks. Anything but one of these lines is dropped.",
   };
 }
 
@@ -879,7 +886,8 @@ Do the following, for each account in turn:
 
    **Add \`area\` yourself**, not from the subagent: when a row's \`location\`
    falls in one of that account's ranked places, set \`area\` to that entry,
-   copied as written from its list; otherwise leave \`area\` out. It files the
+   copied as written from its list - the entry's own text, not the quotes the
+   JSON puts around it; otherwise leave \`area\` out. It files the
    application under the place the person ranked, while \`location\` stays as the
    posting gave it. The tracker keeps it only when it is one of that account's
    entries, so another account's place, or a near-miss like "Seattle" for
