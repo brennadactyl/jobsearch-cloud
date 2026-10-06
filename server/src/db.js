@@ -328,27 +328,11 @@ export async function storedLocationRows(d1, userId) {
   return res.results || [];
 }
 
-/**
- * Store one account's location list. Named for one row rather than taking a
- * patch, because the caller here is converting what is already stored and has
- * no business writing anything else while it is there.
- * @param {D1Database} d1
- * @param {string} userId
- * @param {string} key one of LOCATION_LIST_KEYS
- * @param {string} value the `meta` value to store
- */
-export async function writeStoredLocationList(d1, userId, key, value) {
-  if (!LOCATION_LIST_KEYS.includes(key)) {
-    throw new Error(`${key} is not a location list`);
-  }
-  await d1
-    .prepare(
-      `INSERT INTO meta (user_id, key, value) VALUES (?, ?, ?)
-       ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value`
-    )
-    .bind(userId, key, value)
-    .run();
-}
+// Converting a stored list writes through `Db`'s own `setSetting`, bound to the
+// account whose row it is, rather than through a statement of its own here. The
+// SQL would have been the same, and that is the argument: a second copy of it
+// would be the only statement in this file that no check reaches, since a
+// deployment with nothing left to convert never executes it.
 // ...and settings only prompt.js reads: the per-user half of the search config
 // (TRACK_CONFIG_FIELDS is the per-track half). Stored as verbatim prose - don't
 // rebuild these sentences from keywords, which would drop hand-written detail

@@ -13,9 +13,9 @@
 
 import { getUserByName } from "../auth.js";
 import { CompanyList } from "../companies.js";
-import { Db, storedLocationRows, writeStoredLocationList } from "../db.js";
+import { Db, storedLocationRows } from "../db.js";
 import { json, readJson } from "../http.js";
-import { conversionPlan, planSummary } from "../location-convert.js";
+import { applyConversion, conversionPlan, planSummary } from "../location-convert.js";
 
 /**
  * POST /api/purge - requires the ADMIN_TOKEN secret as Bearer. Body
@@ -140,24 +140,40 @@ export async function handleCleanUpCompanies({ request, env }) {
 
 /**
  * POST /api/locations/convert - requires the ADMIN_TOKEN secret as Bearer. Body
- * `{ user?, dryRun? }` -> `{ dryRun, lists, accounts, alreadyEntries }`;
- * 401 without the admin token, 404 for a name nobody has.
+ * `{ user?, confirm? }` -> `{ dryRun, lists, accounts, alreadyEntries }`, and
+ * `note` when nothing was written; 401 without the admin token, 404 for a name
+ * nobody has.
  *
  * Stores every location list as its entries. Nothing depends on this: a value
  * written before the lists held entries is already read as the entries it
  * splits into, so the deployment works either way. What it buys is that reading
  * stored values stops being one of the comma rule's jobs.
  *
- * `user` names one account; left out, it does every account, which is the
- * difference between this and the routes above it. That is safe here in a way
- * it would not be for a delete: each row is replaced by the entries it already
- * reads as, so there is no value this can store that changes what a reader
- * sees. What makes that a fact rather than a hope is the check on a list served
- * before and after a conversion, which is where it can fail.
+ * **It reports unless told to write.** `confirm: true` is what writes; anything
+ * else, a bare body included, counts and writes nothing. The sibling routes
+ * take the opposite default, and they can afford to: each names exactly one
+ * subject, so a body that lost a field refuses rather than acting. This one may
+ * name no account, so the body that names nothing is the body that would
+ * convert every account - the largest thing the route can do would be its
+ * easiest call to make by accident.
  *
- * `dryRun` reports the same counts and writes nothing. The counts are counts -
- * no account's places appear in the reply, since the reply answers how much is
- * left to convert rather than where anyone is looking.
+ * `user` names one account; left out, it converts every account. That is
+ * defensible here for a reason that is not safety: the write is idempotent and
+ * value-preserving, so a wrong scope, a second run and a run that died partway
+ * all land in the same place. A delete has none of those properties, which is
+ * why it names its subject twice.
+ *
+ * **What that rests on, since the route can't check it:** every reader takes
+ * both shapes. A list stored as entries reads as one long place name to a
+ * reader that still splits on commas, silently - and the readers ship three
+ * different ways, a deploy for the prompt, a pull of the main checkout for the
+ * nightly helper, a deploy for the page. Run this before one of them has landed
+ * and the conversion is not value-preserving at all. It is value-preserving
+ * once they have, and not a moment before.
+ *
+ * The counts are counts - no account's places appear in the reply, since the
+ * reply answers how much is left to convert rather than where anyone is
+ * looking.
  *
  * Rows are written one at a time and a rewrite is its own answer, so a call
  * that dies part way is finished by calling it again rather than repaired.
@@ -180,12 +196,17 @@ export async function handleConvertLocations({ request, env }) {
 
   const plan = conversionPlan(await storedLocationRows(env.DB, userId));
   const summary = planSummary(plan);
-  if (body.dryRun) {
-    return json({ dryRun: true, ...summary });
+  if (body.confirm !== true) {
+    return json({
+      dryRun: true,
+      ...summary,
+      note: 'send `confirm: true` to write - every reader has to take both shapes first',
+    });
   }
 
-  for (const row of plan.convert) {
-    await writeStoredLocationList(env.DB, row.user_id, row.key, row.to);
-  }
+  // Through each account's own `Db`, so the write is scoped by the same
+  // constructor argument every other write here is, and runs the statement the
+  // rest of the suite already exercises rather than a second copy of it.
+  await applyConversion(plan, (userId, key, value) => new Db(env.DB, userId).setSetting(key, value));
   return json({ dryRun: false, ...summary });
 }

@@ -3983,7 +3983,7 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   // entries they came from holds however wrong the rule is.
   // Imported the way the prompt composer is, and for the same reason: this
   // exercises a function rather than taking a list from it to check against.
-  const { conversionPlan, planSummary } = await import("./src/location-convert.js");
+  const { applyConversion, conversionPlan, planSummary } = await import("./src/location-convert.js");
   const legacyRows = [
     { user_id: "u1", key: "search_locations", value: "US, Greater Seattle area , Australia" },
     { user_id: "u1", key: "priority_locations", value: '["Seattle","Vancouver, BC"]' },
@@ -4007,23 +4007,59 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     JSON.stringify(planSummary(plan)) === JSON.stringify({ lists: 3, accounts: 2, alreadyEntries: 2 }),
     JSON.stringify(planSummary(plan)));
 
+  // What the writing does with a plan, which no API check can reach: a
+  // deployment this suite built has nothing left to convert, so the writing
+  // never runs there. The plan and the recorded calls come from different code,
+  // so this isn't the plan agreeing with itself.
+  const written = [];
+  const wroteCount = await applyConversion(plan, async (userId, key, value) => {
+    written.push(`${userId}/${key}=${value}`);
+  });
+  check("converting writes one row per list it planned, and nothing else",
+    wroteCount === 3 && JSON.stringify(written) === JSON.stringify([
+      `u1/search_locations=${JSON.stringify(["US", "Greater Seattle area", "Australia"])}`,
+      `u2/excluded_locations=${JSON.stringify(["Texas"])}`,
+      `u2/search_locations=${JSON.stringify(["[not json]", "Seattle"])}`,
+    ]), JSON.stringify(written));
+  const untouched = [];
+  await applyConversion({ convert: [] }, async (...a) => { untouched.push(a); });
+  check("and a plan with nothing to convert writes nothing at all", untouched.length === 0);
+
   const cvUnknown = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Nobody ${lcRun}` } });
   check("converting names an account nobody has as a 404", cvUnknown.status === 404, JSON.stringify(cvUnknown.json));
   const cvBefore = await lcSettings(LC);
-  const cvDry = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Locations a ${lcRun}`, dryRun: true } });
-  check("a dry run reports what it looked at, and that there is nothing to convert",
-    cvDry.status === 200 && cvDry.json?.dryRun === true && cvDry.json?.lists === 0 &&
-    cvDry.json?.alreadyEntries >= 3, JSON.stringify(cvDry.json));
-  const cvRun = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Locations a ${lcRun}` } });
-  check("and a real one says the same of a deployment already converted",
+
+  // The body that names nothing is the body that would convert every account,
+  // so it is the one that must not write. `confirm` is what writes, and the
+  // reply says so rather than leaving a caller to find out from the counts.
+  const cvBare = await req("POST", "/api/locations/convert", { admin: true, body: {} });
+  check("a bare body reports and writes nothing, and says what would write",
+    cvBare.status === 200 && cvBare.json?.dryRun === true &&
+    typeof cvBare.json?.note === "string" && cvBare.json.note.includes("confirm"),
+    JSON.stringify(cvBare.json));
+  for (const [why, body] of [
+    ["dryRun true, which this route doesn't take", { dryRun: true }],
+    ["dryRun false, which doesn't write either", { dryRun: false }],
+    ["confirm as the string \"true\"", { confirm: "true" }],
+  ]) {
+    const res = await req("POST", "/api/locations/convert", { admin: true, body });
+    check(`and so does ${why}`, res.status === 200 && res.json?.dryRun === true, JSON.stringify(res.json));
+  }
+
+  const cvReport = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Locations a ${lcRun}` } });
+  check("a report says what it looked at, and that there is nothing to convert",
+    cvReport.status === 200 && cvReport.json?.dryRun === true && cvReport.json?.lists === 0 &&
+    cvReport.json?.alreadyEntries >= 3, JSON.stringify(cvReport.json));
+  const cvRun = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Locations a ${lcRun}`, confirm: true } });
+  check("a confirmed run says the same of a deployment already converted",
     cvRun.status === 200 && cvRun.json?.dryRun === false && cvRun.json?.lists === 0 &&
     cvRun.json?.alreadyEntries >= 3, JSON.stringify(cvRun.json));
   check("with every place served exactly as before",
     JSON.stringify(await lcSettings(LC)) === JSON.stringify(cvBefore));
-  const cvAll = await req("POST", "/api/locations/convert", { admin: true, body: { dryRun: true } });
+  const cvAll = await req("POST", "/api/locations/convert", { admin: true, body: {} });
   check("and naming no account reads every account's lists, not one's",
-    cvAll.status === 200 && cvAll.json?.alreadyEntries > cvDry.json?.alreadyEntries,
-    JSON.stringify([cvAll.json, cvDry.json]));
+    cvAll.status === 200 && cvAll.json?.alreadyEntries > cvReport.json?.alreadyEntries,
+    JSON.stringify([cvAll.json, cvReport.json]));
 }
 
 

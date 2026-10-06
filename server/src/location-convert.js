@@ -56,6 +56,25 @@ export function conversionPlan(rows) {
 }
 
 /**
+ * Write a plan, one row at a time, through whatever does the writing.
+ *
+ * The writing is the caller's because the account each row belongs to is what
+ * scopes it, and this file has no business holding a database. It is a function
+ * here rather than a loop in the handler so that what it writes can be checked
+ * without one: on a deployment with nothing left to convert the loop never
+ * runs, so a handler holding it is a loop no passing check reaches.
+ * @param {{convert: LocationRowPlan[]}} plan
+ * @param {(userId: string, key: string, value: string) => Promise<void>} write
+ * @returns {Promise<number>} rows written
+ */
+export async function applyConversion(plan, write) {
+  for (const row of plan.convert) {
+    await write(row.user_id, row.key, row.to);
+  }
+  return plan.convert.length;
+}
+
+/**
  * How a plan is reported, with no account's places in it. An operator wants to
  * know how much is left to convert; the entries themselves are the person's,
  * and a count answers the question without putting one deployment's places in
