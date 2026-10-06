@@ -350,6 +350,61 @@ export function leadFilterKeeps(filter: string, lead: Lead): boolean {
   return lead.status === filter;
 }
 
+/** The chip an applications view shows when its URL names none: everything still going. */
+export const LIVE_FILTER = "Live";
+/**
+ * The one chip covering several statuses: a reply has come and the thread is
+ * still going. An offer is the end of a conversation rather than a different
+ * kind of one, so it sits here instead of alone.
+ */
+export const TALKING_FILTER = "In conversation";
+const TALKING: readonly string[] = [...ACTIVE, "Offer"];
+/** Over: nothing further comes of these, and only the All chip holds them. */
+const CLOSED: readonly string[] = ["Rejected", "Withdrawn"];
+
+/**
+ * The chips an applications tab offers, in the order a row travels through
+ * them. Live first because it is the default, All last because it is the way
+ * back - the shape the leads tab's chips already have.
+ *
+ * `app-chips-cover-status` in domain.test.ts holds these against APP_STATUS, so
+ * a stage added server-side has to be given a chip rather than quietly turning
+ * up only under All.
+ */
+export const APP_FILTERS: readonly string[] = [LIVE_FILTER, "Applied", TALKING_FILTER, "Rejected", ALL_FILTER];
+
+
+/** An applications view with no filter shows Live. */
+export function resolveAppFilter(filter: string | null | undefined): string {
+  return filter || LIVE_FILTER;
+}
+
+/** Whether an application shows under a resolved applications filter. */
+export function appFilterKeeps(filter: string, app: Application): boolean {
+  if (filter === ALL_FILTER) {
+    return true;
+  }
+  if (filter === LIVE_FILTER) {
+    return !CLOSED.includes(app.status);
+  }
+  if (filter === TALKING_FILTER) {
+    return TALKING.includes(app.status);
+  }
+  return app.status === filter;
+}
+
+/**
+ * Whether a target opens the applications tab, which decides both the chip its
+ * link carries and the rows it counts. One function because those two are the
+ * same question: written twice, a target spelled any other way would get a
+ * link and a count that disagree, silently. "apps" is this file's own word for
+ * the same tab three lines further down, so the short spelling is the one a
+ * reader reaches for.
+ */
+export function isAppsTarget(t: DrillTarget): boolean {
+  return t.tab === "applications";
+}
+
 /** What a tile or chart mark links to: a tab, plus at most one narrowing of it. */
 export interface DrillTarget {
   tab: string;
@@ -365,12 +420,17 @@ export interface RowSource extends DrillContext {
 
 /** The rows a target opens. Nothing computes an Overview figure any other way. */
 export function drillRows(t: DrillTarget, src: RowSource): (Lead | Application)[] {
-  const isApps = t.tab === "applications";
+  const isApps = isAppsTarget(t);
   let rows: (Lead | Application)[];
   if (isApps) {
     rows = appRows(src.applications);
+    // No chip here means every application, not the tab's Live default. These
+    // are the Overview's own figures: resolving a missing chip would quietly
+    // drop closed rows from counts that have always held them, and "Applied"
+    // on a tile means every application sent, rejections included. A target
+    // that is linked says ALL_FILTER so the tab it opens shows what it counted.
     if (t.filter) {
-      rows = rows.filter((r) => r.status === t.filter);
+      rows = rows.filter((r) => appFilterKeeps(t.filter!, r as Application));
     }
   } else {
     const filter = resolveLeadFilter(t.filter);

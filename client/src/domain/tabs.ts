@@ -4,7 +4,7 @@
  * a track key written here would be one person's search on everyone's page.
  */
 import type { Application, Lead, Settings, Track } from "../api/schema";
-import type { DrillTarget } from "./drills";
+import { ALL_FILTER, isAppsTarget, type DrillTarget } from "./drills";
 import { ALL_LEADS } from "./constants";
 import { fillState } from "./rows";
 import { isoDay } from "./format";
@@ -173,8 +173,14 @@ export function trackCountLine(tracks: Record<string, Track>): string {
 /** The narrowing rides in query params, so a drilled view is linkable and Back undoes it. */
 export function pathForTarget(t: DrillTarget): string {
   const params = new URLSearchParams();
-  if (t.filter) {
-    params.set("filter", t.filter);
+  // An applications target counts every application, closed ones included,
+  // while the tab opens on Live - so its link has to say All or the figure and
+  // the list it opens are different sets. Here rather than at each target,
+  // because the Overview builds a dozen of them for its tiles and chart marks
+  // and one that forgot would differ silently.
+  const filter = isAppsTarget(t) ? (t.filter ?? ALL_FILTER) : t.filter;
+  if (filter) {
+    params.set("filter", filter);
   }
   if (t.drill) {
     params.set("drill", t.drill);
