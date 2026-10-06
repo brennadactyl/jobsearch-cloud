@@ -1069,6 +1069,36 @@ const listed = buildSearchPrompt({
   }
 }
 
+// ---- A screened row's address is the same one step 9 asks for.
+//
+// The row's only job is matching what the next run finds, and a posting's
+// identity includes its host (src/url.js) - so a row stored on the listing
+// API's host stops matching the page address for every board that serves the
+// two from different hosts, and the rejection is recorded without blocking
+// anything. Step 9 and this step are the two places a run writes an address,
+// so both have to say it.
+//
+// Sliced to 9b rather than asked of the whole prompt, because step 9's own copy
+// of the rule satisfies any looser check - which is exactly how this step went
+// uncovered while the wording looked present.
+{
+  const screenedStep = () => {
+    const p = buildSearchPrompt({
+      user: { id: "u", name: "Nobody" },
+      track: { key: "T", label: "T", full_description: "t", role_search_line: "r" },
+      settings: {},
+      feeds: [],
+    });
+    return p.slice(p.indexOf("9b. RECORD SCREENED"), p.indexOf("\n9c."));
+  };
+  const step = screenedStep();
+  check("step 9b asks for the posting's page rather than the listing API's",
+    step.includes("the same address step 9 asks") && step.includes("never the listing API's"));
+  check("and says why, from what the row is for",
+    step.includes("matching what the next run finds") &&
+    step.includes("screen the same posting over again"));
+}
+
 // ---- Where a search looks comes from the three location lists.
 //
 // Printed as typed, with the order they combine in fixed by the prompt - the

@@ -628,7 +628,11 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
 9b. RECORD SCREENED-OUT CANDIDATES so tomorrow's run doesn't re-verify them.
    Write the disqualified-but-new candidates from step 7 to \`screened.json\` -
    \`{url, company, title, location, reason, kind${screenedTab}}\` - then run
-   \`./tracker screened screened.json\`. \`reason\` is a short, specific,
+   \`./tracker screened screened.json\`. \`url\` is the same address step 9 asks
+   for - the posting's own page, never the listing API's - because this row's
+   whole job is matching what the next run finds, and an address on the API's
+   host doesn't match it: the rejection you record tonight leaves tomorrow free
+   to screen the same posting over again. \`reason\` is a short, specific,
    human-readable explanation (e.g. ${screenedExamples}); it is what makes the
    entry useful later, so don't leave it vague.
 
