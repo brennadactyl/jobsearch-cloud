@@ -70,7 +70,7 @@ export default function LocationsSection({
       />
 
       <NoteField
-        id={`loc-location_note`}
+        id="loc-location_note"
         label={PLACE_QUESTIONS.location_note}
         value={values.location_note}
         changed={changed.has("location_note")}
