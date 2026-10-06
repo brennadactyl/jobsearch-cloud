@@ -194,6 +194,25 @@ const placeText = z
   .transform((v) => v ?? "");
 
 /**
+ * A place list in either shape it arrives in. The three lists are moving from
+ * one comma-joined string to an array of entries, and their three readers -
+ * this page, the settings routes and the nightly helper - ship three different
+ * ways. So every reader has to understand both before any writer sends an
+ * array: a page that read only arrays would show an empty list against a
+ * server still storing strings, and say nothing, which is the same silent
+ * failure the move exists to end.
+ *
+ * An array is taken entry for entry, which is the whole point - "Vancouver, BC"
+ * is one place there and two once it has been through a comma. A string is
+ * split the one way every reader splits it, so nothing changes until the
+ * writers flip.
+ */
+const placeList = z
+  .union([z.string(), z.array(z.string())])
+  .nullish()
+  .transform((v) => (typeof v === "string" ? listEntries(v) : (v ?? []).map((s) => s.trim()).filter(Boolean)));
+
+/**
  * Mirrors DEFAULT_SETTINGS in server/src/db.js. Every key defaults, because a
  * freshly created database has posted no config and must still render a usable
  * page - the same reason the server defaults them.
@@ -206,9 +225,9 @@ export const settingsSchema = z
     all_leads_label: z.string().default("All leads"),
     stale_run_hours: z.number().default(DEFAULT_STALE_RUN_HOURS),
     // The place settings, each as the person typed it (domain/places.ts).
-    search_locations: placeText,
-    excluded_locations: placeText,
-    priority_locations: placeText,
+    search_locations: placeList,
+    excluded_locations: placeList,
+    priority_locations: placeList,
     location_note: placeText,
     /** How a run writes about this person; "" is unset, which it reads as they/them. */
     pronouns: z.enum(["", ...PRONOUNS]).catch("").default(""),
@@ -221,7 +240,7 @@ export const settingsSchema = z
      * typed. A lead's or application's `area` names one of these, and its
      * position here is the row's tier.
      */
-    areas: listEntries(s.priority_locations),
+    areas: s.priority_locations,
   }));
 
 export const userSchema = z.object({

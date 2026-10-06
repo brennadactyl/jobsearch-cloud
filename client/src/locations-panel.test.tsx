@@ -94,7 +94,7 @@ describe("the Locations section", () => {
   });
 
   it("shows each list as stored, one chip per place", async () => {
-    const section = await openPanel({ excluded_locations: "Ogdenville" });
+    const section = await openPanel({ excluded_locations: ["Ogdenville"] });
     expect(chipsOf(fieldOf(section, /What locations should be searched/))).toEqual([
       "Springfield",
       "Shelbyville",
@@ -106,7 +106,7 @@ describe("the Locations section", () => {
   });
 
   it("reads an empty searched list as only the ranked places, not anywhere", async () => {
-    const section = await openPanel({ search_locations: "" });
+    const section = await openPanel({ search_locations: [] });
     expect(within(section).getByText("Only the ranked places")).toBeInTheDocument();
   });
 
@@ -141,7 +141,7 @@ describe("the Locations section", () => {
 
   it("won't save both lists empty, and says so beside the searched list without sending", async () => {
     const save = vi.spyOn(client, "saveSettings");
-    const section = await openPanel({ search_locations: "" });
+    const section = await openPanel({ search_locations: [] });
     const field = fieldOf(section, /What locations should the search prioritize/);
     for (const place of ["Metro core", "Wider region"]) {
       await userEvent.click(within(field).getByRole("button", { name: `Remove ${place}` }));
@@ -172,7 +172,9 @@ describe("one Save and Discard for the whole panel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith({ resumes: { ai: AI }, priority_locations: "Wider region, Metro core" });
+    // Entries, not text: the joining into one string happens at the wire, in
+    // saveSettings, and goes when the routes take arrays.
+    expect(save).toHaveBeenCalledWith({ resumes: { ai: AI }, priority_locations: ["Wider region", "Metro core"] });
     expect(screen.queryByText(/unsaved change/)).toBeNull();
 
     const saved = await backToLocations();
@@ -230,14 +232,25 @@ describe("place settings", () => {
   });
 
   it("count as changed only when they'd store differently", () => {
-    const stored = { search_locations: "US", excluded_locations: "", priority_locations: "Seattle", location_note: "" };
-    expect(changedPlaces(stored, { search_locations: " US ", priority_locations: "Seattle, Remote US" })).toEqual({
-      priority_locations: "Seattle, Remote US",
+    const stored = {
+      search_locations: ["US"],
+      excluded_locations: [],
+      priority_locations: ["Seattle"],
+      location_note: "",
+    };
+    // Same entries in the same order is no change; a list gained an entry.
+    expect(changedPlaces(stored, { search_locations: ["US"], priority_locations: ["Seattle", "Remote US"] })).toEqual({
+      priority_locations: ["Seattle", "Remote US"],
     });
+    // Order is meaning in a ranked list, so reordering is a change.
+    expect(changedPlaces(stored, { priority_locations: ["Seattle"] })).toEqual({});
+    expect(
+      changedPlaces({ ...stored, priority_locations: ["A", "B"] }, { priority_locations: ["B", "A"] }),
+    ).toEqual({ priority_locations: ["B", "A"] });
   });
 
   it("name every changed setting when leaving would lose them", () => {
-    expect(unsavedPlacesSentence({ search_locations: "US", location_note: "x" })).toBe(
+    expect(unsavedPlacesSentence({ search_locations: ["US"], location_note: "x" })).toBe(
       "You changed the places searched and your note about where you'd work but didn't save, so your searches keep the ones they use now.",
     );
     expect(unsavedPlacesSentence({})).toBe("");

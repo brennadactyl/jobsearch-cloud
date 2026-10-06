@@ -90,7 +90,14 @@ const isGeneralKey = (field: string | null): field is GeneralKey => GENERAL_KEYS
 
 function AccountDialog({ name, tracks, settings, section, search, onClose }: Omit<Props, "open">) {
   const qc = useQueryClient();
-  const stored = Object.fromEntries(PLACE_KEYS.map((k) => [k, settings[k]])) as Places;
+  // Written out rather than built from PLACE_KEYS: the three lists and the note
+  // no longer share a type, and a cast would have hidden that.
+  const stored: Places = {
+    search_locations: settings.search_locations,
+    priority_locations: settings.priority_locations,
+    excluded_locations: settings.excluded_locations,
+    location_note: settings.location_note,
+  };
 
   const storedGeneral: General = {
     display_title: settings.display_title,
