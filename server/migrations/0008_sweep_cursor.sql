@@ -13,11 +13,10 @@
 -- wrong slice.
 --
 -- The quieter one: `company` as the tiebreak means alphabetical order decides
--- who is covered first, every cycle, forever. On the live rotation that put
--- Meta, Microsoft, Netflix, Nvidia, OpenAI, Riot, Roblox, Rockstar, Sony,
--- Unity, Valve and every Seattle-local employer in the last 31 of 55 - none of
--- them reached in the rotation's first two days, while the A-to-M half was
--- covered twice.
+-- who is covered first, every cycle, forever. A list weighted towards the back
+-- half of the alphabet leaves most of itself unreached for days while the front
+-- half is covered twice - and nothing about that is visible from the rotation,
+-- which looks like it is working through everyone.
 --
 -- ---- The log
 --

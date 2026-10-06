@@ -10,21 +10,27 @@
 -- a deliberate exception to that, so the boundary it sits on has to be stated
 -- rather than assumed:
 --
---   What may live here: facts about the public internet. "F5's Workday CXS
---   slug is `f5jobs`, not the guessable `F5Careers`." "Microsoft job ids moved
---   from 6 digits to 19 when it migrated to Eightfold." "Roblox's Greenhouse
---   board API returns the whole board in one fetch." None of that is anyone's
---   job search. Two strangers hitting the same careers site learn the same
---   thing, and there is no version of it that is private to one of them.
+--   What may live here: facts about the public internet. "This employer's
+--   Workday CXS slug is not the one its name would suggest." "That employer's
+--   job ids went from 6 digits to 19 when it moved to a different ATS." "This
+--   board's API returns the whole board in one fetch." None of that is
+--   anyone's job search.
+--   Two strangers hitting the same careers site learn the same thing, and there
+--   is no version of it that is private to one of them.
+--
+--   The examples here name no employer on purpose. A reader cannot tell an
+--   illustration from an entry, so naming real ones would say which companies
+--   this deployment's searches cover - which is the other half of this very
+--   boundary.
 --
 --   What may NOT live here, ever: anything that answers "who is looking at
 --   this company, and what did they decide?" No company lists (a person's
 --   target companies are their strategy), no screening reasons, no lead or
 --   application data, no per-person dates, and no record of which account
 --   contributed a row. That last one is why there is no `verified_by` column
---   and deliberately so: "Brenna's search verified Bungie on the 3rd" is a
---   fact about Brenna, not about Bungie, and a column holding it would leak
---   one person's rotation to everyone else by inference.
+--   and deliberately so: "this account's search verified that company on this
+--   day" is a fact about the account, not about the company, and a column
+--   holding it would leak one person's rotation to everyone else by inference.
 --
 -- The rule in one line: a row here describes a *website*, never a *search*.
 -- Per-company knowledge that is entangled with a person - whether the company
@@ -32,22 +38,22 @@
 -- company_sweeps, which is user-scoped and stays that way.
 --
 -- Why a table and not a shared document. The same reason the rotation is a
--- table: a doc is not read by the thing that needs it. One track ran eight
--- days with a "add what you discover" step in its doc and finished with an
--- empty list, because the doc told runs to write names into prose no run ever
--- reads. On 2026-09-08 three separate track docs each independently recorded
--- "Microsoft is robots-blocked" - all three wrong, all three for the same
--- reason (they were testing retired 6-digit ids), and correcting them meant
--- hand-editing four files. Knowledge that has to be copied by hand between
--- searches is knowledge that will be wrong in at least one of them.
+-- table: a doc is not read by the thing that needs it. A track whose doc said
+-- "add what you discover" ran for days and finished with an empty list, because
+-- the doc told runs to write names into prose no run ever reads. Separate track
+-- docs have each independently recorded the same employer as unreachable - every
+-- one of them wrong, and wrong for the same reason, since each run tested the
+-- same stale id format - and correcting it meant hand-editing every doc that
+-- held it. Knowledge that has to be copied by hand between searches is
+-- knowledge that will be wrong in at least one of them.
 CREATE TABLE IF NOT EXISTS company_fetch (
   -- normalize() from src/exclude.js: lowercased, punctuation collapsed to
-  -- single spaces, trimmed. Reused rather than reinvented so "F5 Networks",
-  -- "f5 networks" and "F5, Networks" are one row, and so this table matches
+  -- single spaces, trimmed. Reused rather than reinvented so "Acme Networks",
+  -- "acme networks" and "Acme, Networks" are one row, and so this table matches
   -- names the same way the exclusion list already does.
   --
-  -- Deliberately NOT fuzzy beyond that. Merging "Microsoft" with "Microsoft
-  -- Xbox" would be convenient right up until two genuinely different boards
+  -- Deliberately NOT fuzzy beyond that. Merging "Acme" with "Acme Studios"
+  -- would be convenient right up until two genuinely different boards
   -- share a row and each overwrites the other. A miss here is cheap - it reads
   -- as "nothing known yet", which is where every company starts - so the
   -- failure mode of being too strict is a run doing the work it would have
@@ -66,27 +72,27 @@ CREATE TABLE IF NOT EXISTS company_fetch (
 
   -- The bit that is worth more than the board kind and that nothing currently
   -- stores: the actual reachable thing. A slug, host or full URL template -
-  -- 'f5jobs', 'wd504', or
-  -- 'https://boards-api.greenhouse.io/v1/boards/roblox/jobs'. Knowing a
-  -- company is "workday cxs" saves nothing if the tenant slug still has to be
-  -- guessed, and guessing it is exactly what failed for F5 and Cambia until
-  -- 2026-09-08.
+  -- 'acmejobs', 'wd504', or
+  -- 'https://boards-api.greenhouse.io/v1/boards/acme/jobs'. Knowing a company
+  -- is "workday cxs" saves nothing if the tenant slug still has to be guessed,
+  -- and guessing it is what fails: a slug that doesn't follow from the name
+  -- defeats every run that tries, every night, until someone records it here.
   endpoint TEXT NOT NULL DEFAULT '',
 
   -- The URL shape an individual posting takes, when it is not derivable from
-  -- the endpoint - e.g.
-  -- 'apply.careers.microsoft.com/careers/job/<19-digit id>'. This is where a
-  -- migrated ID space gets recorded, which is the thing that made a live
-  -- domain look dead to three separate searches.
+  -- the endpoint - e.g. '<host>/careers/job/<19-digit id>'. This is where a
+  -- migrated ID space gets recorded, which is the thing that makes a live
+  -- domain look dead: runs go on testing ids in the retired format, every one
+  -- of them 404s, and the whole employer reads as gone.
   url_shape TEXT NOT NULL DEFAULT '',
 
   -- What a *stated* death looks like here: a 404, a redirect target, or exact
   -- page text. Only ever a stated one.
   --
-  -- Read the warning in the run prompt before writing this field. On
-  -- 2026-09-08 a run compared pages it could not read, found two strings they
-  -- shared, concluded those meant "closed", and delisted ten live postings on
-  -- it; the strings were boilerplate present in every response from that host.
+  -- Read the warning in the run prompt before writing this field. A run has
+  -- compared pages it could not read, found two strings they shared, concluded
+  -- those meant "closed", and delisted live postings on it; the strings were
+  -- boilerplate present in every response from that host.
   -- A signal inferred by comparing pages is not a dead signal, however cleanly
   -- it appears to split the sample it was derived from - it will always split
   -- that sample, because that is the sample it came from. Leave this empty
@@ -111,8 +117,8 @@ CREATE TABLE IF NOT EXISTS company_fetch (
   -- show the note, not silently fall back to the fields above it.
   --
   -- This exists because a wrong shared fact is worse than a wrong private one.
-  -- The Microsoft dead-signal above damaged one search; had it been in this
-  -- table it would have damaged every search on the deployment the same night.
+  -- The bad dead-signal above damaged one search; had it been in this table it
+  -- would have damaged every search on the deployment the same night.
   retracted_on TEXT NOT NULL DEFAULT '',
   retracted_note TEXT NOT NULL DEFAULT ''
 );

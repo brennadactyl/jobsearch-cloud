@@ -9,16 +9,16 @@
 -- them in step, so that a deploy could be rolled back to the worker that read
 -- them. That worker has been gone since 2026-09-11. Issue #2 is the `board`
 -- half: the same company's board was stored once per search and once shared,
--- with nothing keeping the copies honest. Four companies had already drifted
--- apart between searches (Amazon AWS, Netflix, World Labs, Costco), and the
--- shared row is the one every reader uses.
+-- with nothing keeping the copies honest. Copies had already drifted apart
+-- between searches by the time this ran, and the shared row is the one every
+-- reader uses.
 --
 -- The precondition issue #2 set was that company_fetch must already hold a
 -- board for every company that has one here, so that dropping the column loses
--- no knowledge. Measured on the 2026-09-11 backup: 96 companies with a board
--- here, 95 already shared and none in disagreement. The last one, NFL, was
--- recorded on the shared list the same evening, so nothing here is the only
--- copy of anything.
+-- no knowledge. Checked against a backup before this ran: every company with a
+-- board here already had the same board on the shared list, with none in
+-- disagreement, and the few that didn't were recorded there before this
+-- applied. So nothing here is the only copy of anything.
 --
 -- ---- What changes
 --
@@ -35,7 +35,7 @@
 -- ---- What the rebuild does with rows that disagree
 --
 -- Before 0011 a run wrote whatever spelling it used, so one search can hold two
--- rows for one company ("Cursor (Anysphere)" and "Cursor Anysphere"). Keyed by
+-- rows for one company - two spellings differing only by punctuation. Keyed by
 -- company_key they are one row, and the merge keeps the later `last_swept` and
 -- the note from the most recently swept row that has one. That is what
 -- getCoverage already did at read time, so no search's view changes.

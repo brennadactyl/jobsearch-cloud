@@ -9,12 +9,10 @@
 -- Both are right on their own. Together, countRunActivity attributes every
 -- screened row carrying (search, date) to that date's *run*, so a person
 -- pruning their own board makes the nightly search's record claim work the
--- search never did. Measured against a local copy of this schema, a single
--- hand-deletion moved one run record from {leads:3, screened:2} to
--- {leads:2, screened:3}. On the live deployment the same afternoon, 242
--- hand-removals landed against tracks whose stored records read screened=0 and
--- screened=6 - true only because those records were written hours earlier and
--- nothing recomputes them. Recompute one and it moves by 94.
+-- search never did. A single hand-deletion is enough to move a run record's
+-- screened count by one, and a board with a history of them moves it by as
+-- much as that history - the stored records are only right because they were
+-- written before the deletions and nothing recomputes them.
 --
 -- ---- Why a column and not the `reason` string.
 -- The obvious cheaper answer is to encode this in `reason`, and the server
@@ -57,7 +55,7 @@ ALTER TABLE screened ADD COLUMN added_by TEXT NOT NULL DEFAULT '';
 -- is exactly why the column exists.
 --
 -- 2026-09-02 itself is mixed: that morning's runs wrote screened rows, and that
--- afternoon a person removed 242 leads by hand. The two are not distinguishable
+-- afternoon a person removed leads by hand. The two are not distinguishable
 -- after the fact. They could be told apart by matching the exact `reason` text
 -- of the hand-removals - but only for an account whose rows can be read, and
 -- the removals spanned two accounts. A rule that is verifiably right for one
@@ -73,12 +71,13 @@ UPDATE screened SET added_by = 'run' WHERE date < '2026-09-02';
 
 -- The one part of 2026-09-02 that can be classified without guessing.
 --
--- The 242 hand-removals that day were all made through one route with a single
+-- The hand-removals that day were all made through one route with a single
 -- constant reason, so an exact string match identifies them precisely and
 -- account-agnostically - no per-user rule, which is what made the earlier
--- reason-matching idea unsafe. 196 of them are in one account and 46 in the
--- other; the 196 were verified directly against production here, the 46 by the
--- person who made them, in an account these credentials cannot read.
+-- reason-matching idea unsafe. They spanned more than one account, and each
+-- account's were confirmed by someone who could read that account: which is
+-- the point, since a rule needing credentials nobody has is a rule that can't
+-- be checked.
 --
 -- This statement is deliberately a no-op in behaviour: countRunActivity counts
 -- 'run', so 'hand' and '' are already treated identically. It buys legibility,
@@ -90,6 +89,11 @@ UPDATE screened SET added_by = 'run' WHERE date < '2026-09-02';
 -- rest of that day. That would rest on "nobody else removed anything by hand
 -- that day", which is an unverifiable claim about the past - the same species
 -- of reasoning this migration otherwise refuses. The remainder stays ''.
+-- The literal below stood for one person's location scope, which is their own
+-- business and not this repo's. It is not a value to fill in: on any database
+-- this file has yet to run against, no row carries that date, so the predicate
+-- matches nothing whatever the string says - and on the one database where it
+-- did match, it has already run and never runs again.
 UPDATE screened SET added_by = 'hand'
  WHERE date = '2026-09-02'
-   AND reason = 'outside target locations (remote / Seattle / Portland only)';
+   AND reason = '<the one constant reason that route wrote>';
