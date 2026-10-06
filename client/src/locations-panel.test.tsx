@@ -172,8 +172,8 @@ describe("one Save and Discard for the whole panel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(save).toHaveBeenCalledTimes(1);
-    // Entries, not text: the joining into one string happens at the wire, in
-    // saveSettings, and goes when the routes take arrays.
+    // Entries, not text: joinPlaceLists turns them into one string as the
+    // request is built, and goes when the routes take arrays.
     expect(save).toHaveBeenCalledWith({ resumes: { ai: AI }, priority_locations: ["Wider region", "Metro core"] });
     expect(screen.queryByText(/unsaved change/)).toBeNull();
 

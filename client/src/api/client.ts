@@ -297,7 +297,7 @@ export type SettingsChanges = {
  * fixed - but it is exactly what the page does today, so nothing gets worse
  * while the three halves land.
  */
-function onTheWire(changes: SettingsChanges): Record<string, unknown> {
+function joinPlaceLists(changes: SettingsChanges): Record<string, unknown> {
   const out: Record<string, unknown> = { ...changes };
   for (const key of PLACE_LIST_KEYS) {
     const list = changes[key];
@@ -341,7 +341,7 @@ export function saveSettings(changes: SettingsChanges) {
   });
   return request("/api/settings", reply, {
     method: "POST",
-    body: onTheWire(changes),
+    body: joinPlaceLists(changes),
   });
 }
 
