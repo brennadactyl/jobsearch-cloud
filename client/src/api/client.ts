@@ -5,6 +5,7 @@
  * because the token it carries is the one being discarded.
  */
 import { z } from "zod";
+import { LEAD_APPLIED } from "../domain/constants";
 import type { SearchEdit } from "../domain/panel";
 import type { Places } from "../domain/places";
 import {
@@ -419,7 +420,7 @@ export function addApplication(link: string): Promise<Application> {
       title: "",
       location: "",
       dateApplied: new Date().toISOString().slice(0, 10),
-      status: "Applied",
+      status: LEAD_APPLIED,
       notes: "",
       team: "",
       setup: "",

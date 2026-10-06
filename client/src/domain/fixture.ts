@@ -11,6 +11,7 @@
  * ago" is exactly the sort of rule that would start passing or failing on its
  * own.
  */
+import { DEFAULT_STALE_RUN_HOURS } from "../api/schema";
 import type { Application, Lead, Screened, Settings, Track, TrackerData } from "../api/schema";
 
 /** 2026-09-10T12:00:00Z. Tests freeze Date.now() here. */
@@ -55,7 +56,7 @@ export const settings: Settings = {
   overview_label: "Overview",
   applications_label: "Applications",
   all_leads_label: "All leads",
-  stale_run_hours: 36,
+  stale_run_hours: DEFAULT_STALE_RUN_HOURS,
   search_locations: ["Springfield", "Shelbyville", "Remote US"],
   excluded_locations: [],
   priority_locations: ["Metro core", "Wider region"],

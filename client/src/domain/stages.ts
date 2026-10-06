@@ -4,7 +4,7 @@
  * so do the drills they open, so a chart and its rows can't disagree.
  */
 import type { Application } from "../api/schema";
-import { ACTIVE, STAGE_DATE_FIELDS } from "./constants";
+import { ACTIVE, APP_APPLIED, STAGE_DATE_FIELDS } from "./constants";
 import { daysBetween, localDay, localToday } from "./format";
 
 type Row = Record<string, string>;
@@ -141,7 +141,7 @@ export function median(values: readonly number[]): number | null {
 
 /** Still in play and waiting on the company: Applied, or a screen or loop. */
 export function isWaiting(a: Application): boolean {
-  return a.status === "Applied" || ACTIVE.includes(a.status);
+  return a.status === APP_APPLIED || ACTIVE.includes(a.status);
 }
 
 /** The latest of the applied date and the forward stage dates, or null for none. */

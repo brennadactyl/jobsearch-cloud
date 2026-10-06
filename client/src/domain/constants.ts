@@ -11,6 +11,19 @@ export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"] as const
 export const LEAD_NEW = "New";
 
 /**
+ * The two lead verdicts other code asks about by name: "has this one left the
+ * board" and "was it turned down". A lead's status is stored as text rather
+ * than a checked union, so a mistyped comparison here compiles and quietly
+ * matches nothing.
+ *
+ * LEAD_APPLIED and APP_APPLIED are the same word in two vocabularies - a lead's
+ * verdict and an application's stage - and `drills.ts` asks about both, so which
+ * one a comparison means is worth saying rather than inferring.
+ */
+export const LEAD_APPLIED = "Applied";
+export const LEAD_NOT_A_FIT = "Not a fit";
+
+/**
  * The verdicts the grid offers as buttons, in the order a row is scanned: the
  * two that answer "is this worth my time" first, then the one that acts on the
  * answer. Every status but LEAD_NEW, which a row is returned to rather than
@@ -27,6 +40,9 @@ export const APP_STATUS = [
   "To Apply", "Applied", "Recruiter Screen", "Tech Screen",
   "Onsite / Loop", "Offer", "Rejected", "Withdrawn",
 ] as const;
+
+/** The stage a sent application sits at until the company moves it on. */
+export const APP_APPLIED = "Applied";
 
 export const ACTIVE: readonly string[] = ["Recruiter Screen", "Tech Screen", "Onsite / Loop"];
 
@@ -136,10 +152,14 @@ export const APP_SORTS: readonly (readonly [key: string, label: string])[] = [
 ];
 
 /**
- * The cross-track leads tab. A tab id, not a track key - the same shape as
- * "dashboard" and "applications", which are also ids no track can usefully have.
+ * The tabs that aren't a track: ids no track can usefully have, named here
+ * because each is written wherever a tab is routed, counted, sorted or drilled
+ * into, and a mistyped one routes nowhere rather than failing. SCREENED is the
+ * fourth and lives beside the rest of its vocabulary in domain/screened.ts.
  */
+export const DASHBOARD = "dashboard";
 export const ALL_LEADS = "allleads";
+export const APPLICATIONS = "applications";
 
 export function pillFor(status: string): string {
   const map: Record<string, string> = {

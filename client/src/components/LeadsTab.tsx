@@ -7,7 +7,7 @@ import { Fragment } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { Lead, TrackerData } from "../api/schema";
 import { useDeleteLead, useMoveLead, type LeavingView } from "../api/mutations";
-import { ALL_LEADS, LABELS, LEAD_GRID_FIELDS, LEAD_STATUS } from "../domain/constants";
+import { ALL_LEADS, LABELS, LEAD_APPLIED, LEAD_GRID_FIELDS, LEAD_NOT_A_FIT, LEAD_STATUS } from "../domain/constants";
 import { ALL_FILTER, OPEN_FILTER, drillKeeps, leadFilterKeeps, leadRows, resolveLeadFilter } from "../domain/drills";
 import { leadColumns } from "../domain/export";
 import { safeUrl } from "../domain/format";
@@ -71,12 +71,12 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   // Applied takes the row out of every leads tab, so its note names the tab it
   // went to rather than the chip it left.
   const onLeave = (lead: Lead, status: string): LeavingView | undefined => {
-    if (status !== "Applied" && leadFilterKeeps(filter, { ...lead, status })) {
+    if (status !== LEAD_APPLIED && leadFilterKeeps(filter, { ...lead, status })) {
       return undefined;
     }
     const leaving: LeavingView = {
       note:
-        status === "Applied"
+        status === LEAD_APPLIED
           ? `Moved to ${settings.applications_label || "Applications"}`
           : `Marked ${status} — hidden from ${filter}`,
     };
@@ -115,7 +115,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
           />
         </div>
         <div className="chips">
-          {[OPEN_FILTER, ...LEAD_STATUS.filter((s) => s !== "Applied"), ALL_FILTER].map((f) => (
+          {[OPEN_FILTER, ...LEAD_STATUS.filter((s) => s !== LEAD_APPLIED), ALL_FILTER].map((f) => (
             <button
               key={f}
               className="chip"
@@ -198,7 +198,7 @@ export default function LeadsTab({ data, trackKey }: { data: TrackerData; trackK
   if (!rows.length) {
     // Open is the default, so an empty Open list isn't something the person
     // filtered out: say what it holds instead, one click away.
-    const notAFit = filter === OPEN_FILTER ? all.filter((l) => l.status === "Not a fit" && narrowed(l)).length : 0;
+    const notAFit = filter === OPEN_FILTER ? all.filter((l) => l.status === LEAD_NOT_A_FIT && narrowed(l)).length : 0;
     return (
       <>
         {toolbar}

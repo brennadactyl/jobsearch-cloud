@@ -10,7 +10,7 @@
  * The scope union keeps a leads drill from being handed an application.
  */
 import type { Application, Lead, Screened, Settings, Track } from "../api/schema";
-import { ACTIVE, ALL_LEADS, STAGE_DATE_FIELDS } from "./constants";
+import { ACTIVE, ALL_LEADS, APPLICATIONS, APP_APPLIED, LEAD_APPLIED, LEAD_NOT_A_FIT, STAGE_DATE_FIELDS } from "./constants";
 import { daysSince, localDay, shortDate, weekOf } from "./format";
 import { tierOf } from "./geo";
 import {
@@ -72,7 +72,7 @@ const base: Record<string, Drill> = {
     label: (c) => `${c.settings.areas[0] ?? "Top locations"} · still open`,
     test: (l, c) => {
       const g = tierOf(l, c.settings);
-      return !!g && g.rank === 0 && l.status !== "Not a fit";
+      return !!g && g.rank === 0 && l.status !== LEAD_NOT_A_FIT;
     },
   },
   "in-conversation": {
@@ -85,7 +85,7 @@ const base: Record<string, Drill> = {
     label: () => `Applied ${GONE_QUIET_DAYS}+ days ago, no reply`,
     test: (a) => {
       const d = daysSince(a.dateApplied);
-      return a.status === "Applied" && d !== null && d >= GONE_QUIET_DAYS;
+      return a.status === APP_APPLIED && d !== null && d >= GONE_QUIET_DAYS;
     },
   },
   /**
@@ -242,7 +242,7 @@ const PARAMETERISED: Record<string, (arg: string) => Drill | undefined> = {
       : {
           scope: "leads",
           label: (c) => `${name(c)} · Not a fit`,
-          test: (l, c) => l.status === "Not a fit" && inTier(l, c),
+          test: (l, c) => l.status === LEAD_NOT_A_FIT && inTier(l, c),
         };
   },
   /** `flow:<stage slug>:<segment>`, or `flow:<stage slug>:reached` for the whole bar. */
@@ -309,7 +309,7 @@ export function drillKeeps(id: string | null, scope: DrillScope, row: Lead | App
  */
 export function leadRows(leads: readonly Lead[], key: string): Lead[] {
   const isAll = key === ALL_LEADS;
-  return leads.filter((l) => (isAll || l.search === key) && l.status !== "Applied");
+  return leads.filter((l) => (isAll || l.search === key) && l.status !== LEAD_APPLIED);
 }
 
 /**
@@ -402,7 +402,7 @@ export function appFilterKeeps(filter: string, app: Application): boolean {
  * reader reaches for.
  */
 export function isAppsTarget(t: DrillTarget): boolean {
-  return t.tab === "applications";
+  return t.tab === APPLICATIONS;
 }
 
 /** What a tile or chart mark links to: a tab, plus at most one narrowing of it. */
