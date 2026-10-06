@@ -15,7 +15,14 @@ role.
 - **Comments and docs give the why; the code shows the what.** No history
   anywhere: nothing about how it used to be, dated incidents, PR numbers. State
   the rule and its reason in the present tense. Applied migrations and
-  `docs/*-plan.md` are the exceptions and are never rewritten.
+  `docs/*-plan.md` are the exceptions and are never rewritten - for a migration,
+  that is its statements: wrangler skips a file that has already run, so an
+  edited statement silently never lands. The comment beside them is prose
+  nothing re-executes, so a line that is false, or that should never have been
+  published, is corrected or removed there as anywhere else. What can't be done
+  is keeping it current, so it is never where today's behaviour belongs:
+  `docs/schema.md` holds the schema, and a rule about a route belongs with that
+  route.
 - **Plans state the design.** Give each section a line or two of context, name
   the files and constraints, and stop. Don't argue choices or narrate drafts;
   keep an explanation only where it prevents a wrong build, as a one-line
