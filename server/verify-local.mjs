@@ -3970,6 +3970,60 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("another account's places are its own",
     (await lcSettings(LC_B)).priority_locations.length === 0 &&
     (await lcSettings(LC_B)).search_locations.length === 200);
+
+  console.log("\n== converting the stored location lists ==");
+  // Storing every list as its entries. Nothing depends on it - a comma-joined
+  // value is already read as its entries - so what is checked is that the
+  // conversion stores those entries and nothing else.
+  //
+  // The rules are checked in process, because no route writes the old shape any
+  // more: a list sent comma-joined is converted on the way in, so a database
+  // this suite built from empty has no row left to convert. Each expectation is
+  // written out rather than derived, since asking whether the entries equal the
+  // entries they came from holds however wrong the rule is.
+  // Imported the way the prompt composer is, and for the same reason: this
+  // exercises a function rather than taking a list from it to check against.
+  const { conversionPlan, planSummary } = await import("./src/location-convert.js");
+  const legacyRows = [
+    { user_id: "u1", key: "search_locations", value: "US, Greater Seattle area , Australia" },
+    { user_id: "u1", key: "priority_locations", value: '["Seattle","Vancouver, BC"]' },
+    { user_id: "u2", key: "excluded_locations", value: "Texas" },
+    { user_id: "u2", key: "search_locations", value: "[not json], Seattle" },
+    { user_id: "u3", key: "search_locations", value: "[]" },
+  ];
+  const plan = conversionPlan(legacyRows);
+  check("a comma-joined list converts to the places it already reads as",
+    plan.convert.find((r) => r.user_id === "u1" && r.key === "search_locations")?.to ===
+      JSON.stringify(["US", "Greater Seattle area", "Australia"]),
+    JSON.stringify(plan.convert));
+  check("a list already holding its entries converts to nothing",
+    !plan.convert.some((r) => r.user_id === "u1" && r.key === "priority_locations") &&
+    plan.alreadyEntries === 2, JSON.stringify(plan));
+  check("a list whose own first place starts with a bracket is read the old way",
+    plan.convert.find((r) => r.user_id === "u2" && r.key === "search_locations")?.to ===
+      JSON.stringify(["[not json]", "Seattle"]),
+    JSON.stringify(plan.convert));
+  check("the summary counts lists and accounts without naming a place",
+    JSON.stringify(planSummary(plan)) === JSON.stringify({ lists: 3, accounts: 2, alreadyEntries: 2 }),
+    JSON.stringify(planSummary(plan)));
+
+  const cvUnknown = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Nobody ${lcRun}` } });
+  check("converting names an account nobody has as a 404", cvUnknown.status === 404, JSON.stringify(cvUnknown.json));
+  const cvBefore = await lcSettings(LC);
+  const cvDry = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Locations a ${lcRun}`, dryRun: true } });
+  check("a dry run reports what it looked at, and that there is nothing to convert",
+    cvDry.status === 200 && cvDry.json?.dryRun === true && cvDry.json?.lists === 0 &&
+    cvDry.json?.alreadyEntries >= 3, JSON.stringify(cvDry.json));
+  const cvRun = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Locations a ${lcRun}` } });
+  check("and a real one says the same of a deployment already converted",
+    cvRun.status === 200 && cvRun.json?.dryRun === false && cvRun.json?.lists === 0 &&
+    cvRun.json?.alreadyEntries >= 3, JSON.stringify(cvRun.json));
+  check("with every place served exactly as before",
+    JSON.stringify(await lcSettings(LC)) === JSON.stringify(cvBefore));
+  const cvAll = await req("POST", "/api/locations/convert", { admin: true, body: { dryRun: true } });
+  check("and naming no account reads every account's lists, not one's",
+    cvAll.status === 200 && cvAll.json?.alreadyEntries > cvDry.json?.alreadyEntries,
+    JSON.stringify([cvAll.json, cvDry.json]));
 }
 
 

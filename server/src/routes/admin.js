@@ -1,17 +1,21 @@
 /**
  * Operator writes a scheduled search cannot reach: removing a retired search's
- * rows, and tidying the shared company list.
+ * rows, tidying the shared company list, and converting stored location lists
+ * to the shape every reader already reads them as.
  *
  * Like ./accounts.js's user provisioning, each takes the ADMIN_TOKEN secret
  * rather than a session and names its subject in the body, so it builds its own
- * `Db` or `CompanyList` rather than being handed one. Neither queries d1
- * directly.
+ * `Db` or `CompanyList` rather than being handed one. The conversion is the one
+ * that has no single subject - it reads and writes one `meta` row at a time
+ * across accounts - so it goes through ../db.js's own functions for those rows
+ * instead. No handler here writes SQL.
  */
 
 import { getUserByName } from "../auth.js";
 import { CompanyList } from "../companies.js";
-import { Db } from "../db.js";
+import { Db, storedLocationRows, writeStoredLocationList } from "../db.js";
 import { json, readJson } from "../http.js";
+import { conversionPlan, planSummary } from "../location-convert.js";
 
 /**
  * POST /api/purge - requires the ADMIN_TOKEN secret as Bearer. Body
@@ -132,4 +136,56 @@ export async function handleCleanUpCompanies({ request, env }) {
     // list each one now has.
     aliases: result.aliasOnly.map((a) => ({ company: a.company, aliases: a.aliases })),
   });
+}
+
+/**
+ * POST /api/locations/convert - requires the ADMIN_TOKEN secret as Bearer. Body
+ * `{ user?, dryRun? }` -> `{ dryRun, lists, accounts, alreadyEntries }`;
+ * 401 without the admin token, 404 for a name nobody has.
+ *
+ * Stores every location list as its entries. Nothing depends on this: a value
+ * written before the lists held entries is already read as the entries it
+ * splits into, so the deployment works either way. What it buys is that reading
+ * stored values stops being one of the comma rule's jobs.
+ *
+ * `user` names one account; left out, it does every account, which is the
+ * difference between this and the routes above it. That is safe here in a way
+ * it would not be for a delete: each row is replaced by the entries it already
+ * reads as, so there is no value this can store that changes what a reader
+ * sees. What makes that a fact rather than a hope is the check on a list served
+ * before and after a conversion, which is where it can fail.
+ *
+ * `dryRun` reports the same counts and writes nothing. The counts are counts -
+ * no account's places appear in the reply, since the reply answers how much is
+ * left to convert rather than where anyone is looking.
+ *
+ * Rows are written one at a time and a rewrite is its own answer, so a call
+ * that dies part way is finished by calling it again rather than repaired.
+ */
+export async function handleConvertLocations({ request, env }) {
+  const body = await readJson(request);
+  if (body instanceof Response) {
+    return body;
+  }
+
+  const name = typeof body.user === "string" ? body.user.trim() : "";
+  let userId;
+  if (name) {
+    const user = await getUserByName(env.DB, name);
+    if (!user) {
+      return json({ error: `no account named "${name}"` }, 404);
+    }
+    userId = user.id;
+  }
+
+  const plan = conversionPlan(await storedLocationRows(env.DB, userId));
+  const summary = planSummary(plan);
+  if (body.dryRun) {
+    return json({ dryRun: true, ...summary });
+  }
+
+  for (const row of plan.convert) {
+    await writeStoredLocationList(env.DB, row.user_id, row.key, row.to);
+  }
+  return json({ dryRun: false, ...summary });
 }
