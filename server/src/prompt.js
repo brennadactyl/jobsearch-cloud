@@ -428,7 +428,8 @@ function areaStep(settings, name) {
     areaRule:
       ` \`area\` is the one place ${name} ranked first that the posting falls in, copied as one of these ` +
       `lines exactly:\n${ranked}\n   or left out when the posting falls in none of them. A line is one ` +
-      "place, commas and all, and there is nothing to strip or tidy: send the line's own characters. An " +
+      "place, commas and all: send the text after the dash, leaving the dash and the spaces around it " +
+      "behind and changing nothing else - not the case, not the punctuation, not a word of it. An " +
       "entry can also be narrower than a place a person would name - somewhere typed with a comma may " +
       "reach you as two of these lines - so `area` is filed from these lines alone, while `location` keeps " +
       "the posting's own words as step 6 asks. Anything but one of these lines is dropped.",

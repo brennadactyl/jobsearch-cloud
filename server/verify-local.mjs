@@ -1050,9 +1050,21 @@ const listed = buildSearchPrompt({
   const comma = syncStep({ priority_locations: ["Vancouver, BC", "Remote Canada"] });
   check("step 9 gives an entry holding a comma a line of its own",
     comma.includes("     - Vancouver, BC\n     - Remote Canada"));
-  check("and asks a run to strip nothing, since nothing is printed around an entry",
-    withRanked.includes("there is nothing to strip or tidy: send the line's own characters") &&
-    !/quotes and all|["'`]Seattle area["'`]/.test(withRanked.slice(withRanked.indexOf("`area` is the one place"))));
+  // Read off the rendered step rather than asserted about the sentence: take
+  // the printed lines, remove the one prefix the rule names, and what is left
+  // has to be the entries themselves. Any decoration added later - a quote, a
+  // bullet character, a number - survives the strip and fails here by name,
+  // which an assertion about the wording cannot do.
+  const printedEntries = (step) => step
+    .slice(step.indexOf("copied as one of these lines exactly"))
+    .split("\n")
+    .filter((line) => /^ {5}- /.test(line))
+    .map((line) => line.replace(/^ {5}- /, ""));
+  check("the printed lines carry the entries and nothing else around them",
+    JSON.stringify(printedEntries(withRanked)) === JSON.stringify(["Seattle area", "Portland OR", "Remote US"]));
+  check("and the rule names the dash as the one thing to leave behind",
+    withRanked.includes("send the text after the dash, leaving the dash and the spaces around it behind") &&
+    withRanked.includes("changing nothing else"));
   // Each is true in one of the two states this ships through: until the stored
   // lists are arrays, a place typed with a comma still arrives as two entries,
   // and a run told only "a line is one place" is told about a case that cannot
