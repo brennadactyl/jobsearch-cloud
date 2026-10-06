@@ -66,6 +66,20 @@ doc, and a finding says whether anything was built on the wrong line.
   It covers every search, and it hides that company's existing leads too. The
   person is told what it did and can undo it, and removing the chip in the
   panel is the other way back.
+- **A place whose name holds a comma can't be stored.** "Vancouver, BC" becomes
+  two places, because each location list is one `meta` value holding its places
+  joined by commas and every reader splits on the comma - `rankedEntries` in
+  `server/src/validate.js`, `places.ts` on the page, and `tracker.ps1`'s helper.
+  [The plan chose that](location-settings-plan.md) deliberately, and the cost is
+  that the ordinary way to write a city is the one way that doesn't work: the
+  person sees two chips, and an area matched against either of them is matched
+  against half a place name. Making it representable is a storage change - JSON
+  in the `meta` value, or a delimiter a place name cannot hold - with a backfill
+  of the stored lists, and it retires "one split rule, everywhere". Readers that
+  accept a list as an array of entries are being built ahead of it and change
+  nothing by themselves, since what is written is still joined. The question
+  before the work is whether the comma case is worth a storage change at all,
+  given a person can type "Vancouver BC" and the prompt reads it the same way.
 - **Split a track doc into what is composed and what is accumulated.** One file
   holds both the parts generated from config and what the runs earn over weeks -
   companies tried, delisting guards, notes on a careers site - and its only
