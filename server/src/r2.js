@@ -175,6 +175,14 @@ export class Docs {
 }
 
 /**
+ * How many list-and-delete passes one call makes. A pass clears up to the 1000
+ * keys `list` returns, so this is the ceiling on what a single call removes -
+ * there to bound the work rather than to be reached, and a folder still holding
+ * objects after it is finished by the next call.
+ */
+const DELETE_PASSES = 20;
+
+/**
  * Remove every object under a prefix, a page at a time. `list` caps at 1000
  * keys, so each pass lists what is left and deletes that; a pass that dies part
  * way leaves the rest for a later call, which is what lets the account delete
@@ -185,7 +193,7 @@ export class Docs {
  */
 async function deleteUnder(bucket, prefix) {
   let removed = 0;
-  for (let pass = 0; pass < 20; pass++) {
+  for (let pass = 0; pass < DELETE_PASSES; pass++) {
     const result = await bucket.list({ prefix });
     if (result.objects.length === 0) {
       break;
