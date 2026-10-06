@@ -1037,12 +1037,25 @@ const listed = buildSearchPrompt({
     });
     return p.slice(p.indexOf("9. SYNC"), p.indexOf("\n9b."));
   };
-  const withRanked = syncStep({ priority_locations: "Seattle area, Portland OR, Remote US" });
+  const withRanked = syncStep({ priority_locations: ["Seattle area", "Portland OR", "Remote US"] });
   check("step 9 asks for an area copied exactly from the ranked list, as typed",
-    withRanked.includes("posted_days, area}") && withRanked.includes('one entry from "Seattle area, Portland OR, Remote US"') &&
+    withRanked.includes("posted_days, area}") && withRanked.includes('one of "Seattle area", "Portland OR", "Remote US"') &&
     withRanked.includes("copied as written") && withRanked.includes("leave it out when the posting falls in none"));
-  check("step 9 says each comma starts a new entry, since the list is split on them",
-    withRanked.includes("Each comma starts a new entry"));
+  // Each entry is printed quoted, because an entry may hold a comma: a place
+  // written with one is one place, and a comma-joined line couldn't be read
+  // back as the entries it came from.
+  check("step 9 quotes each ranked entry, so one holding a comma is one place",
+    syncStep({ priority_locations: ["Vancouver, BC", "Remote Canada"] })
+      .includes('one of "Vancouver, BC", "Remote Canada"'));
+  check("and tells a run a quoted entry is one place however many commas are in it",
+    withRanked.includes("Each quoted entry is one place however many commas are inside it") &&
+    withRanked.includes("quotes and all removed"));
+  // The older comma-joined form still reads: this prompt ships on a deploy and
+  // the helper ships when the checkout is pulled, so for a while either shape
+  // arrives, and a reader that understood one would compose a night with no
+  // places in it and raise nothing.
+  check("a list given as a comma-joined string composes the same as the array",
+    syncStep({ priority_locations: "Seattle area, Portland OR, Remote US" }) === withRanked);
   // Asked of the whole prompt, not of step 9 alone: the field was named in step
   // 6 while step 9 asked for nothing, and a check that slices one step cannot
   // see that.
@@ -1110,15 +1123,25 @@ const listed = buildSearchPrompt({
     buildSearchPrompt({ user: { id: "u", name: "Nobody" }, track: trackOf, settings, feeds: [] });
   const stepOf5 = (p) => p.slice(p.indexOf("\n5. "), p.indexOf("\n6. "));
   const full = compose({
-    priority_locations: "Seattle, Portland, OR",
-    search_locations: "US, Greater Toronto area",
-    excluded_locations: "Texas",
+    priority_locations: ["Seattle", "Portland OR", "Vancouver, BC"],
+    search_locations: ["US", "Greater Toronto area"],
+    excluded_locations: ["Texas"],
     location_note: "Open to relocating for the right team.",
   });
   const five = stepOf5(full);
-  check("step 5 prints each location list exactly as typed",
-    five.includes("always searched:** Seattle, Portland, OR") && five.includes("Also searched:** US, Greater Toronto area") &&
-    five.includes("Ruled out:** Texas") && five.includes("Open to relocating for the right team."));
+  check("step 5 prints each location list's entries as typed, one quoted entry each",
+    five.includes('always searched:** "Seattle", "Portland OR", "Vancouver, BC"') &&
+    five.includes('Also searched:** "US", "Greater Toronto area"') &&
+    five.includes('Ruled out:** "Texas"'));
+  // The note is a sentence rather than a list, so it is printed as written -
+  // quoting it would read as a place.
+  check("and prints the person's own note as prose, unquoted",
+    five.includes("**In Nobody's words:** Open to relocating for the right team."));
+  // Either shape reads, since this prompt and the helper that reads the same
+  // lists ship by different mechanisms.
+  check("a comma-joined list prints the same entries as the array",
+    stepOf5(compose({ priority_locations: "Seattle, Portland OR", excluded_locations: "Texas" })) ===
+    stepOf5(compose({ priority_locations: ["Seattle", "Portland OR"], excluded_locations: ["Texas"] })));
   check("and states the fixed order: wanted first, then ruled out, then searched",
     /wanted first always qualifies.*ruled out is out.*searched place qualifies; anywhere else is out/.test(five));
   check("and the fixed remote and relocation rules, deferring to the person's own note",

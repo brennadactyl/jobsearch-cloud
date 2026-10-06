@@ -20,7 +20,14 @@ http.createServer((req, res) => {
     if (scen === "retry" && hits[key] === 1) return J(res, 500, "error code: 1101 <html>\n  <body>boom</body></html>");
     if (scen === "e400") return J(res, 400, {error:"bad request"});
     if (scen === "e503") return J(res, 503, {error:"no binding"});
-    if (path === "/api/config") return J(res, 200, {tracks:[{key:"SWE"},{key:"swe-ai",fed_by:"SWE"},{key:"swe-tech",fed_by:"SWE"},{key:"CPM"},null],settings:{priority_locations:scen==="noranked"?"":" Seattle area, Portland OR,, Remote US "}});
+    // `rankedarray` serves the lists as the settings store them - an array of
+    // entries, one of which contains a comma. The comma-joined string is the
+    // older form and every other scenario keeps serving it, because the helper
+    // meets both while the route and the checkout ship separately.
+    if (path === "/api/config") return J(res, 200, {tracks:[{key:"SWE"},{key:"swe-ai",fed_by:"SWE"},{key:"swe-tech",fed_by:"SWE"},{key:"CPM"},null],settings:{
+      priority_locations: scen==="noranked" ? ""
+        : scen==="rankedarray" ? ["Seattle area", "Vancouver, BC", "  Remote US  ", "", 7]
+        : " Seattle area, Portland OR,, Remote US "}});
     if (path.startsWith("/api/dedup/")) {
       const k = path.split("/")[3].split("?")[0];
       const scoped = scen==="mixed" ? k!=="swe-tech" : scen!=="unscoped";

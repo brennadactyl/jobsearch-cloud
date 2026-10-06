@@ -437,8 +437,20 @@ function Get-RankedEntries {
         $ranked = $config.settings.priority_locations
         # Wrapped in @(): an `if` that yields an empty array assigns $null,
         # which would read the config again for every row.
+        #
+        # A stored list is an array of entries; a comma-joined string is the
+        # older form, split on commas, which is all that form ever meant. Both
+        # are read because this helper ships when the main checkout is pulled
+        # while the route ships on a deploy, so either shape can arrive for a
+        # while - and a helper that understood only one would clear every
+        # lead's area and report a tidy `area_cleared` for doing it.
+        #
+        # An array is taken as it stands: an entry may contain a comma, and
+        # "Vancouver, BC" is one place.
         $script:RankedEntries = @(if ($ranked -is [string]) {
             $ranked -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        } elseif ($null -ne $ranked) {
+            $ranked | Where-Object { $_ -is [string] } | ForEach-Object { $_.Trim() } | Where-Object { $_ }
         })
     }
     return , $script:RankedEntries

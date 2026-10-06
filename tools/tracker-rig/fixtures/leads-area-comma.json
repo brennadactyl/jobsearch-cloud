@@ -1,0 +1,5 @@
+[{"url":"https://a/20","company":"Acme","title":"SWE","location":"Vancouver, BC, Canada","area":"Vancouver, BC"},
+ {"url":"https://a/21","company":"Acme","title":"SWE","location":"Burnaby, BC","area":"vancouver, bc"},
+ {"url":"https://a/22","company":"Acme","title":"SWE","location":"Vancouver, BC","area":"Vancouver"},
+ {"url":"https://a/23","company":"Acme","title":"SWE","location":"Seattle, WA","area":"Seattle area"},
+ {"url":"https://a/24","company":"Acme","title":"SWE","location":"Toronto, ON","area":"BC"}]

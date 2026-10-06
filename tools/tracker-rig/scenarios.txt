@@ -46,3 +46,5 @@ e503|e503|companies
 leads-reallinks|ok|leads leads-reallinks.json
 leads-filled|filled|leads leads-area.json
 leads-posted|posted|leads leads-posted.json
+leads-area-comma|rankedarray|leads leads-area-comma.json
+leads-area-stringform|ok|leads leads-area-comma.json
