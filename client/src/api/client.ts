@@ -6,6 +6,7 @@
  */
 import { z } from "zod";
 import { APP_APPLIED } from "../domain/constants";
+import { today } from "../domain/format";
 import type { SearchEdit } from "../domain/panel";
 import type { Places } from "../domain/places";
 import {
@@ -411,15 +412,13 @@ export function addApplication(link: string): Promise<Application> {
   return request("/api/update", updateAppSchema, {
     method: "POST",
     // Every column blank but the link, status and applied date: a link with no
-    // company, role or location is what queues the overnight fill. The UTC date
-    // is inlined rather than taken from domain/format's today(), which computes
-    // the same thing: one expression is cheaper to read here than an import.
+    // company, role or location is what queues the overnight fill.
     body: {
       type: "application",
       company: "",
       title: "",
       location: "",
-      dateApplied: new Date().toISOString().slice(0, 10),
+      dateApplied: today(),
       status: APP_APPLIED,
       notes: "",
       team: "",
