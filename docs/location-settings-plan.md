@@ -60,18 +60,14 @@ hint says "inside the searched area".
   stored as the ranked entry is spelled ("portland or" is stored as "Portland OR").
   A place typed with a comma becomes two chips. The server, `tracker.ps1` and
   the page use this rule and no other.
-- **A comma always separates, and that is the open question.** The rule above
-  makes "Vancouver, BC" two places, which is how people write a city. Readers
-  that take a list as an array of entries instead are being built - the page,
-  the settings routes, `tracker.ps1`'s helper - and they change nothing on their
-  own: a list is one `meta` value holding the places joined by commas, so a list
-  written joined is read back split however the reader is written. Making the
-  comma case reachable is a storage change - JSON in the `meta` value, or a
-  delimiter a place name cannot hold - plus a backfill of the stored values, and
-  it retires "one split rule, everywhere" as the thing `rankedEntries` in
-  `server/src/validate.js`, `places.ts` and the helper each implement. Until that
-  is decided the readers are preparation, and a change claiming a place can hold
-  a comma is claiming more than it does.
+- **The split rule above is being replaced by JSON arrays,** so a place whose
+  name holds a comma is one entry: the lists are stored as arrays in their
+  `meta` values rather than joined by commas, and the readers parse rather than
+  split. The work is in flight across the page, the settings routes and
+  `tracker.ps1`'s helper; this section is rewritten when it lands, and until
+  then the rules above describe what is stored. Lists already split keep their
+  split - nothing can tell a separator from part of a name afterwards - and
+  retyping those is in [the backlog](backlog.md).
 - **Tier colours come from each lead's area** (below), not from matching text.
 - **An optional note, `location_note`,** keeps what a list can't say - "open to relocating for
   the right team" - and reaches the prompt as context.

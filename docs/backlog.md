@@ -66,20 +66,25 @@ doc, and a finding says whether anything was built on the wrong line.
   It covers every search, and it hides that company's existing leads too. The
   person is told what it did and can undo it, and removing the chip in the
   panel is the other way back.
-- **A place whose name holds a comma can't be stored.** "Vancouver, BC" becomes
-  two places, because each location list is one `meta` value holding its places
-  joined by commas and every reader splits on the comma - `rankedEntries` in
-  `server/src/validate.js`, `places.ts` on the page, and `tracker.ps1`'s helper.
-  [The plan chose that](location-settings-plan.md) deliberately, and the cost is
-  that the ordinary way to write a city is the one way that doesn't work: the
-  person sees two chips, and an area matched against either of them is matched
-  against half a place name. Making it representable is a storage change - JSON
-  in the `meta` value, or a delimiter a place name cannot hold - with a backfill
-  of the stored lists, and it retires "one split rule, everywhere". Readers that
-  accept a list as an array of entries are being built ahead of it and change
-  nothing by themselves, since what is written is still joined. The question
-  before the work is whether the comma case is worth a storage change at all,
-  given a person can type "Vancouver BC" and the prompt reads it the same way.
+- **Retype the lists a comma already split**, once the page can store one. The
+  three location lists are becoming JSON arrays of entries, so from then on
+  "Vancouver, BC" is one place; that is being built and is not this item. What
+  it cannot do is recover a list already stored. The split happened on the way
+  in and took the information with it: "Vancouver" and "BC" are two entries now,
+  and nothing downstream can tell a separator from part of a name after the
+  fact. Guessing is the one way the change could lose something, so the
+  conversion deliberately stores each list as the entries it already reads as
+  and nothing more.
+  So each affected list is retyped by the person whose list it is, through the
+  account page - **after the client half is live, not alongside it**, since
+  until then the page has no way to put a comma inside one entry.
+  The scope is small. In the 2026-10-06 backup, 21 lists are stored across every
+  account; one entry is unmistakably an orphan - a bare region code sitting
+  after another entry - and three more are region names that may be exactly what
+  their owner meant, since a list like "Portland OR, Texas" is ordinary. So at
+  most three lists on two accounts, and only their owners can say which. Bare
+  country entries are not in that count: a list that is just "US" is a
+  whole-country search, not a split.
 - **Split a track doc into what is composed and what is accumulated.** One file
   holds both the parts generated from config and what the runs earn over weeks -
   companies tried, delisting guards, notes on a careers site - and its only
