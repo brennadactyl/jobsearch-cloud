@@ -2791,6 +2791,60 @@ check("the location answers become the location settings, each answer's places a
 check("nothing the run owns is written on send",
   builtConfig.tracks?.every((t) => t.role_search_line === "" && t.fit_clause === "" && t.schedule_time === ""),
   JSON.stringify(builtConfig.tracks[0]));
+
+// The lowest pay a role is worth is asked once, on the form, and has to reach
+// the search as the pair step 7 compares a posting against - not only the
+// answers blob, which nothing but this route reads.
+{
+  const payRun = Date.now().toString(36);
+  const paySetup = async (tag, roles) => {
+    const inv = await invAdmin("POST", "/api/invites", { note: `pay ${tag} ${payRun}` });
+    const tok = (await req("POST", "/api/signup", { body: {
+      code: inv.json.code, name: `Pay ${tag} ${payRun}`, password: `pay-${tag}-long-password` } })).json.token;
+    const res = await postIntake(tok, { ...baseAnswers, roles });
+    return { tok, res };
+  };
+
+  const both = await paySetup("both", [{ ...intakeRole, min_pay: " $180k base ", min_pay_unit: "hour" }]);
+  const bothTrack = (await req("GET", "/api/config", { token: both.tok })).json?.tracks?.[0];
+  check("the pay a role asked for reaches the search it creates, amount and unit",
+    both.res.status === 200 && bothTrack?.pay_floor === "$180k base" && bothTrack?.pay_floor_unit === "hour",
+    JSON.stringify([both.res.json, bothTrack?.pay_floor, bothTrack?.pay_floor_unit]));
+
+  const amountOnly = await paySetup("amount", [{ ...intakeRole, min_pay: "$200,000" }]);
+  const amountTrack = (await req("GET", "/api/config", { token: amountOnly.tok })).json?.tracks?.[0];
+  check("an amount with no unit is a year rather than a refused setup",
+    amountOnly.res.status === 200 && amountTrack?.pay_floor === "$200,000" &&
+    amountTrack?.pay_floor_unit === "year",
+    JSON.stringify([amountOnly.res.json, amountTrack?.pay_floor_unit]));
+
+  const unitOnly = await paySetup("unit", [{ ...intakeRole, min_pay: "", min_pay_unit: "hour" }]);
+  const unitTrack = (await req("GET", "/api/config", { token: unitOnly.tok })).json?.tracks?.[0];
+  check("a unit with no amount leaves the floor unset rather than half set",
+    unitOnly.res.status === 200 && unitTrack?.pay_floor === "" && unitTrack?.pay_floor_unit === "",
+    JSON.stringify([unitOnly.res.json, unitTrack?.pay_floor, unitTrack?.pay_floor_unit]));
+
+  const noPay = await paySetup("none", [{ ...intakeRole, min_pay: "" }]);
+  const noPayTrack = (await req("GET", "/api/config", { token: noPay.tok })).json?.tracks?.[0];
+  check("and a role that named no pay has no floor",
+    noPay.res.status === 200 && noPayTrack?.pay_floor === "" && noPayTrack?.pay_floor_unit === "",
+    JSON.stringify([noPayTrack?.pay_floor, noPayTrack?.pay_floor_unit]));
+
+  // Refused by the rules the panel uses, so the two screens cannot disagree
+  // about what a pay floor may say.
+  for (const [i, [why, role]] of [
+    ["a unit the prompt can't state", { ...intakeRole, min_pay: "$1", min_pay_unit: "month" }],
+    ["an amount past what an amount runs to", { ...intakeRole, min_pay: "x".repeat(41) }],
+    ["a unit that isn't text", { ...intakeRole, min_pay: "$1", min_pay_unit: 7 }],
+  ].entries()) {
+    // The tag is the index rather than the reason: two reasons starting with
+    // the same words would name one account twice, and the second signup would
+    // fail for the name rather than for the pay floor.
+    const res = (await paySetup(`bad${i}`, [role])).res;
+    check(`a setup is refused for ${why}, naming the roles`,
+      res.status === 400 && res.json?.field === "roles", JSON.stringify(res.json));
+  }
+}
 check("a second send is refused whatever the state - there is no re-send",
   (await postIntake(I_TOK, instAnswers)).status === 409);
 check("one person's setup is invisible to another",

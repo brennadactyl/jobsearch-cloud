@@ -28,7 +28,14 @@ import {
   revokeInvite,
   signupWithInvite,
 } from "../onboarding.js";
-import { isDocumentPath, locationSettingError, nowhereToSearchError, pronounsError } from "../validate.js";
+import {
+  isDocumentPath,
+  locationSettingError,
+  nowhereToSearchError,
+  payFloorError,
+  payFloorUnitError,
+  pronounsError,
+} from "../validate.js";
 
 const NOTE_MAX = 200;
 const NAME_MAX = 60;
@@ -56,7 +63,21 @@ const KEY_MAX = 40;
 const ALREADY_SENT = {
   error: "your setup has already been sent - change your search from the tracker, or ask whoever invited you",
 };
-const ROLE_STRINGS = ["name", "titles", "company_kinds", "rule_outs", "min_pay"];
+const ROLE_STRINGS = ["name", "titles", "company_kinds", "rule_outs", "min_pay", "min_pay_unit"];
+// The form asks the lowest acceptable pay per role; the search config holds it
+// as an amount and a unit (`pay_floor`, `pay_floor_unit`), which is what
+// src/prompt.js states in step 7 and compares a posting against. The answer
+// keys keep the form's own words and this translates them, the way
+// LOCATION_ANSWERS above does - the answers are a record of what someone typed
+// and are never re-sent, so renaming a key there would leave every stored
+// setup carrying the old one.
+//
+// A unit the form didn't ask for is a year. Every stated floor this is meant
+// for is annual, the account panel's own form defaults the same way, and the
+// alternative is refusing a whole setup over a dropdown - which would lose the
+// figure instead of reading it generously. A unit with no amount is nothing:
+// it says which denomination a number nobody gave would have been in.
+const DEFAULT_PAY_UNIT = "year";
 
 /**
  * GET /api/invite/:code - public -> `{ valid: true, expires_at }` or
@@ -144,9 +165,16 @@ export async function handleGetIntake({ db }) {
  * The answers are stored whole, as sent, because the run reads every field and
  * the form may add more. Only what the run cannot work without is checked:
  * at least one role with a name and titles, a resume it can find, location
- * answers as text within their caps, and somewhere to look. A resume counts
- * when there is pasted text, or when a named file under resumes/ exists now -
- * the page uploads files before it sends the answers.
+ * answers as text within their caps, somewhere to look, and each role's pay
+ * floor by the rules the account panel uses for the same answer. A resume
+ * counts when there is pasted text, or when a named file under resumes/ exists
+ * now - the page uploads files before it sends the answers.
+ *
+ * Each role's pay floor is also written onto the search it creates, as the
+ * `pay_floor` and `pay_floor_unit` pair the config holds. The blob alone does
+ * not reach a run: nothing reads it except this route serving it back, so a
+ * floor left there is a number a model may mention in prose rather than one
+ * step 7 compares a posting against.
  */
 export async function handlePostIntake({ request, db, docs, user }) {
   if (user.demo) {
@@ -224,8 +252,23 @@ function tracksFromRoles(roles) {
       key = `${key || "role"}-${i + 1}`.slice(0, KEY_MAX);
     }
     taken.add(key);
-    return { key, label: role.name.trim(), sort_order: i };
+    return { key, label: role.name.trim(), sort_order: i, ...payFloorFromRole(role) };
   });
+}
+
+/**
+ * One role's pay floor, as the search config holds it. The pair is set together
+ * or not at all (validate.js halfSetPayFloorError), so a unit with no amount
+ * stores neither and the panel shows the floor unset rather than half of one.
+ * @param {{min_pay?: string, min_pay_unit?: string}} role
+ * @returns {{pay_floor: string, pay_floor_unit: string}}
+ */
+function payFloorFromRole(role) {
+  const amount = (role.min_pay || "").trim();
+  if (!amount) {
+    return { pay_floor: "", pay_floor_unit: "" };
+  }
+  return { pay_floor: amount, pay_floor_unit: (role.min_pay_unit || "").trim() || DEFAULT_PAY_UNIT };
 }
 
 /**
@@ -292,6 +335,20 @@ async function answersProblem(answers, docs) {
     }
     if (!(role.titles || "").trim()) {
       return bad("roles", `role ${i + 1} needs the roles to search for`);
+    }
+    // Judged by the same rules the panel judges a pay floor by, so a setup
+    // cannot store a pair the panel would then refuse to save back. The
+    // refusals name the form's field rather than the config's, since the
+    // person is looking at the form.
+    //
+    // There is no half-set case to refuse here, which is why the panel's rule
+    // for one isn't called: an amount with no unit is a year, and a unit with
+    // no amount is dropped, so neither can reach the config half set.
+    const payProblem =
+      payFloorError("min_pay", role.min_pay ?? "") ||
+      payFloorUnitError("min_pay_unit", role.min_pay_unit ?? "");
+    if (payProblem) {
+      return bad("roles", `role ${i + 1}: ${payProblem}`);
     }
   }
 
