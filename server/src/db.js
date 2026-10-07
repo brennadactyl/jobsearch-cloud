@@ -347,7 +347,7 @@ export const PROMPT_SETTING_KEYS = ["footer_note", "pronouns"];
  * client/src/api/schema.ts - and the two are built separately, so a change
  * here is a change there.
  */
-export const STALE_RUN_HOURS_DEFAULT = 36;
+const STALE_RUN_HOURS_DEFAULT = 36;
 
 export const DEFAULT_SETTINGS = {
   display_title: "Job Search Tracker",
