@@ -48,8 +48,14 @@ const LEAD_SORTS = new Map<string, Compare<Lead>>([
 ]);
 
 /**
- * "priority", the default, sinks "Not a fit" to the bottom, then orders by
- * location rank, then newest-found. The other sorts are exactly what they say.
+ * "priority" sinks "Not a fit" to the bottom, then orders by location rank,
+ * then newest-found. It is also where an unrecognised key lands: this file's
+ * map holds four comparators and not this one, and nothing refuses a key it
+ * doesn't know, so a key renamed in one file shows up as the page quietly
+ * sorting differently rather than as an error.
+ *
+ * A tab opens on Newest found, not on this. The other sorts are exactly what
+ * they say.
  */
 export function leadComparator(sortKey: string, settings: TierSettings): Compare<Lead> {
   return (
