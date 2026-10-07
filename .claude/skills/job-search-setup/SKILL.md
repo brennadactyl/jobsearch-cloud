@@ -295,7 +295,7 @@ finished sentence the search should read:
   3's compensation floor). Both empty for no floor. **Only when you post the
   config yourself**, through `POST /api/config`: on the unattended path this
   pair is the form's, the script forwards only prose fields, and the write-up
-  route would refuse it as form-owned (section 6).
+  route would refuse it as form-owned (intake mode's step 6).
 - `fit_filter_step` - only for a genuine pivot, where one clause won't carry
   the fit: it becomes a screening step of its own. Verifiable mismatches only
   (step 3).
@@ -453,7 +453,7 @@ The answers map onto the config like this:
 | each role's `titles` | `role_search_line` and `full_description` |
 | each role's `company_kinds` | the track doc's `## What this search is looking for`, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
 | each role's `rule_outs` | `fit_clause` / `fit_disqualifier`, and `fit_filter_step` only for a real pivot. A pay floor among them belongs in `pay_floor`, not here |
-| each role's lowest acceptable pay | the track's `pay_floor` and `pay_floor_unit` - **already written when the form arrives, and not yours to send**, like the location lists. Writing the pair into `out\config.json` on this path achieves nothing and says nothing: the script forwards only the prose fields it names, so anything else is dropped before the request, and `POST /api/writeup` would refuse the pair anyway as a field the form owns. The one thing to do with a floor here is keep it out of `fit_clause` and `fit_disqualifier`, where it would become a sentence a run interprets nightly instead of the comparison the prompt composes from the pair |
+| each role's lowest acceptable pay | the track's `pay_floor` and `pay_floor_unit` - **already written when the form arrives, and not yours to send**, like the location lists. Writing the pair into `out\config.json` on this path achieves nothing and says nothing: the script forwards only the prose fields it names, so anything else is dropped before the request, and `POST /api/writeup` would refuse the pair anyway as a field the form owns. The one thing to do with a floor here is keep it out of `fit_clause` and `fit_disqualifier` - and that is the instruction that matters on this path, because those two *are* forwarded. So prose is the one place a floor can land here, and it is the wrong one: a sentence re-read every night, counted under no kind, in place of a comparison |
 | `never_work_for` | `excluded_companies` - already written when the form was sent, not by you |
 | `preferences` | the track doc's `## What this search is looking for`, weighed - never turned into a rule-out |
 
