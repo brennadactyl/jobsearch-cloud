@@ -1,6 +1,9 @@
 # docs
 
-Three kinds of document live here, and the filename says which.
+Three kinds of document live here: a guide for the people using the tracker,
+reference docs describing the system as it is, and plans for changes not yet
+built. A `*-plan.md` filename says which of the three; the sections below say it
+for the rest.
 
 ## For the people using the tracker
 
