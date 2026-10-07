@@ -93,6 +93,20 @@ const shapes = {
     track: baseTrack,
     settings: { ...baseSettings, search_locations: "Anywhere in Washington", excluded_locations: "Spokane, WA" },
   },
+  // The lists as the settings store them, with an entry that contains a comma.
+  // The comma-joined shapes above are the older form and stay, because both
+  // arrive while the route and the main checkout ship separately - and because
+  // "Spokane, WA" above is the bug in miniature: as a string it is two places.
+  "locations-array": {
+    track: baseTrack,
+    settings: {
+      ...baseSettings,
+      priority_locations: ["Seattle area", "Vancouver, BC"],
+      search_locations: ["Anywhere in Washington"],
+      excluded_locations: ["The Bay Area"],
+      location_note: "Would move for the right team.",
+    },
+  },
   "pay-floor-year": { track: { ...baseTrack, pay_floor: "180,000", pay_floor_unit: "year" }, settings: baseSettings },
   "pay-floor-hour": { track: { ...baseTrack, pay_floor: "$95", pay_floor_unit: "hour" }, settings: baseSettings },
   "stale-profile": { track: { ...baseTrack, profile_stale_since: "2026-09-16T10:00:00Z", resume_was: "resumes/Old.pdf" }, settings: baseSettings },

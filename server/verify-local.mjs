@@ -1037,12 +1037,52 @@ const listed = buildSearchPrompt({
     });
     return p.slice(p.indexOf("9. SYNC"), p.indexOf("\n9b."));
   };
-  const withRanked = syncStep({ priority_locations: "Seattle area, Portland OR, Remote US" });
+  const withRanked = syncStep({ priority_locations: ["Seattle area", "Portland OR", "Remote US"] });
   check("step 9 asks for an area copied exactly from the ranked list, as typed",
-    withRanked.includes("posted_days, area}") && withRanked.includes('one entry from "Seattle area, Portland OR, Remote US"') &&
-    withRanked.includes("copied as written") && withRanked.includes("leave it out when the posting falls in none"));
-  check("step 9 says each comma starts a new entry, since the list is split on them",
-    withRanked.includes("Each comma starts a new entry"));
+    withRanked.includes("posted_days, area}") && withRanked.includes("     - Seattle area\n     - Portland OR\n     - Remote US") &&
+    withRanked.includes("copied as one of these lines exactly") &&
+    withRanked.includes("left out when the posting falls in none"));
+  // One entry to a line, with the entry's own characters and nothing around
+  // them. The area a run sends is matched by exact equality, so a delimiter it
+  // has to strip first is a comparison left to a model: a value arriving still
+  // wrapped equals no entry, the area is cleared, and the night reports a tidy
+  // count for having done it. These three checks are what that costs.
+  const comma = syncStep({ priority_locations: ["Vancouver, BC", "Remote Canada"] });
+  check("step 9 gives an entry holding a comma a line of its own",
+    comma.includes("     - Vancouver, BC\n     - Remote Canada"));
+  // Read off the rendered step rather than asserted about the sentence: take
+  // the printed lines, remove the one prefix the rule names, and what is left
+  // has to be the entries themselves. Any decoration added later - a quote, a
+  // bullet character, a number - survives the strip and fails here by name,
+  // which an assertion about the wording cannot do.
+  const printedEntries = (step) => step
+    .slice(step.indexOf("copied as one of these lines exactly"))
+    .split("\n")
+    .filter((line) => /^ {5}- /.test(line))
+    .map((line) => line.replace(/^ {5}- /, ""));
+  check("the printed lines carry the entries and nothing else around them",
+    JSON.stringify(printedEntries(withRanked)) === JSON.stringify(["Seattle area", "Portland OR", "Remote US"]));
+  check("and the rule names the dash as the one thing to leave behind",
+    withRanked.includes("send the text after the dash, leaving the dash and the spaces around it behind") &&
+    withRanked.includes("changing nothing else"));
+  // Each is true in one of the two states this ships through: until the stored
+  // lists are arrays, a place typed with a comma still arrives as two entries,
+  // and a run told only "a line is one place" is told about a case that cannot
+  // happen yet.
+  check("and keeps both true sentences: a line is one place, and an entry may be half of one",
+    withRanked.includes("A line is one place, commas and all") &&
+    withRanked.includes("somewhere typed with a comma may reach you as two of these lines") &&
+    withRanked.includes("`location` keeps the posting's own words"));
+  // Pins the benign overlap only: the two shapes compose identically exactly
+  // when no entry holds a comma, which is when the array buys nothing. For the
+  // case this change exists for they differ - that is the point - so this
+  // cannot fail on the interesting input and is not evidence about it.
+  check("a list of plain entries composes the same given as a string or an array",
+    syncStep({ priority_locations: "Seattle area, Portland OR, Remote US" }) === withRanked);
+  // What the string form still means while it is what is stored: the halves,
+  // each on its own line, which is the case the sentence above warns about.
+  check("and a comma inside a stored string is still two entries, as that form has always meant",
+    syncStep({ priority_locations: "Vancouver, BC" }).includes("     - Vancouver\n     - BC"));
   // Asked of the whole prompt, not of step 9 alone: the field was named in step
   // 6 while step 9 asked for nothing, and a check that slices one step cannot
   // see that.
@@ -1110,15 +1150,25 @@ const listed = buildSearchPrompt({
     buildSearchPrompt({ user: { id: "u", name: "Nobody" }, track: trackOf, settings, feeds: [] });
   const stepOf5 = (p) => p.slice(p.indexOf("\n5. "), p.indexOf("\n6. "));
   const full = compose({
-    priority_locations: "Seattle, Portland, OR",
-    search_locations: "US, Greater Toronto area",
-    excluded_locations: "Texas",
+    priority_locations: ["Seattle", "Portland OR", "Vancouver, BC"],
+    search_locations: ["US", "Greater Toronto area"],
+    excluded_locations: ["Texas"],
     location_note: "Open to relocating for the right team.",
   });
   const five = stepOf5(full);
-  check("step 5 prints each location list exactly as typed",
-    five.includes("always searched:** Seattle, Portland, OR") && five.includes("Also searched:** US, Greater Toronto area") &&
-    five.includes("Ruled out:** Texas") && five.includes("Open to relocating for the right team."));
+  check("step 5 prints each location list's entries as typed, one to a line",
+    five.includes("always searched:**\n     - Seattle\n     - Portland OR\n     - Vancouver, BC") &&
+    five.includes("Also searched:**\n     - US\n     - Greater Toronto area") &&
+    five.includes("Ruled out:**\n     - Texas"));
+  // The note is a sentence rather than a list, so it is printed as written -
+  // quoting it would read as a place.
+  check("and prints the person's own note as prose, unquoted",
+    five.includes("**In Nobody's words:** Open to relocating for the right team."));
+  // Either shape reads, since this prompt and the helper that reads the same
+  // lists ship by different mechanisms.
+  check("a comma-joined list prints the same entries as the array",
+    stepOf5(compose({ priority_locations: "Seattle, Portland OR", excluded_locations: "Texas" })) ===
+    stepOf5(compose({ priority_locations: ["Seattle", "Portland OR"], excluded_locations: ["Texas"] })));
   check("and states the fixed order: wanted first, then ruled out, then searched",
     /wanted first always qualifies.*ruled out is out.*searched place qualifies; anywhere else is out/.test(five));
   check("and the fixed remote and relocation rules, deferring to the person's own note",
@@ -3708,6 +3758,68 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     saved.location_note === "open to relocating for the right team", JSON.stringify([lcSave.json, saved]));
   check("and says what it stored",
     lcSave.json?.locations?.search_locations === "US, Greater Seattle area , Australia");
+
+  // The one assertion that spans the stored shape and the composed text: the
+  // places an account saved have to turn up in its own prompt, fetched from
+  // the route. Every other location check composes the prompt from settings it
+  // hands over itself, so a storage layer that began serving `prompt.js` a
+  // shape it couldn't read would empty the whole section with all of them
+  // still green.
+  //
+  // The track is written up here because one without a `role_search_line` has
+  // no prompt at all - the route answers 409 - and a check that reads `.text`
+  // from that measures an error body for the absence of every place in it. The
+  // status is asserted so it cannot do that again.
+  {
+    const token = await lcUser("composed");
+    await req("POST", "/api/config", { token, body: { tracks: [
+      { key: "SWE", label: "SWE", full_description: "Senior engineering roles", role_search_line: "senior software engineer" },
+    ] } });
+    await req("POST", "/api/settings", { token, body: {
+      search_locations: "US, Greater Seattle area, Australia",
+      excluded_locations: "Portland, OR",
+      priority_locations: "Seattle, Portland OR, Raleigh NC",
+    } });
+    const composed = await req("GET", "/api/prompt/SWE", { token });
+    const absent = ["Seattle", "Portland OR", "Raleigh NC", "Greater Seattle area", "Australia"]
+      .filter((place) => !composed.text.includes(place));
+    check("and an account's own prompt names the places it saved, read back through the route",
+      composed.status === 200 && composed.text.includes("WHERE THIS SEARCH LOOKS") && absent.length === 0,
+      `status ${composed.status}, not named: ${absent.join(" | ") || "none"}`);
+
+    // What the step prints and what the route files have to be the same thing.
+    // They are written in two places by two people, nothing has stood over the
+    // join, and it has slipped twice in one day: once when the printed form
+    // gained quotes a run was asked to remove, once when a matcher learned to
+    // remove quotes the step had stopped printing.
+    //
+    // So: take each entry exactly as the step prints it, send it as a lead's
+    // `area`, and require the lead to come back carrying it. A run that copies
+    // the line faithfully is what this imitates, so either side changing
+    // format alone fails here by name rather than clearing a night of areas
+    // and reporting a tidy count. Done through the API rather than by importing
+    // the matcher, because the question is what the route stores.
+    const printed = composed.text
+      .slice(composed.text.indexOf("copied as one of these lines exactly"))
+      .split("\n")
+      .filter((line) => /^ {5}- /.test(line))
+      .map((line) => line.replace(/^ {5}- /, ""));
+    // Each url needs its own run of five or more digits: ../url.js keys a
+    // posting on the host plus those, so three urls differing by one digit are
+    // one posting and two of these leads would be dropped as duplicates.
+    const stamp = Date.now();
+    const sent = await req("POST", "/api/leads", { token, body: { leads: printed.map((area, i) => ({
+      search: "SWE", url: `https://example.com/area-join/${stamp}${100000 + i}`, company: "Acme", title: "SWE",
+      location: "Seattle, WA", area,
+    })) } });
+    const filed = ((await req("GET", "/api/data?screened=all", { token })).json?.leads || [])
+      .filter((lead) => lead.url.includes(`/area-join/${stamp}`))
+      .map((lead) => lead.area);
+    check("the step prints its ranked entries in the form the route files as an area",
+      printed.length === 3 && sent.json?.area_cleared === 0 &&
+      JSON.stringify(filed.slice().sort()) === JSON.stringify(printed.slice().sort()),
+      `printed ${JSON.stringify(printed)}, filed ${JSON.stringify(filed)}, cleared ${sent.json?.area_cleared}`);
+  }
   check("a list left out of a save keeps its value",
     (await req("POST", "/api/settings", { token: LC, body: { location_note: "" } })).status === 200 &&
     (await lcSettings(LC)).priority_locations === "Seattle, Portland OR, Raleigh NC" && (await lcSettings(LC)).location_note === "");
