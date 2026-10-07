@@ -3758,6 +3758,68 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     saved.location_note === "open to relocating for the right team", JSON.stringify([lcSave.json, saved]));
   check("and says what it stored",
     lcSave.json?.locations?.search_locations === "US, Greater Seattle area , Australia");
+
+  // The one assertion that spans the stored shape and the composed text: the
+  // places an account saved have to turn up in its own prompt, fetched from
+  // the route. Every other location check composes the prompt from settings it
+  // hands over itself, so a storage layer that began serving `prompt.js` a
+  // shape it couldn't read would empty the whole section with all of them
+  // still green.
+  //
+  // The track is written up here because one without a `role_search_line` has
+  // no prompt at all - the route answers 409 - and a check that reads `.text`
+  // from that measures an error body for the absence of every place in it. The
+  // status is asserted so it cannot do that again.
+  {
+    const token = await lcUser("composed");
+    await req("POST", "/api/config", { token, body: { tracks: [
+      { key: "SWE", label: "SWE", full_description: "Senior engineering roles", role_search_line: "senior software engineer" },
+    ] } });
+    await req("POST", "/api/settings", { token, body: {
+      search_locations: "US, Greater Seattle area, Australia",
+      excluded_locations: "Portland, OR",
+      priority_locations: "Seattle, Portland OR, Raleigh NC",
+    } });
+    const composed = await req("GET", "/api/prompt/SWE", { token });
+    const absent = ["Seattle", "Portland OR", "Raleigh NC", "Greater Seattle area", "Australia"]
+      .filter((place) => !composed.text.includes(place));
+    check("and an account's own prompt names the places it saved, read back through the route",
+      composed.status === 200 && composed.text.includes("WHERE THIS SEARCH LOOKS") && absent.length === 0,
+      `status ${composed.status}, not named: ${absent.join(" | ") || "none"}`);
+
+    // What the step prints and what the route files have to be the same thing.
+    // They are written in two places by two people, nothing has stood over the
+    // join, and it has slipped twice in one day: once when the printed form
+    // gained quotes a run was asked to remove, once when a matcher learned to
+    // remove quotes the step had stopped printing.
+    //
+    // So: take each entry exactly as the step prints it, send it as a lead's
+    // `area`, and require the lead to come back carrying it. A run that copies
+    // the line faithfully is what this imitates, so either side changing
+    // format alone fails here by name rather than clearing a night of areas
+    // and reporting a tidy count. Done through the API rather than by importing
+    // the matcher, because the question is what the route stores.
+    const printed = composed.text
+      .slice(composed.text.indexOf("copied as one of these lines exactly"))
+      .split("\n")
+      .filter((line) => /^ {5}- /.test(line))
+      .map((line) => line.replace(/^ {5}- /, ""));
+    // Each url needs its own run of five or more digits: ../url.js keys a
+    // posting on the host plus those, so three urls differing by one digit are
+    // one posting and two of these leads would be dropped as duplicates.
+    const stamp = Date.now();
+    const sent = await req("POST", "/api/leads", { token, body: { leads: printed.map((area, i) => ({
+      search: "SWE", url: `https://example.com/area-join/${stamp}${100000 + i}`, company: "Acme", title: "SWE",
+      location: "Seattle, WA", area,
+    })) } });
+    const filed = ((await req("GET", "/api/data?screened=all", { token })).json?.leads || [])
+      .filter((lead) => lead.url.includes(`/area-join/${stamp}`))
+      .map((lead) => lead.area);
+    check("the step prints its ranked entries in the form the route files as an area",
+      printed.length === 3 && sent.json?.area_cleared === 0 &&
+      JSON.stringify(filed.slice().sort()) === JSON.stringify(printed.slice().sort()),
+      `printed ${JSON.stringify(printed)}, filed ${JSON.stringify(filed)}, cleared ${sent.json?.area_cleared}`);
+  }
   check("a list left out of a save keeps its value",
     (await req("POST", "/api/settings", { token: LC, body: { location_note: "" } })).status === 200 &&
     (await lcSettings(LC)).priority_locations === "Seattle, Portland OR, Raleigh NC" && (await lcSettings(LC)).location_note === "");
