@@ -5,6 +5,8 @@
  * because the token it carries is the one being discarded.
  */
 import { z } from "zod";
+import { APP_APPLIED } from "../domain/constants";
+import { today } from "../domain/format";
 import type { SearchEdit } from "../domain/panel";
 import type { Places } from "../domain/places";
 import {
@@ -410,16 +412,14 @@ export function addApplication(link: string): Promise<Application> {
   return request("/api/update", updateAppSchema, {
     method: "POST",
     // Every column blank but the link, status and applied date: a link with no
-    // company, role or location is what queues the overnight fill. The UTC date
-    // is inlined, as
-    // domain/format's today() computes it, so this layer imports no domain code.
+    // company, role or location is what queues the overnight fill.
     body: {
       type: "application",
       company: "",
       title: "",
       location: "",
-      dateApplied: new Date().toISOString().slice(0, 10),
-      status: "Applied",
+      dateApplied: today(),
+      status: APP_APPLIED,
       notes: "",
       team: "",
       setup: "",

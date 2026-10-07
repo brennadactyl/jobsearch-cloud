@@ -1,4 +1,5 @@
 import type { Application, Lead } from "../api/schema";
+import { LEAD_NOT_A_FIT } from "./constants";
 import { safeUrl } from "./format";
 import { tierRank, type TierSettings } from "./geo";
 import { isWaiting, lastMoved } from "./stages";
@@ -61,7 +62,7 @@ export function leadComparator(sortKey: string, settings: TierSettings): Compare
   return (
     LEAD_SORTS.get(sortKey) ??
     inOrder<Lead>(
-      lastIf((l) => l.status === "Not a fit"),
+      lastIf((l) => l.status === LEAD_NOT_A_FIT),
       byNumber((l) => tierRank(l, settings)),
       byText((l) => l.found, true),
     )

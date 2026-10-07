@@ -11,6 +11,14 @@ import { useEffect } from "react";
 
 export const WHEEL_TARGET = "data-wheel-target";
 
+/**
+ * What one "line" of wheel movement is worth, for a device that reports lines
+ * rather than pixels. A stand-in for the line height the browser would have
+ * used: only the proportion matters here, since the number is multiplied by
+ * the lines the device reports and handed to a scroll.
+ */
+const PIXELS_PER_WHEEL_LINE = 16;
+
 /** Whether `el` scrolls vertically and has room to move `dy` pixels that way. */
 function canScroll(el: Element, dy: number): boolean {
   const overflow = getComputedStyle(el).overflowY;
@@ -43,7 +51,7 @@ export function wheelTarget(from: Element, dy: number, doc: Document = document)
 /** A wheel's vertical distance in pixels, whichever unit the device reports it in. */
 function pixelsOf(e: WheelEvent, target: HTMLElement): number {
   if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) {
-    return e.deltaY * 16;
+    return e.deltaY * PIXELS_PER_WHEEL_LINE;
   }
   if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
     return e.deltaY * target.clientHeight;

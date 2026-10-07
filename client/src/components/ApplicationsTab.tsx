@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Application, TrackerData } from "../api/schema";
 import { useAddApplication, useDeleteApplication } from "../api/mutations";
-import { LABELS } from "../domain/constants";
+import { APPLICATIONS, LABELS } from "../domain/constants";
 import { APP_FILTERS, LIVE_FILTER, appFilterKeeps, appRows, drillKeeps, resolveAppFilter } from "../domain/drills";
 import { applicationColumns } from "../domain/export";
 import { daysSince, hostOf, safeUrl } from "../domain/format";
@@ -50,7 +50,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
       const same = data.applications.find((a) => String(a.link || "").trim().toLowerCase() === url.toLowerCase());
       if (same) {
         setLink("");
-        selectRow("applications", String(same.id));
+        selectRow(APPLICATIONS, String(same.id));
         saved.note("Already in your applications");
         return;
       }
@@ -60,7 +60,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
       {
         onSuccess: (app) => {
           setLink("");
-          selectRow("applications", String(app.id));
+          selectRow(APPLICATIONS, String(app.id));
           saved.note(url ? "Added — it fills in overnight" : "Saved");
         },
       },
@@ -131,7 +131,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
               {f}
             </button>
           ))}
-          <DrillChip drill={drill} ctx={data} clearTo={pathWithoutDrill("applications", params)} />
+          <DrillChip drill={drill} ctx={data} clearTo={pathWithoutDrill(APPLICATIONS, params)} />
         </div>
       </div>
     </>
@@ -195,7 +195,7 @@ export default function ApplicationsTab({ data }: { data: TrackerData }) {
                 key={a.id}
                 selected={a.id === sel.id}
                 tierClass={g ? g.cssClass : ""}
-                onSelect={() => selectRow("applications", String(a.id))}
+                onSelect={() => selectRow(APPLICATIONS, String(a.id))}
               >
                 <div className="md-row-top">
                   <span className="co">{label}</span>
@@ -359,7 +359,7 @@ function AppsGrid({
                       .filter(Boolean)
                       .join(" ");
                     const ph = grp.key === "waiting" ? "Reads overnight" : grp.key === "stuck" ? "Type it in" : "";
-                    const toggle = () => toggleGridRow("applications", a.id);
+                    const toggle = () => toggleGridRow(APPLICATIONS, a.id);
                     return (
                       <Fragment key={a.id}>
                         <ExpandableRow id={a.id} className={cls} onToggle={toggle}>

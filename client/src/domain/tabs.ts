@@ -5,7 +5,7 @@
  */
 import type { Application, Lead, Settings, Track } from "../api/schema";
 import { ALL_FILTER, isAppsTarget, type DrillTarget } from "./drills";
-import { ALL_LEADS } from "./constants";
+import { ALL_LEADS, APPLICATIONS, DASHBOARD } from "./constants";
 import { fillState } from "./rows";
 import { isoDay } from "./format";
 import { SCREENED } from "./screened";
@@ -49,10 +49,10 @@ export function buildTracks(list: readonly Track[]): Record<string, Track> {
 }
 
 export function pathForTab(id: string): string {
-  if (id === "dashboard") {
+  if (id === DASHBOARD) {
     return "/";
   }
-  if (id === "applications") {
+  if (id === APPLICATIONS) {
     return "/applications";
   }
   if (id === ALL_LEADS) {
@@ -89,17 +89,17 @@ export function buildTabs(
 ): Tab[] {
   const tabs: Tab[] = [
     {
-      id: "dashboard",
+      id: DASHBOARD,
       kind: "overview",
       label: settings.overview_label || "Overview",
       n: null,
       warn: null,
       paused: "",
       fresh: 0,
-      path: pathForTab("dashboard"),
+      path: pathForTab(DASHBOARD),
     },
     {
-      id: "applications",
+      id: APPLICATIONS,
       kind: "applications",
       label: settings.applications_label || "Applications",
       n: applications.length,
@@ -110,7 +110,7 @@ export function buildTabs(
         : null,
       paused: "",
       fresh: 0,
-      path: pathForTab("applications"),
+      path: pathForTab(APPLICATIONS),
     },
     {
       // The Overview's tiles count across tracks, and each number has to open

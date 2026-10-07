@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { usePinnedLayout } from "../ui/hooks";
 import type { Settings, TrackerData } from "../api/schema";
-import { ALL_LEADS, LABELS } from "../domain/constants";
+import { ALL_LEADS, APPLICATIONS, LABELS } from "../domain/constants";
 import { GONE_QUIET_DAYS, drillCount, drillRows, type DrillTarget, type RowSource } from "../domain/drills";
 import { shortDate } from "../domain/format";
 import { tierColour } from "../domain/geo";
@@ -68,7 +68,7 @@ export default function Overview({
   const tracks = buildTracks(data.tracks);
   const trackKeys = Object.keys(tracks);
 
-  const appliedCount = drillCount({ tab: "applications", drill: "applied" }, src);
+  const appliedCount = drillCount({ tab: APPLICATIONS, drill: "applied" }, src);
   // The complement of the count above, so the two cannot disagree about which
   // rows are which.
   const toApply = data.applications.length - appliedCount;
@@ -82,11 +82,11 @@ export default function Overview({
     {
       title: "Applied",
       footnote: toApply ? `plus ${toApply} still to apply` : "in your Applications tab",
-      tab: "applications",
+      tab: APPLICATIONS,
       drill: "applied",
     },
-    { title: "In conversation", footnote: "screen or loop stage", tab: "applications", drill: "in-conversation" },
-    { title: "Gone quiet", footnote: `applied ${GONE_QUIET_DAYS}+ days ago`, tab: "applications", drill: "gone-quiet" },
+    { title: "In conversation", footnote: "screen or loop stage", tab: APPLICATIONS, drill: "in-conversation" },
+    { title: "Gone quiet", footnote: `applied ${GONE_QUIET_DAYS}+ days ago`, tab: APPLICATIONS, drill: "gone-quiet" },
   ];
 
   return (
@@ -549,7 +549,7 @@ const FLOW_TONES: Record<string, string> = {
 };
 
 function PipelineSection({ data, appliedCount, toApply }: { data: TrackerData; appliedCount: number; toApply: number }) {
-  const active = drillCount({ tab: "applications", drill: "in-conversation" }, data);
+  const active = drillCount({ tab: APPLICATIONS, drill: "in-conversation" }, data);
   return (
     <Section
       id="pipeline"
@@ -650,9 +650,9 @@ function FlowChart({ data, appliedCount }: { data: TrackerData; appliedCount: nu
 
 /** The Offer row that closes the flow, and the outcome legend under it. */
 function FlowFoot({ data, offer, appliedCount }: { data: TrackerData; offer: Count; appliedCount: number }) {
-  const sent = drillRows({ tab: "applications", drill: "applied" }, data);
+  const sent = drillRows({ tab: APPLICATIONS, drill: "applied" }, data);
   const countStatus = (s: string) => sent.filter((a) => a.status === s).length;
-  const heard = drillCount({ tab: "applications", drill: "responded" }, data);
+  const heard = drillCount({ tab: APPLICATIONS, drill: "responded" }, data);
   const offerLabel = FORWARD_STAGES[FORWARD_STAGES.length - 1].label;
   return (
     <>
@@ -747,8 +747,8 @@ function WaitingList({ data }: { data: TrackerData }) {
                   {/* Selecting the row first is what makes the tab open on it. */}
                   <Link
                     className="wait-row"
-                    to={pathForTab("applications")}
-                    onClick={() => selectRow("applications", String(app.id))}
+                    to={pathForTab(APPLICATIONS)}
+                    onClick={() => selectRow(APPLICATIONS, String(app.id))}
                   >
                     <span className="wait-co">{app.company || "Untitled"}</span>
                     <span className="wait-role">{app.title}</span>
@@ -760,7 +760,7 @@ function WaitingList({ data }: { data: TrackerData }) {
               ))}
             </ol>
           )}
-          <Link className="jumplink ch-more" to={pathForTarget({ tab: "applications", drill: "waiting" })}>
+          <Link className="jumplink ch-more" to={pathForTarget({ tab: APPLICATIONS, drill: "waiting" })}>
             See all waiting ›
           </Link>
         </>

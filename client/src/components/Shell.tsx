@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import type { TrackerData } from "../api/schema";
-import { ALL_LEADS } from "../domain/constants";
+import { ALL_LEADS, APPLICATIONS, DASHBOARD } from "../domain/constants";
 import { pausedDay } from "../domain/runs";
 import { SCREENED } from "../domain/screened";
 import { buildTabs, buildTracks, pathForTab } from "../domain/tabs";
@@ -169,8 +169,8 @@ export default function Shell({
             {/* Overview owns its scroll region: the tiles are pinned outside
                 it, so the wrapper can't live out here. */}
             {/* Built from pathForTab, which the tabs link to, so the two can't drift. */}
-            <Route path={pathForTab("dashboard")} element={<Overview data={data} {...pinned} />} />
-            <Route path={pathForTab("applications")} element={<ApplicationsTab data={data} />} />
+            <Route path={pathForTab(DASHBOARD)} element={<Overview data={data} {...pinned} />} />
+            <Route path={pathForTab(APPLICATIONS)} element={<ApplicationsTab data={data} />} />
             <Route path={pathForTab(ALL_LEADS)} element={<LeadsTab data={data} trackKey={ALL_LEADS} />} />
             <Route path={pathForTab(SCREENED)} element={<ScreenedTab data={data} />} />
             {/* pathForTab's /t/<key>, for every track. */}
