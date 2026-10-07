@@ -640,12 +640,17 @@ export class Db {
       ...tracks.map((t) =>
         this.d1
           .prepare(
-            `INSERT INTO tracks (user_id, key, label, sort_order)
-             SELECT ?, ?, ?, ? WHERE ${mine}
+            `INSERT INTO tracks (user_id, key, label, sort_order, pay_floor, pay_floor_unit)
+             SELECT ?, ?, ?, ?, ?, ? WHERE ${mine}
              ON CONFLICT(user_id, key) DO UPDATE SET
-               label = excluded.label, sort_order = excluded.sort_order`
+               label = excluded.label, sort_order = excluded.sort_order,
+               pay_floor = excluded.pay_floor, pay_floor_unit = excluded.pay_floor_unit`
           )
-          .bind(this.userId, t.key, t.label, t.sort_order, this.userId, now)
+          .bind(
+            this.userId, t.key, t.label, t.sort_order,
+            t.pay_floor || "", t.pay_floor_unit || "",
+            this.userId, now
+          )
       ),
       // The "never ran" row each track needs, as replaceTracks makes one.
       ...tracks.map((t) =>
