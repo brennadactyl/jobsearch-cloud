@@ -3970,6 +3970,96 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("another account's places are its own",
     (await lcSettings(LC_B)).priority_locations.length === 0 &&
     (await lcSettings(LC_B)).search_locations.length === 200);
+
+  console.log("\n== converting the stored location lists ==");
+  // Storing every list as its entries. Nothing depends on it - a comma-joined
+  // value is already read as its entries - so what is checked is that the
+  // conversion stores those entries and nothing else.
+  //
+  // The rules are checked in process, because no route writes the old shape any
+  // more: a list sent comma-joined is converted on the way in, so a database
+  // this suite built from empty has no row left to convert. Each expectation is
+  // written out rather than derived, since asking whether the entries equal the
+  // entries they came from holds however wrong the rule is.
+  // Imported the way the prompt composer is, and for the same reason: this
+  // exercises a function rather than taking a list from it to check against.
+  const { applyConversion, conversionPlan, planSummary } = await import("./src/location-convert.js");
+  const legacyRows = [
+    { user_id: "u1", key: "search_locations", value: "US, Greater Seattle area , Australia" },
+    { user_id: "u1", key: "priority_locations", value: '["Seattle","Vancouver, BC"]' },
+    { user_id: "u2", key: "excluded_locations", value: "Texas" },
+    { user_id: "u2", key: "search_locations", value: "[not json], Seattle" },
+    { user_id: "u3", key: "search_locations", value: "[]" },
+  ];
+  const plan = conversionPlan(legacyRows);
+  check("a comma-joined list converts to the places it already reads as",
+    plan.convert.find((r) => r.user_id === "u1" && r.key === "search_locations")?.to ===
+      JSON.stringify(["US", "Greater Seattle area", "Australia"]),
+    JSON.stringify(plan.convert));
+  check("a list already holding its entries converts to nothing",
+    !plan.convert.some((r) => r.user_id === "u1" && r.key === "priority_locations") &&
+    plan.alreadyEntries === 2, JSON.stringify(plan));
+  check("a list whose own first place starts with a bracket is read the old way",
+    plan.convert.find((r) => r.user_id === "u2" && r.key === "search_locations")?.to ===
+      JSON.stringify(["[not json]", "Seattle"]),
+    JSON.stringify(plan.convert));
+  check("the summary counts lists and accounts without naming a place",
+    JSON.stringify(planSummary(plan)) === JSON.stringify({ lists: 3, accounts: 2, alreadyEntries: 2 }),
+    JSON.stringify(planSummary(plan)));
+
+  // What the writing does with a plan, which no API check can reach: a
+  // deployment this suite built has nothing left to convert, so the writing
+  // never runs there. The plan and the recorded calls come from different code,
+  // so this isn't the plan agreeing with itself.
+  const written = [];
+  const wroteCount = await applyConversion(plan, async (userId, key, value) => {
+    written.push(`${userId}/${key}=${value}`);
+  });
+  check("converting writes one row per list it planned, and nothing else",
+    wroteCount === 3 && JSON.stringify(written) === JSON.stringify([
+      `u1/search_locations=${JSON.stringify(["US", "Greater Seattle area", "Australia"])}`,
+      `u2/excluded_locations=${JSON.stringify(["Texas"])}`,
+      `u2/search_locations=${JSON.stringify(["[not json]", "Seattle"])}`,
+    ]), JSON.stringify(written));
+  const untouched = [];
+  await applyConversion({ convert: [] }, async (...a) => { untouched.push(a); });
+  check("and a plan with nothing to convert writes nothing at all", untouched.length === 0);
+
+  const cvUnknown = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Nobody ${lcRun}` } });
+  check("converting names an account nobody has as a 404", cvUnknown.status === 404, JSON.stringify(cvUnknown.json));
+  const cvBefore = await lcSettings(LC);
+
+  // The body that names nothing is the body that would convert every account,
+  // so it is the one that must not write. `confirm` is what writes, and the
+  // reply says so rather than leaving a caller to find out from the counts.
+  const cvBare = await req("POST", "/api/locations/convert", { admin: true, body: {} });
+  check("a bare body reports and writes nothing, and says what would write",
+    cvBare.status === 200 && cvBare.json?.dryRun === true &&
+    typeof cvBare.json?.note === "string" && cvBare.json.note.includes("confirm"),
+    JSON.stringify(cvBare.json));
+  for (const [why, body] of [
+    ["dryRun true, which this route doesn't take", { dryRun: true }],
+    ["dryRun false, which doesn't write either", { dryRun: false }],
+    ["confirm as the string \"true\"", { confirm: "true" }],
+  ]) {
+    const res = await req("POST", "/api/locations/convert", { admin: true, body });
+    check(`and so does ${why}`, res.status === 200 && res.json?.dryRun === true, JSON.stringify(res.json));
+  }
+
+  const cvReport = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Locations a ${lcRun}` } });
+  check("a report says what it looked at, and that there is nothing to convert",
+    cvReport.status === 200 && cvReport.json?.dryRun === true && cvReport.json?.lists === 0 &&
+    cvReport.json?.alreadyEntries >= 3, JSON.stringify(cvReport.json));
+  const cvRun = await req("POST", "/api/locations/convert", { admin: true, body: { user: `Locations a ${lcRun}`, confirm: true } });
+  check("a confirmed run says the same of a deployment already converted",
+    cvRun.status === 200 && cvRun.json?.dryRun === false && cvRun.json?.lists === 0 &&
+    cvRun.json?.alreadyEntries >= 3, JSON.stringify(cvRun.json));
+  check("with every place served exactly as before",
+    JSON.stringify(await lcSettings(LC)) === JSON.stringify(cvBefore));
+  const cvAll = await req("POST", "/api/locations/convert", { admin: true, body: {} });
+  check("and naming no account reads every account's lists, not one's",
+    cvAll.status === 200 && cvAll.json?.alreadyEntries > cvReport.json?.alreadyEntries,
+    JSON.stringify([cvAll.json, cvReport.json]));
 }
 
 

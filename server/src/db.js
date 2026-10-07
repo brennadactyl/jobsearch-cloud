@@ -278,31 +278,61 @@ export const LOCATION_SETTING_KEYS = ["search_locations", "excluded_locations", 
 export const LOCATION_LIST_KEYS = LOCATION_SETTING_KEYS.filter((k) => k !== "location_note");
 
 /**
+ * Whether a stored location list already holds its entries, rather than being a
+ * comma-joined line from before the lists did. A list whose own first entry
+ * starts with "[" is not one, which is why this parses rather than looking.
+ * @param {unknown} value the `meta` value as stored
+ * @returns {boolean}
+ */
+export function isStoredAsEntries(value) {
+  if (typeof value !== "string" || !value.trim().startsWith("[")) {
+    return false;
+  }
+  try {
+    return Array.isArray(JSON.parse(value.trim()));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A stored location list, as entries. A JSON array is what is written now. A
  * bare comma-joined string is a value written before the lists held entries,
- * and the old split rule is the only thing that says what it meant - which is
- * why a list whose own first entry starts with "[" is still read that way when
- * it doesn't parse.
+ * and the old split rule is the only thing that says what it meant.
  * @param {unknown} value the `meta` value as stored
  * @returns {string[]}
  */
-function storedLocationList(value) {
+export function storedLocationList(value) {
   if (typeof value !== "string") {
     return [];
   }
   const text = value.trim();
-  if (text.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) {
-        return locationEntries(parsed);
-      }
-    } catch {
-      // Not JSON, so it is a list that happens to start with a bracket.
-    }
-  }
-  return locationEntries(text);
+  return locationEntries(isStoredAsEntries(text) ? JSON.parse(text) : text);
 }
+
+/**
+ * Every stored location list on the deployment, or one account's, exactly as
+ * stored. A read, so that what needs rewriting can be counted before anything
+ * is - and raw, because whether a value is already entries is the question, and
+ * a parsed one can't answer it.
+ * @param {D1Database} d1
+ * @param {string} [userId] one account, or every account when left out
+ * @returns {Promise<{user_id: string, key: string, value: string}[]>}
+ */
+export async function storedLocationRows(d1, userId) {
+  const keys = LOCATION_LIST_KEYS.map(() => "?").join(", ");
+  const sql = `SELECT user_id, key, value FROM meta WHERE key IN (${keys})${userId ? " AND user_id = ?" : ""}
+               ORDER BY user_id, key`;
+  const binds = userId ? [...LOCATION_LIST_KEYS, userId] : LOCATION_LIST_KEYS;
+  const res = await d1.prepare(sql).bind(...binds).all();
+  return res.results || [];
+}
+
+// Converting a stored list writes through `Db`'s own `setSetting`, bound to the
+// account whose row it is, rather than through a statement of its own here. The
+// SQL would have been the same, and that is the argument: a second copy of it
+// would be the only statement in this file that no check reaches, since a
+// deployment with nothing left to convert never executes it.
 // ...and settings only prompt.js reads: the per-user half of the search config
 // (TRACK_CONFIG_FIELDS is the per-track half). Stored as verbatim prose - don't
 // rebuild these sentences from keywords, which would drop hand-written detail
