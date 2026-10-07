@@ -11,7 +11,7 @@ import * as client from "./api/client";
 import type { Intake, IntakeAnswers, TrackerData } from "./api/schema";
 import { NOW, data as fixture } from "./domain/fixture";
 import { emptyAnswers } from "./domain/onboarding";
-import { GENERAL_KEYS, GENERAL_QUESTIONS, SEARCH_QUESTIONS } from "./domain/panel";
+import { DEFAULT_PAY_UNIT, GENERAL_KEYS, GENERAL_QUESTIONS, PAY_UNITS, SEARCH_QUESTIONS } from "./domain/panel";
 import { clearPrefs } from "./ui/prefs";
 
 const newAccount: TrackerData = { ...fixture, tracks: [], leads: [], applications: [], user: { id: "u9", name: "Sam" } };
@@ -143,6 +143,27 @@ describe("the setup form", () => {
     renderAt("/");
     await screen.findByRole("heading", { name: "Set up your job search" });
   }
+
+  it("asks the pay floor as an amount and a unit, the pair the account panel asks", async () => {
+    await openSetup();
+
+    expect(screen.getByLabelText(SEARCH_QUESTIONS.pay_floor)).toBeInTheDocument();
+    const unit = screen.getByLabelText(SEARCH_QUESTIONS.pay_floor_unit);
+    // The same options the panel offers, from the same list, so the two
+    // screens can't come to offer different units for one answer.
+    expect([...unit.querySelectorAll("option")].map((o) => o.textContent)).toEqual(PAY_UNITS.map((u) => u.label));
+    // A year is what almost every stated salary is, so the question is
+    // answered before it is asked.
+    expect(unit).toHaveValue(DEFAULT_PAY_UNIT);
+  });
+
+  it("keeps the unit someone picks", async () => {
+    await openSetup();
+
+    await userEvent.selectOptions(screen.getByLabelText(SEARCH_QUESTIONS.pay_floor_unit), "hour");
+
+    expect(screen.getByLabelText(SEARCH_QUESTIONS.pay_floor_unit)).toHaveValue("hour");
+  });
 
   it("asks about a search in the words the account panel asks them in", async () => {
     await openSetup();

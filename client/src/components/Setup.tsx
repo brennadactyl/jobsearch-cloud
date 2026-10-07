@@ -10,6 +10,7 @@ import { useId, useRef, useState, type ReactNode } from "react";
 import { deleteDocument, failureOf, putDocument, submitIntake } from "../api/client";
 import { PRONOUNS, type IntakeAnswers, type RoleAnswer, type TrackerData } from "../api/schema";
 import {
+  answersToSend,
   emptyAnswers,
   emptyRole,
   isOlderWordFile,
@@ -18,7 +19,7 @@ import {
   setupProblems,
   type SetupProblems,
 } from "../domain/onboarding";
-import { GENERAL_QUESTIONS, SEARCH_QUESTIONS } from "../domain/panel";
+import { DEFAULT_PAY_UNIT, GENERAL_QUESTIONS, PAY_UNITS, SEARCH_QUESTIONS } from "../domain/panel";
 import { listEntries, PLACE_QUESTIONS } from "../domain/places";
 import { saved, useSaved } from "../ui/saved";
 import PlaceChips from "./PlaceChips";
@@ -211,11 +212,27 @@ function RoleBlock({
         />
       </Field>
       <Field
-        label={<label htmlFor={`${id}-pay`}>Lowest acceptable pay</label>}
+        label={<label htmlFor={`${id}-pay`}>{SEARCH_QUESTIONS.pay_floor}</label>}
         optional
         hint="A posting stays if its range reaches this, or if it names no pay at all. One whose whole range sits below it is screened out."
       >
-        <input id={`${id}-pay`} type="text" placeholder="$180k base" value={role.min_pay} onChange={set("min_pay")} />
+        {/* The amount and its unit are one answer, asked the way the account
+            panel asks it about a search that exists: an amount alone doesn't
+            say whether 95 is a year or an hour, and the search has to pick. */}
+        <div className="pay-floor">
+          <input id={`${id}-pay`} type="text" placeholder="$180k base" value={role.min_pay} onChange={set("min_pay")} />
+          <select
+            aria-label={SEARCH_QUESTIONS.pay_floor_unit}
+            value={role.min_pay_unit || DEFAULT_PAY_UNIT}
+            onChange={set("min_pay_unit")}
+          >
+            {PAY_UNITS.map((u) => (
+              <option key={u.value} value={u.value}>
+                {u.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </Field>
     </div>
   );
@@ -316,7 +333,7 @@ export default function Setup({
     setSending(true);
     saved.saving("Sending…");
     try {
-      await submitIntake({ ...answers, resume_files: stored.map((a) => a.path) });
+      await submitIntake(answersToSend({ ...answers, resume_files: stored.map((a) => a.path) }));
       setRefused([]);
       saved.ok();
       onSent();

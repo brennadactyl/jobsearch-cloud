@@ -66,7 +66,7 @@ export function safeDocumentName(original: string): string {
 }
 
 export function emptyRole(): RoleAnswer {
-  return { name: "", titles: "", company_kinds: "", rule_outs: "", min_pay: "" };
+  return { name: "", titles: "", company_kinds: "", rule_outs: "", min_pay: "", min_pay_unit: "" };
 }
 
 export function emptyAnswers(displayName: string): IntakeAnswers {
@@ -94,6 +94,21 @@ export type SetupProblems = Partial<
  * What stops a send. `files` is every attachment the resume section lists, stored
  * or about to be.
  */
+/**
+ * The answers as they should be sent: a pay unit only where there is an amount
+ * for it to be the unit of. The account panel's `payEdit` keeps the same rule
+ * about a search that exists - a unit alone says nothing, and storing one would
+ * leave a search claiming an hourly floor of nothing.
+ */
+export function answersToSend(answers: IntakeAnswers): IntakeAnswers {
+  return {
+    ...answers,
+    roles: answers.roles.map((role) =>
+      role.min_pay.trim() ? role : { ...role, min_pay_unit: "" },
+    ),
+  };
+}
+
 export function setupProblems(answers: IntakeAnswers, files: readonly string[]): SetupProblems {
   const found: SetupProblems = {};
   if (!answers.resume_text.trim()) {
