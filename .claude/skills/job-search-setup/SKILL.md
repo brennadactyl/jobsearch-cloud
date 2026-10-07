@@ -191,12 +191,18 @@ Once per person:
 - **Display title** for the page ("Jordan's Job Search").
 - **Pronouns** - the `pronouns` setting the prompt uses when it writes about
   them. Ask; never infer from a name or resume. Empty keeps the prompt generic.
-- **A compensation floor**, if any. It goes in `fit_clause` /
-  `fit_disqualifier` and screens on a *stated* range only: "a range topping out
-  below $X" disqualifies, "no published range" does not. Most postings outside
-  pay-transparency states publish none, so a literal floor quietly discards
-  them. Say the floor, and that an unstated range isn't a reason to screen, in
-  `fit_clause` and `fit_disqualifier` themselves - not in the doc.
+- **A compensation floor**, if any. It goes in the track's `pay_floor` - the
+  amount as they said it, "$165,000" or "170k" - with `pay_floor_unit` of
+  `year` or `hour`. Both or neither: an amount without a unit composes nothing.
+  The prompt builds the whole rule from the pair, including the part that is
+  easy to get wrong - a posting stating no pay at all is kept, and only a range
+  lying entirely below the floor is screened out, as `pay-below-floor`. Most
+  postings outside pay-transparency states publish no range, so a floor that
+  discarded them would quietly throw away most of a night.
+  **Don't also say it in `fit_clause` or `fit_disqualifier`.** A floor written
+  there is a sentence a run interprets nightly instead of a comparison, it is
+  counted under no kind, and said in both places a run meets the same rule twice
+  with only the prose copy able to drift.
 
 ### 4. Write the per-track doc, and draft the track's config
 
@@ -221,7 +227,8 @@ disagree, and nothing says which one a run follows. So each thing has one home:
 
 | What | Where |
 |---|---|
-| What screens a posting out - fit caveats, a pay floor, a pivot's screening step | the track config only: `fit_clause`, `fit_disqualifier`, `fit_filter_step` |
+| What screens a posting out - fit caveats, a pivot's screening step | the track config only: `fit_clause`, `fit_disqualifier`, `fit_filter_step` |
+| A pay floor | the track's `pay_floor` and `pay_floor_unit`, never prose: the prompt composes both clauses from the pair, and a floor in prose is a comparison left to a model |
 | Where the search looks | the person's settings only: `search_locations`, `priority_locations`, `excluded_locations`, `location_note` |
 | What the resume says - level, roles, skills, the case for a stretch, the gaps | the doc's `## Candidate Profile`, and nothing else there. A resume change rewrites this whole section, so anything else in it is lost |
 | What the person wants - kinds of employer, preferences, why a role appeals | the doc's `## What this search is looking for`. A resume change leaves it alone |
@@ -281,7 +288,11 @@ finished sentence the search should read:
   with an empty list is refused its documents, so it never runs. List only this
   track's files - a person's other searches keep their own.
 - `fit_clause` / `fit_disqualifier` - a short requirement and its mirror in the
-  disqualified list. Both empty with no fit filter beyond the role line.
+  disqualified list. Both empty with no fit filter beyond the role line. A pay
+  floor is not one of these: it has its own pair of fields.
+- `pay_floor` / `pay_floor_unit` - the amount as they said it, and `year` or
+  `hour`. The prompt composes the finding and the disqualifier from them (step
+  3's compensation floor). Both empty for no floor.
 - `fit_filter_step` - only for a genuine pivot, where one clause won't carry
   the fit: it becomes a screening step of its own. Verifiable mismatches only
   (step 3).
@@ -438,7 +449,8 @@ The answers map onto the config like this:
 | each role's `name` | the track `label`, and a slug `key` |
 | each role's `titles` | `role_search_line` and `full_description` |
 | each role's `company_kinds` | the track doc's `## What this search is looking for`, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
-| each role's `rule_outs` | `fit_clause` / `fit_disqualifier`, and `fit_filter_step` only for a real pivot |
+| each role's `rule_outs` | `fit_clause` / `fit_disqualifier`, and `fit_filter_step` only for a real pivot. A pay floor among them belongs in `pay_floor`, not here |
+| each role's `min_pay` | `pay_floor`, the amount exactly as they typed it, with `pay_floor_unit`: `hour` when they wrote an hourly rate, `year` otherwise. Never restated in the prose - the form's own wording ("a posting stays if its range reaches this, or if it names no pay at all") is what the prompt already composes from the pair |
 | each role's `min_pay` | part of the fit filter: a *stated* range topping out below it disqualifies; no published range does not |
 | `never_work_for` | `excluded_companies` - already written when the form was sent, not by you |
 | `preferences` | the track doc's `## What this search is looking for`, weighed - never turned into a rule-out |
