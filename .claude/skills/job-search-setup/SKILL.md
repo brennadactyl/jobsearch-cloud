@@ -292,7 +292,10 @@ finished sentence the search should read:
   floor is not one of these: it has its own pair of fields.
 - `pay_floor` / `pay_floor_unit` - the amount as they said it, and `year` or
   `hour`. The prompt composes the finding and the disqualifier from them (step
-  3's compensation floor). Both empty for no floor.
+  3's compensation floor). Both empty for no floor. **Only when you post the
+  config yourself**, through `POST /api/config`: on the unattended path this
+  pair is the form's, the script forwards only prose fields, and the write-up
+  route would refuse it as form-owned (section 6).
 - `fit_filter_step` - only for a genuine pivot, where one clause won't carry
   the fit: it becomes a screening step of its own. Verifiable mismatches only
   (step 3).
@@ -450,7 +453,7 @@ The answers map onto the config like this:
 | each role's `titles` | `role_search_line` and `full_description` |
 | each role's `company_kinds` | the track doc's `## What this search is looking for`, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
 | each role's `rule_outs` | `fit_clause` / `fit_disqualifier`, and `fit_filter_step` only for a real pivot. A pay floor among them belongs in `pay_floor`, not here |
-| each role's lowest acceptable pay | the track's `pay_floor` and `pay_floor_unit`. Where the answers carry a unit, use it as given and change neither; where they carry only an amount, put it in `pay_floor` exactly as typed and set the unit yourself - `hour` for an hourly rate, `year` otherwise. Keyed on what the answers hold rather than on what the form offers, because those differ while a form field is being added and the inference would otherwise overrule someone who chose. Never restated in the prose: the form's own wording ("a posting stays if its range reaches this, or if it names no pay at all") is what the prompt composes from the pair |
+| each role's lowest acceptable pay | the track's `pay_floor` and `pay_floor_unit` - **already written when the form arrives, and not yours to send**, like the location lists. Writing the pair into `out\config.json` on this path achieves nothing and says nothing: the script forwards only the prose fields it names, so anything else is dropped before the request, and `POST /api/writeup` would refuse the pair anyway as a field the form owns. The one thing to do with a floor here is keep it out of `fit_clause` and `fit_disqualifier`, where it would become a sentence a run interprets nightly instead of the comparison the prompt composes from the pair |
 | `never_work_for` | `excluded_companies` - already written when the form was sent, not by you |
 | `preferences` | the track doc's `## What this search is looking for`, weighed - never turned into a rule-out |
 
