@@ -10,6 +10,8 @@ import {
   setupOverdue,
   setupProblems,
 } from "./onboarding";
+import { changedSearches } from "./panel";
+import { tracks as trackList } from "./fixture";
 
 /** The documents route's filename rule (server/src/validate.js). */
 const ROUTE_NAME = /^\w(?:[\w .-]*\w)?$/;
@@ -153,5 +155,25 @@ describe("answersToSend", () => {
   it("leaves every other answer as it was", () => {
     const full = { ...answers, work_scope: "Anywhere in the US", resume_text: "Engineer" };
     expect(answersToSend(full)).toEqual(full);
+  });
+});
+
+describe("the pay pair's rule, at both doors", () => {
+  // Setup and the account panel implement this separately, and have to: one
+  // normalises a whole document with no prior state, the other diffs a change
+  // set against a stored track. What must not drift is the answer, so this
+  // asserts it rather than making them share code - the same trade as tying a
+  // stored value to what the prompt prints rather than teaching each half the
+  // other's format.
+  const unitAlone = { min_pay: "   ", min_pay_unit: "hour" };
+
+  it("stores no unit where no amount was given, whichever door it came through", () => {
+    const role = { name: "Eng", titles: "Staff engineer", company_kinds: "", rule_outs: "", ...unitAlone };
+    const fromSetup = answersToSend({ ...emptyAnswers("Sam"), roles: [role] });
+    expect(fromSetup.roles[0].min_pay_unit).toBe("");
+
+    const track = { ...trackList[0], pay_floor: "", pay_floor_unit: "" };
+    const fromPanel = changedSearches([track], { [track.key]: { pay_floor: "   ", pay_floor_unit: "hour" } });
+    expect(fromPanel[track.key]?.pay_floor_unit ?? "").toBe("");
   });
 });
