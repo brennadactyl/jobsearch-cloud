@@ -461,10 +461,13 @@ Per-user key/value rows. The keys in use:
 - `updated` — the day of the last data change, `YYYY-MM-DD`
 - page display: `display_title`, `overview_label`, `applications_label`,
   `all_leads_label`, `stale_run_hours`
-- where the search looks: `search_locations`, `excluded_locations`,
-  `priority_locations` and `location_note` — text, each stored as the person
-  typed it, trimmed at the ends; the three lists are comma-separated, and
-  `priority_locations` is in ranked order
+- where the search looks: `search_locations`, `excluded_locations` and
+  `priority_locations` — a JSON array of entries each, stored and served as
+  entries, so a place whose name holds a comma is one entry; `priority_locations`
+  is in ranked order. A value written before the lists held entries is a bare
+  comma-joined string, and reading one splits it on commas (`src/validate.js`
+  `locationEntries`), which is the only thing left that rule does
+- `location_note` — text, what the three lists can't say
 - `excluded_companies` — a JSON array
 - search prompt prose: `footer_note`, `pronouns`
 

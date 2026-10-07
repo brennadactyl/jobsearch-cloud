@@ -2746,8 +2746,9 @@ const rankedSignup = await req("POST", "/api/signup", {
 const rankedOnly = await postIntake(rankedSignup.json.token, { ...baseAnswers, work_scope: " " });
 const rankedOnlySettings = (await req("GET", "/api/config", { token: rankedSignup.json.token })).json?.settings;
 check("setup with places ranked first may leave the place to search empty",
-  rankedOnly.status === 200 && rankedOnlySettings?.search_locations === "" &&
-  rankedOnlySettings?.priority_locations === "Seattle, Portland, OR, Remote", JSON.stringify(rankedOnly.json));
+  rankedOnly.status === 200 && rankedOnlySettings?.search_locations?.length === 0 &&
+  JSON.stringify(rankedOnlySettings?.priority_locations) ===
+    JSON.stringify(["Seattle", "Portland", "OR", "Remote"]), JSON.stringify(rankedOnly.json));
 
 // The account above sent successfully, so the rest of the send's effects are
 // checked on a second one - the send is write-once.
@@ -2776,10 +2777,15 @@ check("and the settings the form owns, with a title defaulted from the name",
   builtConfig.settings?.pronouns === "she/her" &&
   JSON.stringify(builtConfig.settings?.excluded_companies) === JSON.stringify(["Bad Corp", "Worse Inc"]),
   JSON.stringify(builtConfig.settings));
-check("the location answers become the location settings, as typed and trimmed at the ends",
-  builtConfig.settings?.search_locations === "Seattle, or remote in the US" &&
-  builtConfig.settings?.excluded_locations === "Texas" &&
-  builtConfig.settings?.priority_locations === "Seattle, Portland, OR, Remote" &&
+// The setup form asks for each list as one line of prose, so its commas are
+// what separate the entries - the one place a sentence still becomes a list,
+// and why the old split rule has a caller as well as stored values to read.
+check("the location answers become the location settings, each answer's places as entries",
+  JSON.stringify(builtConfig.settings?.search_locations) ===
+    JSON.stringify(["Seattle", "or remote in the US"]) &&
+  JSON.stringify(builtConfig.settings?.excluded_locations) === JSON.stringify(["Texas"]) &&
+  JSON.stringify(builtConfig.settings?.priority_locations) ===
+    JSON.stringify(["Seattle", "Portland", "OR", "Remote"]) &&
   builtConfig.settings?.location_note === "open to relocating",
   JSON.stringify(builtConfig.settings));
 check("nothing the run owns is written on send",
@@ -2824,8 +2830,10 @@ const afterWriteUp = (await req("GET", "/api/config", { token: I_TOK })).json;
 check("and the form's fields come through it untouched",
   afterWriteUp.tracks?.[0]?.label === "Engineering" && afterWriteUp.tracks?.[0]?.sort_order === 0 &&
   afterWriteUp.settings?.display_title === `${instName}'s Job Search` &&
-  afterWriteUp.settings?.priority_locations === "Seattle, Portland, OR, Remote" &&
-  afterWriteUp.settings?.search_locations === "Seattle, or remote in the US",
+  JSON.stringify(afterWriteUp.settings?.priority_locations) ===
+    JSON.stringify(["Seattle", "Portland", "OR", "Remote"]) &&
+  JSON.stringify(afterWriteUp.settings?.search_locations) ===
+    JSON.stringify(["Seattle", "or remote in the US"]),
   JSON.stringify({ label: afterWriteUp.tracks?.[0]?.label, title: afterWriteUp.settings?.display_title }));
 check("a written-up track has a prompt again",
   (await req("GET", "/api/prompt/engineering", { token: I_TOK })).status === 200);
@@ -3741,23 +3749,27 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   const lcSettings = async (token) => (await req("GET", "/api/config", { token })).json?.settings || {};
 
   const unset = await lcSettings(LC);
-  check("an account that never set its places reads each as empty text",
-    ["search_locations", "excluded_locations", "priority_locations", "location_note"].every((k) => unset[k] === ""),
+  check("an account that never set its places reads each list as empty",
+    ["search_locations", "excluded_locations", "priority_locations"]
+      .every((k) => Array.isArray(unset[k]) && unset[k].length === 0) && unset.location_note === "",
     JSON.stringify(unset));
 
   const lcSave = await req("POST", "/api/settings", { token: LC, body: {
-    search_locations: "  US, Greater Seattle area , Australia ",
-    excluded_locations: "Portland, OR",
-    priority_locations: "Seattle, Portland OR, Raleigh NC",
+    search_locations: ["  US ", "Greater Seattle area", "Australia"],
+    excluded_locations: ["Portland OR"],
+    priority_locations: ["Seattle", "Portland OR", "Raleigh NC"],
     location_note: "open to relocating for the right team",
   } });
   const saved = await lcSettings(LC);
-  check("the account panel saves each list as typed, trimmed only at the ends",
-    lcSave.status === 200 && saved.search_locations === "US, Greater Seattle area , Australia" &&
-    saved.excluded_locations === "Portland, OR" && saved.priority_locations === "Seattle, Portland OR, Raleigh NC" &&
+  check("the account panel saves each list entry by entry, trimmed only at the ends",
+    lcSave.status === 200 &&
+    JSON.stringify(saved.search_locations) === JSON.stringify(["US", "Greater Seattle area", "Australia"]) &&
+    JSON.stringify(saved.excluded_locations) === JSON.stringify(["Portland OR"]) &&
+    JSON.stringify(saved.priority_locations) === JSON.stringify(["Seattle", "Portland OR", "Raleigh NC"]) &&
     saved.location_note === "open to relocating for the right team", JSON.stringify([lcSave.json, saved]));
-  check("and says what it stored",
-    lcSave.json?.locations?.search_locations === "US, Greater Seattle area , Australia");
+  check("and says what it stored, as entries",
+    JSON.stringify(lcSave.json?.locations?.search_locations) ===
+      JSON.stringify(["US", "Greater Seattle area", "Australia"]), JSON.stringify(lcSave.json?.locations));
 
   // The one assertion that spans the stored shape and the composed text: the
   // places an account saved have to turn up in its own prompt, fetched from
@@ -3822,45 +3834,132 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   }
   check("a list left out of a save keeps its value",
     (await req("POST", "/api/settings", { token: LC, body: { location_note: "" } })).status === 200 &&
-    (await lcSettings(LC)).priority_locations === "Seattle, Portland OR, Raleigh NC" && (await lcSettings(LC)).location_note === "");
+    JSON.stringify((await lcSettings(LC)).priority_locations) ===
+      JSON.stringify(["Seattle", "Portland OR", "Raleigh NC"]) && (await lcSettings(LC)).location_note === "");
 
+  // The whole point of a list of entries: a place whose name holds a comma is
+  // one place. Under the old comma-joined value there was no spelling of this
+  // that survived a round trip, and the two halves it broke into matched no
+  // ranked entry, so every lead in that place lost its tier.
+  const lcComma = await req("POST", "/api/settings", { token: LC, body: {
+    priority_locations: ["Vancouver, BC", "Seattle"] } });
+  const commaSaved = await lcSettings(LC);
+  check("a place whose name holds a comma is one entry, kept whole",
+    lcComma.status === 200 &&
+    JSON.stringify(commaSaved.priority_locations) === JSON.stringify(["Vancouver, BC", "Seattle"]),
+    JSON.stringify(commaSaved.priority_locations));
+  await req("POST", "/api/config", { token: LC, body: { tracks: [{ key: "SWE", label: "SWE" }] } });
+  const lcCommaLead = await req("POST", "/api/leads", { token: LC, body: { leads: [
+    { search: "SWE", company: "Comma Co", title: "Engineer",
+      url: `https://commaco.test/jobs/${lcRun.toString(36)}`,
+      location: "Vancouver, BC", area: "Vancouver, BC" },
+  ] } });
+  const lcCommaRow = (await req("GET", "/api/data", { token: LC })).json?.leads
+    ?.find((l) => l.company === "Comma Co");
+  check("and a lead reporting it files under that entry rather than losing its tier",
+    lcCommaLead.status === 200 && lcCommaRow?.area === "Vancouver, BC",
+    JSON.stringify([lcCommaLead.json, lcCommaRow?.area]));
+
+  // A run that copies the quotes the prompt prints around an entry is naming
+  // the right place, and an exact match would clear the area without saying so.
+  const lcQuoted = await req("POST", "/api/leads", { token: LC, body: { leads: [
+    { search: "SWE", company: "Quoted Co", title: "Engineer",
+      url: `https://quotedco.test/jobs/${lcRun.toString(36)}`,
+      location: "Seattle", area: '"Seattle"' },
+  ] } });
+  const lcQuotedRow = (await req("GET", "/api/data", { token: LC })).json?.leads
+    ?.find((l) => l.company === "Quoted Co");
+  check("an area reported with the quotes the prompt printed still names its entry",
+    lcQuoted.status === 200 && lcQuotedRow?.area === "Seattle", JSON.stringify(lcQuotedRow?.area));
+  const lcNotAnEntry = await req("POST", "/api/leads", { token: LC, body: { leads: [
+    { search: "SWE", company: "Elsewhere Co", title: "Engineer",
+      url: `https://elsewhereco.test/jobs/${lcRun.toString(36)}`,
+      location: "Denver", area: '"Denver"' },
+  ] } });
+  const lcNotAnEntryRow = (await req("GET", "/api/data", { token: LC })).json?.leads
+    ?.find((l) => l.company === "Elsewhere Co");
+  check("while quotes around a place nobody ranked still name no entry",
+    lcNotAnEntry.status === 200 && lcNotAnEntryRow?.area === "", JSON.stringify(lcNotAnEntryRow?.area));
+  // Only a surrounding pair comes off. A quote on one side is a place name
+  // nobody typed, and taking quotes off wherever they appear would make the
+  // comparison looser than the list it is comparing against.
+  const lcHalfQuoted = await req("POST", "/api/leads", { token: LC, body: { leads: [
+    { search: "SWE", company: "Half Quoted Co", title: "Engineer",
+      url: `https://halfquoted.test/jobs/${lcRun.toString(36)}`,
+      location: "Seattle", area: '"Seattle' },
+  ] } });
+  const lcHalfQuotedRow = (await req("GET", "/api/data", { token: LC })).json?.leads
+    ?.find((l) => l.company === "Half Quoted Co");
+  check("and a quote on one side only is no entry either",
+    lcHalfQuoted.status === 200 && lcHalfQuotedRow?.area === "", JSON.stringify(lcHalfQuotedRow?.area));
+
+  // A caller written against the comma-joined contract still works, and one
+  // write converts what it sends. This is the only thing the old split rule is
+  // still for.
+  const LC_OLD = await lcUser("old");
+  const lcLegacy = await req("POST", "/api/settings", { token: LC_OLD, body: {
+    search_locations: "US, Greater Seattle area , Australia" } });
+  check("a list sent the old way, comma-joined, is read as its entries",
+    lcLegacy.status === 200 &&
+    JSON.stringify((await lcSettings(LC_OLD)).search_locations) ===
+      JSON.stringify(["US", "Greater Seattle area", "Australia"]),
+    JSON.stringify((await lcSettings(LC_OLD)).search_locations));
+
+  // The caps are on what was typed. Each refusal names the setting, so the page
+  // can show it against the field the person was editing.
   for (const [why, body, field] of [
-    ["a list that isn't text", { priority_locations: ["Seattle"] }, "priority_locations"],
-    ["a list over 4000 characters", { search_locations: "x".repeat(4001) }, "search_locations"],
+    ["a list that is neither entries nor text", { priority_locations: 7 }, "priority_locations"],
+    ["an entry that isn't text", { priority_locations: ["Seattle", 7] }, "priority_locations"],
+    ["more than 200 places", { search_locations: Array.from({ length: 201 }, (_, i) => `Place ${i}`) }, "search_locations"],
+    ["one place over 120 characters", { search_locations: ["Seattle", "x".repeat(121)] }, "search_locations"],
+    ["places summing over 4000 characters", { search_locations: Array.from({ length: 40 }, () => "x".repeat(101)) }, "search_locations"],
     ["a note over 1000 characters", { location_note: "x".repeat(1001) }, "location_note"],
   ]) {
     const res = await req("POST", "/api/settings", { token: LC, body });
     check(`a location setting is refused: ${why}, naming it`, res.status === 400 && res.json?.field === field, JSON.stringify(res.json));
   }
-  const lcHalf = await req("POST", "/api/settings", { token: LC, body: { excluded_locations: "Nowhere", location_note: "x".repeat(1001) } });
+  const lcHalf = await req("POST", "/api/settings", { token: LC, body: { excluded_locations: ["Nowhere"], location_note: "x".repeat(1001) } });
   check("a refused save writes none of it",
-    lcHalf.status === 400 && (await lcSettings(LC)).excluded_locations === "Portland, OR");
-  check("a list 4000 characters long fits",
-    (await req("POST", "/api/settings", { token: LC_B, body: { search_locations: "x".repeat(4000) } })).status === 200);
+    lcHalf.status === 400 &&
+    JSON.stringify((await lcSettings(LC)).excluded_locations) === JSON.stringify(["Portland OR"]),
+    JSON.stringify((await lcSettings(LC)).excluded_locations));
+  // The sum, not the stored length: 40 entries of 100 is exactly the cap, and
+  // the JSON it is stored as is well over it.
+  check("places summing to exactly 4000 characters fit, whatever the encoding costs",
+    (await req("POST", "/api/settings", { token: LC_B, body: {
+      search_locations: Array.from({ length: 40 }, (_, i) => `${"x".repeat(97)}${String(i).padStart(3, "0")}`) } })).status === 200);
+  check("and 200 places fit",
+    (await req("POST", "/api/settings", { token: LC_B, body: {
+      search_locations: Array.from({ length: 200 }, (_, i) => `Place ${i}`) } })).status === 200);
 
   // An empty searched list means "only the ranked places", so only both empty
   // is refused, judged on what the save leaves.
-  const lcOnlyRanked = await req("POST", "/api/settings", { token: LC, body: { search_locations: "" } });
+  const lcOnlyRanked = await req("POST", "/api/settings", { token: LC, body: { search_locations: [] } });
   check("the searched list can be cleared while a place is ranked",
-    lcOnlyRanked.status === 200 && (await lcSettings(LC)).search_locations === "", JSON.stringify(lcOnlyRanked.json));
-  const lcNowhere = await req("POST", "/api/settings", { token: LC, body: { priority_locations: " , " } });
-  check("but not the ranked list too - a list of bare commas is empty - naming the searched list",
+    lcOnlyRanked.status === 200 && (await lcSettings(LC)).search_locations.length === 0, JSON.stringify(lcOnlyRanked.json));
+  const lcNowhere = await req("POST", "/api/settings", { token: LC, body: { priority_locations: ["  ", ""] } });
+  check("but not the ranked list too - entries that are all blank are no places - naming the searched list",
     lcNowhere.status === 400 && lcNowhere.json?.field === "search_locations" &&
-    (await lcSettings(LC)).priority_locations === "Seattle, Portland OR, Raleigh NC", JSON.stringify(lcNowhere.json));
+    JSON.stringify((await lcSettings(LC)).priority_locations) === JSON.stringify(["Vancouver, BC", "Seattle"]),
+    JSON.stringify(lcNowhere.json));
   check("nor both in one save",
-    (await req("POST", "/api/settings", { token: LC, body: { search_locations: "", priority_locations: "" } })).status === 400);
+    (await req("POST", "/api/settings", { token: LC, body: { search_locations: [], priority_locations: [] } })).status === 400);
   check("the ranked list can be cleared while a place is searched",
-    (await req("POST", "/api/settings", { token: LC, body: { search_locations: "US", priority_locations: "" } })).status === 200 &&
-    (await lcSettings(LC)).search_locations === "US" && (await lcSettings(LC)).priority_locations === "");
+    (await req("POST", "/api/settings", { token: LC, body: { search_locations: ["US"], priority_locations: [] } })).status === 200 &&
+    JSON.stringify((await lcSettings(LC)).search_locations) === JSON.stringify(["US"]) &&
+    (await lcSettings(LC)).priority_locations.length === 0);
   const LC_C = await lcUser("c");
   check("a save that leaves both lists alone isn't held up by them",
     (await req("POST", "/api/settings", { token: LC_C, body: { location_note: "anywhere with a good team" } })).status === 200);
   await req("POST", "/api/settings", { token: LC, body: {
-    search_locations: "US, Greater Seattle area , Australia", priority_locations: "Seattle, Portland OR, Raleigh NC" } });
+    search_locations: ["US", "Greater Seattle area", "Australia"],
+    priority_locations: ["Seattle", "Portland OR", "Raleigh NC"] } });
 
-  const lcConfig = await req("POST", "/api/config", { token: LC, body: { priority_locations: " Boston " } });
+  const lcConfig = await req("POST", "/api/config", { token: LC, body: { priority_locations: [" Boston "] } });
   check("an operator can set them through the config too",
-    lcConfig.status === 200 && (await lcSettings(LC)).priority_locations === "Boston", JSON.stringify(lcConfig.json));
+    lcConfig.status === 200 &&
+    JSON.stringify((await lcSettings(LC)).priority_locations) === JSON.stringify(["Boston"]),
+    JSON.stringify(lcConfig.json));
   const lcBadConfig = await req("POST", "/api/config", { token: LC, body: {
     tracks: [{ key: "RENAMED", label: "Renamed" }], search_locations: 7 } });
   check("and a refused location setting there leaves the tracks alone",
@@ -3869,7 +3968,8 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
   check("the overnight run can't write them",
     (await req("POST", "/api/writeup", { token: LC, body: { search: "SWE", search_locations: "anywhere" } })).json?.field === "search_locations");
   check("another account's places are its own",
-    (await lcSettings(LC_B)).priority_locations === "" && (await lcSettings(LC_B)).search_locations === "x".repeat(4000));
+    (await lcSettings(LC_B)).priority_locations.length === 0 &&
+    (await lcSettings(LC_B)).search_locations.length === 200);
 }
 
 
@@ -3902,7 +4002,8 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     afterSave.settings?.pronouns === "she/her" &&
     JSON.stringify(afterSave.settings?.excluded_companies) === JSON.stringify(["Bad Corp", "Worse Inc"]) &&
     afterSave.tracks?.find((t) => t.key === "SWE")?.label === "Eng - Gaming" &&
-    afterSave.settings?.priority_locations === "Seattle", JSON.stringify(saved.json));
+    JSON.stringify(afterSave.settings?.priority_locations) === JSON.stringify(["Seattle"]),
+    JSON.stringify(saved.json));
   check("and says what it stored, read back rather than echoed",
     saved.json?.settings?.display_title === "Ada's search" &&
     saved.json?.searches?.SWE?.label === "Eng - Gaming" && saved.json?.searches?.CPM?.label === "Program",
@@ -4047,7 +4148,9 @@ check("a run reporting the new name in another spelling lands on the clRenamed c
     priority_rules: [{ label: "Seattle area", anyOf: ["seattle"] }] } });
   const settings = (await req("GET", "/api/config", { token: PR })).json?.settings || {};
   check("config serves no ranking rules, and a sent rules list isn't stored",
-    !("priority_rules" in settings) && settings.priority_locations === "Seattle area", JSON.stringify(Object.keys(settings)));
+    !("priority_rules" in settings) &&
+    JSON.stringify(settings.priority_locations) === JSON.stringify(["Seattle area"]),
+    JSON.stringify(Object.keys(settings)));
   check("the person's own route refuses them",
     (await req("POST", "/api/settings", { token: PR, body: { priority_rules: [] } })).json?.field === "priority_rules");
   check("the area fill route is gone",

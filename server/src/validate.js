@@ -27,26 +27,58 @@ export function isoDate(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
 }
 
-// Where a person's search looks, as they typed it (docs/location-settings-plan.md):
-// three comma-separated lists and a note, each one `meta` value. Nothing is
-// split, matched or flagged here - the prompt reads each list as written, and
-// the page builds its ranking from `priority_locations` itself - so the only
-// checks are that each is text and fits. The caps keep a list to what a person
-// types, since the prompt carries every one of them every night.
+// Where a person's search looks, as they typed it: three lists of entries and a
+// note, each one `meta` value. A list is a list of strings, so an entry is
+// whatever the person typed and a place whose name holds a comma - "Vancouver,
+// BC" - is one entry rather than two. There is no delimiter to escape and no
+// spelling a list can't hold.
+//
+// The caps are on what a person types, not on how it is stored. A cap applied
+// to the encoded form shrinks every time the encoding changes - each entry
+// gaining quotes and a separator - and the refusal could never point at the
+// quotes as the reason.
 export const LOCATION_LIST_MAX_CHARS = 4000;
+export const LOCATION_ENTRY_MAX_CHARS = 120;
+export const LOCATION_LIST_MAX_ENTRIES = 200;
 export const LOCATION_NOTE_MAX_CHARS = 1000;
 
 /**
- * The entries of a location list, the one way everything splits it
- * (docs/location-settings-plan.md, "The three lists"): on commas, each entry
- * trimmed, empty ones dropped. "Portland, OR" is two entries. scripts/tracker.ps1
- * and the page split it the same way, so a value one accepts the other can't
- * refuse.
+ * The entries of a location list: each trimmed, empty ones dropped. The one
+ * reader of the stored shape, so every caller sees entries rather than deciding
+ * what a list is.
+ *
+ * Named for the lists rather than for one of them: all three go through here -
+ * `search_locations` and `excluded_locations` as well as the ranked
+ * `priority_locations` - and only the last of those is ranked at all.
+ *
+ * A plain string is a list written before the lists held entries, and the comma
+ * split is the only thing that says what it meant, so it stays here as a reader
+ * of stored values. It is not a shape anything writes: a list written now and
+ * read by that rule would come back as one long place name, silently, which is
+ * why nothing may serve entries until every reader takes them.
  * @param {unknown} list a stored location list, such as `priority_locations`
  * @returns {string[]}
  */
-export function rankedEntries(list) {
+export function locationEntries(list) {
+  if (Array.isArray(list)) {
+    return list.map((e) => (typeof e === "string" ? e.trim() : "")).filter(Boolean);
+  }
   return typeof list === "string" ? list.split(",").map((e) => e.trim()).filter(Boolean) : [];
+}
+
+/**
+ * One entry as the person meant it, with a surrounding pair of quotes taken
+ * off. The prompt prints entries quoted, because an entry may hold a comma and
+ * the quotes are how a run sees where one ends; a run that copies the quotes
+ * along with the entry is reporting the right place. Deciding that here is a
+ * comparison, and a run asked to strip them instead gets it wrong silently -
+ * the area clears, and the clearing reports as success.
+ * @param {string} value already trimmed
+ * @returns {string}
+ */
+function withoutSurroundingQuotes(value) {
+  const quoted = value.length >= 2 && value.startsWith('"') && value.endsWith('"');
+  return quoted ? value.slice(1, -1).trim() : value;
 }
 
 /**
@@ -61,11 +93,12 @@ export function rankedEntries(list) {
  * @returns {string}
  */
 export function storedArea(area, list) {
-  const value = typeof area === "string" ? area.trim().toLowerCase() : "";
+  const sent = typeof area === "string" ? area.trim() : "";
+  const value = withoutSurroundingQuotes(sent).toLowerCase();
   if (!value) {
     return "";
   }
-  return rankedEntries(list).find((entry) => entry.toLowerCase() === value) ?? "";
+  return locationEntries(list).find((entry) => entry.toLowerCase() === value) ?? "";
 }
 
 /**
@@ -210,27 +243,51 @@ export function areaToStore(sent, location, list) {
  * @returns {string}
  */
 export function nowhereToSearchError(searched, ranked) {
-  if (rankedEntries(searched).length || rankedEntries(ranked).length) {
+  if (locationEntries(searched).length || locationEntries(ranked).length) {
     return "";
   }
   return "say where to search, or rank at least one place first - the search needs somewhere to look";
 }
 
 /**
- * What is wrong with one location setting as sent, or "" for nothing. The
- * value is judged after trimming, which is how it is stored.
+ * What is wrong with one location setting as sent, or "" for nothing. Judged
+ * after trimming, which is how it is stored.
+ *
+ * `location_note` is a sentence and stays text. The three lists are lists of
+ * entries; a plain string is still taken, as the shape a caller written against
+ * the old contract sends, and read by the same rule that reads a stored one.
  * @param {string} key `search_locations`, `excluded_locations`,
  *   `priority_locations` or `location_note` (db.js LOCATION_SETTING_KEYS)
  * @param {unknown} value
  * @returns {string}
  */
 export function locationSettingError(key, value) {
-  if (typeof value !== "string") {
-    return `${key} must be text`;
+  if (key === "location_note") {
+    if (typeof value !== "string") {
+      return `${key} must be text`;
+    }
+    return value.trim().length > LOCATION_NOTE_MAX_CHARS
+      ? `${key} is longer than ${LOCATION_NOTE_MAX_CHARS} characters`
+      : "";
   }
-  const max = key === "location_note" ? LOCATION_NOTE_MAX_CHARS : LOCATION_LIST_MAX_CHARS;
-  if (value.trim().length > max) {
-    return `${key} is longer than ${max} characters`;
+  if (!Array.isArray(value) && typeof value !== "string") {
+    return `${key} must be a list of places`;
+  }
+  if (Array.isArray(value) && value.some((e) => typeof e !== "string")) {
+    return `every entry in ${key} must be text`;
+  }
+  const entries = locationEntries(value);
+  if (entries.length > LOCATION_LIST_MAX_ENTRIES) {
+    return `${key} has more than ${LOCATION_LIST_MAX_ENTRIES} places`;
+  }
+  const tooLong = entries.find((e) => e.length > LOCATION_ENTRY_MAX_CHARS);
+  if (tooLong) {
+    return `a place in ${key} is longer than ${LOCATION_ENTRY_MAX_CHARS} characters`;
+  }
+  // The sum of what was typed, with nothing counted for the encoding.
+  const typed = entries.reduce((n, e) => n + e.length, 0);
+  if (typed > LOCATION_LIST_MAX_CHARS) {
+    return `${key} is longer than ${LOCATION_LIST_MAX_CHARS} characters`;
   }
   return "";
 }
