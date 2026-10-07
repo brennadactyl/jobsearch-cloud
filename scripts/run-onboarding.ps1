@@ -232,13 +232,19 @@ Log "waiting:          $($queue.Count) ($(($queue | ForEach-Object { $_.user.nam
 # already taken anyway.
 #
 # The night is bounded by this run (00:00, up to two hours) and the application
-# fill (06:30). Inside it a new search goes 45 minutes after the latest one
-# already scheduled, on the quarter hour, and never within 45 minutes of the
-# 03:15 backup or of anyone else's run. Past 05:45 there is no room, and the
-# person is told that rather than given a slot that collides.
+# fill (06:30). Inside it a new search takes the earliest quarter hour that is
+# clear of every other run and of the 03:15 backup. The earliest rather than the
+# one after the latest: a slot left by a search that was retimed or removed is
+# room, and stepping past it fills the night left to right and never comes back,
+# so a machine with a gap at two o'clock reports itself full.
+#
+# The gap is what a run takes, which is about a quarter of an hour, and
+# scripts/run-lock.ps1 serialises them whatever the schedule says. Past 05:45
+# there is no room, and the person is told that rather than given a slot that
+# collides.
 $NIGHT_FIRST = 60      # 01:00, after this run's own two-hour window
 $NIGHT_LAST = 345      # 05:45, clear of the fill
-$SPACING = 45
+$SPACING = 30
 $GRID = 15
 $BACKUP_AT = 195       # 03:15, scripts/backup-tracker.ps1
 $FILL_AT = 390         # 06:30, scripts/run-fill.ps1
@@ -255,7 +261,6 @@ function ConvertTo-Clock([int]$m) {
 function Get-NightSlot([int[]]$taken) {
     $night = @($taken | Where-Object { $_ -ge 0 -and $_ -lt $FILL_AT })
     $candidate = $NIGHT_FIRST
-    foreach ($t in $night) { if ($t + $SPACING -gt $candidate) { $candidate = $t + $SPACING } }
     if ($candidate % $GRID) { $candidate += $GRID - ($candidate % $GRID) }
     while ($candidate -le $NIGHT_LAST) {
         $clear = $true
