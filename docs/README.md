@@ -1,6 +1,16 @@
 # docs
 
-Two kinds of document live here, and the filename says which.
+Three kinds of document live here, and the filename says which.
+
+## For the people using the tracker
+
+Written for someone who has an account and will never see this repository. No
+route, table, file or script is named in these, and the page's own words are
+used rather than the codebase's: a change that makes one wrong says what a
+person now sees, not what was altered.
+
+- [`using-the-tracker.md`](using-the-tracker.md) — what the nightly search does,
+  what to expect from it, and every setting a person can change
 
 ## Reference
 
