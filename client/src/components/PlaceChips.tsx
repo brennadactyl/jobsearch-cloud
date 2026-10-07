@@ -17,6 +17,7 @@ export default function PlaceChips({
   onChange,
   placeholder,
   ranked = false,
+  splitOnComma = false,
   invalid = false,
   empty = "",
 }: {
@@ -26,6 +27,12 @@ export default function PlaceChips({
   placeholder: string;
   /** A ranked list is ordered, so each chip shows its place and can be moved. */
   ranked?: boolean;
+  /**
+   * The exception, for a list still carried as one comma-joined string: a typed
+   * comma ends the entry, because one inside a name would be split back out on
+   * the way to storage whatever this box did. Intake is the last of these.
+   */
+  splitOnComma?: boolean;
   invalid?: boolean;
   /** What an empty list means, said in place of the chips. */
   empty?: string;
@@ -33,10 +40,13 @@ export default function PlaceChips({
   const [draft, setDraft] = useState("");
 
   const set = (next: readonly string[]) => onChange([...next]);
-  // Typing or pasting several at once splits the same way the setting does, so
-  // "Seattle, Portland OR" can't become one entry no search would match.
+  // A comma is an ordinary character in a place's name - "Vancouver, BC" is one
+  // place - so by default the box keeps what was typed and Enter is what says
+  // "that's one". Where the list is still carried as one joined string, the
+  // caller asks for the old splitting instead, because an entry holding a comma
+  // could not survive the journey anyway.
   const add = () => {
-    const added = listEntries(draft);
+    const added = splitOnComma ? listEntries(draft) : [draft.trim()].filter(Boolean);
     setDraft("");
     if (added.length) {
       set([...entries, ...added]);
@@ -50,13 +60,13 @@ export default function PlaceChips({
     set(next);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter" && e.key !== ",") {
-      return;
+    // Enter would otherwise send the form this sits in. A comma only ends an
+    // entry where the list is still joined into one string; everywhere else it
+    // is a character someone is typing into a name.
+    if (e.key === "Enter" || (splitOnComma && e.key === ",")) {
+      e.preventDefault();
+      add();
     }
-    // Enter would send the form it sits in, and a comma is how entries are
-    // separated - both mean "that's one place".
-    e.preventDefault();
-    add();
   };
 
   const chip = (place: string, i: number) => (

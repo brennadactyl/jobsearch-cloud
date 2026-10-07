@@ -5,7 +5,7 @@
  */
 import { DEFAULT_STALE_RUN_HOURS, type IntakeAnswers, type InviteReason, type RoleAnswer } from "../api/schema";
 import { HOUR_MS } from "./format";
-import { nowhereToSearch } from "./places";
+import { listEntries, nowhereToSearch } from "./places";
 
 export const MAX_NAME = 60;
 /** The documents route refuses anything larger. */
@@ -105,7 +105,9 @@ export function setupProblems(answers: IntakeAnswers, files: readonly string[]):
     }
   }
   // The ruled-out list never says where to look, so it can't stand in for these two.
-  const nowhere = nowhereToSearch(answers.work_scope, answers.locations_first);
+  // Intake is still typed text at this point - the server files it into the
+  // settings - so this is where it becomes entries.
+  const nowhere = nowhereToSearch(listEntries(answers.work_scope), listEntries(answers.locations_first));
   if (nowhere) {
     found.work_scope = nowhere;
   }
