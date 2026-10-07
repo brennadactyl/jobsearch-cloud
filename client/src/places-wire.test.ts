@@ -51,10 +51,9 @@ describe("reading a place list", () => {
 });
 
 describe("writing a place list", () => {
-  it("sends the joined string, because the write flips last", async () => {
-    // A reader that hasn't shipped yet would read an array as empty and say
-    // nothing about it, which is the same silent failure this move exists to
-    // end. So the page reads both shapes before any writer sends the new one.
+  it("sends the entries, so a name holding a comma survives the round trip", async () => {
+    // The lists are stored as JSON, so there is no delimiter to collide with:
+    // joining them here is what used to turn one place into two.
     const fetched = vi.fn().mockResolvedValue({
       status: 200,
       ok: true,
@@ -62,10 +61,10 @@ describe("writing a place list", () => {
     });
     vi.stubGlobal("fetch", fetched);
 
-    await saveSettings({ priority_locations: ["Metro core", "Wider region"], location_note: "A note" });
+    await saveSettings({ priority_locations: ["Vancouver, BC", "Remote (US)"], location_note: "A note" });
 
     const body = JSON.parse(fetched.mock.calls[0][1].body);
-    expect(body.priority_locations).toBe("Metro core, Wider region");
+    expect(body.priority_locations).toEqual(["Vancouver, BC", "Remote (US)"]);
     expect(body.location_note).toBe("A note");
   });
 

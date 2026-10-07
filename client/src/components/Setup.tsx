@@ -459,13 +459,26 @@ export default function Setup({
             // lead's location - and their "not a bare country" is about a
             // posting, not about what anyone here wants.
             //
-            // Word for word what the account panel shows for this question:
-            // the two are meant to match, so a reword changes both.
+            // No longer word for word what the account panel shows, and that
+            // is the point rather than drift: its lists are entries, where a
+            // comma is part of a name, and intake is still one joined string
+            // where a comma ends the entry. Two behaviours need two sentences.
+            // The two converge again when intake takes entries.
             hint="Every area the search should cover — name all of it, not only the part you'd prefer. One place per entry, and a comma starts the next: a city as Seattle WA; a remote role as Remote (US); a whole country or region if that's what you want. The places you rank below are always searched too."
           >
             <PlaceChips
               id={`${id}-scope`}
               placeholder="Add a place, then press Enter"
+              // Intake is carried as one joined string (routes/onboarding.js),
+              // so a comma has to end the entry here: one inside a name would
+              // be split back out on the way to storage whatever this box did.
+              //
+              // Saying it rather than leaving it to the default, though these
+              // three fields would split anyway: `entries` re-splits the joined
+              // answer on every render, so the round trip enforces it whatever
+              // the box does. Both go when intake takes entries, and until then
+              // the stated intent is what a reader can check against.
+              splitOnComma
               invalid={!!problems.work_scope}
               entries={listEntries(answers.work_scope)}
               onChange={(entries) => set("work_scope", entries.join(", "))}
@@ -481,6 +494,7 @@ export default function Setup({
             <PlaceChips
               id={`${id}-first`}
               placeholder="Add a place, then press Enter"
+              splitOnComma
               ranked
               invalid={!!problems.locations_first}
               entries={listEntries(answers.locations_first)}
@@ -496,6 +510,7 @@ export default function Setup({
             <PlaceChips
               id={`${id}-limits`}
               placeholder="Add a place, then press Enter"
+              splitOnComma
               invalid={!!problems.location_limits}
               entries={listEntries(answers.location_limits)}
               onChange={(entries) => set("location_limits", entries.join(", "))}

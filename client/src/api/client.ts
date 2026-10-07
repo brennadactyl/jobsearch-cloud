@@ -6,7 +6,7 @@
  */
 import { z } from "zod";
 import type { SearchEdit } from "../domain/panel";
-import { PLACE_LIST_KEYS, type Places } from "../domain/places";
+import type { Places } from "../domain/places";
 import {
   intakeResponseSchema,
   intakeSentSchema,
@@ -283,31 +283,6 @@ export type SettingsChanges = {
  * A refusal's message names the search it's about; one about a setting also
  * names it as its `field`.
  */
-/**
- * The lists go out joined, because the write flips last.
- *
- * This page, the settings routes and the nightly helper all read these lists
- * and ship three different ways, so every reader has to understand both shapes
- * before any writer sends an array - otherwise a reader that hasn't shipped
- * yet gets something it reads as empty and says nothing about. Reading an
- * array already works (placeList in schema.ts); this is the other half, and it
- * goes when the routes accept arrays.
- *
- * Joining loses an entry whose name holds a comma, which is the bug being
- * fixed - but it is exactly what the page does today, so nothing gets worse
- * while the three halves land.
- */
-function joinPlaceLists(changes: SettingsChanges): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...changes };
-  for (const key of PLACE_LIST_KEYS) {
-    const list = changes[key];
-    if (list !== undefined) {
-      out[key] = list.join(", ");
-    }
-  }
-  return out;
-}
-
 export function saveSettings(changes: SettingsChanges) {
   const reply = z.object({
     resumes: z.record(z.string(), z.unknown()),
@@ -341,7 +316,7 @@ export function saveSettings(changes: SettingsChanges) {
   });
   return request("/api/settings", reply, {
     method: "POST",
-    body: joinPlaceLists(changes),
+    body: changes,
   });
 }
 

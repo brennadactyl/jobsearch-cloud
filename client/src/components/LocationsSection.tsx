@@ -45,12 +45,14 @@ export default function LocationsSection({
       <PlaceField
         {...field("search_locations")}
         placeholder="Add a place, then press Enter"
-        // Word for word what the setup form shows for this question: the two
-        // are meant to match, so a reword changes both. No example may contain
-        // a comma - a comma ends an entry, so one typed as written would become
-        // two places. The examples are shapes an entry takes, not a rule it
-        // obeys: a country or a region is as good an answer as a city.
-        hint="Every area the search should cover — name all of it, not only the part you'd prefer. One place per entry, and a comma starts the next: a city as Seattle WA; a remote role as Remote (US); a whole country or region if that's what you want. The places you rank below are always searched too."
+        // This no longer matches the setup form's wording, and shouldn't: the
+        // lists here are entries, so a comma is part of a name, while intake is
+        // still one joined string where a comma ends the entry. Two behaviours
+        // need two sentences until intake takes entries too.
+        //
+        // The examples are shapes an entry takes, not a rule it obeys: a
+        // country or a region is as good an answer as a city.
+        hint="Every area the search should cover — name all of it, not only the part you'd prefer. One place per entry, added with Enter, and a comma is just part of the name: a city as Seattle, WA; a remote role as Remote (US); a whole country or region if that's what you want. The places you rank below are always searched too."
         // Empty doesn't mean anywhere: the search looks only where the ranked list says.
         empty="Only the ranked places"
       />
