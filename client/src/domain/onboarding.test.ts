@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  answersToSend,
   emptyAnswers,
   inviteNotice,
   isOlderWordFile,
@@ -62,7 +63,7 @@ describe("setupProblems", () => {
     ...emptyAnswers("Sam"),
     resume_text: "Engineer",
     work_scope: "Anywhere in the US",
-    roles: [{ name: "Eng", titles: "Staff engineer", company_kinds: "", rule_outs: "", min_pay: "" }],
+    roles: [{ name: "Eng", titles: "Staff engineer", company_kinds: "", rule_outs: "", min_pay: "", min_pay_unit: "" }],
   };
 
   it("lets a complete form send", () => {
@@ -100,7 +101,7 @@ describe("setupProblems", () => {
   });
 
   it("puts the missing-role message on the first incomplete role", () => {
-    const roles = [{ name: "Eng", titles: "", company_kinds: "", rule_outs: "", min_pay: "" }];
+    const roles = [{ name: "Eng", titles: "", company_kinds: "", rule_outs: "", min_pay: "", min_pay_unit: "" }];
     expect(setupProblems({ ...ready, roles }, [])).toEqual({
       "role-0": "Fill in at least one role — both what to call it and what to look for.",
     });
@@ -130,5 +131,27 @@ describe("retriesEnded", () => {
   it("reads a missing cutoff as still retrying, which is what the page said before there was one", () => {
     expect(retriesEnded("", Date.parse(end) + 1)).toBe(false);
     expect(retriesEnded("not a date", Date.parse(end) + 1)).toBe(false);
+  });
+});
+
+describe("answersToSend", () => {
+  const role = { name: "Eng", titles: "Staff engineer", company_kinds: "", rule_outs: "", min_pay: "", min_pay_unit: "" };
+  const answers = { ...emptyAnswers("Sam"), roles: [role] };
+
+  it("keeps the unit where there is an amount for it to be the unit of", () => {
+    const sent = answersToSend({ ...answers, roles: [{ ...role, min_pay: "$52", min_pay_unit: "hour" }] });
+    expect(sent.roles[0]).toMatchObject({ min_pay: "$52", min_pay_unit: "hour" });
+  });
+
+  it("drops a unit left behind when the amount was cleared", () => {
+    // A unit alone says nothing, and storing one leaves a search claiming an
+    // hourly floor of nothing. The account panel keeps the same rule.
+    const sent = answersToSend({ ...answers, roles: [{ ...role, min_pay: "  ", min_pay_unit: "hour" }] });
+    expect(sent.roles[0].min_pay_unit).toBe("");
+  });
+
+  it("leaves every other answer as it was", () => {
+    const full = { ...answers, work_scope: "Anywhere in the US", resume_text: "Engineer" };
+    expect(answersToSend(full)).toEqual(full);
   });
 });

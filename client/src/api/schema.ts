@@ -306,6 +306,12 @@ export const roleAnswerSchema = z.object({
   company_kinds: str.default(""),
   rule_outs: str.default(""),
   min_pay: str.default(""),
+  /**
+   * The unit the amount is in, asked because an amount alone doesn't say: "95"
+   * is a year to one person and an hour to another, and the search has to pick
+   * one. The account panel asks the same pair about a search that exists.
+   */
+  min_pay_unit: str.default(""),
 });
 export const intakeAnswersSchema = z.object({
   page_title: str.default(""),
