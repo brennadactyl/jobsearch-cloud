@@ -15,6 +15,11 @@ import { DAY_MS } from "./validate.js";
 
 export const INVITE_DAYS_DEFAULT = 14;
 export const INVITE_DAYS_MAX = 30;
+
+// A ceiling on what is worth hashing to look up an invite. A real code is far
+// shorter; anything past this is a caller sending something that isn't one, and
+// the lookup says no without doing the work.
+const MAX_INVITE_CODE_CHARS = 200;
 // How many nights a failed setup is retried before the run gives up and the
 // note tells the person to ask whoever invited them.
 export const RETRY_NIGHTS = 3;
@@ -96,7 +101,7 @@ export async function mintInvite(d1, note, days) {
  * @returns {Promise<Invite|null>}
  */
 export async function findInvite(d1, code) {
-  if (typeof code !== "string" || !code || code.length > 200) {
+  if (typeof code !== "string" || !code || code.length > MAX_INVITE_CODE_CHARS) {
     return null;
   }
   const row = await d1.prepare("SELECT * FROM invites WHERE code_hash = ?").bind(await hashToken(code)).first();

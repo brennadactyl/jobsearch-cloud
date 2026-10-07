@@ -339,15 +339,23 @@ export async function storedLocationRows(d1, userId) {
 // the searches depend on.
 export const PROMPT_SETTING_KEYS = ["footer_note", "pronouns"];
 
+/**
+ * How long a search may go without a recorded run before the page calls it
+ * stale. Long enough that one missed night is not a warning, since a run can
+ * slip by hours; short enough that two missed nights are. The page falls back
+ * to the same number of its own - DEFAULT_STALE_RUN_HOURS in
+ * client/src/api/schema.ts - and the two are built separately, so a change
+ * here is a change there.
+ */
+const STALE_RUN_HOURS_DEFAULT = 36;
+
 export const DEFAULT_SETTINGS = {
   display_title: "Job Search Tracker",
   overview_label: "Overview",
   applications_label: "Applications",
   // The built-in cross-track leads tab.
   all_leads_label: "All leads",
-  // The page falls back to the same number (DEFAULT_STALE_RUN_HOURS in
-  // client/src/api/schema.ts).
-  stale_run_hours: 36,
+  stale_run_hours: STALE_RUN_HOURS_DEFAULT,
   search_locations: [],
   excluded_locations: [],
   priority_locations: [],

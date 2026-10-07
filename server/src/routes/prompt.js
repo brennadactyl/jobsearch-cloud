@@ -87,10 +87,18 @@ export async function handleGetPrompt({ db, user, params, url }) {
   return text(buildSearchPrompt({ user, track, settings: config.settings, feeds, docBudget: docBudgetFrom(url) }));
 }
 
+// What a caller may ask a run to add to its doc in one night. Below the floor
+// the run could not write a finding at all; above the ceiling a night's edit
+// stops being an update and starts rewriting the doc. Anything outside the
+// range, or unparseable, falls back to the default rather than being refused -
+// the budget is a hint to the prompt, not a contract.
+const DOC_BUDGET_MIN_BYTES = 100;
+const DOC_BUDGET_MAX_BYTES = 20000;
+
 function docBudgetFrom(url) {
   const raw = url ? url.searchParams.get("doc_budget") : null;
   const n = raw !== null && /^\d+$/.test(raw) ? Number(raw) : NaN;
-  return n >= 100 && n <= 20000 ? n : DEFAULT_DOC_BUDGET_BYTES;
+  return n >= DOC_BUDGET_MIN_BYTES && n <= DOC_BUDGET_MAX_BYTES ? n : DEFAULT_DOC_BUDGET_BYTES;
 }
 
 /**
