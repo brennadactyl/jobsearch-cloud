@@ -450,7 +450,7 @@ The answers map onto the config like this:
 | each role's `titles` | `role_search_line` and `full_description` |
 | each role's `company_kinds` | the track doc's `## What this search is looking for`, as guidance for discovery - and any company they named by name in `named_companies`, which the script puts on the shared list |
 | each role's `rule_outs` | `fit_clause` / `fit_disqualifier`, and `fit_filter_step` only for a real pivot. A pay floor among them belongs in `pay_floor`, not here |
-| each role's `min_pay` | `pay_floor`, the amount exactly as they typed it, with `pay_floor_unit`: `hour` when they wrote an hourly rate, `year` otherwise. Never restated in the prose - the form's own wording ("a posting stays if its range reaches this, or if it names no pay at all") is what the prompt already composes from the pair |
+| each role's lowest acceptable pay | the track's `pay_floor` and `pay_floor_unit`. Where the form sends that pair itself, it is already written when the form arrives and is not yours to touch, like the location lists; where it sends the amount as text, put it in `pay_floor` exactly as typed and set the unit - `hour` for an hourly rate, `year` otherwise. Never restated in the prose: the form's own wording ("a posting stays if its range reaches this, or if it names no pay at all") is what the prompt composes from the pair |
 | each role's `min_pay` | part of the fit filter: a *stated* range topping out below it disqualifies; no published range does not |
 | `never_work_for` | `excluded_companies` - already written when the form was sent, not by you |
 | `preferences` | the track doc's `## What this search is looking for`, weighed - never turned into a rule-out |
