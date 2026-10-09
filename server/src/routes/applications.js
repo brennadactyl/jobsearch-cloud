@@ -8,6 +8,7 @@
 
 import { json, readJson } from "../http.js";
 import { areaToStore, isoDate, postedToStore } from "../validate.js";
+import { APPLIED_LEAD_STATUS, REOPENED_LEAD_STATUS } from "./leads.js";
 
 // Duplicated in client/src/domain/constants.ts's APP_STATUS: client and server
 // share no code.
@@ -75,7 +76,23 @@ export async function handleSetApplicationStatus({ request, db, params }) {
 
 /**
  * POST /api/delete-application - requires a Bearer token. Body `{ id }` ->
- * `{ ok }`; 400 for a missing id, 404 for an unknown application.
+ * `{ ok, lead }`; 400 for a missing id, 404 for an unknown application.
+ *
+ * **Removing an application puts its lead back.** An application made from a
+ * lead leaves that lead reading "Applied", which means "see Applications" - so
+ * deleting the application alone leaves the lead on no tab anyone looks at,
+ * off the Open chip and absent from the one place its status points to. The
+ * pair is written together (db.js deleteApplicationAndRestoreLead).
+ *
+ * It goes back to "Reviewing" rather than "New": the person has handled this
+ * row, and the tab badge counts untouched leads, so "New" would put it back as
+ * unread work and claim nobody had looked at it.
+ *
+ * `lead` is the restored row, or null when there was nothing to restore - an
+ * application added by hand, or one whose lead is gone. It is in the reply
+ * because the page removes the application from its cache without refetching,
+ * so a reply that said only "ok" would leave it holding a state the server
+ * never had: the application gone and the lead still reading "Applied".
  */
 export async function handleDeleteApplication({ request, db }) {
   const body = await readJson(request);
@@ -86,12 +103,16 @@ export async function handleDeleteApplication({ request, db }) {
   if (!body.id) {
     return json({ error: "missing id" }, 400);
   }
-  const deleted = await db.deleteApplication(body.id);
+  const { deleted, lead } = await db.deleteApplicationAndRestoreLead(
+    body.id,
+    APPLIED_LEAD_STATUS,
+    REOPENED_LEAD_STATUS
+  );
   if (!deleted) {
     return json({ error: "application not found" }, 404);
   }
   await db.touchUpdated();
-  return json({ ok: true });
+  return json({ ok: true, lead: lead || null });
 }
 
 // ------------------------------------------------- the overnight fill --
