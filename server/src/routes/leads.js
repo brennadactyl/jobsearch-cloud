@@ -25,6 +25,17 @@ import {
 // share no code. Only handleSetLeadStatus validates against it;
 // /api/update (./update.js) writes `status` unvalidated.
 export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"];
+// The two of those the lead/application pair turns on, named because the pair
+// is written in two files (./applications.js, ../db.js) and a bare string in
+// one of them is a status nobody can grep for.
+//
+// `APPLIED` means "see Applications" rather than naming a tab of its own, which
+// is what makes an application's removal the lead's business too. `REOPENED` is
+// Reviewing rather than New: the person has handled the row, and the tab badge
+// counts untouched leads, so New would put it back as unread work and claim
+// nobody had looked at it.
+export const APPLIED_LEAD_STATUS = "Applied";
+export const REOPENED_LEAD_STATUS = "Reviewing";
 
 /**
  * POST /api/leads - requires a Bearer token. Body `{ on?, leads: [...] }` ->
