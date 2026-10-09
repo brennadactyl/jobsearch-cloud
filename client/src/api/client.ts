@@ -444,8 +444,14 @@ export function deleteLead(id: number, reason: string) {
   });
 }
 
+/**
+ * `lead` is the row put back on its search's board, complete, or null where
+ * nothing was restored - an application added by hand, or one whose lead was
+ * judged something else after applying, which the server leaves alone rather
+ * than overruling a decision someone made.
+ */
 export function deleteApplication(id: number) {
-  return request("/api/delete-application", z.object({ ok: z.boolean().optional() }), {
+  return request("/api/delete-application", z.object({ ok: z.boolean().optional(), lead: leadSchema.nullish() }), {
     method: "POST",
     body: { id },
   });

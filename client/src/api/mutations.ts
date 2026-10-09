@@ -241,9 +241,34 @@ export function useDeleteLead() {
   });
 }
 
+/**
+ * Removing an application puts its lead back on its search's board, and the
+ * reply carries the restored row. Patching it in is what makes the lead appear
+ * where someone would go looking for it; without it the cache keeps the lead
+ * reading Applied, which `leadRows` drops from every leads tab, so the posting
+ * is nowhere until something else refetches.
+ *
+ * The removal is optimistic and the restore is not: the lead that comes back is
+ * the server's, status and all, and guessing it here would mean deciding
+ * whether the restore happened at all. It doesn't always - `lead` is null for
+ * an application added by hand, and for one whose lead was judged something
+ * else after applying, which the server leaves alone rather than overruling.
+ *
+ * So for one round trip the posting really is nowhere: the application has gone
+ * optimistically and the lead has not come back yet. That is the design rather
+ * than the bug above returning.
+ *
+ * `replaceById` replaces and never inserts, so this relies on `/api/data`
+ * serving every lead whatever its status - which it does, unwindowed. Screened
+ * rows in the same payload are windowed, so the precedent for narrowing one of
+ * these lists is a few lines away in db.js: window leads the same way and a
+ * restored lead outside the window is mapped over without matching, putting the
+ * posting nowhere again with nothing raised.
+ */
 export function useDeleteApplication() {
-  return useWrite<{ id: number }, unknown>({
+  return useWrite<{ id: number }, Awaited<ReturnType<typeof api.deleteApplication>>>({
     mutationFn: ({ id }) => api.deleteApplication(id),
     optimistic: (d, { id }) => ({ ...d, applications: d.applications.filter((a) => a.id !== id) }),
+    onResult: (d, res) => (res.lead ? { ...d, leads: replaceById(d.leads, res.lead) } : d),
   });
 }
