@@ -37,6 +37,23 @@ doc, and a finding says whether anything was built on the wrong line.
   list, and the actions that are scripts today, minting an invite first among
   them. An operator signs in as themselves, with a flag on the account; the
   admin token stays the machine's. Planned, unbuilt.
+- **Removing an application should put its lead back.** Marking a lead
+  **Applied** sets the lead's status to Applied and creates the application,
+  which keeps a `leadId` pointing home. Deleting that application deletes only
+  the application row, so the lead is left at Applied with nothing it belongs
+  to: not on the Open chip, which is New and Reviewing; not in Applications;
+  visible only under **All** on its own tab. Someone who moves a lead across by
+  mistake and undoes it has no way back that they would think to look for, and
+  the row reads as lost.
+  The return trip needs nothing new - the application already carries the
+  `leadId`, and the lead row was never deleted. Deleting an application whose
+  `leadId` resolves sets that lead back to an open status, and **Reviewing** is
+  the honest one: the person has handled this row, so claiming nobody has looked
+  at it would be false and would put it back in the tab's badge, which counts
+  only what is untouched. An application with no `leadId`, or one whose lead no
+  longer resolves, is deleted as it is today. Worth doing as its own small
+  change rather than waiting for a bigger one: the stranding happens on every
+  removal, not only a mistaken one.
 - **A setup answer can land in the wrong field and nothing says so.** One
   signup's answer to the work-scope question held seven company names, which
   were stored as places, so the night was told to search "at Amazon" as though
