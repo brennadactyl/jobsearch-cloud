@@ -253,6 +253,17 @@ export function useDeleteLead() {
  * whether the restore happened at all. It doesn't always - `lead` is null for
  * an application added by hand, and for one whose lead was judged something
  * else after applying, which the server leaves alone rather than overruling.
+ *
+ * So for one round trip the posting really is nowhere: the application has gone
+ * optimistically and the lead has not come back yet. That is the design rather
+ * than the bug above returning.
+ *
+ * `replaceById` replaces and never inserts, so this relies on `/api/data`
+ * serving every lead whatever its status - which it does, unwindowed. Screened
+ * rows in the same payload are windowed, so the precedent for narrowing one of
+ * these lists is a few lines away in db.js: window leads the same way and a
+ * restored lead outside the window is mapped over without matching, putting the
+ * posting nowhere again with nothing raised.
  */
 export function useDeleteApplication() {
   return useWrite<{ id: number }, Awaited<ReturnType<typeof api.deleteApplication>>>({
