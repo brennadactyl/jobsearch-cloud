@@ -47,13 +47,19 @@ doc, and a finding says whether anything was built on the wrong line.
   the row reads as lost.
   The return trip needs nothing new - the application already carries the
   `leadId`, and the lead row was never deleted. Deleting an application whose
-  `leadId` resolves sets that lead back to an open status, and **Reviewing** is
-  the honest one: the person has handled this row, so claiming nobody has looked
-  at it would be false and would put it back in the tab's badge, which counts
-  only what is untouched. An application with no `leadId`, or one whose lead no
-  longer resolves, is deleted as it is today. Worth doing as its own small
-  change rather than waiting for a bigger one: the stranding happens on every
-  removal, not only a mistaken one.
+  `leadId` resolves sets that lead back to **Reviewing**: the person has handled
+  this row, so claiming nobody has looked at it would be false and would put it
+  back in the tab's badge, which counts only what is untouched. It is restored
+  only while it still reads Applied, since a lead marked **Not a fit** after
+  applying is not stranded and reopening it would overrule a decision made
+  later. An application with no `leadId` - one typed in or added from a link -
+  is deleted as it is today. There is no third case: an id that points at a
+  missing lead cannot be built, because `delete-leads` keeps any lead an
+  application points at and `purgeSearch` clears `leadId` rather than leaving an
+  id behind, so the id either resolves or is empty. Guarding against it anyway
+  costs one clause and is worth it, since those two routes are what make the
+  claim true. Worth doing as its own small change rather than waiting for a
+  bigger one: the stranding happens on every removal, not only a mistaken one.
 - **A setup answer can land in the wrong field and nothing says so.** One
   signup's answer to the work-scope question held seven company names, which
   were stored as places, so the night was told to search "at Amazon" as though
