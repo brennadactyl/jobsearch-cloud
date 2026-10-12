@@ -624,7 +624,13 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
 
    **There is no undoing the delist report.** A removed lead's row is gone and its URL is screened from then on, so step 7 skips it for good: if the posting turns out to be live after all, no future run puts it back.
 
-   **So only list a posting you have actually confirmed dead** - a page that loads and says the role is closed or filled, or a genuine 404. Not being able to check is not the same as dead: a fetch timeout, a blocked domain, a 403/429, truncated content, or a JS shell that renders nothing all mean *unknown*, and an unknown belongs in **neither** file - it leaves the lead exactly as it is while you note the tooling problem in your report. Reporting a live posting as dead takes a real opening off ${pn.poss} board. When in doubt, leave it out of both and say so.
+   **So only list a posting you have actually confirmed dead** - a page that loads and says the role is closed or filled, a genuine 404, or the listing check below. Not being able to check is not the same as dead: a fetch timeout, a blocked domain, truncated content, or a JS shell that renders nothing all mean *unknown*, and an unknown belongs in **neither** file - it leaves the lead exactly as it is while you note the tooling problem in your report. Reporting a live posting as dead takes a real opening off ${pn.poss} board. When in doubt, leave it out of both and say so.
+
+   **A refusal on one posting from a board that is answering you is not a block.** Some boards - Workday most of all - answer a *removed* req with 403 while serving every other req on the same host, so "403 means unknown" leaves dead postings on the board for good. What settles it is the board's own listing, not the posting's status: ask the listing for that req's id. Absent from it, the posting is gone and belongs in \`dead.json\`; present, it is live.
+
+   Before trusting an absence, prove the search works on that host: take a req id out of that same listing and search for it the same way. If the control doesn't come back, the search is broken rather than the posting missing, and every lead on that host is *unknown*. A Workday listing is \`POST /wday/cxs/<tenant>/<site>/jobs\` with \`{"limit":20,"offset":0,"searchText":"<req id>"}\`, and the req id is the tail of the posting's own address (\`..._R70906\`).
+
+   A 403 from a host that refuses you everywhere - the listing too - is still a block, and still unknown.
 
    A url reported back as unmatched means you believe you're tracking something the tracker has no lead for - report that plainly rather than retrying it.
 8b. ${docUpdate}

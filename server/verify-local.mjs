@@ -1257,6 +1257,28 @@ for (const cmd of [
 }
 check("the prompt says where the helper is and how to run it if the shim won't execute",
   sweSteps.includes("-File tracker.ps1"));
+// A removed Workday req answers 403 while its host serves every other req, so
+// "a 403 means unknown" leaves a dead posting on the board permanently - the
+// delist report is the only thing that takes one off, and there is no undo.
+// What decides it is the board's own listing, which is a comparison rather than
+// a reading of a status code.
+check("step 8 says a refusal from a board that is answering is not a block",
+  sweSteps.includes("A refusal on one posting from a board that is answering you is not a block") &&
+  sweSteps.includes("answer a *removed* req with 403 while serving every other req on the same host"));
+check("and settles it on the listing, naming how to ask and where the req id is",
+  sweSteps.includes("ask the listing for that req's id") &&
+  sweSteps.includes("/wday/cxs/<tenant>/<site>/jobs") && sweSteps.includes("_R70906"));
+// Without the control, a listing that answers nothing at all reads as every
+// posting on it being gone - which would delete a board's worth of live leads.
+check("and requires a control from that listing before trusting an absence",
+  sweSteps.includes("prove the search works on that host") &&
+  sweSteps.includes("If the control doesn't come back, the search is broken rather than the posting missing"));
+check("and still calls a host that refuses everywhere a block",
+  sweSteps.includes("A 403 from a host that refuses you everywhere - the listing too - is still a block"));
+// The blanket clause this replaces must be gone, or the two read as a
+// contradiction and the softer one wins.
+check("and no longer lists a bare 403 among the things that mean unknown",
+  !/a blocked domain, a 403\/429, truncated content/.test(sweSteps));
 // The one instruction a shorter prompt is most tempting to soften, and the
 // premise everything else rests on: a search-snippet URL is not a finding.
 check("step 4 still requires every candidate URL to be opened and confirmed",
