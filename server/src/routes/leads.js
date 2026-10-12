@@ -34,6 +34,15 @@ export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"];
 // Reviewing rather than New: the person has handled the row, and the tab badge
 // counts untouched leads, so New would put it back as unread work and claim
 // nobody had looked at it.
+//
+// What makes Reviewing *arrive* somewhere, rather than merely be correct, is a
+// rule in the page: `isOpen` in client/src/domain/drills.ts is New or
+// Reviewing, and the Open chip is what someone looks at afterwards. Client and
+// server share no code, so narrowing that predicate to New alone - not an
+// absurd reading of "open" - would strand the restored lead again while
+// every check here stayed green, because they read the status back and the
+// status is the part that would still be right. Change this constant and that
+// predicate together, or neither.
 export const APPLIED_LEAD_STATUS = "Applied";
 export const REOPENED_LEAD_STATUS = "Reviewing";
 
