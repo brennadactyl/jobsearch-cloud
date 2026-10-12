@@ -25,6 +25,26 @@ import {
 // share no code. Only handleSetLeadStatus validates against it;
 // /api/update (./update.js) writes `status` unvalidated.
 export const LEAD_STATUS = ["New", "Reviewing", "Applied", "Not a fit"];
+// The two of those the lead/application pair turns on, named because the pair
+// is written in two files (./applications.js, ../db.js) and a bare string in
+// one of them is a status nobody can grep for.
+//
+// `APPLIED` means "see Applications" rather than naming a tab of its own, which
+// is what makes an application's removal the lead's business too. `REOPENED` is
+// Reviewing rather than New: the person has handled the row, and the tab badge
+// counts untouched leads, so New would put it back as unread work and claim
+// nobody had looked at it.
+//
+// What makes Reviewing *arrive* somewhere, rather than merely be correct, is a
+// rule in the page: `isOpen` in client/src/domain/drills.ts is New or
+// Reviewing, and the Open chip is what someone looks at afterwards. Client and
+// server share no code, so narrowing that predicate to New alone - not an
+// absurd reading of "open" - would strand the restored lead again while
+// every check here stayed green, because they read the status back and the
+// status is the part that would still be right. Change this constant and that
+// predicate together, or neither.
+export const APPLIED_LEAD_STATUS = "Applied";
+export const REOPENED_LEAD_STATUS = "Reviewing";
 
 /**
  * POST /api/leads - requires a Bearer token. Body `{ on?, leads: [...] }` ->

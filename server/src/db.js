@@ -1844,6 +1844,69 @@ export class Db {
   }
 
   /**
+   * Deletes an application and, when it was made from a lead that is still
+   * waiting on it, puts that lead back to an open status - in one D1 batch
+   * (transaction), the mirror of setLeadStatusAndMaybeCreateApplication.
+   *
+   * Both halves land together for the reason the pair exists: a lead reading
+   * "Applied" with no application is on no tab a person looks at. It is off the
+   * Open chip, absent from Applications, and reachable only by opening its own
+   * search and asking for everything - so a half-done pair here strands the row
+   * exactly as the delete alone does today.
+   *
+   * The status change is conditional on the lead still reading `appliedStatus`,
+   * which is narrower than "put it back" on purpose. That is the state this
+   * repairs: a lead someone has since marked anything else is on a tab that
+   * means what it says, and moving it would overrule a decision they made
+   * after applying.
+   *
+   * An application with no `leadId` - added by hand - deletes exactly as
+   * before. Nothing is created to receive it.
+   *
+   * The UPDATE is conditional on the id as well as the status, so an id that
+   * resolves to nothing matches no row and restores nothing. That is defence
+   * rather than a path: removing leads keeps any an application points at, and
+   * retiring a search clears `leadId` to '' rather than leaving an id behind,
+   * so a dangling one cannot be built. Written this way because the cost is a
+   * clause, and whichever of those two guards changes would otherwise make
+   * this method the place a wrong lead gets reopened.
+   * @param {number|string} id the application to remove
+   * @param {string} appliedStatus the status a lead waiting on an application reads
+   * @param {string} openStatus the status to put it back to
+   * @returns {Promise<{deleted: boolean, lead: Lead|null}>} `lead` is the row
+   *   put back, so a caller can answer with it rather than make the page ask
+   *   again; null when nothing was restored
+   */
+  async deleteApplicationAndRestoreLead(id, appliedStatus, openStatus) {
+    // Throw rather than default: these are the lead vocabulary, which belongs
+    // to routes/leads.js, and a fallback here would invent a status.
+    if (!appliedStatus || !openStatus) {
+      throw new Error("deleteApplicationAndRestoreLead: both statuses are required");
+    }
+    const application = await this.getApplication(id);
+    if (!application) {
+      return { deleted: false, lead: null };
+    }
+    const leadId = typeof application.leadId === "string" ? application.leadId.trim() : "";
+    const batch = [
+      this.d1.prepare("DELETE FROM applications WHERE id = ? AND user_id = ?").bind(id, this.userId),
+    ];
+    if (leadId) {
+      batch.push(
+        this.d1
+          .prepare("UPDATE leads SET status = ? WHERE id = ? AND user_id = ? AND status = ?")
+          .bind(openStatus, leadId, this.userId, appliedStatus)
+      );
+    }
+    const results = await this.d1.batch(batch);
+    const restored = Boolean(leadId) && (results[1].meta.changes || 0) > 0;
+    return {
+      deleted: (results[0].meta.changes || 0) > 0,
+      lead: restored ? await this.getLead(leadId) : null,
+    };
+  }
+
+  /**
    * Sets status and, the first time it reaches a stage with a history
    * column, stamps that column with a date - but only if it's still empty,
    * so it never overwrites a date the user corrected by hand.

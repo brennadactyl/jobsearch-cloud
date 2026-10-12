@@ -1876,6 +1876,90 @@ const dupId = (await req("GET", "/api/data", { token: A_TOK })).json.leads
 check("moving onto a url the destination tab already holds is a 409, not a 500",
   (await req("POST", "/api/update", { token: A_TOK, body: { type: "lead", id: dupId, search: "DATA" } })).status === 409);
 
+console.log("\n== removing an application puts its lead back ==");
+{
+  // A lead reading "Applied" with no application is on no tab anyone looks at:
+  // off the Open chip, absent from Applications, and reachable only by asking
+  // its own search for everything. Each check reads the lead's status back,
+  // since the route answered 200 before this existed too.
+  const raRun = Date.now().toString(36);
+  const raLead = async (slug) => {
+    await req("POST", "/api/leads", { token: A_TOK, body: { leads: [
+      { search: "SWE", company: `Restore ${slug}`, title: "Staff Backend",
+        location: "Remote (U.S.)", url: `https://example.com/restore-${slug}-${raRun}` }] } });
+    return (await req("GET", "/api/data", { token: A_TOK })).json.leads
+      .find((l) => l.company === `Restore ${slug}`);
+  };
+  const raStatus = async (id) =>
+    (await req("GET", "/api/data", { token: A_TOK })).json.leads.find((l) => l.id === id)?.status;
+  const raApply = async (id) => {
+    await req("POST", `/api/leads/${id}/status`, { token: A_TOK, body: { status: "Applied" } });
+    return (await req("GET", "/api/data", { token: A_TOK })).json.applications
+      .find((x) => x.leadId === String(id));
+  };
+
+  const back = await raLead("back");
+  const backApp = await raApply(back.id);
+  const removed = await req("POST", "/api/delete-application", { token: A_TOK, body: { id: backApp.id } });
+  check("removing an application puts its lead back as Reviewing, not New",
+    removed.status === 200 && (await raStatus(back.id)) === "Reviewing",
+    JSON.stringify([removed.json, await raStatus(back.id)]));
+  check("and the reply carries the restored lead, so the page needn't ask again",
+    removed.json?.lead?.id === back.id && removed.json?.lead?.status === "Reviewing",
+    JSON.stringify(removed.json?.lead));
+  check("the application is gone",
+    !(await req("GET", "/api/data", { token: A_TOK })).json.applications.some((x) => x.id === backApp.id));
+
+  // An application nobody applied from: added by hand, so there is no lead to
+  // put back and nothing else may move.
+  const byHand = await req("POST", "/api/update", { token: A_TOK, body: {
+    type: "application", company: `Restore byhand ${raRun}`, title: "Staff Backend",
+    link: `https://example.com/restore-byhand-${raRun}` } });
+  const byHandId = byHand.json?.application?.id;
+  const handLead = await raLead("untouched");
+  const handRemoved = await req("POST", "/api/delete-application", { token: A_TOK, body: { id: byHandId } });
+  check("an application added by hand still deletes, restoring nothing",
+    handRemoved.status === 200 && handRemoved.json?.lead === null,
+    JSON.stringify([handRemoved.status, handRemoved.json]));
+  check("and no other lead moved while it did", (await raStatus(handLead.id)) === "New");
+
+  // A lead someone has since judged for themselves is not stranded - "Not a
+  // fit" is a tab that means what it says - so removing the application leaves
+  // that decision alone.
+  const judged = await raLead("judged");
+  const judgedApp = await raApply(judged.id);
+  await req("POST", "/api/update", { token: A_TOK, body: { type: "lead", id: judged.id, status: "Not a fit" } });
+  const judgedRemoved = await req("POST", "/api/delete-application", { token: A_TOK, body: { id: judgedApp.id } });
+  check("a lead marked something else after applying keeps that status",
+    judgedRemoved.status === 200 && (await raStatus(judged.id)) === "Not a fit" &&
+    judgedRemoved.json?.lead === null,
+    JSON.stringify([await raStatus(judged.id), judgedRemoved.json?.lead]));
+
+  // Why there is no check here for an application whose `leadId` points at a
+  // lead that no longer exists: nothing can build that state. Removing leads
+  // keeps any an application points at, and retiring a search clears `leadId`
+  // to '' rather than leaving an id behind - both deliberately, both saying so.
+  // So the id either resolves or is empty, and the empty case is the hand-added
+  // one above. What is checked instead is the guard that makes it true, since
+  // that is the thing whose breaking would create the state.
+  const guarded = await raLead("guarded");
+  const guardedApp = await raApply(guarded.id);
+  const refusedDelete = await req("POST", "/api/delete-leads", { token: A_TOK, body: {
+    ids: [guarded.id], reason: "tidying the board" } });
+  check("a lead an application points at is kept rather than deleted, so no id dangles",
+    refusedDelete.status === 200 &&
+    (refusedDelete.json?.kept || []).map(String).includes(String(guarded.id)) &&
+    (await raStatus(guarded.id)) === "Applied",
+    JSON.stringify([refusedDelete.json, await raStatus(guarded.id)]));
+  const guardedRemoved = await req("POST", "/api/delete-application", { token: A_TOK, body: { id: guardedApp.id } });
+  check("and once its application goes, the lead is open again",
+    guardedRemoved.status === 200 && (await raStatus(guarded.id)) === "Reviewing",
+    JSON.stringify([guardedRemoved.json?.lead?.status, await raStatus(guarded.id)]));
+
+  check("an application nobody has still 404s",
+    (await req("POST", "/api/delete-application", { token: A_TOK, body: { id: 999999 } })).status === 404);
+}
+
 console.log("\n== sessions ==");
 const aSecond = await req("POST", "/api/login", { body: { name: "Ada", password: "ada-new-password-1", label: "browser" } });
 check("logging out revokes only the token used",
