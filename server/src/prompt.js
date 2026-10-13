@@ -628,7 +628,11 @@ ${filing}8. RE-CHECK THE LEADS DUE TONIGHT, AND REPORT WHAT YOU FOUND. Open ever
 
    **A refusal on one posting from a board that is answering you is not a block.** Some boards - Workday most of all - answer a *removed* req with 403 while serving every other req on the same host, so "403 means unknown" leaves dead postings on the board for good. What settles it is the board's own listing, not the posting's status: ask the listing for that req's id. Absent from it, the posting is gone and belongs in \`dead.json\`; present, it is live.
 
-   Before trusting an absence, prove the search works on that host: take a req id out of that same listing and search for it the same way. If the control doesn't come back, the search is broken rather than the posting missing, and every lead on that host is *unknown*. A Workday listing is \`POST /wday/cxs/<tenant>/<site>/jobs\` with \`{"limit":20,"offset":0,"searchText":"<req id>"}\`, and the req id is the tail of the posting's own address (\`..._R70906\`).
+   Asking the listing for an id is a search, never a read-through: \`searchText\` is the id, and a short page of matches for one id is the whole answer. Don't page through a board looking for it - a req missing from the page you happened to fetch is not a req that is gone.
+
+   Before trusting an absence, prove the step works on that host - and prove it the same way you are about to use it. Take **another lead's url on that same host**, pull the req id out of its address exactly as you did the suspect's, and search for that. If it comes back, the absence means something. If it doesn't, what is broken is your reading of these addresses or the host's index, not the posting, and every lead on that host is *unknown*. Where there is no second lead on the host, take any posting the listing returns unfiltered and pull its id from its address the same way: the point is that the control travels the identical path - address to id to search - because that extraction is the only part a listing-sourced id would never test.
+
+   A Workday listing is \`POST /wday/cxs/<tenant>/<site>/jobs\` with \`{"limit":20,"offset":0,"searchText":"<req id>"}\`, and the req id is the tail of the posting's own address (\`..._R70906\`).
 
    A 403 from a host that refuses you everywhere - the listing too - is still a block, and still unknown.
 

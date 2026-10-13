@@ -1270,9 +1270,23 @@ check("and settles it on the listing, naming how to ask and where the req id is"
   sweSteps.includes("/wday/cxs/<tenant>/<site>/jobs") && sweSteps.includes("_R70906"));
 // Without the control, a listing that answers nothing at all reads as every
 // posting on it being gone - which would delete a board's worth of live leads.
-check("and requires a control from that listing before trusting an absence",
-  sweSteps.includes("prove the search works on that host") &&
-  sweSteps.includes("If the control doesn't come back, the search is broken rather than the posting missing"));
+//
+// The control has to travel the same path as the thing it guards: address ->
+// id -> search. An id taken from the listing skips the extraction from an
+// address, which is the one step that can differ per host - so on a host whose
+// url tail isn't what its listing indexes, such a control passes while every
+// lead there reads as gone.
+check("and requires a control that comes from an address, like the check it guards",
+  sweSteps.includes("prove it the same way you are about to use it") &&
+  sweSteps.includes("another lead's url on that same host") &&
+  sweSteps.includes("the control travels the identical path - address to id to search"));
+check("and says what a failed control means: the reading, not the posting",
+  sweSteps.includes("what is broken is your reading of these addresses or the host's index, not the posting"));
+// "Absent from the listing" invites paging through a board, where a req missing
+// from the page you fetched looks gone - the hazard the control exists for.
+check("and says asking the listing is a search rather than a read-through",
+  sweSteps.includes("is a search, never a read-through") &&
+  sweSteps.includes("Don't page through a board looking for it"));
 check("and still calls a host that refuses everywhere a block",
   sweSteps.includes("A 403 from a host that refuses you everywhere - the listing too - is still a block"));
 // The blanket clause this replaces must be gone, or the two read as a
