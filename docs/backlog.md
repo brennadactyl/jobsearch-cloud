@@ -37,6 +37,26 @@ doc, and a finding says whether anything was built on the wrong line.
   list, and the actions that are scripts today, minting an invite first among
   them. An operator signs in as themselves, with a flag on the account; the
   admin token stays the machine's. Planned, unbuilt.
+- **A board changing its address format delists every lead found before the
+  change.** A stored address in a retired format does not load, and a genuine
+  404 is counted as confirmed dead, so the lead is deleted with no undo. An
+  employer that re-platforms its board can cost a person everything they had
+  there in one night while the roles are still open. The repo already knows this
+  happens: migration `0010`'s header says a migrated ID space "is the thing that
+  makes a live domain look dead", because runs go on testing ids in the retired
+  format and every one of them 404s.
+  The comparison that would settle it already exists and nothing consults it.
+  `url_shape` on the shared company list records the current shape of a
+  company's posting addresses, so a 404 at an address whose shape no longer
+  matches what is recorded says the address is stale rather than that the
+  posting is gone. It is the same mistake as a removed Workday req answering 403
+  and being read as "unknown, leave it alone", pointing the other way: a status
+  code treated as a verdict where a comparison was available.
+  **Unmeasured, and that is the first thing to find out.** How often it bites
+  needs delisted rows read against the companies whose `url_shape` has changed
+  since those rows were written, through `?screened=all` rather than the page's
+  window. Rank it once that number exists; a fix that recovers nothing is worth
+  less than its risk.
 - **Removing an application should put its lead back.** Marking a lead
   **Applied** sets the lead's status to Applied and creates the application,
   which keeps a `leadId` pointing home. Deleting that application deletes only
