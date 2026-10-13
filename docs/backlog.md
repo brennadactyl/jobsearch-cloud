@@ -52,11 +52,23 @@ doc, and a finding says whether anything was built on the wrong line.
   posting is gone. It is the same mistake as a removed Workday req answering 403
   and being read as "unknown, leave it alone", pointing the other way: a status
   code treated as a verdict where a comparison was available.
-  **Unmeasured, and that is the first thing to find out.** How often it bites
-  needs delisted rows read against the companies whose `url_shape` has changed
-  since those rows were written, through `?screened=all` rather than the page's
-  window. Rank it once that number exists; a fix that recovers nothing is worth
-  less than its risk.
+  **Measured, and the answer is that it cannot be measured backwards.** Of 317
+  delisted rows across every account, 63 sit at a company whose recorded shape
+  has moved since the row was written, 190 are clean, and 64 are unclassifiable
+  for want of a recorded shape. None of the 63 could be turned into a
+  casualty: a delisted row is months old, so a dead address today fits both
+  "wrongly delisted, role since closed" and "correctly delisted", and only a
+  live hit separates them. Nothing stores the history of a company's shape, so
+  the proxy cannot tell a board that re-platformed from a shape that was simply
+  recorded loosely and later refined.
+  **So build the cheap version rather than measure further.** The decisive
+  comparison is prospective and is the fix: when a run meets a 404, check the
+  address against the company's recorded shape *then*, while the posting's fate
+  is still knowable, and treat a mismatch as unknown rather than dead. Unknown
+  is the safe verdict - it leaves the lead alone - so the cheap version needs no
+  evidence of past loss to justify it, which is the point, because that evidence
+  can only ever arrive after someone has lost their leads. Prompt Bro for the
+  step, with the shared list's shape as the comparison.
 - **Removing an application should put its lead back.** Marking a lead
   **Applied** sets the lead's status to Applied and creates the application,
   which keeps a `leadId` pointing home. Deleting that application deletes only
