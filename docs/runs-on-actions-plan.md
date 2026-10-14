@@ -46,17 +46,30 @@ and the role line they wrote. That is the one thing in this change that cannot
 be solved by being careful, because being careful is a thing someone has to keep
 being.
 
-Two ways out, and the choice is the first decision this plan needs:
+**The workflows live in a second, private repository**, which checks this one
+out at run time. Run output and secrets are private; this repo stays public and
+holds neither. The alternative considered and not taken was a rule that the run
+prints nothing: cheaper, but one careless line from publishing somebody's
+search, and the failure would be silent and public. A boundary holds without
+anyone remembering it.
 
-- **The workflows live in a second, private repository** that checks this one
-  out. Run output is private; this repo stays public and keeps no secrets.
-- **The run prints nothing.** Everything goes to the tracker's own log, which is
-  where it already goes, and the workflow's visible output is a status line.
-  Cheaper, but it is one careless `Write-Host` from publishing somebody's
-  search, and the failure is silent and public.
+What follows from that repository existing:
 
-The first is the one to take unless there is a reason not to. The second is a
-rule; the first is a boundary.
+- **`scripts/` is checked out rather than pulled, so merging a script change
+  ships it.** Today a script is live only once the main checkout is pulled, and
+  `CLAUDE.md` makes merging and pulling two separate goes for exactly that
+  reason. A workflow that checks out `main` removes the second one. Either the
+  workflow pins a ref that someone moves deliberately, or that gate is gone and
+  the rule in `CLAUDE.md` stops being true. Pinning keeps it; decide before the
+  first workflow, not after.
+- **The private repo is outside this repo's rules.** Review, branch protection
+  and who may merge there are not inherited, and a workflow file is as
+  consequential as anything under `.claude/`. It needs the same two readers,
+  stated where it lives.
+- **Nothing in it may be a copy of what lives here.** A workflow that restates a
+  runner's arguments is a second place the truth lives; it invokes
+  `scripts/run-search.ps1` and passes what the dispatcher answered, and that is
+  all.
 
 ## Credentials
 
