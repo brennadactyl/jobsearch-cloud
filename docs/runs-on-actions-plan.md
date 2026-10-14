@@ -94,10 +94,21 @@ challenges, CAPTCHA pages and outright 403s appear in the logs - and the whole
 premise is that a posting is fetched and confirmed to render. GitHub's runners
 are datacenter addresses, which boards treat differently.
 
-This is cheap to find out and expensive to discover afterwards: take the
-companies a recent night actually swept, fetch each from a runner, and compare
-what comes back against what that night got. A materially worse rate is a reason
-to stop, not a thing to design around.
+**Measured, and it does not appear.** Sixty companies from the shared list,
+stratified across the board platforms in use, fetched by the same probe from the
+house and from a GitHub runner: every one answered identically - same verdict
+for 60 of 60, no status code different, no body size apart by more than a
+quarter. The two companies that 403 at home 403 there too.
+
+What that does and does not say. It tests the board endpoint each company is
+reached through, not the individual postings, which is where most of the
+challenges in the logs come from. It is one run from one address at one moment,
+and bot walls are adaptive, so it says nothing about a month of nightly traffic
+from the same ranges. And the sample under-represents walled companies, because
+a wall often stopped an endpoint being recorded at all: 11 of 287 fetchable
+companies carry the flag against 56 of 404 overall. So this is no evidence of a
+problem at the layer most likely to have one, which is weaker than safe and
+enough to continue. The probe and both results are in the runs repository.
 
 Second, **what a night costs in runner minutes.** Searches take 10 to 40 minutes
 each and there are eight, so a night is several hours of runner time.
@@ -116,7 +127,7 @@ handed; on Actions that interval is a `schedule:` cron.
 
 ## Order
 
-1. The fetch comparison above, before anything is built.
+1. ~~The fetch comparison above~~ - done; no difference found.
 2. The dispatcher, as [its own plan](dispatcher-plan.md) has it, still running
    on the PC.
 3. One search on Actions, nightly, with the PC's task for it disabled and the
