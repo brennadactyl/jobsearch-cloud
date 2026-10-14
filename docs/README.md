@@ -50,6 +50,7 @@ reference docs above are the authority.
 - [`search-fields-plan.md`](search-fields-plan.md) — a person edits what each of their searches looks for, and its pay floor
 - [`tab-grouping-plan.md`](tab-grouping-plan.md) — a person decides which tabs each of their searches fills
 - [`dispatcher-plan.md`](dispatcher-plan.md) — one task asks the tracker which searches are due, instead of one task per search
+- [`runs-on-actions-plan.md`](runs-on-actions-plan.md) — the nightly searches leave the PC and run on GitHub-hosted runners, with the same CLI
 - [`admin-dashboard-plan.md`](admin-dashboard-plan.md) — an operator signs in and sees run health, accounts and the company list, and mints invites
 - [`instant-setup-plan.md`](instant-setup-plan.md) — the tracker exists the moment setup is sent; the night writes only the prose
 - [`overview-collapsible-plan.md`](overview-collapsible-plan.md) — Momentum moves to the bottom; every Overview section and chart folds, remembered per browser
