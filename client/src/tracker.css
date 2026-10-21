@@ -70,10 +70,21 @@ h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;margin:0;l
 .dot.off{background:var(--ink3)}
 .dot.bad{background:var(--crit)}
 
-.tabs{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;
-  border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;
-  background:var(--ground);padding-top:2px}
+/* The row carries the border and the sticky, so an arrow sits beside the
+   strip rather than inside it - inside, it would scroll away with the tabs. */
+.tabrow{display:flex;align-items:stretch;border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20;background:var(--ground);padding-top:2px}
+.tabs{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0}
 .tabs::-webkit-scrollbar{display:none}
+/* Shown only while that end has something hidden, so there is no dead stub at
+   a width where every tab fits. The fade falls on the side the hidden tabs are
+   on, which is what says the row carries on rather than ends. */
+.tabmore{flex:none;position:relative;display:flex;align-items:center;
+  padding:0 10px 2px;background:none;border:0;cursor:pointer;color:var(--ink2)}
+.tabmore:hover{color:var(--ink)}
+.tabmore::before{content:"";position:absolute;top:0;bottom:0;width:48px;pointer-events:none}
+.tabmore.right::before{right:100%;background:linear-gradient(to right,transparent,var(--ground))}
+.tabmore.left::before{left:100%;background:linear-gradient(to left,transparent,var(--ground))}
 .tab{flex:none;appearance:none;border:0;background:none;cursor:pointer;color:var(--ink2);
   font:inherit;font-weight:500;padding:11px 14px;border-bottom:2px solid transparent;
   white-space:nowrap;display:flex;align-items:center;gap:7px}
