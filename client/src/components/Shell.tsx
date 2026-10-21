@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import type { TrackerData } from "../api/schema";
 import { ALL_LEADS, APPLICATIONS, DASHBOARD } from "../domain/constants";
@@ -7,6 +7,7 @@ import { SCREENED } from "../domain/screened";
 import { buildTabs, buildTracks, pathForTab } from "../domain/tabs";
 import { usePinnedLayout, useTheme } from "../ui/hooks";
 import { useSaved } from "../ui/saved";
+import { hiddenSides, nextEdge } from "../ui/tabScroll";
 import { useWheelAnywhere } from "../ui/wheel";
 import ApplicationsTab from "./ApplicationsTab";
 import AccountPanel from "./AccountPanel";
@@ -18,6 +19,81 @@ import ScreenedTab from "./ScreenedTab";
 function pausedTitle(paused: string): string {
   const day = pausedDay(paused);
   return `Paused${day ? ` since ${day}` : ""}: this search doesn't run until it's resumed. Its leads stay here.`;
+}
+
+/**
+ * The tab strip scrolls when its tabs don't fit, which a portrait monitor or a
+ * sixth search makes ordinary rather than rare. Nothing in the bar itself says
+ * so - the scrollbar is hidden in both engines - and the tab that falls off the
+ * end first is Screened, the one tab with no other route to it.
+ *
+ * So each end gets an arrow while that end has something hidden. Both ends,
+ * because reaching Screened puts Overview off the other side with nothing
+ * pointing back; only while hidden, because a dead stub at a width where
+ * everything fits is its own small wrongness.
+ */
+function useTabOverflow(tabCount: number) {
+  const strip = useRef<HTMLElement>(null);
+  const [hidden, setHidden] = useState({ left: false, right: false });
+
+  const measure = useCallback(() => {
+    const el = strip.current;
+    if (el) {
+      setHidden(hiddenSides(el));
+    }
+  }, []);
+
+  // Resize because the window is what changes whether they fit; the children
+  // because a search added or removed changes it without a resize.
+  useEffect(() => {
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [measure, tabCount]);
+
+  return { strip, hidden, measure };
+}
+
+/**
+ * One end's arrow. A button rather than a styled div, so it is reachable by
+ * keyboard, and named, because an icon alone is the one thing a screen reader
+ * can make nothing of.
+ */
+function TabArrow({
+  side,
+  strip,
+  hidden,
+}: {
+  side: "left" | "right";
+  strip: RefObject<HTMLElement | null>;
+  hidden: boolean;
+}) {
+  if (!hidden) {
+    return null;
+  }
+  const scroll = () => {
+    const el = strip.current;
+    if (!el) {
+      return;
+    }
+    const spans = [...el.children].map((c) => {
+      const tab = c as HTMLElement;
+      return { start: tab.offsetLeft, end: tab.offsetLeft + tab.offsetWidth };
+    });
+    el.scrollTo({ left: nextEdge(side, el, spans), behavior: "smooth" });
+  };
+  return (
+    <button
+      className={`tabmore ${side}`}
+      type="button"
+      onClick={scroll}
+      aria-label={side === "right" ? "More tabs" : "Earlier tabs"}
+    >
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d={side === "right" ? "m6 3 5 5-5 5" : "M10 3 5 8l5 5"} />
+      </svg>
+    </button>
+  );
 }
 
 /**
@@ -61,6 +137,7 @@ export default function Shell({
   const tabs = buildTabs(data.leads, data.applications, tracks, settings);
   const location = useLocation();
   const save = useSaved();
+  const { strip, hidden, measure } = useTabOverflow(tabs.length);
   const [accountOpen, setAccountOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   // `?account=<section>` opens My account on that section, so a link can lead
@@ -128,7 +205,9 @@ export default function Shell({
             </div>
           </div>
 
-          <nav className="tabs" role="tablist">
+          <div className="tabrow">
+          <TabArrow side="left" strip={strip} hidden={hidden.left} />
+          <nav className="tabs" role="tablist" ref={strip} onScroll={measure}>
             {tabs.map((t) => (
               // aria-selected set by hand: role="tab" needs it for assistive
               // tech, and the stylesheet draws the selected tab from it.
@@ -160,6 +239,8 @@ export default function Shell({
               </Link>
             ))}
           </nav>
+          <TabArrow side="right" strip={strip} hidden={hidden.right} />
+          </div>
         </div>
 
         {notice}
