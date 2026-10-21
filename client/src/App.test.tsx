@@ -149,6 +149,23 @@ describe("routing", () => {
   });
 });
 
+describe("the tab bar's arrows", () => {
+  beforeEach(signedIn);
+
+  it("offers neither while nothing is hidden", async () => {
+    // jsdom gives every element a zero-sized box, so the strip measures as not
+    // overflowing - which is the state worth asserting here, because it runs
+    // the whole chain the arithmetic tests can't: the ref reaches the strip,
+    // the measure fires, hiddenSides answers, and the state reaches the
+    // render. An arrow appearing here would mean one appears always.
+    renderApp();
+    await screen.findByRole("heading", { name: "Fixture Search" });
+
+    expect(screen.queryByRole("button", { name: "More tabs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Earlier tabs" })).toBeNull();
+  });
+});
+
 describe("drill-downs: the number and the rows it opens", () => {
   beforeEach(signedIn);
 
