@@ -12,29 +12,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { scrollBehavior } from "./ui/hooks";
 
 /**
- * jsdom has no matchMedia, so each case says what the browser would answer.
- *
- * A whole MediaQueryList rather than just `matches`: this replaces the global
- * for every query, and `useTheme` subscribes to the colour-scheme one. A stub
- * without `addEventListener` throws there - not here, but in whichever other
- * file shares this one's worker, surfacing as a timeout that names neither
- * this file nor the real cause.
+ * Changes one query's answer and keeps the rest of the list the test setup
+ * installs. Building on that baseline rather than replacing the global is what
+ * keeps the other query whole - `useTheme` subscribes to prefers-color-scheme,
+ * and a replacement missing `addEventListener` throws there rather than here.
  */
+/** Captured once, before any spy: read inside the mock it would be the mock. */
+const baseline = window.matchMedia;
+
 function asksFor(reduced: boolean) {
-  vi.stubGlobal("matchMedia", (query: string) => ({
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    ...baseline(query),
     matches: query.includes("prefers-reduced-motion: reduce") && reduced,
-    media: query,
-    onchange: null,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-    dispatchEvent: () => false,
   }));
 }
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // The spy as well as the stub: a spy left in place becomes the next test's
+  // baseline, and a mock reading itself never returns.
+  vi.restoreAllMocks();
 });
 
 describe("a scroll the page starts", () => {
@@ -48,10 +45,12 @@ describe("a scroll the page starts", () => {
     expect(scrollBehavior()).toBe("smooth");
   });
 
-  it("glides where the browser won't say, rather than failing", () => {
-    // matchMedia is absent in jsdom and in older embedded browsers. Treating
-    // that as "no preference" keeps the ordinary case working; treating it as
-    // an error would break the arrows for everyone to serve no one.
+  it("glides where the browser won't say", () => {
+    // Where matchMedia is missing - an older embedded browser - both answers
+    // work and the arrows scroll either way; the choice is only whether an
+    // unreadable preference animates for everyone or for no one. Gliding is
+    // what osPrefersDark does with the same absence, falling through to "not
+    // dark", so the file answers an unanswerable query one way throughout.
     vi.stubGlobal("matchMedia", undefined);
     expect(scrollBehavior()).toBe("smooth");
   });
