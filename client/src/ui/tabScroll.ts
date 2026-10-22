@@ -34,6 +34,25 @@ export function hiddenSides(m: View & { scrollWidth: number }): { left: boolean;
 }
 
 /**
+ * Where to scroll so one child is wholly in view, moving as little as it takes.
+ * Arriving at a tab that sits off the end should bring it in, not re-centre the
+ * strip around it: a jump further than necessary loses the tabs either side of
+ * where you landed.
+ *
+ * Returns the current position when it is already whole, so a caller can scroll
+ * to it unconditionally.
+ */
+export function edgeToShow(span: Span, view: View): number {
+  if (span.start < view.scrollLeft) {
+    return Math.max(0, span.start);
+  }
+  if (span.end > view.scrollLeft + view.clientWidth) {
+    return Math.max(0, span.end - view.clientWidth);
+  }
+  return view.scrollLeft;
+}
+
+/**
  * Where to scroll so the next child that is cut off becomes whole. A fixed step
  * would be simpler and would regularly stop with half a label showing, which
  * reads as the same bug this is here to fix.

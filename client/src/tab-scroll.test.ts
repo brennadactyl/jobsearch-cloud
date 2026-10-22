@@ -7,7 +7,7 @@
  * real browser is what proves the half that measures.
  */
 import { describe, expect, it } from "vitest";
-import { hiddenSides, nextEdge } from "./ui/tabScroll";
+import { edgeToShow, hiddenSides, nextEdge } from "./ui/tabScroll";
 
 /** Her nine tabs at a width that cuts the last two: a strip of 1181 showing 1045. */
 const VIEW = { scrollLeft: 0, clientWidth: 1045 };
@@ -75,5 +75,34 @@ describe("where one press lands", () => {
 
   it("never scrolls past the start", () => {
     expect(nextEdge("left", { scrollLeft: 50, clientWidth: 1045 }, TABS)).toBe(0);
+  });
+});
+
+describe("bringing the tab you are on into view", () => {
+  it("pulls in one that sits off the right, and no further", () => {
+    // The last tab ends at 1181 in a 1045-wide view, so it lands flush at the
+    // right edge: the tabs before it stay as visible as they can.
+    expect(edgeToShow(TABS[8], VIEW)).toBe(1181 - 1045);
+  });
+
+  it("pulls in one that sits off the left, to its own start", () => {
+    expect(edgeToShow(TABS[1], { scrollLeft: 500, clientWidth: 1045 })).toBe(99);
+  });
+
+  it("leaves a tab already whole exactly where it is", () => {
+    expect(edgeToShow(TABS[0], VIEW)).toBe(0);
+    expect(edgeToShow(TABS[3], VIEW)).toBe(0);
+  });
+
+  it("moves as little as it takes rather than centring", () => {
+    // Centring tab eight would scroll past where it becomes readable and take
+    // the tabs either side of it off screen for no gain.
+    const flush = edgeToShow(TABS[7], VIEW);
+    expect(flush).toBe(1063 - 1045);
+    expect(flush).toBeLessThan(TABS[7].start);
+  });
+
+  it("never scrolls past the start for a tab near the beginning", () => {
+    expect(edgeToShow(TABS[0], { scrollLeft: 300, clientWidth: 1045 })).toBe(0);
   });
 });
