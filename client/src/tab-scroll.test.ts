@@ -95,14 +95,22 @@ describe("bringing the tab you are on into view", () => {
   });
 
   it("moves as little as it takes rather than centring", () => {
-    // Centring tab eight would scroll past where it becomes readable and take
-    // the tabs either side of it off screen for no gain.
-    const flush = edgeToShow(TABS[7], VIEW);
-    expect(flush).toBe(1063 - 1045);
-    expect(flush).toBeLessThan(TABS[7].start);
+    // The exact figure is what tells the two apart: flush is the tab's end
+    // less the view's width, and centring would give a different number and
+    // fail here. Centring would scroll past where the tab becomes readable and
+    // take the tabs either side of it off screen for no gain, and those are
+    // destinations in their own right.
+    expect(edgeToShow(TABS[7], VIEW)).toBe(1063 - 1045);
   });
 
   it("never scrolls past the start for a tab near the beginning", () => {
     expect(edgeToShow(TABS[0], { scrollLeft: 300, clientWidth: 1045 })).toBe(0);
+  });
+
+  it("ignores a clip of under a pixel, so it agrees with the arrow about what is hidden", () => {
+    // hiddenSides shows no arrow for an overflow this small. If this moved the
+    // strip for it, the two functions would be answering one question twice.
+    expect(edgeToShow({ start: 0, end: 1045.5 }, { scrollLeft: 0, clientWidth: 1045 })).toBe(0);
+    expect(edgeToShow({ start: -0.5, end: 900 }, { scrollLeft: 0, clientWidth: 1045 })).toBe(0);
   });
 });

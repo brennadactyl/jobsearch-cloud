@@ -43,10 +43,14 @@ export function hiddenSides(m: View & { scrollWidth: number }): { left: boolean;
  * to it unconditionally.
  */
 export function edgeToShow(span: Span, view: View): number {
-  if (span.start < view.scrollLeft) {
+  // The same tolerance the other two use, because this file's job is to answer
+  // "is this visible" once. Without it a tab clipped by half a pixel moves the
+  // strip while hiddenSides reports nothing hidden and shows no arrow - two
+  // answers to one question, from neighbouring functions.
+  if (span.start < view.scrollLeft - SLACK) {
     return Math.max(0, span.start);
   }
-  if (span.end > view.scrollLeft + view.clientWidth) {
+  if (span.end > view.scrollLeft + view.clientWidth + SLACK) {
     return Math.max(0, span.end - view.clientWidth);
   }
   return view.scrollLeft;
