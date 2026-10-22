@@ -1,11 +1,17 @@
 -- company_fetch.aliases: other names that mean this company.
 --
--- Merging "Marriott" into "Marriott International" removed the row, but not
--- the name from the world: the first night after, a run met "Marriott" in
--- discovery and reported it, and the list grew the duplicate back. A merge that
--- a run can undo by using the short name isn't a merge. So a merged or renamed
--- name is remembered on the company it became, and a run reporting it gets that
--- company.
+-- Merging a shorter name into a longer one removes the row, but not the name
+-- from the world: the first night after, a run meets the short name in
+-- discovery and reports it, and the list grows the duplicate back. A merge a
+-- run can undo by using the shorter name isn't a merge. So a merged or renamed
+-- name is remembered on the company it became, and a run reporting it gets
+-- that company.
+--
+-- The worked example is the column rather than this comment. A row's `aliases`
+-- beside its `display_name` is the case itself, and it stays true as the list
+-- changes, where a pair named here would be one row copied into prose that
+-- nothing updates - and a company on a real list is a thing a public file has
+-- no reason to hold.
 --
 --   aliases  JSON array of names, as written ('[]' for none). Matched through
 --            normalize(), like company_key, so every spelling of an alias
