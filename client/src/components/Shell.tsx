@@ -7,7 +7,7 @@ import { SCREENED } from "../domain/screened";
 import { buildTabs, buildTracks, pathForTab } from "../domain/tabs";
 import { usePinnedLayout, useTheme } from "../ui/hooks";
 import { useSaved } from "../ui/saved";
-import { hiddenSides, nextEdge } from "../ui/tabScroll";
+import { edgeToShow, hiddenSides, nextEdge } from "../ui/tabScroll";
 import { useWheelAnywhere } from "../ui/wheel";
 import ApplicationsTab from "./ApplicationsTab";
 import AccountPanel from "./AccountPanel";
@@ -32,7 +32,7 @@ function pausedTitle(paused: string): string {
  * pointing back; only while hidden, because a dead stub at a width where
  * everything fits is its own small wrongness.
  */
-function useTabOverflow(tabCount: number) {
+function useTabOverflow(tabCount: number, selectedPath: string) {
   const strip = useRef<HTMLElement>(null);
   const [hidden, setHidden] = useState({ left: false, right: false });
 
@@ -50,6 +50,20 @@ function useTabOverflow(tabCount: number) {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [measure, tabCount]);
+
+  // The tab you are on is the one that has to be readable, and arriving is
+  // when it might not be: a reload, a typed address or a figure that opens a
+  // tab all land without the strip having moved. Jumping rather than gliding,
+  // because this is where the strip should have been on arrival rather than
+  // somewhere a press is taking it.
+  useEffect(() => {
+    const el = strip.current;
+    const tab = el?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (el && tab) {
+      el.scrollLeft = edgeToShow({ start: tab.offsetLeft, end: tab.offsetLeft + tab.offsetWidth }, el);
+      measure();
+    }
+  }, [measure, selectedPath, tabCount]);
 
   return { strip, hidden, measure };
 }
@@ -137,7 +151,7 @@ export default function Shell({
   const tabs = buildTabs(data.leads, data.applications, tracks, settings);
   const location = useLocation();
   const save = useSaved();
-  const { strip, hidden, measure } = useTabOverflow(tabs.length);
+  const { strip, hidden, measure } = useTabOverflow(tabs.length, location.pathname);
   const [accountOpen, setAccountOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   // `?account=<section>` opens My account on that section, so a link can lead

@@ -7,7 +7,7 @@
  * real browser is what proves the half that measures.
  */
 import { describe, expect, it } from "vitest";
-import { hiddenSides, nextEdge } from "./ui/tabScroll";
+import { edgeToShow, hiddenSides, nextEdge } from "./ui/tabScroll";
 
 /** Her nine tabs at a width that cuts the last two: a strip of 1181 showing 1045. */
 const VIEW = { scrollLeft: 0, clientWidth: 1045 };
@@ -75,5 +75,42 @@ describe("where one press lands", () => {
 
   it("never scrolls past the start", () => {
     expect(nextEdge("left", { scrollLeft: 50, clientWidth: 1045 }, TABS)).toBe(0);
+  });
+});
+
+describe("bringing the tab you are on into view", () => {
+  it("pulls in one that sits off the right, and no further", () => {
+    // The last tab ends at 1181 in a 1045-wide view, so it lands flush at the
+    // right edge: the tabs before it stay as visible as they can.
+    expect(edgeToShow(TABS[8], VIEW)).toBe(1181 - 1045);
+  });
+
+  it("pulls in one that sits off the left, to its own start", () => {
+    expect(edgeToShow(TABS[1], { scrollLeft: 500, clientWidth: 1045 })).toBe(99);
+  });
+
+  it("leaves a tab already whole exactly where it is", () => {
+    expect(edgeToShow(TABS[0], VIEW)).toBe(0);
+    expect(edgeToShow(TABS[3], VIEW)).toBe(0);
+  });
+
+  it("moves as little as it takes rather than centring", () => {
+    // The exact figure is what tells the two apart: flush is the tab's end
+    // less the view's width, and centring would give a different number and
+    // fail here. Centring would scroll past where the tab becomes readable and
+    // take the tabs either side of it off screen for no gain, and those are
+    // destinations in their own right.
+    expect(edgeToShow(TABS[7], VIEW)).toBe(1063 - 1045);
+  });
+
+  it("never scrolls past the start for a tab near the beginning", () => {
+    expect(edgeToShow(TABS[0], { scrollLeft: 300, clientWidth: 1045 })).toBe(0);
+  });
+
+  it("ignores a clip of under a pixel, so it agrees with the arrow about what is hidden", () => {
+    // hiddenSides shows no arrow for an overflow this small. If this moved the
+    // strip for it, the two functions would be answering one question twice.
+    expect(edgeToShow({ start: 0, end: 1045.5 }, { scrollLeft: 0, clientWidth: 1045 })).toBe(0);
+    expect(edgeToShow({ start: -0.5, end: 900 }, { scrollLeft: 0, clientWidth: 1045 })).toBe(0);
   });
 });
