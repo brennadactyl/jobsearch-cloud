@@ -69,6 +69,22 @@ doc, and a finding says whether anything was built on the wrong line.
   evidence of past loss to justify it, which is the point, because that evidence
   can only ever arrive after someone has lost their leads. Prompt Bro for the
   step, with the shared list's shape as the comparison.
+- **Deleting an account leaves its folder, and the leftover credential stops
+  the next setup.** `DELETE /api/users/<id>` removes every row and every
+  document, and touches nothing on the machine that runs the searches. The
+  folder keeps its `tracker.json`, whose token died with the account, and
+  `run-onboarding.ps1` reads every folder's config to work out which schedule
+  slots are taken. An unreadable one makes it refuse outright - correctly, since
+  a slot handed out on top of an invisible one breaks a search that already
+  works - so the next person to sign up is not built.
+  The delay is what makes it nasty: the account is deleted on one day and the
+  failure arrives whenever somebody next signs up, as a midnight run that built
+  nobody, with nothing in the message connecting it to a deletion weeks earlier.
+  Retiring the credential is enough to clear it; the folder's logs are harmless.
+  So offboarding wants to be one named thing that removes the account,
+  unregisters its scheduled tasks and retires its credential, rather than three
+  steps someone has to remember in order. Fullstack Friend owns the operator
+  scripts; the first two steps exist and nothing names them together.
 - **Removing an application should put its lead back.** Marking a lead
   **Applied** sets the lead's status to Applied and creates the application,
   which keeps a `leadId` pointing home. Deleting that application deletes only
