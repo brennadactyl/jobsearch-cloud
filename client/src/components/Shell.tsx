@@ -5,7 +5,7 @@ import { ALL_LEADS, APPLICATIONS, DASHBOARD } from "../domain/constants";
 import { pausedDay } from "../domain/runs";
 import { SCREENED } from "../domain/screened";
 import { buildTabs, buildTracks, pathForTab } from "../domain/tabs";
-import { usePinnedLayout, useTheme } from "../ui/hooks";
+import { scrollBehavior, usePinnedLayout, useTheme } from "../ui/hooks";
 import { useSaved } from "../ui/saved";
 import { edgeToShow, hiddenSides, nextEdge } from "../ui/tabScroll";
 import { useWheelAnywhere } from "../ui/wheel";
@@ -94,7 +94,7 @@ function TabArrow({
       const tab = c as HTMLElement;
       return { start: tab.offsetLeft, end: tab.offsetLeft + tab.offsetWidth };
     });
-    el.scrollTo({ left: nextEdge(side, el, spans), behavior: "smooth" });
+    el.scrollTo({ left: nextEdge(side, el, spans), behavior: scrollBehavior() });
   };
   return (
     <button
