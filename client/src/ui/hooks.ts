@@ -6,6 +6,20 @@ function osPrefersDark(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
 }
 
+/**
+ * How a scroll this code starts should move.
+ *
+ * Someone who asked their system for less motion meant scrolling too. The
+ * stylesheet's reduced-motion rule reaches transitions and animations, and a
+ * smooth scroll is neither - and passing `behavior` at all overrides the
+ * element's own `scroll-behavior`, so no stylesheet could reach it even if one
+ * named it. This is the only place that decides, so it is the only place that
+ * has to remember.
+ */
+export function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
 function explicitTheme(): Theme | null {
   const v = document.documentElement.getAttribute("data-theme");
   return v === "light" || v === "dark" ? v : null;
