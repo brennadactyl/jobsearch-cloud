@@ -11,11 +11,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { scrollBehavior } from "./ui/hooks";
 
-/** jsdom has no matchMedia, so each case says what the browser would answer. */
+/**
+ * jsdom has no matchMedia, so each case says what the browser would answer.
+ *
+ * A whole MediaQueryList rather than just `matches`: this replaces the global
+ * for every query, and `useTheme` subscribes to the colour-scheme one. A stub
+ * without `addEventListener` throws there - not here, but in whichever other
+ * file shares this one's worker, surfacing as a timeout that names neither
+ * this file nor the real cause.
+ */
 function asksFor(reduced: boolean) {
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query.includes("prefers-reduced-motion: reduce") && reduced,
     media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
   }));
 }
 
