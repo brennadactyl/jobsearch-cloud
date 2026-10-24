@@ -108,14 +108,24 @@ doc, and a finding says whether anything was built on the wrong line.
   fetch belongs in its report. Runs write the prose anyway, more nights than
   not and rising with sweep volume, so no wording fixes it: the field is
   storage, and storage is code's to decide.
-  So `/api/coverage` normalises rather than refuses: an endpoint that is an
-  address followed by whitespace and prose is stored as the address. A refusal
+  So `/api/coverage` normalises rather than refuses: for `endpoint` and
+  `url_shape`, the address runs to the first whitespace outside a `<...>`
+  placeholder and only that is stored. **A placeholder can hold a space** - the
+  step's own example is `<19-digit id>` - so splitting at the first space stores
+  a truncated shape, silently, and the board reader reads the host off the
+  front of `url_shape`; that would be worse than the prose. `board` is a
+  vocabulary, not an address, so neither rule applies to it: store a recognised
+  kind, and otherwise leave the stored value alone. Some stored `board` values
+  carry a parenthetical naming an endpoint or host nobody recorded where it
+  belongs, so the cleanup reads those before stripping them. A refusal
   would fail nightly writes on behaviour that happens now, and the route
   already refuses a whole request over one bad `wall`, so one prosy field would
   cost a night's coverage for every company in it. A method-prefixed endpoint
   (`POST <url>` and its body) is a real shape and is left alone; count the two
-  separately or the measurement doubles. The same read should say whether
-  `url_shape` and `board`, held to the same rule, carry prose too. Ships alone,
+  separately or the measurement doubles. Measure with the same split the route
+  uses, so the count and the fix can't disagree: "contains whitespace" reads
+  most of the healthy `board` vocabulary as prose, and a word test for "jobs"
+  matches most greenhouse endpoints. Ships alone,
   with no prompt change, and the data stops getting worse the day it does.
   Cleaning the rows already stored comes after it and is a live write. Backend
   Buddy.
