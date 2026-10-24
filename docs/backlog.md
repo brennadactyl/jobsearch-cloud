@@ -90,7 +90,13 @@ doc, and a finding says whether anything was built on the wrong line.
   declines. Once the prose step is gone, open leads on those boards would never
   be found dead. Whose board it is doesn't matter to whether a posting is still
   open, so the first fix is in the reader: when every claimant resolves to the
-  same board, check it. Merging the rows into one with `aliases` is the tidier
+  same board, check it. That test holds whether the rows are a duplicate or a
+  parent and its subsidiary, so nothing has to decide which. Counting distinct
+  company names instead of rows closes none of it: the duplicated rows are one
+  employer under two spellings, so names and rows always match. The board token
+  is what they share and a shared vendor's tenants don't. The fix ships in the
+  same change as the retirement, since that is what makes it safe.
+  Merging the rows into one with `aliases` is the tidier
   answer, but `company_sweeps` joins on `company_key`, so a merge has to carry
   each search's sweep history across. It is Backend Buddy's, and a live data
   write.
@@ -99,7 +105,9 @@ doc, and a finding says whether anything was built on the wrong line.
   column for that. The route accepting prose there is what spreads it, since
   each night can add more, so refusing it in `/api/coverage` (Backend Buddy) and
   saying where the finding goes in the step that writes it (Prompt Bro) come
-  before cleaning the rows already stored.
+  before cleaning the rows already stored. The step ships first or with the
+  refusal, never after it: a route that refuses before the step changes fails
+  that night's coverage writes.
 - **Deleting an account leaves its folder, and the leftover credential stops
   the next setup.** `DELETE /api/users/<id>` removes every row and every
   document, and touches nothing on the machine that runs the searches. The
