@@ -84,12 +84,25 @@ doc, and a finding says whether anything was built on the wrong line.
   web fetches than the scheduled run before it, which the tool does not explain,
   so the confirming night is a scheduled one. Count fetches of every kind, web
   fetches included, and read the subagent transcripts as well as the
-  orchestrator's, which alone shows no board calls at all.
-  **It is a rewrite, not a deletion.** The reader reads four kinds of board and
-  answers "unknown" for the rest, which is most of what it is asked today, so
-  the step keeps a path for a board it cannot read. A fifth reader, for
-  whichever kind the unknowns are mostly made of, moves that more than any
-  refinement to the four.
+  orchestrator's, which alone shows no board calls at all; whether a run fans
+  out varies, so a lower count from the orchestrator says nothing by itself.
+  Divide by companies swept before comparing two runs: that run swept more than
+  twice as many companies as the one before it, so its larger total was fewer
+  fetches and far fewer tokens per company.
+  **It is a rewrite, not a deletion, and it keeps two paths.** The reader reads
+  four kinds of board and answers "unknown" for the rest, which is most of what
+  it is asked today, so the step keeps a path for a board it cannot read. And
+  the reader serves a posting's id, title and address but not its description,
+  so a run still reads each description itself to judge fit, on every board.
+  The rewrite also names the tool, which the step does not today: some of that
+  run's hand fetches went to listings the reader serves.
+  **What to build after it, in order.** Serve the description for the boards
+  the reader covers - their APIs already return it - since that is the largest
+  share of hand fetches to a covered board, and a fit judgement read from the
+  API is the same text every night where a web fetch's summary is not. Then a
+  fifth reader for Oracle Fusion, the most common kind on the list the reader
+  cannot read. Rank it from the list, not from one night's unknowns, which are
+  too few to say anything.
   The list keeps growing, and at a fixed number of companies per night per feed
   group a longer list means each company comes round less often. The board
   reader cuts the cost of a company, which is what would let that number rise;
