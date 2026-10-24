@@ -100,14 +100,25 @@ doc, and a finding says whether anything was built on the wrong line.
   answer, but `company_sweeps` joins on `company_key`, so a merge has to carry
   each search's sweep history across. It is Backend Buddy's, and a live data
   write.
-  Separately, `endpoint` is being used to write findings: a URL followed by a
-  note that it worked on some night, sometimes with a job count. `note` is the
-  column for that. The route accepting prose there is what spreads it, since
-  each night can add more, so refusing it in `/api/coverage` (Backend Buddy) and
-  saying where the finding goes in the step that writes it (Prompt Bro) come
-  before cleaning the rows already stored. The step ships first or with the
-  refusal, never after it: a route that refuses before the step changes fails
-  that night's coverage writes.
+- **Store a fetch fact as the value, whatever the run sends.** `endpoint` on
+  the shared list is collecting findings: a URL followed by a note that it
+  worked on some night, sometimes with a job count. The step that writes it
+  already says, in bold and with its reason, that each of those fields is a
+  value and nothing else, and that what a run wants to say about tonight's
+  fetch belongs in its report. Runs write the prose anyway, more nights than
+  not and rising with sweep volume, so no wording fixes it: the field is
+  storage, and storage is code's to decide.
+  So `/api/coverage` normalises rather than refuses: an endpoint that is an
+  address followed by whitespace and prose is stored as the address. A refusal
+  would fail nightly writes on behaviour that happens now, and the route
+  already refuses a whole request over one bad `wall`, so one prosy field would
+  cost a night's coverage for every company in it. A method-prefixed endpoint
+  (`POST <url>` and its body) is a real shape and is left alone; count the two
+  separately or the measurement doubles. The same read should say whether
+  `url_shape` and `board`, held to the same rule, carry prose too. Ships alone,
+  with no prompt change, and the data stops getting worse the day it does.
+  Cleaning the rows already stored comes after it and is a live write. Backend
+  Buddy.
 - **Deleting an account leaves its folder, and the leftover credential stops
   the next setup.** `DELETE /api/users/<id>` removes every row and every
   document, and touches nothing on the machine that runs the searches. The
