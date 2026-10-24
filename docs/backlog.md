@@ -124,6 +124,15 @@ doc, and a finding says whether anything was built on the wrong line.
   answer, but `company_sweeps` joins on `company_key`, so a merge has to carry
   each search's sweep history across. It is Backend Buddy's, and a live data
   write.
+- **Decide a wanted level in code, not each night.** A search that states no
+  level leaves the run to invent one, and it invents a different one on
+  different nights: the same track keeps a Principal role as a lead and screens
+  another as `wrong-level` in one run. Whether a title's level is wanted is a
+  lookup, so it belongs in a structured list on the track, matched against the
+  title the way `excluded_companies` is matched against the company, with the
+  run judging only what a title doesn't say. Until then, every search's config
+  states its levels in words. Prompt Bro for the config and the step, Backend
+  Buddy for the matcher.
 - **Store a fetch fact as the value, whatever the run sends.** `endpoint` on
   the shared list is collecting findings: a URL followed by a note that it
   worked on some night, sometimes with a job count. The step that writes it
