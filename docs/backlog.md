@@ -83,6 +83,23 @@ doc, and a finding says whether anything was built on the wrong line.
   group a longer list means each company comes round less often. The board
   reader cuts the cost of a company, which is what would let that number rise;
   measure a night's throughput with it before changing the cap.
+  **Two things on the list stand in the way, and both come before the
+  retirement.** Some boards are claimed by more than one row - one employer
+  entered under two names, or a parent and its subsidiary each recorded with
+  the same board - so the reader answers that the address is ambiguous and
+  declines. Once the prose step is gone, open leads on those boards would never
+  be found dead. Whose board it is doesn't matter to whether a posting is still
+  open, so the first fix is in the reader: when every claimant resolves to the
+  same board, check it. Merging the rows into one with `aliases` is the tidier
+  answer, but `company_sweeps` joins on `company_key`, so a merge has to carry
+  each search's sweep history across. It is Backend Buddy's, and a live data
+  write.
+  Separately, `endpoint` is being used to write findings: a URL followed by a
+  note that it worked on some night, sometimes with a job count. `note` is the
+  column for that. The route accepting prose there is what spreads it, since
+  each night can add more, so refusing it in `/api/coverage` (Backend Buddy) and
+  saying where the finding goes in the step that writes it (Prompt Bro) come
+  before cleaning the rows already stored.
 - **Deleting an account leaves its folder, and the leftover credential stops
   the next setup.** `DELETE /api/users/<id>` removes every row and every
   document, and touches nothing on the machine that runs the searches. The
