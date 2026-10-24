@@ -595,6 +595,47 @@ $promptBody
 "@
 $allowedTools = "Read Write Edit Glob Grep WebSearch WebFetch Bash"
 
+# ---- The board reader, over MCP. -------------------------------------------
+#
+# The shared company list records how each company's postings are reached;
+# tools/board-mcp/server.mjs is what executes it, so a run asks for a
+# company's postings or a posting's state instead of composing a fetch per
+# company and parsing what comes back. Whether a posting is still open is
+# membership in its board's listing, which is a comparison and so belongs in
+# code rather than in a nightly judgement.
+#
+# Passed as a file rather than an inline string: the path needs escaping inside
+# JSON inside a command line, and that is three quoting rules deep. Forward
+# slashes throughout, which node takes on Windows, so there is nothing to
+# escape at all.
+#
+# `--strict-mcp-config` so a run loads this and nothing else - whatever MCP
+# servers the person has configured for their own sessions are not a nightly
+# run's business.
+#
+# The server holds no credentials: it reads TRACKER_URL and TRACKER_API_TOKEN
+# from the environment the job already sets, because the CLI starts it as a
+# child of that process.
+$boardServer = Join-Path (Split-Path -Parent $scriptDir) "tools\board-mcp\server.mjs"
+$mcpArgs = @()
+if (Test-Path $boardServer) {
+    $mcpConfigPath = Join-Path $workDir "mcp-boards.json"
+    $mcpConfig = @{
+        mcpServers = @{
+            boards = @{
+                command = "node"
+                args = @(($boardServer -replace '\\', '/'))
+            }
+        }
+    } | ConvertTo-Json -Depth 6
+    Set-Content -Path $mcpConfigPath -Value $mcpConfig -Encoding utf8
+    $mcpArgs = @("--mcp-config", $mcpConfigPath, "--strict-mcp-config")
+    $allowedTools += " mcp__boards__list_postings mcp__boards__posting_status mcp__boards__company_facts"
+    Log "board reader:     $boardServer (mcp config $mcpConfigPath)"
+} else {
+    Log "board reader:     not present at $boardServer - running without it"
+}
+
 Log "prompt:           $($promptBody.Length) chars from $trackerUrl/api/prompt/$Task"
 Log "claude CLI:       $claudePath"
 Log "allowed tools:    $allowedTools"
@@ -622,7 +663,7 @@ try {
 }
 
 $job = Start-Job -ScriptBlock {
-    param($claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken, $task)
+    param($claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken, $task, $mcpArgs)
     Set-Location $cwd
     # For tracker.ps1. Set inside the script block because Start-Job runs in
     # its own process, and from the resolved per-user values so each person's
@@ -641,8 +682,8 @@ $job = Start-Job -ScriptBlock {
     # `Program 'claude.exe' failed to run: The filename or extension is too long`:
     # the CLI never starts, yet the job completes and the task records a
     # success. Piping has no such limit.
-    $prompt | & $claudePath -p --allowedTools $allowedTools 2>&1
-} -ArgumentList $claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken, $Task
+    $prompt | & $claudePath -p --allowedTools $allowedTools @mcpArgs 2>&1
+} -ArgumentList $claudePath, $prompt, $allowedTools, $cwd, $trackerUrl, $trackerToken, $Task, $mcpArgs
 
 $start = Get-Date
 Log "job started (id $($job.Id)), waiting..."
