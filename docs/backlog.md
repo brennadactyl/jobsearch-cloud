@@ -79,6 +79,17 @@ doc, and a finding says whether anything was built on the wrong line.
   stays until a real night is seen calling the tool instead of hand-building a
   fetch per company. Then the paragraph goes and a tool call takes its place - a
   judgement moved into code rather than argued in the prompt. Prompt Bro.
+  A run started by hand has used it, and its hand-built shell fetches fell
+  sharply. The same run delegated its board work to subagents and made far more
+  web fetches than the scheduled run before it, which the tool does not explain,
+  so the confirming night is a scheduled one. Count fetches of every kind, web
+  fetches included, and read the subagent transcripts as well as the
+  orchestrator's, which alone shows no board calls at all.
+  **It is a rewrite, not a deletion.** The reader reads four kinds of board and
+  answers "unknown" for the rest, which is most of what it is asked today, so
+  the step keeps a path for a board it cannot read. A fifth reader, for
+  whichever kind the unknowns are mostly made of, moves that more than any
+  refinement to the four.
   The list keeps growing, and at a fixed number of companies per night per feed
   group a longer list means each company comes round less often. The board
   reader cuts the cost of a company, which is what would let that number rise;
