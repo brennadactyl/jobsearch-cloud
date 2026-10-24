@@ -68,7 +68,21 @@ doc, and a finding says whether anything was built on the wrong line.
   is the safe verdict - it leaves the lead alone - so the cheap version needs no
   evidence of past loss to justify it, which is the point, because that evidence
   can only ever arrive after someone has lost their leads. Prompt Bro for the
-  step, with the shared list's shape as the comparison.
+  step, with the shared list's shape as the comparison. Once the board reader
+  below is in the runs, its still-open check is where this comparison belongs:
+  in code, beside the status it qualifies, rather than as a paragraph of prose.
+- **Retire the prose the board reader replaces, once a night has used it.** The
+  shared company list records how each company's postings are reached, and the
+  board reader executes those facts: what a board lists, whether one posting is
+  still open, and what the list records about reaching a company. The search
+  step still tells a run to do the listing-and-control check in prose, and it
+  stays until a real night is seen calling the tool instead of hand-building a
+  fetch per company. Then the paragraph goes and a tool call takes its place - a
+  judgement moved into code rather than argued in the prompt. Prompt Bro.
+  The list keeps growing, and at a fixed number of companies per night per feed
+  group a longer list means each company comes round less often. The board
+  reader cuts the cost of a company, which is what would let that number rise;
+  measure a night's throughput with it before changing the cap.
 - **Deleting an account leaves its folder, and the leftover credential stops
   the next setup.** `DELETE /api/users/<id>` removes every row and every
   document, and touches nothing on the machine that runs the searches. The
