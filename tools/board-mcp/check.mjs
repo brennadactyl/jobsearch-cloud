@@ -96,7 +96,7 @@ function record(what, asserts, pass, answer) {
 // that deletes leads: pick the wrong company and its board reads fine, the id
 // is legitimately absent from it, and the answer is "gone" with evidence that
 // reads like a true one. The companies here are invented.
-const { findBoardOwner } = await import("./server.mjs");
+const { findBoardOwner, oracleReader } = await import("./server.mjs");
 
 const invented = [
   { company: "Acme", known: { board: "greenhouse", endpoint: "boards-api.greenhouse.io/v1/boards/acme/jobs" } },
@@ -167,6 +167,32 @@ for (const c of [
     ok: (r) => r.found === "none",
   },
   {
+    // Oracle ids are not all numeric - tenants serve both 334432 and W737883 -
+    // so a pattern tighter than "whatever follows job" would report no id for
+    // a form it had not seen, and the posting would never be checked at all.
+    what: "an Oracle address yields its requisition id and its site number, whatever form the id takes",
+    asserts: "the id is whatever follows `job` and the site whatever follows `sites`, so a W-prefixed id, a trailing slash and a tenant host without a data centre label all survive",
+    run: () => {
+      const forms = [
+        ["https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_45001/job/334432", "334432", "CX_45001"],
+        ["https://tenant.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/W737883/", "W737883", "CX_1001"],
+        ["https://tenant.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/607", "607", "CX_1"],
+      ];
+      return forms.map(([address, id, site]) => {
+        const u = new URL(address);
+        const m = oracleReader.fromUrl(u);
+        return oracleReader.idFromUrl(u) === id && m && m[2] === site && m[1] === u.host;
+      });
+    },
+    ok: (r) => Array.isArray(r) && r.length === 3 && r.every(Boolean),
+  },
+  {
+    what: "an Oracle address with no site number yields no coordinates rather than guessing one",
+    asserts: "a missing site number is declined rather than defaulted - the tenants seen ignore it, but a tenant configured with several boards can enforce it, and a guessed coordinate is what would produce a confident answer about the wrong board",
+    run: () => oracleReader.fromUrl(new URL("https://tenant.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/job/334432")),
+    ok: (r) => r === null,
+  },
+  {
     what: "an address that is not an address is reported, not thrown",
     asserts: "a malformed address fails as an answer rather than as an exception",
     run: () => findBoardOwner("not-a-url", "greenhouse", invented),
@@ -221,9 +247,12 @@ const greenhouse = rows.find((c) => {
   return Boolean(t) && ghClaimants.get(t) === 1;
 });
 const workday = withEndpoint(/myworkdayjobs\.com\/wday\/cxs\//);
+// A company the reader has no route for. This list must name every board kind
+// the server reads: miss one and this case picks a company the server can in
+// fact read, then fails asserting it was declined.
 const noRoute = rows.find((c) => {
   const ep = ((c.known || {}).endpoint) || "";
-  return !/greenhouse|ashbyhq|lever\.co|myworkdayjobs/.test(ep);
+  return !/greenhouse|ashbyhq|lever\.co|myworkdayjobs|oraclecloud/.test(ep);
 });
 
 const server = openServer();
@@ -260,6 +289,38 @@ if (greenhouse) {
       "an id its board does not list is gone, with the board's size as evidence",
       "an absence is only concluded against a listing that came back non-empty",
       absent.state === "gone" && /absent/.test(absent.evidence || ""),
+      absent,
+    );
+  }
+}
+
+const oracle = withEndpoint(/oraclecloud\.com[^\s]*siteNumber=CX_/);
+if (oracle) {
+  const listing = await server.call("list_postings", { company: oracle.company });
+  record(
+    "an Oracle listing serves postings and says plainly whether it is the whole board",
+    "an Oracle tenant can hold thousands of requisitions and is read a few pages deep, so a listing that is not the whole board reports complete:false and carries the warning - an absence must never be read out of it",
+    Array.isArray(listing.postings) && listing.postings.length > 0
+      && (listing.complete === false ? /don't read a posting's absence/.test(listing.warning || "") : listing.complete === true),
+    { count: listing.count, complete: listing.complete, total: listing.board_says_total },
+  );
+
+  if (Array.isArray(listing.postings) && listing.postings.length) {
+    const open = await server.call("posting_status", { url: listing.postings[0].url });
+    record(
+      "an Oracle requisition the tenant still serves is open",
+      "the verdict is a lookup by requisition id rather than a read of the whole board, which is why it works on a tenant too large to list",
+      open.state === "open" && Boolean(open.evidence),
+      open,
+    );
+    // A fabricated id rather than a requisition that was once real, so the
+    // case asserts the absence path without pinning anything that rots.
+    const host = new URL(listing.postings[0].url);
+    const absent = await server.call("posting_status", { url: `${host.origin}${host.pathname.replace(/\/job\/.*$/, "/job/9")}` });
+    record(
+      "an Oracle requisition the tenant does not serve is gone, and only against a control",
+      "an empty answer is also what a failing tenant returns, so `gone` is only reached when an id the board served moments earlier comes back by the same route",
+      absent.state === "gone" && /control/.test(absent.evidence || ""),
       absent,
     );
   }

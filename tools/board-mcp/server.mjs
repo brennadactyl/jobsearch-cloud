@@ -238,7 +238,107 @@ const readers = {
       return { present: ids.includes(id) };
     },
   },
+  // Oracle Fusion, which the list also records as oracle recruiting cloud and
+  // oracle fusion recruiting cx. One tenant's board can be enormous - one of
+  // the ones on the list serves 8,284 requisitions - so it is never read
+  // whole, and membership is a lookup by id like Workday's.
+  //
+  // A tenant needs two coordinates, both of which the recorded endpoint
+  // carries: the host, and the site number - the candidate-facing board within
+  // the tenant, recorded on the list as CX_1, CX_1001, CX_2001 or CX_45001.
+  //
+  // On the tenants here the site number turns out to be ignored by both
+  // routes: the same id and the same totals come back for the right site, a
+  // neighbour's, and a value that is not a site at all. It is still sent,
+  // because it is part of the documented route and a tenant configured with
+  // several boards can enforce it, and it is still required from the address
+  // rather than defaulted, because a guessed coordinate is how this would
+  // produce a confident answer about the wrong board on the day one does
+  // enforce it. Declining costs an `unknown`, which changes nothing.
+  oracle: {
+    match: (ep) => /([a-z0-9-]+\.fa\.(?:[a-z0-9-]+\.)?oraclecloud\.com)[^\s]*siteNumber=(CX_[A-Za-z0-9_]+)/i.exec(ep || ""),
+    // Paged, 200 at a time, and deliberately not to the end: the point of the
+    // cap is that `complete` then says false and a caller cannot read an
+    // absence out of it. Membership questions go to `has`, which needs no
+    // listing at all.
+    list: async (m) => {
+      const [, host, site] = m;
+      const postings = [];
+      let total = null;
+      for (let offset = 0; offset < 600; offset += 200) {
+        const r = await fetchText(`https://${host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions`
+          + `?onlyData=true&expand=requisitionList&finder=findReqs;siteNumber=${site},limit=200,offset=${offset}`);
+        const j = asJson(r.text);
+        const head = (j && j.items && j.items[0]) || null;
+        if (!head) {
+          if (!offset) return { error: `oracle ${host} answered ${r.status || r.why}` };
+          break;
+        }
+        if (typeof head.TotalJobsCount === "number") total = head.TotalJobsCount;
+        const page = head.requisitionList || [];
+        if (!page.length) break;
+        for (const p of page) {
+          postings.push({
+            id: String(p.Id || ""),
+            title: p.Title || "",
+            location: p.PrimaryLocation || p.Location || p.PrimaryLocationCountry || "",
+            url: `https://${host}/hcmUI/CandidateExperience/en/sites/${site}/job/${p.Id}`,
+            posted: p.PostedDate || "",
+          });
+        }
+        if (total !== null && total <= offset + 200) break;
+      }
+      const coherent = typeof total === "number" && total >= postings.length && total > 0;
+      return {
+        postings,
+        total: coherent ? total : null,
+        total_as_given: total,
+        complete: coherent ? postings.length >= total : null,
+      };
+    },
+    // The id is the segment after `job`, and it is not always numeric: tenants
+    // serve both 334432 and W737883. Anything there is taken as the id rather
+    // than matched against a pattern, because a pattern that misses a form
+    // reports "no id" and the posting is then never checked at all.
+    idFromUrl: (u) => {
+      const parts = u.pathname.split("/").filter(Boolean);
+      const at = parts.indexOf("job");
+      return at >= 0 && parts[at + 1] ? decodeURIComponent(parts[at + 1]) : "";
+    },
+    // posting_status is handed a lead's address, not a company's endpoint, so
+    // the coordinates are recovered by writing the endpoint this address
+    // implies and matching it the usual way. Building a match by hand instead
+    // would drift from `match` the moment either one moved.
+    fromUrl: (u) => {
+      const parts = u.pathname.split("/").filter(Boolean);
+      const at = parts.indexOf("sites");
+      const site = at >= 0 ? parts[at + 1] : "";
+      if (!site) return null;
+      return readers.oracle.match(`https://${u.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions`
+        + `?finder=findReqs;siteNumber=${site},limit=1`);
+    },
+    // One requisition by id. Oracle answers 200 with an empty `items` for a
+    // requisition that is closed and for one that never existed, and it would
+    // answer the same for a tenant having a bad night - so an empty answer
+    // alone is never enough, and the caller controls it against an id the same
+    // board served moments earlier.
+    has: async (m, id) => {
+      const [, host, site] = m;
+      const r = await fetchText(`https://${host}/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails`
+        + `?expand=all&onlyData=true&finder=ById;Id=${encodeURIComponent(id)},siteNumber=${site}`);
+      if (r.status !== 200) return { error: `the requisition lookup answered ${r.status || r.why}` };
+      const j = asJson(r.text);
+      if (!j || !Array.isArray(j.items)) return { error: "the requisition lookup did not answer with a list" };
+      return { present: j.items.length > 0 };
+    },
+  },
 };
+
+// A reader's pure parts - the requisition id and the tenant coordinates it
+// reads out of an address - decide whether a `gone` is even about the right
+// requisition, so they are exported for the checks to exercise without
+// reaching a board.
+export const oracleReader = readers.oracle;
 
 const readerFor = (company) => {
   const ep = (company.known || {}).endpoint || "";
@@ -350,6 +450,7 @@ const readerForUrl = (url) => {
   if (u.host === "jobs.ashbyhq.com") return { kind: "ashby", u };
   if (u.host === "jobs.lever.co") return { kind: "lever", u };
   if (/\.wd\d+\.myworkdayjobs\.com$/.test(u.host)) return { kind: "workday", u };
+  if (/\.fa\.(?:[a-z0-9-]+\.)?oraclecloud\.com$/.test(u.host)) return { kind: "oracle", u };
   return { kind: "", u };
 };
 
@@ -464,6 +565,36 @@ const call = async (name, args) => {
       })();
       if (!control.ok) return { state: "unknown", why: `${id} was not found, and ${control.why}, so the absence proves nothing`, id };
       return { state: "gone", id, evidence: `${id} is absent while the control ${control.cid}, read the same way, came back` };
+    }
+
+    // Oracle answers membership by id too, and for the same reason as Workday:
+    // its boards are far too large to read whole, so there is no listing to
+    // compare against.
+    if (kind === "oracle") {
+      const m = readers.oracle.fromUrl(u);
+      const id = readers.oracle.idFromUrl(u);
+      if (!m || !id) return { state: "unknown", why: "no requisition id or site number could be read out of the address" };
+      const r = await readers.oracle.has(m, id);
+      if (r.error) return { state: "unknown", why: r.error, id };
+      if (r.present) return { state: "open", id, evidence: `${id} is still served by the tenant's board` };
+      // An empty answer is also what a wrong site number and a tenant having a
+      // bad night look like, so it proves nothing until the same question is
+      // shown to work here. The control is an id this board served moments ago,
+      // looked up by the same route.
+      const control = await (async () => {
+        const first = await fetchText(`https://${m[1]}/hcmRestApi/resources/latest/recruitingCEJobRequisitions`
+          + `?onlyData=true&expand=requisitionList&finder=findReqs;siteNumber=${m[2]},limit=1,offset=0`);
+        const j = asJson(first.text);
+        const head = (j && j.items && j.items[0]) || null;
+        const other = head && (head.requisitionList || [])[0];
+        if (!other || !other.Id) return { ok: false, why: "the board served no requisition to control with" };
+        const cid = String(other.Id);
+        if (cid === id) return { ok: false, why: "the only requisition to control with is the one being asked about" };
+        const c = await readers.oracle.has(m, cid);
+        return c.error || !c.present ? { ok: false, why: `the control ${cid} did not come back` } : { ok: true, cid };
+      })();
+      if (!control.ok) return { state: "unknown", why: `${id} was not found, and ${control.why}, so the absence proves nothing`, id };
+      return { state: "gone", id, evidence: `${id} is absent while the control ${control.cid}, looked up the same way, came back` };
     }
 
     const idOf = readers[kind].idFromUrl(u);
