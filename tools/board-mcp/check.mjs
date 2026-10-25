@@ -169,16 +169,21 @@ for (const c of [
     ok: (r) => r.found === "none",
   },
   {
-    // Oracle ids are not all numeric - tenants serve both 334432 and W737883 -
+    // Oracle ids are not all numeric - tenants serve letter-prefixed ones too -
     // so a pattern tighter than "whatever follows job" would report no id for
     // a form it had not seen, and the posting would never be checked at all.
+    //
+    // Every value here is invented. A real tenant subdomain would say whose
+    // board this deployment reads, and the requisition id beside it stops
+    // being an opaque number the moment the host names the employer. The cases
+    // assert shapes, which invented values carry exactly as well.
     what: "an Oracle address yields its requisition id and its site number, whatever form the id takes",
     asserts: "the id is whatever follows `job` and the site whatever follows `sites`, so a W-prefixed id, a trailing slash and a tenant host without a data centre label all survive",
     run: () => {
       const forms = [
-        ["https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_45001/job/334432", "334432", "CX_45001"],
-        ["https://tenant.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/W737883/", "W737883", "CX_1001"],
-        ["https://tenant.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/607", "607", "CX_1"],
+        ["https://tenant.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_45001/job/100001", "100001", "CX_45001"],
+        ["https://tenant.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/W200002/", "W200002", "CX_1001"],
+        ["https://tenant.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/603", "603", "CX_1"],
       ];
       return forms.map(([address, id, site]) => {
         const u = new URL(address);
@@ -195,12 +200,12 @@ for (const c of [
     what: "an id shaped like nothing the board serves is not accepted as a subject",
     asserts: "a damaged id position - truncated, a slug, the word undefined - is an unreadable address rather than a closed posting, and the board's own ids are what say which it is",
     run: () => {
-      const served = ["334432", "336931", "320967"];
+      const served = ["100001", "100002", "100003"];
       return {
-        damaged: ["undefined", "senior-software-engineer", "334432?utm=x", ""].map((bad) => idLooksIssuedBy(bad, served)),
-        real: idLooksIssuedBy("451002", served),
-        otherFormAccepted: idLooksIssuedBy("W737883", ["W737883", "W737884"]),
-        mixedBoardAcceptsBoth: ["334432", "W737883"].map((ok) => idLooksIssuedBy(ok, ["334432", "W737883"])),
+        damaged: ["undefined", "senior-software-engineer", "100001?utm=x", ""].map((bad) => idLooksIssuedBy(bad, served)),
+        real: idLooksIssuedBy("100004", served),
+        otherFormAccepted: idLooksIssuedBy("W200002", ["W200002", "W200003"]),
+        mixedBoardAcceptsBoth: ["100001", "W200002"].map((ok) => idLooksIssuedBy(ok, ["100001", "W200002"])),
       };
     },
     ok: (r) => r.damaged.every((x) => x === false)
@@ -211,13 +216,13 @@ for (const c of [
   {
     what: "an id's shape is its character classes with runs collapsed",
     asserts: "the comparison is on shape, not length or value, so a board's next id is accepted while a different form is not",
-    run: () => [idShape("334432"), idShape("W737883"), idShape("2026-0024110"), idShape("undefined"), idShape("Req184431-1")],
+    run: () => [idShape("100001"), idShape("W200002"), idShape("2026-0000001"), idShape("undefined"), idShape("Req100004-1")],
     ok: (r) => r[0] === "d" && r[1] === "ad" && r[2] === "d-d" && r[3] === "a" && r[4] === "ad-d",
   },
   {
     what: "an Oracle address with no site number yields no coordinates rather than guessing one",
     asserts: "a missing site number is declined rather than defaulted - the tenants seen ignore it, but a tenant configured with several boards can enforce it, and a guessed coordinate is what would produce a confident answer about the wrong board",
-    run: () => oracleReader.fromUrl(new URL("https://tenant.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/job/334432")),
+    run: () => oracleReader.fromUrl(new URL("https://tenant.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/job/100001")),
     ok: (r) => r === null,
   },
   {

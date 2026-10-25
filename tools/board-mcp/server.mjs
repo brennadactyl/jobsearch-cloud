@@ -213,7 +213,7 @@ const readers = {
     },
     // The req id is whatever follows the last underscore, provided it has a
     // digit in it. The forms vary more than a tight pattern survives -
-    // R70906, R-861055, JR2026496236, REF072039W, 2026-0024110, Req184431-1 -
+    // A10001, A-100002, AB2000001, REF100003X, 2026-0000001, Req100004-1 -
     // and a pattern that misses one reports "no id" rather than failing, so
     // the posting is never checked at all.
     idFromUrl: (u) => {
@@ -297,7 +297,7 @@ const readers = {
       };
     },
     // The id is the segment after `job`, and it is not always numeric: tenants
-    // serve both 334432 and W737883. Anything there is taken as the id rather
+    // serve both 100001 and W200002. Anything there is taken as the id rather
     // than matched against a pattern, because the forms vary more than a
     // pattern written today survives.
     //
@@ -350,8 +350,8 @@ const readers = {
 // reaching a board.
 export const oracleReader = readers.oracle;
 
-// An id's shape, as character classes with runs collapsed: 334432 is "d",
-// W737883 is "ad", 2026-0024110 is "d-d", and the word "undefined" is "a".
+// An id's shape, as character classes with runs collapsed: 100001 is "d",
+// W200002 is "ad", 2026-0000001 is "d-d", and the word "undefined" is "a".
 export function idShape(id) {
   const classes = [...String(id)].map((c) => (/[0-9]/.test(c) ? "d" : /[A-Za-z]/.test(c) ? "a" : "-"));
   const out = [];
@@ -371,7 +371,7 @@ export function idShape(id) {
 // others unreadable.
 //
 // What it does not catch, stated so nobody reads it as proof: damage that
-// preserves the shape. A truncated R72869 is still letter-then-digits, so it
+// preserves the shape. A truncated A10001 is still letter-then-digits, so it
 // passes here and reaches `gone` on a posting that is open. Shape closes the
 // cases that actually occur - a slug, a word, an empty position - and a
 // stricter test would need a per-tenant id pattern, which is the thing that
