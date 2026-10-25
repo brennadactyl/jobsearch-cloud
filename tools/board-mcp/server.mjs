@@ -306,9 +306,10 @@ const readers = {
     // damaged in the id position - truncated, a redirect's slug, an
     // `undefined` written once - yields an id the board answers empty for,
     // which is indistinguishable from closed. A missed form leaves a lead
-    // unchecked; a garbage id takes a live one off the board. Both are silent,
-    // and only the second is irreversible in practice, so the reader reads
-    // permissively here and refuses downstream on shape.
+    // unchecked; a garbage id takes a live one off the board, deleting the row
+    // and everything the person typed on it. Both are silent, and only the
+    // second destroys anything, so the reader reads permissively here and
+    // refuses downstream on shape.
     idFromUrl: (u) => {
       const parts = u.pathname.split("/").filter(Boolean);
       const at = parts.indexOf("job");
@@ -602,9 +603,9 @@ const call = async (name, args) => {
       // serves is an address that cannot be read - an id position truncated,
       // substituted, or written as a redirect's slug - and calling that gone
       // takes a live posting off the person's board with evidence that reads
-      // correctly. The row survives as a screened `delisted` one, so nothing
-      // is destroyed; what is lost is that anything ever looks again, since a
-      // run skips a url already screened.
+      // correctly. Delisting deletes the lead row: a screened row keeps the
+      // posting's identity, and the status, notes, next action and everything
+      // else the person typed on it go. See db.deleteLeadAndScreen.
       const served = all.postings.map((p) => p.id).filter(Boolean);
       if (served.length && !idLooksIssuedBy(id, served)) {
         return {
