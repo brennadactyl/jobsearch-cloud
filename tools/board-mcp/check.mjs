@@ -2,8 +2,10 @@
 //
 // Checks the board reader: a set of cases that need nothing, and a set that reaches
 // live boards. It exists so the server can be refactored - a reader that
-// answers "gone" for a posting that is open deletes a lead with no undo, so
-// "I only moved code around" is not something anyone should take on trust.
+// answers "gone" for a posting that is open takes a live posting off her board
+// and hides it from later runs, and while the hiding is undoable
+// (db.unscreenUrls) what she typed on the lead is not, so "I only moved code
+// around" is not something anyone should take on trust.
 //
 // It names no company and asserts no count. Which employers a search covers,
 // and which one an account excludes, are that account's business and this file
