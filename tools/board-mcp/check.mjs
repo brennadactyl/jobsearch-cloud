@@ -96,7 +96,7 @@ function record(what, asserts, pass, answer) {
 // that deletes leads: pick the wrong company and its board reads fine, the id
 // is legitimately absent from it, and the answer is "gone" with evidence that
 // reads like a true one. The companies here are invented.
-const { findBoardOwner, oracleReader } = await import("./server.mjs");
+const { findBoardOwner, oracleReader, idShape, idLooksIssuedBy } = await import("./server.mjs");
 
 const invented = [
   { company: "Acme", known: { board: "greenhouse", endpoint: "boards-api.greenhouse.io/v1/boards/acme/jobs" } },
@@ -185,6 +185,32 @@ for (const c of [
       });
     },
     ok: (r) => Array.isArray(r) && r.length === 3 && r.every(Boolean),
+  },
+  {
+    // The case the control cannot catch. A control is fetched from the board,
+    // so it comes back whatever the subject looked like - which means a stored
+    // address damaged in the id position reaches `gone` on a live posting.
+    what: "an id shaped like nothing the board serves is not accepted as a subject",
+    asserts: "a damaged id position - truncated, a slug, the word undefined - is an unreadable address rather than a closed posting, and the board's own ids are what say which it is",
+    run: () => {
+      const served = ["334432", "336931", "320967"];
+      return {
+        damaged: ["undefined", "senior-software-engineer", "334432?utm=x", ""].map((bad) => idLooksIssuedBy(bad, served)),
+        real: idLooksIssuedBy("451002", served),
+        otherFormAccepted: idLooksIssuedBy("W737883", ["W737883", "W737884"]),
+        mixedBoardAcceptsBoth: ["334432", "W737883"].map((ok) => idLooksIssuedBy(ok, ["334432", "W737883"])),
+      };
+    },
+    ok: (r) => r.damaged.every((x) => x === false)
+      && r.real === true
+      && r.otherFormAccepted === true
+      && r.mixedBoardAcceptsBoth.every(Boolean),
+  },
+  {
+    what: "an id's shape is its character classes with runs collapsed",
+    asserts: "the comparison is on shape, not length or value, so a board's next id is accepted while a different form is not",
+    run: () => [idShape("334432"), idShape("W737883"), idShape("2026-0024110"), idShape("undefined"), idShape("Req184431-1")],
+    ok: (r) => r[0] === "d" && r[1] === "ad" && r[2] === "d-d" && r[3] === "a" && r[4] === "ad-d",
   },
   {
     what: "an Oracle address with no site number yields no coordinates rather than guessing one",
