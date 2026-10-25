@@ -124,6 +124,18 @@ doc, and a finding says whether anything was built on the wrong line.
   answer, but `company_sweeps` joins on `company_key`, so a merge has to carry
   each search's sweep history across. It is Backend Buddy's, and a live data
   write.
+- **Find a company's board, with the evidence shown.** A fourth board-reader
+  tool, read-only: given a company and optionally its domain or careers page, it
+  first asks the shared list, and says so when a board it finds is already
+  recorded against a different row - which is how one board comes to be
+  claimed twice. Then it probes the slug-addressable boards in parallel and
+  reads the careers page for links into a board host, the only route to Workday
+  and Oracle, whose tenants can't be guessed. Candidates come back ranked with
+  their evidence, and a best answer only when a careers-page link or the board's
+  own name confirms it: a slug that answers is not evidence it is this
+  company's. Ships alone; the line in `add-target-company` naming it joins the
+  collected rule changes. Prompt Bro, after the current board-reader work
+  merges.
 - **Decide a wanted level in code, not each night.** A search that states no
   level leaves the run to invent one, and it invents a different one on
   different nights: the same track keeps a Principal role as a lead and screens
