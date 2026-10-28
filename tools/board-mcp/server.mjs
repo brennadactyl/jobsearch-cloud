@@ -213,7 +213,7 @@ const readers = {
     },
     // The req id is whatever follows the last underscore, provided it has a
     // digit in it. The forms vary more than a tight pattern survives -
-    // R70906, R-861055, JR2026496236, REF072039W, 2026-0024110, Req184431-1 -
+    // A10001, A-100002, AB2000001, REF100003X, 2026-0000001, Req100004-1 -
     // and a pattern that misses one reports "no id" rather than failing, so
     // the posting is never checked at all.
     idFromUrl: (u) => {
@@ -238,7 +238,148 @@ const readers = {
       return { present: ids.includes(id) };
     },
   },
+  // Oracle Fusion, which the list also records as oracle recruiting cloud and
+  // oracle fusion recruiting cx. One tenant's board can be enormous - one of
+  // the ones on the list serves 8,284 requisitions - so it is never read
+  // whole, and membership is a lookup by id like Workday's.
+  //
+  // A tenant needs two coordinates, both of which the recorded endpoint
+  // carries: the host, and the site number - the candidate-facing board within
+  // the tenant, recorded on the list as CX_1, CX_1001, CX_2001 or CX_45001.
+  //
+  // On the tenants here the site number turns out to be ignored by both
+  // routes: the same id and the same totals come back for the right site, a
+  // neighbour's, and a value that is not a site at all. It is still sent,
+  // because it is part of the documented route and a tenant configured with
+  // several boards can enforce it, and it is still required from the address
+  // rather than defaulted, because a guessed coordinate is how this would
+  // produce a confident answer about the wrong board on the day one does
+  // enforce it. Declining costs an `unknown`, which changes nothing.
+  oracle: {
+    match: (ep) => /([a-z0-9-]+\.fa\.(?:[a-z0-9-]+\.)?oraclecloud\.com)[^\s]*siteNumber=(CX_[A-Za-z0-9_]+)/i.exec(ep || ""),
+    // Paged, 200 at a time, and deliberately not to the end: the point of the
+    // cap is that `complete` then says false and a caller cannot read an
+    // absence out of it. Membership questions go to `has`, which needs no
+    // listing at all.
+    list: async (m) => {
+      const [, host, site] = m;
+      const postings = [];
+      let total = null;
+      for (let offset = 0; offset < 600; offset += 200) {
+        const r = await fetchText(`https://${host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions`
+          + `?onlyData=true&expand=requisitionList&finder=findReqs;siteNumber=${site},limit=200,offset=${offset}`);
+        const j = asJson(r.text);
+        const head = (j && j.items && j.items[0]) || null;
+        if (!head) {
+          if (!offset) return { error: `oracle ${host} answered ${r.status || r.why}` };
+          break;
+        }
+        if (typeof head.TotalJobsCount === "number") total = head.TotalJobsCount;
+        const page = head.requisitionList || [];
+        if (!page.length) break;
+        for (const p of page) {
+          postings.push({
+            id: String(p.Id || ""),
+            title: p.Title || "",
+            location: p.PrimaryLocation || p.Location || p.PrimaryLocationCountry || "",
+            url: `https://${host}/hcmUI/CandidateExperience/en/sites/${site}/job/${p.Id}`,
+            posted: p.PostedDate || "",
+          });
+        }
+        if (total !== null && total <= offset + 200) break;
+      }
+      const coherent = typeof total === "number" && total >= postings.length && total > 0;
+      return {
+        postings,
+        total: coherent ? total : null,
+        total_as_given: total,
+        complete: coherent ? postings.length >= total : null,
+      };
+    },
+    // The id is the segment after `job`, and it is not always numeric: tenants
+    // serve both 100001 and W200002. Anything there is taken as the id rather
+    // than matched against a pattern, because the forms vary more than a
+    // pattern written today survives.
+    //
+    // That is only safe because of idLooksIssuedBy below. Taken alone, a
+    // permissive read is the dangerous half of the choice: a stored address
+    // damaged in the id position - truncated, a redirect's slug, an
+    // `undefined` written once - yields an id the board answers empty for,
+    // which is indistinguishable from closed. A missed form leaves a lead
+    // unchecked; a garbage id takes a live one off the board, deleting the row
+    // and everything the person typed on it. Both are silent, and only the
+    // second destroys anything, so the reader reads permissively here and
+    // refuses downstream on shape.
+    idFromUrl: (u) => {
+      const parts = u.pathname.split("/").filter(Boolean);
+      const at = parts.indexOf("job");
+      return at >= 0 && parts[at + 1] ? decodeURIComponent(parts[at + 1]) : "";
+    },
+    // posting_status is handed a lead's address, not a company's endpoint, so
+    // the coordinates are recovered by writing the endpoint this address
+    // implies and matching it the usual way. Building a match by hand instead
+    // would drift from `match` the moment either one moved.
+    fromUrl: (u) => {
+      const parts = u.pathname.split("/").filter(Boolean);
+      const at = parts.indexOf("sites");
+      const site = at >= 0 ? parts[at + 1] : "";
+      if (!site) return null;
+      return readers.oracle.match(`https://${u.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions`
+        + `?finder=findReqs;siteNumber=${site},limit=1`);
+    },
+    // One requisition by id. Oracle answers 200 with an empty `items` for a
+    // requisition that is closed and for one that never existed, and it would
+    // answer the same for a tenant having a bad night - so an empty answer
+    // alone is never enough, and the caller controls it against an id the same
+    // board served moments earlier.
+    has: async (m, id) => {
+      const [, host, site] = m;
+      const r = await fetchText(`https://${host}/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails`
+        + `?expand=all&onlyData=true&finder=ById;Id=${encodeURIComponent(id)},siteNumber=${site}`);
+      if (r.status !== 200) return { error: `the requisition lookup answered ${r.status || r.why}` };
+      const j = asJson(r.text);
+      if (!j || !Array.isArray(j.items)) return { error: "the requisition lookup did not answer with a list" };
+      return { present: j.items.length > 0 };
+    },
+  },
 };
+
+// A reader's pure parts - the requisition id and the tenant coordinates it
+// reads out of an address - decide whether a `gone` is even about the right
+// requisition, so they are exported for the checks to exercise without
+// reaching a board.
+export const oracleReader = readers.oracle;
+
+// An id's shape, as character classes with runs collapsed: 100001 is "d",
+// W200002 is "ad", 2026-0000001 is "d-d", and the word "undefined" is "a".
+export function idShape(id) {
+  const classes = [...String(id)].map((c) => (/[0-9]/.test(c) ? "d" : /[A-Za-z]/.test(c) ? "a" : "-"));
+  const out = [];
+  for (const c of classes) if (out[out.length - 1] !== c) out.push(c);
+  return out.join("");
+}
+
+// Could this board have issued this id? A control proves the route works; it
+// says nothing about the subject, because it is fetched from the board rather
+// than read out of the address being asked about. So an id whose shape matches
+// nothing the board just served is an address the reader could not read, not a
+// requisition that closed - and the difference is a lead left alone versus a
+// lead deleted with evidence that reads correctly.
+//
+// Compared against several of the board's own ids rather than one, since a
+// tenant can serve more than one form and a single sample would make the
+// others unreadable.
+//
+// What it does not catch, stated so nobody reads it as proof: damage that
+// preserves the shape. A truncated A10001 is still letter-then-digits, so it
+// passes here and reaches `gone` on a posting that is open. Shape closes the
+// cases that actually occur - a slug, a word, an empty position - and a
+// stricter test would need a per-tenant id pattern, which is the thing that
+// cannot be written once and stay true.
+export function idLooksIssuedBy(id, sampleIds) {
+  const shapes = new Set((sampleIds || []).map(idShape));
+  return shapes.has(idShape(id));
+}
 
 const readerFor = (company) => {
   const ep = (company.known || {}).endpoint || "";
@@ -350,6 +491,7 @@ const readerForUrl = (url) => {
   if (u.host === "jobs.ashbyhq.com") return { kind: "ashby", u };
   if (u.host === "jobs.lever.co") return { kind: "lever", u };
   if (/\.wd\d+\.myworkdayjobs\.com$/.test(u.host)) return { kind: "workday", u };
+  if (/\.fa\.(?:[a-z0-9-]+\.)?oraclecloud\.com$/.test(u.host)) return { kind: "oracle", u };
   return { kind: "", u };
 };
 
@@ -451,9 +593,28 @@ const call = async (name, args) => {
       // An absence means nothing until the question is shown to work on this
       // host, and the control must travel the same path: another id read out of
       // an address on this host, searched the same way.
+      const all = await readers.workday.list(mm);
+      if (all.error || !all.postings.length) {
+        return { state: "unknown", id, why: `${id} was not found, and ${all.error || "the listing returned nothing"}, so the absence proves nothing` };
+      }
+      // The control proves the route works here; it says nothing about the
+      // subject, because it is taken from the board rather than read out of the
+      // address being asked about. So a req id shaped like nothing this tenant
+      // serves is an address that cannot be read - an id position truncated,
+      // substituted, or written as a redirect's slug - and calling that gone
+      // takes a live posting off the person's board with evidence that reads
+      // correctly. Delisting deletes the lead row: a screened row keeps the
+      // posting's identity, and the status, notes, next action and everything
+      // else the person typed on it go. See db.deleteLeadAndScreen.
+      const served = all.postings.map((p) => p.id).filter(Boolean);
+      if (served.length && !idLooksIssuedBy(id, served)) {
+        return {
+          state: "unknown",
+          id,
+          why: `${id} is not the shape of any req id this tenant just served (${[...new Set(served.map(idShape))].join(", ")}), so this address cannot be read rather than the posting being gone`,
+        };
+      }
       const control = await (async () => {
-        const all = await readers.workday.list(mm);
-        if (all.error || !all.postings.length) return { ok: false, why: all.error || "the listing returned nothing" };
         const other = all.postings.find((p) => {
           try { return readers.workday.idFromUrl(new URL(p.url)) && readers.workday.idFromUrl(new URL(p.url)) !== id; } catch { return false; }
         });
@@ -464,6 +625,53 @@ const call = async (name, args) => {
       })();
       if (!control.ok) return { state: "unknown", why: `${id} was not found, and ${control.why}, so the absence proves nothing`, id };
       return { state: "gone", id, evidence: `${id} is absent while the control ${control.cid}, read the same way, came back` };
+    }
+
+    // Oracle answers membership by id too, and for the same reason as Workday:
+    // its boards are far too large to read whole, so there is no listing to
+    // compare against.
+    if (kind === "oracle") {
+      const m = readers.oracle.fromUrl(u);
+      const id = readers.oracle.idFromUrl(u);
+      if (!m || !id) return { state: "unknown", why: "no requisition id or site number could be read out of the address" };
+      const r = await readers.oracle.has(m, id);
+      if (r.error) return { state: "unknown", why: r.error, id };
+      if (r.present) return { state: "open", id, evidence: `${id} is still served by the tenant's board` };
+      // An empty answer is also what a tenant having a bad night returns, and
+      // what a damaged address returns. So two things must hold before an
+      // absence counts: the route has to work here, and the id being asked
+      // about has to be a form this board issues. Both come out of one
+      // listing request.
+      const sample = await (async () => {
+        const first = await fetchText(`https://${m[1]}/hcmRestApi/resources/latest/recruitingCEJobRequisitions`
+          + `?onlyData=true&expand=requisitionList&finder=findReqs;siteNumber=${m[2]},limit=10,offset=0`);
+        const j = asJson(first.text);
+        const head = (j && j.items && j.items[0]) || null;
+        return ((head && head.requisitionList) || []).map((p) => String(p.Id || "")).filter(Boolean);
+      })();
+      if (!sample.length) {
+        return { state: "unknown", id, why: `${id} was not found, and the board served no requisition to check that against, so the absence proves nothing` };
+      }
+      if (!idLooksIssuedBy(id, sample)) {
+        return {
+          state: "unknown",
+          id,
+          why: `${id} is not the shape of any id this board just served (${[...new Set(sample.map(idShape))].join(", ")}), so this address cannot be read rather than the posting being gone`,
+        };
+      }
+      const cid = sample.find((s) => s !== id);
+      if (!cid) {
+        return { state: "unknown", id, why: `${id} was not found, and the only requisition to control with is the one being asked about, so the absence proves nothing` };
+      }
+      const c = await readers.oracle.has(m, cid);
+      if (c.error || !c.present) {
+        return { state: "unknown", id, why: `${id} was not found, and the control ${cid} did not come back, so the absence proves nothing` };
+      }
+      return {
+        state: "gone",
+        id,
+        evidence: `${id} is absent while the control ${cid}, looked up the same way, came back, and ${id} is a shape this board issues`,
+      };
     }
 
     const idOf = readers[kind].idFromUrl(u);

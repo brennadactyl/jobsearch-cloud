@@ -2,8 +2,10 @@
 //
 // Checks the board reader: a set of cases that need nothing, and a set that reaches
 // live boards. It exists so the server can be refactored - a reader that
-// answers "gone" for a posting that is open deletes a lead with no undo, so
-// "I only moved code around" is not something anyone should take on trust.
+// answers "gone" for a posting that is open takes a live posting off her board
+// and hides it from later runs, and while the hiding is undoable
+// (db.unscreenUrls) what she typed on the lead is not, so "I only moved code
+// around" is not something anyone should take on trust.
 //
 // It names no company and asserts no count. Which employers a search covers,
 // and which one an account excludes, are that account's business and this file
@@ -96,7 +98,7 @@ function record(what, asserts, pass, answer) {
 // that deletes leads: pick the wrong company and its board reads fine, the id
 // is legitimately absent from it, and the answer is "gone" with evidence that
 // reads like a true one. The companies here are invented.
-const { findBoardOwner } = await import("./server.mjs");
+const { findBoardOwner, oracleReader, idShape, idLooksIssuedBy } = await import("./server.mjs");
 
 const invented = [
   { company: "Acme", known: { board: "greenhouse", endpoint: "boards-api.greenhouse.io/v1/boards/acme/jobs" } },
@@ -167,6 +169,63 @@ for (const c of [
     ok: (r) => r.found === "none",
   },
   {
+    // Oracle ids are not all numeric - tenants serve letter-prefixed ones too -
+    // so a pattern tighter than "whatever follows job" would report no id for
+    // a form it had not seen, and the posting would never be checked at all.
+    //
+    // Every value here is invented. A real tenant subdomain would say whose
+    // board this deployment reads, and the requisition id beside it stops
+    // being an opaque number the moment the host names the employer. The cases
+    // assert shapes, which invented values carry exactly as well.
+    what: "an Oracle address yields its requisition id and its site number, whatever form the id takes",
+    asserts: "the id is whatever follows `job` and the site whatever follows `sites`, so a W-prefixed id, a trailing slash and a tenant host without a data centre label all survive",
+    run: () => {
+      const forms = [
+        ["https://tenant.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_45001/job/100001", "100001", "CX_45001"],
+        ["https://tenant.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/W200002/", "W200002", "CX_1001"],
+        ["https://tenant.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/603", "603", "CX_1"],
+      ];
+      return forms.map(([address, id, site]) => {
+        const u = new URL(address);
+        const m = oracleReader.fromUrl(u);
+        return oracleReader.idFromUrl(u) === id && m && m[2] === site && m[1] === u.host;
+      });
+    },
+    ok: (r) => Array.isArray(r) && r.length === 3 && r.every(Boolean),
+  },
+  {
+    // The case the control cannot catch. A control is fetched from the board,
+    // so it comes back whatever the subject looked like - which means a stored
+    // address damaged in the id position reaches `gone` on a live posting.
+    what: "an id shaped like nothing the board serves is not accepted as a subject",
+    asserts: "a damaged id position - truncated, a slug, the word undefined - is an unreadable address rather than a closed posting, and the board's own ids are what say which it is",
+    run: () => {
+      const served = ["100001", "100002", "100003"];
+      return {
+        damaged: ["undefined", "senior-software-engineer", "100001?utm=x", ""].map((bad) => idLooksIssuedBy(bad, served)),
+        real: idLooksIssuedBy("100004", served),
+        otherFormAccepted: idLooksIssuedBy("W200002", ["W200002", "W200003"]),
+        mixedBoardAcceptsBoth: ["100001", "W200002"].map((ok) => idLooksIssuedBy(ok, ["100001", "W200002"])),
+      };
+    },
+    ok: (r) => r.damaged.every((x) => x === false)
+      && r.real === true
+      && r.otherFormAccepted === true
+      && r.mixedBoardAcceptsBoth.every(Boolean),
+  },
+  {
+    what: "an id's shape is its character classes with runs collapsed",
+    asserts: "the comparison is on shape, not length or value, so a board's next id is accepted while a different form is not",
+    run: () => [idShape("100001"), idShape("W200002"), idShape("2026-0000001"), idShape("undefined"), idShape("Req100004-1")],
+    ok: (r) => r[0] === "d" && r[1] === "ad" && r[2] === "d-d" && r[3] === "a" && r[4] === "ad-d",
+  },
+  {
+    what: "an Oracle address with no site number yields no coordinates rather than guessing one",
+    asserts: "a missing site number is declined rather than defaulted - the tenants seen ignore it, but a tenant configured with several boards can enforce it, and a guessed coordinate is what would produce a confident answer about the wrong board",
+    run: () => oracleReader.fromUrl(new URL("https://tenant.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/job/100001")),
+    ok: (r) => r === null,
+  },
+  {
     what: "an address that is not an address is reported, not thrown",
     asserts: "a malformed address fails as an answer rather than as an exception",
     run: () => findBoardOwner("not-a-url", "greenhouse", invented),
@@ -221,9 +280,12 @@ const greenhouse = rows.find((c) => {
   return Boolean(t) && ghClaimants.get(t) === 1;
 });
 const workday = withEndpoint(/myworkdayjobs\.com\/wday\/cxs\//);
+// A company the reader has no route for. This list must name every board kind
+// the server reads: miss one and this case picks a company the server can in
+// fact read, then fails asserting it was declined.
 const noRoute = rows.find((c) => {
   const ep = ((c.known || {}).endpoint) || "";
-  return !/greenhouse|ashbyhq|lever\.co|myworkdayjobs/.test(ep);
+  return !/greenhouse|ashbyhq|lever\.co|myworkdayjobs|oraclecloud/.test(ep);
 });
 
 const server = openServer();
@@ -260,6 +322,38 @@ if (greenhouse) {
       "an id its board does not list is gone, with the board's size as evidence",
       "an absence is only concluded against a listing that came back non-empty",
       absent.state === "gone" && /absent/.test(absent.evidence || ""),
+      absent,
+    );
+  }
+}
+
+const oracle = withEndpoint(/oraclecloud\.com[^\s]*siteNumber=CX_/);
+if (oracle) {
+  const listing = await server.call("list_postings", { company: oracle.company });
+  record(
+    "an Oracle listing serves postings and says plainly whether it is the whole board",
+    "an Oracle tenant can hold thousands of requisitions and is read a few pages deep, so a listing that is not the whole board reports complete:false and carries the warning - an absence must never be read out of it",
+    Array.isArray(listing.postings) && listing.postings.length > 0
+      && (listing.complete === false ? /don't read a posting's absence/.test(listing.warning || "") : listing.complete === true),
+    { count: listing.count, complete: listing.complete, total: listing.board_says_total },
+  );
+
+  if (Array.isArray(listing.postings) && listing.postings.length) {
+    const open = await server.call("posting_status", { url: listing.postings[0].url });
+    record(
+      "an Oracle requisition the tenant still serves is open",
+      "the verdict is a lookup by requisition id rather than a read of the whole board, which is why it works on a tenant too large to list",
+      open.state === "open" && Boolean(open.evidence),
+      open,
+    );
+    // A fabricated id rather than a requisition that was once real, so the
+    // case asserts the absence path without pinning anything that rots.
+    const host = new URL(listing.postings[0].url);
+    const absent = await server.call("posting_status", { url: `${host.origin}${host.pathname.replace(/\/job\/.*$/, "/job/9")}` });
+    record(
+      "an Oracle requisition the tenant does not serve is gone, and only against a control",
+      "an empty answer is also what a failing tenant returns, so `gone` is only reached when an id the board served moments earlier comes back by the same route",
+      absent.state === "gone" && /control/.test(absent.evidence || ""),
       absent,
     );
   }
