@@ -32,6 +32,10 @@ doc, and a finding says whether anything was built on the wrong line.
 
 ## Next
 
+- **[Retire companies from the rotation](retire-companies-plan.md)** - take
+  companies that have given no search anything out of every search's cycle,
+  keeping their rows so runs don't add them back. Planned, unbuilt. The larger
+  saving is a per-search cadence, which wants its own plan.
 - **[An operator's dashboard](admin-dashboard-plan.md)** - run health across
   every account, who exists and what state their setup is in, the shared company
   list, and the actions that are scripts today, minting an invite first among
