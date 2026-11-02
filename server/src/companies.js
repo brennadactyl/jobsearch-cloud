@@ -299,15 +299,6 @@ export class CompanyList {
   }
 
   /**
-   * For each name that is another company's alias, the name of that company
-   * (migrations/0020_company_aliases.sql), keyed by normalize(). A name that
-   * isn't an alias isn't in the map.
-   *
-   * Reads every company that has aliases - a few rows on a list of a couple of
-   * hundred - rather than searching inside the JSON.
-   * @returns {Promise<Map<string, string>>}
-   */
-  /**
    * Which of these names are companies on the list, and which are nothing.
    *
    * Matched the way every other reader matches - `normalize()` first, then the
@@ -409,6 +400,15 @@ export class CompanyList {
     return out;
   }
 
+  /**
+   * For each name that is another company's alias, the name of that company
+   * (migrations/0020_company_aliases.sql), keyed by normalize(). A name that
+   * isn't an alias isn't in the map.
+   *
+   * Reads every company that has aliases - a few rows on a list of a couple of
+   * hundred - rather than searching inside the JSON.
+   * @returns {Promise<Map<string, string>>}
+   */
   async aliasMap() {
     const rows = await this.d1
       .prepare(

@@ -66,6 +66,15 @@ export async function upcomingCompanies(db, key, count) {
  * reported name against that answer, so a retired company missing from it is a
  * company the next run adds back as new, and the rotation regrows by the work
  * that shortened it.
+ *
+ * Both callers that decide what a run is offered go through this one function -
+ * the nightly slice and `upcomingCompanies`, which is the dedup window
+ * (routes/screened.js). One function rather than the same filter twice, so the
+ * window cannot come to disagree with the slice about which companies a search
+ * will see. That is also why only the slice's behaviour is asserted directly:
+ * the window has no filter of its own to get wrong, and a check naming a
+ * particular company in a 48-wide window over a list of hundreds would turn on
+ * that company's position rather than on the rule.
  * @param {Array<{company: string, retired_on?: string}>} log every company on the list
  * @param {(company: string) => boolean} isExcluded
  */
