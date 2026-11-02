@@ -406,18 +406,32 @@ function Invoke-KnownCommand {
         $fullList = Invoke-Tracker "GET" "/api/coverage/${Search}?all=1" $null
         $names = @(foreach ($listed in @($fullList.companies | Where-Object { $_ })) {
             $kept = [string]$listed.company
-            [pscustomobject]@{ name = $kept; company = $kept }
+            # A server that doesn't mark retirement sends nothing here, and
+            # absent is not retired - so this says what it always said until the
+            # server change is deployed, and the deploy and the pull that ships
+            # this file can land in either order.
+            $retired = [bool]$listed.retired
+            [pscustomobject]@{ name = $kept; company = $kept; retired = $retired }
             foreach ($alias in @($listed.aliases | Where-Object { $_ })) {
-                [pscustomobject]@{ name = [string]$alias; company = $kept }
+                [pscustomobject]@{ name = [string]$alias; company = $kept; retired = $retired }
             }
         })
         # Under a property, not as a bare array: piped through ConvertTo-Json, a
         # one-name list is written as a single object and an empty one as nothing.
         Write-Json "known-list.json" @{ names = $names }
     }
-    $hit = @($names | Where-Object { $_ -and ((& $norm $_.name) -eq $want) } | ForEach-Object { $_.company }) | Select-Object -First 1
-    if ($hit) {
-        Write-TrackerLine "known: $PositionalArg is on the list as '$hit' - skip it, its turn comes in the rotation"
+    $match = @($names | Where-Object { $_ -and ((& $norm $_.name) -eq $want) }) | Select-Object -First 1
+    if ($match) {
+        $hit = [string]$match.company
+        if ($match.retired) {
+            # A retired company keeps its row so a run that meets it doesn't add
+            # it back, but no search's slice will ever serve it, so there is no
+            # turn to wait for. Saying there is would send the run away expecting
+            # the list to cover it later, and nothing would.
+            Write-TrackerLine "known: $PositionalArg is on the list as '$hit', retired from the rotation - skip it, no search will be given it"
+        } else {
+            Write-TrackerLine "known: $PositionalArg is on the list as '$hit' - skip it, its turn comes in the rotation"
+        }
     } else {
         # The list hides this account's excluded companies, so absence is one of
         # two things, and the run has to hear both.

@@ -12,6 +12,8 @@ known-hit|ok|known "initech globex"
 known-hit-cached|ok|known ACME
 known-alias-cached|ok|known "initech corp"
 known-alias-other|ok|known INITRODE
+known-retired|ok|known "Dunder Mifflin"
+known-retired-alias|ok|known "dunder-mifflin paper"
 known-miss|ok|known "Nope Inc"
 known-empty|ok|known "!!!"
 known-none|ok|known
