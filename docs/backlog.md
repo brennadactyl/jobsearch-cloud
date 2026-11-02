@@ -36,6 +36,12 @@ doc, and a finding says whether anything was built on the wrong line.
   companies that have given no search anything out of every search's cycle,
   keeping their rows so runs don't add them back. Planned, unbuilt. The larger
   saving is a per-search cadence, which wants its own plan.
+  That plan should also let a company be brought forward. A cursor only moves
+  along the list, so a company whose board was dark on its turn waits a whole
+  cycle, and today the only way to sweep it sooner is a one-off run pinned to
+  it. Choosing what is due per company, rather than reading along a cursor,
+  answers both at once, which is why it belongs there rather than as a route
+  that sets a cursor.
 - **[An operator's dashboard](admin-dashboard-plan.md)** - run health across
   every account, who exists and what state their setup is in, the shared company
   list, and the actions that are scripts today, minting an invite first among
