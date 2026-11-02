@@ -39,10 +39,10 @@ gaps they leave are ordinary and no search skips or repeats a stretch.
 
 `POST /api/companies/retire`, `ADMIN_TOKEN` only, beside
 `/api/companies/cleanup` in `server/src/routes/admin.js`. Body
-`{ companies: [names], note, restore?: true, dry_run?: true }`. Names are
+`{ companies: [names], note, restore?: true, dryRun?: true }`. Names are
 matched through `normalize()` and aliases; any name not on the list refuses the
-whole request, naming it. A dry run returns what would change and writes
-nothing. Restoring clears both columns.
+whole request, naming it. A dry run returns what would change, per company, and
+writes nothing. Restoring clears both columns.
 
 Verifiers in `server/verify-local.mjs`, both paths: a retired company is absent
 from a search's slice and present in `?all=1`; a report on it is recorded and
