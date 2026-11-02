@@ -1,0 +1,47 @@
+-- company_fetch.retired_on / retired_note: a company that keeps its place on
+-- the list but stops costing every search a slot.
+--
+-- Every search reads the whole shared list, about once a month, a batch a
+-- night. Some companies have given no search anything - no lead, no screened
+-- posting - after many searches have looked, and each one still takes a slot in
+-- every cycle from every search. Retiring is how a company stops being offered
+-- without leaving the list.
+--
+-- The row stays, and that is the point. `./tracker known` checks a reported
+-- name against the whole list, so a company deleted from it is a company the
+-- next run adds back as new, and the rotation grows again by the same work that
+-- shortened it. A retired row answers "yes, known, skip it".
+--
+--   retired_on    'YYYY-MM-DD' the day it was retired, '' while it is not.
+--                 The date rather than a flag, because the question asked of a
+--                 retirement later is when it happened, and a flag cannot
+--                 answer it.
+--   retired_note  why, in a sentence, as whoever retired it put it. Not a code:
+--                 the reasons differ in ways a list of kinds would flatten -
+--                 nothing found after many sweeps, a careers site that has
+--                 moved behind something no run can read, a company that no
+--                 longer hires for anything searched.
+--
+-- **Retirement is not retraction**, which this table already has, and the two
+-- sit on the same row. A retracted row is a *wrong* row: its facts are
+-- withdrawn, `getCompanyFetch` serves only the retraction, and the board is
+-- blanked on read. A retired row is a *right* row that is not worth a slot - it
+-- keeps its board, endpoint and URL shape, a run can still correct them, and
+-- every reader sees them as before. A company can be both, and neither implies
+-- the other.
+--
+-- **Retirement is not exclusion.** `excluded_companies` is one person's choice
+-- and hides that company's leads from them. Retirement is the deployment's, it
+-- hides nothing, and a posting found at a retired company by any other path is
+-- recorded as usual: the leads already there are kept, and nothing about anyone
+-- else's list changes.
+--
+-- Both default to '' and no existing row is touched, so nothing is retired by
+-- this file. What retires a company is POST /api/companies/retire, which takes
+-- the deployment's token and reports before it writes.
+--
+-- Not done here: deleting the row, which would let runs re-add it; and a
+-- per-search cadence that visits a company less often after it keeps coming up
+-- empty for that search, which is the larger saving and its own plan.
+ALTER TABLE company_fetch ADD COLUMN retired_on TEXT NOT NULL DEFAULT '';
+ALTER TABLE company_fetch ADD COLUMN retired_note TEXT NOT NULL DEFAULT '';

@@ -307,6 +307,108 @@ export class CompanyList {
    * hundred - rather than searching inside the JSON.
    * @returns {Promise<Map<string, string>>}
    */
+  /**
+   * Which of these names are companies on the list, and which are nothing.
+   *
+   * Matched the way every other reader matches - `normalize()` first, then the
+   * alias map - so a name that reaches a company here reaches the same company
+   * in a sweep report. Resolution only: whether an unresolved name is fatal is
+   * the caller's, because "refuse the whole request" is a route's decision and
+   * differs between them.
+   *
+   * A retracted company does not resolve, because `aliasMap` excludes those
+   * rows and a retracted row's own name is not a thing to act on.
+   * @param {string[]} names as sent
+   * @returns {Promise<{resolved: Array<{sent: string, key: string, company: string}>, unknown: string[]}>}
+   */
+  async resolveCompanies(names) {
+    const rows = await this.d1
+      .prepare(
+        `SELECT company_key, COALESCE(NULLIF(display_name, ''), company_key) AS company
+           FROM company_fetch WHERE retracted_on = ''`
+      )
+      .all();
+    const byKey = new Map(rows.results.map((r) => [r.company_key, r.company]));
+    const aliases = await this.aliasMap();
+    const resolved = [];
+    const unknown = [];
+    for (const sent of names) {
+      const key = normalizeCompany(sent);
+      if (!key) {
+        unknown.push(sent);
+        continue;
+      }
+      if (byKey.has(key)) {
+        resolved.push({ sent, key, company: byKey.get(key) });
+        continue;
+      }
+      const viaAlias = aliases.get(key);
+      const aliasKey = viaAlias ? normalizeCompany(viaAlias) : "";
+      if (aliasKey && byKey.has(aliasKey)) {
+        resolved.push({ sent, key: aliasKey, company: byKey.get(aliasKey) });
+        continue;
+      }
+      unknown.push(sent);
+    }
+    return { resolved, unknown };
+  }
+
+  /**
+   * Retire the named companies, or restore them.
+   *
+   * Retiring sets `retired_on` and `retired_note`; restoring clears both, which
+   * puts the company back at the position it never left - retirement takes it
+   * out of the slice and nothing else, so there is no place to put it back to.
+   *
+   * Only these two columns are touched. A retired company keeps its board,
+   * endpoint and shape, and a run may still correct them
+   * (migrations/0032_company_retired.sql): retiring says nothing about whether
+   * the facts are right, which is what retraction says.
+   * @param {string[]} keys `company_key`s, already resolved
+   * @param {{on: string, note: string}|null} to the retirement to set, or null to restore
+   * @returns {Promise<number>} rows changed
+   */
+  async setRetired(keys, to) {
+    if (keys.length === 0) {
+      return 0;
+    }
+    let changed = 0;
+    for (let i = 0; i < keys.length; i += ID_CHUNK) {
+      const chunk = keys.slice(i, i + ID_CHUNK);
+      const res = await this.d1
+        .prepare(
+          `UPDATE company_fetch SET retired_on = ?, retired_note = ?
+            WHERE company_key IN (${chunk.map(() => "?").join(",")})`
+        )
+        .bind(to ? to.on : "", to ? to.note : "", ...chunk)
+        .run();
+      changed += res.meta.changes || 0;
+    }
+    return changed;
+  }
+
+  /** The retirement state of these companies, for reporting what a write would change. */
+  async retiredState(keys) {
+    const out = new Map();
+    if (keys.length === 0) {
+      return out;
+    }
+    for (let i = 0; i < keys.length; i += ID_CHUNK) {
+      const chunk = keys.slice(i, i + ID_CHUNK);
+      const res = await this.d1
+        .prepare(
+          `SELECT company_key, retired_on, retired_note FROM company_fetch
+            WHERE company_key IN (${chunk.map(() => "?").join(",")})`
+        )
+        .bind(...chunk)
+        .all();
+      for (const r of res.results) {
+        out.set(r.company_key, { retired_on: r.retired_on || "", retired_note: r.retired_note || "" });
+      }
+    }
+    return out;
+  }
+
   async aliasMap() {
     const rows = await this.d1
       .prepare(

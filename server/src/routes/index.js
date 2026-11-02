@@ -28,7 +28,12 @@ import {
   handleSetUserAdmin,
   handleUpsertUser,
 } from "./accounts.js";
-import { handleCleanUpCompanies, handleConvertLocations, handlePurgeSearch } from "./admin.js";
+import {
+  handleCleanUpCompanies,
+  handleConvertLocations,
+  handlePurgeSearch,
+  handleRetireCompanies,
+} from "./admin.js";
 import { handleAdminOverview } from "./overview.js";
 import {
   handleDeleteApplication,
@@ -137,6 +142,9 @@ export const S2S_ROUTES = [
   // Merging duplicate companies and renaming acquired ones, on the list every
   // account shares.
   ["POST", "/api/companies/cleanup", handleCleanUpCompanies],
+  // Taking a company out of every search's rotation while keeping its row, so
+  // a run that meets it again finds it known rather than new.
+  ["POST", "/api/companies/retire", handleRetireCompanies],
   // Storing every location list as its entries. The one route here that may
   // name no account: each row is replaced by what it already reads as, so
   // there is no value it can write that changes what a reader sees.

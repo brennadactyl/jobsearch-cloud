@@ -1,7 +1,7 @@
 # Schema
 
 The tracker's D1 database as `server/migrations/` builds it: twelve tables, from
-`0001_schema.sql` through `0031_posted_date.sql` applied in order. This is the
+`0001_schema.sql` through `0032_company_retired.sql` applied in order. This is the
 schema as it exists today. A plan in this folder that changes a table describes
 only its change and links here.
 
@@ -229,6 +229,8 @@ erDiagram
         TEXT wall_last_on
         INTEGER wall_dates
         TEXT aliases "JSON list of other names"
+        TEXT retired_on
+        TEXT retired_note
     }
     invites {
         INTEGER id PK
@@ -517,6 +519,16 @@ name as written when the company joined.
 - A wrong row is retracted, not deleted: `retracted_on` and `retracted_note` are
   set, reads return only the retraction, and runs cannot update the row.
   A retracted company stays on the list.
+- A company not worth a slot is retired, which is a different thing: `retired_on`
+  and `retired_note` are set, it is left out of every search's slice so it takes
+  no turn, and it is still listed by `GET /api/coverage/<key>?all=1` marked
+  `retired`. The row stays because `./tracker known` checks a reported name
+  against that list, and a company missing from it is one the next run adds back
+  as new. A retired row keeps its board, endpoint and shape, runs may still
+  correct them, and nobody's leads are hidden - so retirement says nothing about
+  whether the facts are right, which is what retraction says, and nothing about
+  whether one person wants the company, which is what `excluded_companies` says.
+  Set through `POST /api/companies/retire`; restoring clears both columns.
 - `aliases` is a JSON list of other names that mean this company: every name
   merged into it or replaced by a rename, and any added by hand, through
   `POST /api/companies/cleanup` only. Matched through `normalize()`, so a run

@@ -718,6 +718,25 @@ export function badDocumentPath(path) {
   );
 }
 
+/**
+ * Whether a company row is retired: on the shared list, but not costing every
+ * search a slot in every cycle (migrations/0032_company_retired.sql).
+ *
+ * A function rather than a field read at each site, because `retired_on` sits
+ * one word from `retracted_on` on the same row and the two mean opposite
+ * things - a retired row is a right row not worth a slot, a retracted row is a
+ * wrong row whose facts are withdrawn. Typing one for the other reads fine and
+ * runs; calling the wrong name here doesn't resolve.
+ *
+ * Retirement hides nothing and excludes nobody's leads: it decides only whether
+ * a company takes a turn in the rotation.
+ * @param {{retired_on?: unknown}} row a `company_fetch` row, or a coverage row
+ * @returns {boolean}
+ */
+export function isRetired(row) {
+  return typeof row?.retired_on === "string" && row.retired_on !== "";
+}
+
 // Every write path that can introduce a company filters through this.
 export async function excluderFor(db) {
   const { settings } = await db.getTracksAndSettings();
