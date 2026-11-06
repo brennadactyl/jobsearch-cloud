@@ -36,7 +36,13 @@ http.createServer((req, res) => {
       return J(res, 200, d);
     }
     if (path === "/api/coverage/SWE") return J(res, 200, {batch:3,cursor:40,total:300,companies:[{company:"Acme",board:"greenhouse",note:" slow "},{company:"Béta Co"},{company:"Gamma",note:"x"}]});
-    if (path.startsWith("/api/coverage/SWE?all=1")) return J(res, 200, {companies:[{company:"Initech (Globex)",aliases:["Initrode","Initech Corp."]},{company:"Acme"}]});
+    // A retired company carries `retired` (the date it was retired) and sits in
+    // `?all=1` beside the rest, because that is the answer `known` checks a name
+    // against - one missing from it would be added back as new. The windowed
+    // route above omits retired companies instead, which is what frees the slot.
+    // Not-retired companies carry no `retired` at all, so this reply also covers
+    // a helper meeting a server that has never heard of retirement.
+    if (path.startsWith("/api/coverage/SWE?all=1")) return J(res, 200, {companies:[{company:"Initech (Globex)",aliases:["Initrode","Initech Corp."]},{company:"Acme"},{company:"Dunder Mifflin",aliases:["Dunder-Mifflin Paper"],retired:"2026-02-17",retired_note:"nine searches, nothing kept"}]});
     // `posted` serves every count the posted date produces, in one reply,
     // because they are three different things about one field and the line has
     // to keep them apart: two drops, split by reason - a date that wasn't a
