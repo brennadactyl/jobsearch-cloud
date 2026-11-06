@@ -11,7 +11,7 @@
 import { parseAliases } from "../company-cleanup.js";
 import { normalize } from "../exclude.js";
 import { json, readJson } from "../http.js";
-import { excluderFor, isoDate, today, unknownTrack } from "../validate.js";
+import { excluderFor, isoDate, isRetired, today, unknownTrack } from "../validate.js";
 
 // How many companies one run covers. A whole list is more than a run can
 // verify properly, and the failure isn't that a company gets missed - it's
@@ -50,7 +50,36 @@ function sliceAt(eligible, cursor, count = COVERAGE_BATCH) {
 export async function upcomingCompanies(db, key, count) {
   const [log, cursor] = await Promise.all([db.getCoverage(key), db.getSweepCursor(key)]);
   const isExcluded = await excluderFor(db);
-  return { cursor, companies: sliceAt(log.filter((c) => !isExcluded(c.company)), cursor, count) };
+  return { cursor, companies: sliceAt(servable(log, isExcluded), cursor, count) };
+}
+
+/**
+ * The companies a search can be offered: on the shared list, not excluded by
+ * this account, not retired.
+ *
+ * Both are dropped before `sliceAt` rather than after, so neither uses up a
+ * slot - the whole point of retiring one. The gaps they leave in `position` are
+ * ordinary, because the cursor is compared against `position` and never used as
+ * an index.
+ *
+ * `?all=1` deliberately does not go through here: `./tracker known` checks a
+ * reported name against that answer, so a retired company missing from it is a
+ * company the next run adds back as new, and the rotation regrows by the work
+ * that shortened it.
+ *
+ * Both callers that decide what a run is offered go through this one function -
+ * the nightly slice and `upcomingCompanies`, which is the dedup window
+ * (routes/screened.js). One function rather than the same filter twice, so the
+ * window cannot come to disagree with the slice about which companies a search
+ * will see. That is also why only the slice's behaviour is asserted directly:
+ * the window has no filter of its own to get wrong, and a check naming a
+ * particular company in a 48-wide window over a list of hundreds would turn on
+ * that company's position rather than on the rule.
+ * @param {Array<{company: string, retired_on?: string}>} log every company on the list
+ * @param {(company: string) => boolean} isExcluded
+ */
+function servable(log, isExcluded) {
+  return log.filter((c) => !isExcluded(c.company) && !isRetired(c));
 }
 
 /**
@@ -82,6 +111,11 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
   const isExcluded = await excluderFor(db);
   const eligible = log.filter((c) => !isExcluded(c.company));
   if (all) {
+    // Retired companies are listed here, unlike in the slice below: this is
+    // what `./tracker known` checks a reported name against, and a retired
+    // company missing from it would be added back as new. Marked, so a run can
+    // tell "known, skip it" from "known, your turn".
+    //
     // `known` here too, so a person reading the whole table sees the shared
     // facts rather than concluding there are none.
     const allIntel = await companyList.getCompanyFetch(eligible.map((c) => c.company));
@@ -89,11 +123,23 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
       // `aliases` too, the other names each company goes by, so a run that
       // checks a name against the whole list (scripts/tracker.ps1's `known`)
       // matches them as the server does.
-      companies: eligible.map(({ aliases, ...c }) => {
+      companies: eligible.map(({ aliases, retired_on: retiredOn, retired_note: retiredNote, ...c }) => {
         const known = allIntel.get(normalize(c.company));
         const names = parseAliases(aliases);
-        return { ...c, ...(known ? { known } : {}), ...(names.length ? { aliases: names } : {}) };
+        return {
+          ...c,
+          ...(known ? { known } : {}),
+          ...(names.length ? { aliases: names } : {}),
+          // The date is the mark: a reader asking "is it retired" and one
+          // asking "since when" get the same field, and an unretired company
+          // carries nothing rather than a false date.
+          ...(retiredOn ? { retired: retiredOn, ...(retiredNote ? { retired_note: retiredNote } : {}) } : {}),
+        };
       }),
+      // Both count what this answer holds, retired included, so the number
+      // never disagrees with the array beside it. Neither is the number of
+      // companies a search will be offered - that is the list below, shorter by
+      // however many are retired or excluded.
       total: eligible.length,
       // The whole table's size, not the nightly slice (that is COVERAGE_BATCH).
       batch: eligible.length,
@@ -103,13 +149,15 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
 
   // Read forward from the cursor, wrapping at the end. Only position decides
   // the slice; `last_swept` records when a company was attempted and takes no
-  // part in choosing. Excluded companies are filtered out before slicing, so
-  // they don't use up slots.
+  // part in choosing. Excluded and retired companies are filtered out before
+  // slicing, so they don't use up slots - which for a retired one is the whole
+  // reason it is retired.
   //
   // The cursor is compared against `position`, never used as an array index:
-  // once any company is excluded, eligible[i] is no longer position i, and
-  // indexing would skip a company silently.
-  const companies = sliceAt(eligible, cursor).map(({ aliases, ...c }) => c);
+  // once any company is dropped, the remaining list's i is no longer position
+  // i, and indexing would skip a company silently.
+  const companies = sliceAt(servable(log, isExcluded), cursor)
+    .map(({ aliases, retired_on: _on, retired_note: _note, ...c }) => c);
 
   // What is known about reaching each company, pooled across the deployment
   // (docs/glossary.md#companies-and-the-rotation). Attached here rather than served by a
@@ -123,7 +171,12 @@ export async function handleGetCoverage({ db, companyList, params, url }) {
 
   return json({
     companies: withIntel,
-    total: eligible.length,
+    // What this search still has to get through, so retired and excluded
+    // companies are not in it. Counting them here would tell a run its rotation
+    // is longer than the number of companies it will ever be offered, which is
+    // the opposite of what retiring one is for. `?all=1`'s `total` is the other
+    // question - everything on the list - and the two differ by design.
+    total: servable(log, isExcluded).length,
     batch: companies.length,
     cursor,
   });

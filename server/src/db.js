@@ -855,6 +855,8 @@ export class Db {
                 f.position,
                 f.aliases,
                 CASE WHEN f.retracted_on = '' THEN f.board ELSE '' END AS board,
+                f.retired_on,
+                f.retired_note,
                 COALESCE(s.last_swept, '') AS last_swept,
                 COALESCE(s.note, '') AS note
            FROM company_fetch f

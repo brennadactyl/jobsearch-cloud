@@ -15,6 +15,7 @@ import { getUserByName } from "../auth.js";
 import { CompanyList } from "../companies.js";
 import { Db, storedLocationRows } from "../db.js";
 import { json, readJson } from "../http.js";
+import { today } from "../validate.js";
 import { applyConversion, conversionPlan, planSummary } from "../location-convert.js";
 
 /**
@@ -209,4 +210,104 @@ export async function handleConvertLocations({ request, env }) {
   // rest of the suite already exercises rather than a second copy of it.
   await applyConversion(plan, (userId, key, value) => new Db(env.DB, userId).setSetting(key, value));
   return json({ dryRun: false, ...summary });
+}
+
+/**
+ * POST /api/companies/retire - requires the ADMIN_TOKEN secret as Bearer. Body
+ * `{ companies: [name, ...], note, restore?, dryRun? }` ->
+ * `{ dryRun, restore, changes: [{company, from, to}], unchanged: [company, ...] }`;
+ * 400 for a missing or empty `companies`, a missing `note` when retiring, or
+ * any name not on the list - naming every one of them.
+ *
+ * A retired company keeps its row and stops taking a turn
+ * (migrations/0032_company_retired.sql). The row has to stay: `./tracker known`
+ * checks a reported name against the whole list, so a company deleted from it
+ * is one the next run adds back as new, and the rotation regrows by the work
+ * that shortened it.
+ *
+ * **An unresolved name refuses the whole request**, naming every one that
+ * failed rather than the first. These calls name a set someone assembled from a
+ * backup, so a partial write would leave them reconciling what landed against
+ * what they sent - and the names that fail are the interesting ones: a company
+ * spelled differently here than on the list is a missing alias, not a typo.
+ *
+ * `dryRun` reports per company rather than a total, because what is being
+ * approved is a list of names. `changes` carries `from` and `to` so a company
+ * already retired shows as a no-op instead of being counted twice; those are
+ * listed under `unchanged` rather than silently dropped.
+ *
+ * `restore: true` clears both columns, and then `note` is not required: there
+ * is nothing to explain, and the row carries no record that it was ever
+ * retired. Restoring puts a company back at the position it never left.
+ *
+ * Retirement is not retraction and not exclusion. It says nothing about whether
+ * the facts are right, and it hides nobody's leads.
+ */
+export async function handleRetireCompanies({ request, env }) {
+  const body = await readJson(request);
+  if (body instanceof Response) {
+    return body;
+  }
+
+  const restore = body.restore === true;
+  const names = Array.isArray(body.companies) ? body.companies.filter((n) => typeof n === "string" && n.trim()) : [];
+  if (names.length === 0) {
+    return json({ error: "companies must be a non-empty array of names", field: "companies" }, 400);
+  }
+  const note = typeof body.note === "string" ? body.note.trim() : "";
+  if (!restore && !note) {
+    return json(
+      { error: "note is required - a retirement says why, in a sentence, as whoever retired it put it", field: "note" },
+      400
+    );
+  }
+
+  const companyList = new CompanyList(env.DB);
+  const { resolved, unknown } = await companyList.resolveCompanies(names);
+  if (unknown.length) {
+    return json(
+      {
+        error:
+          "not on the company list, so nothing was written - a name spelled differently here than on the list " +
+          "wants an alias rather than a retirement: " +
+          unknown.join(", "),
+        field: "companies",
+        unknown,
+      },
+      400
+    );
+  }
+
+  // One row per company_key: a caller may send a company twice, by its own name
+  // and by an alias, and it would otherwise be reported twice.
+  const byKey = new Map(resolved.map((r) => [r.key, r]));
+  const keys = [...byKey.keys()];
+  const before = await companyList.retiredState(keys);
+  const to = restore ? { on: "", note: "" } : { on: today(), note };
+
+  // The key is carried alongside rather than recovered from the display name
+  // later: normalizing a display name back to its key is a round trip that
+  // usually works, and a company whose key was recorded from a different
+  // spelling would silently drop out of the write while appearing in the
+  // report.
+  const moving = [];
+  const unchanged = [];
+  for (const key of keys) {
+    const was = before.get(key) || { retired_on: "", retired_note: "" };
+    const row = byKey.get(key);
+    if (was.retired_on === to.on && was.retired_note === to.note) {
+      unchanged.push(row.company);
+      continue;
+    }
+    moving.push({ key, change: { company: row.company, from: was.retired_on || "", to: to.on } });
+  }
+  const changes = moving.map((m) => m.change);
+
+  if (body.dryRun) {
+    return json({ dryRun: true, restore, changes, unchanged });
+  }
+  // Only the companies whose state would move: a no-op write would restamp a
+  // retirement date someone may later want to read.
+  await companyList.setRetired(moving.map((m) => m.key), restore ? null : to);
+  return json({ dryRun: false, restore, changes, unchanged });
 }

@@ -2713,6 +2713,115 @@ const staleWall = (await req("GET", "/api/coverage/ENG?all=1", { token: T1 })).j
 check("an earned wall last seen more than seven days ago is not served, so the next run re-tests it",
   !!staleWall && (!staleWall.known || staleWall.known.wall === undefined), JSON.stringify(staleWall));
 
+console.log("\n== retiring a company from the rotation ==");
+{
+  // 0032_company_retired.sql. A retired company keeps its row and stops taking
+  // a turn. The row has to stay: `./tracker known` checks a reported name
+  // against the whole list, so one deleted from it is one the next run adds
+  // back as new.
+  const rtRun = Date.now().toString(36);
+  const RT = `RET${rtRun}`;
+  const name = `Retire Co ${rtRun}`;
+  const keeper = `Keeper Co ${rtRun}`;
+  await req("POST", "/api/users", { admin: true, body: { name: `Retire ${rtRun}`, password: "retire-long-password" } });
+  const RT_TOK = (await req("POST", "/api/login", {
+    body: { name: `Retire ${rtRun}`, password: "retire-long-password" } })).json.token;
+  await req("POST", "/api/config", { token: RT_TOK, body: { tracks: [{ key: RT, label: "Ret" }] } });
+  // Both carry a board, so the facts are there to still be served afterwards.
+  await req("POST", "/api/coverage", { token: RT_TOK, body: { search: RT, on: "", swept: [
+    { company: name, board: "greenhouse" }, { company: keeper, board: "lever" }] } });
+
+  const retire = (body) => req("POST", "/api/companies/retire", { admin: true, body });
+  const all = async () => (await req("GET", `/api/coverage/${RT}?all=1`, { token: RT_TOK })).json.companies;
+  const onList = async (lister, who) => (await lister()).find((c) => c.company === who);
+  // The shared list runs to hundreds and a slice is COVERAGE_BATCH from the
+  // cursor, so a company just added is usually not in it - "absent from the
+  // slice" would pass before anything was retired. What retiring changes, for a
+  // company at any position, is the count the search still has to get through:
+  // `total` on the windowed read, which leaves retired companies out.
+  const servableTotal = async () =>
+    (await req("GET", `/api/coverage/${RT}`, { token: RT_TOK })).json.total;
+  const listedTotal = async () =>
+    (await req("GET", `/api/coverage/${RT}?all=1`, { token: RT_TOK })).json.total;
+  const before = await servableTotal(), beforeAll = await listedTotal();
+
+  check("before retiring, the company is one the search still has to get through",
+    !!(await onList(all, name)) && !("retired" in (await onList(all, name))),
+    JSON.stringify(await onList(all, name)));
+
+  const dry = await retire({ companies: [name], note: "nothing found after many sweeps", dryRun: true });
+  check("a dry run names the company it would retire, and writes nothing",
+    dry.status === 200 && dry.json?.dryRun === true &&
+    dry.json?.changes?.length === 1 && dry.json.changes[0].company === name &&
+    dry.json.changes[0].from === "" && !!dry.json.changes[0].to &&
+    (await servableTotal()) === before,
+    JSON.stringify([dry.json, before, await servableTotal()]));
+
+  const done = await retire({ companies: [name], note: "nothing found after many sweeps" });
+  check("retiring it reports the change and drops it from what the search must get through",
+    done.status === 200 && done.json?.dryRun === false && done.json?.changes?.length === 1 &&
+    (await servableTotal()) === before - 1,
+    JSON.stringify([done.json, before, await servableTotal()]));
+  check("exactly one company left the rotation, not two",
+    (await servableTotal()) === before - 1 && !!(await onList(all, keeper)) &&
+    !("retired" in (await onList(all, keeper))));
+  check("and the list itself is no shorter - the row stays, which is why known still finds it",
+    (await listedTotal()) === beforeAll, JSON.stringify([beforeAll, await listedTotal()]));
+
+  // The reason the row stays, and the thing `known` reads.
+  const listed = await onList(all, name);
+  check("it is still listed by ?all=1, marked with the day it was retired",
+    !!listed && typeof listed.retired === "string" && /^\d{4}-\d{2}-\d{2}$/.test(listed.retired),
+    JSON.stringify(listed));
+  check("and the mark is absent on a company that isn't retired",
+    !("retired" in (await onList(all, keeper))), JSON.stringify(await onList(all, keeper)));
+
+  // Retirement is not retraction: the facts are still right and still served,
+  // which is what `getCompanyFetch` would stop doing if the two were confused.
+  check("its shared facts are still served - retiring withdraws nothing",
+    (await onList(all, name))?.known?.board === "greenhouse",
+    JSON.stringify((await onList(all, name))?.known));
+
+  const reported = await req("POST", "/api/coverage", { token: RT_TOK, body: { search: RT, on: "", swept: [
+    { company: name, board: "greenhouse", note: "looked again anyway" }] } });
+  check("a report on a retired company is recorded and leaves it retired",
+    reported.status === 200 && !!(await onList(all, name))?.retired && (await servableTotal()) === before - 1,
+    JSON.stringify([reported.json, (await onList(all, name))?.retired]));
+
+  const back = await retire({ companies: [name], restore: true });
+  check("restoring clears the mark and puts it back in the rotation",
+    back.status === 200 && back.json?.restore === true &&
+    !("retired" in (await onList(all, name))) && (await servableTotal()) === before,
+    JSON.stringify(back.json));
+
+  // An unknown name refuses the whole request: these calls name a set someone
+  // assembled, and a partial write leaves them reconciling it.
+  const mixed = await retire({ companies: [name, `No Such Co ${rtRun}`], note: "whatever" });
+  check("an unknown name refuses the whole request, naming it",
+    mixed.status === 400 && (mixed.json?.unknown || []).some((u) => u.includes("No Such Co")),
+    JSON.stringify(mixed.json));
+  check("and the company that would have been retired is untouched",
+    (await servableTotal()) === before && !("retired" in (await onList(all, name))));
+
+  check("retiring with no note is refused, naming the note",
+    (await retire({ companies: [name] })).json?.field === "note");
+  check("restoring needs no note, since there is nothing to explain",
+    (await retire({ companies: [name], restore: true })).status === 200);
+  check("an empty company list is refused",
+    (await retire({ companies: [], note: "x" })).json?.field === "companies");
+
+  // Retiring something already retired is a no-op rather than a restamp: the
+  // date is a fact someone may read later.
+  await retire({ companies: [name], note: "first time" });
+  const first = (await onList(all, name))?.retired;
+  const again = await retire({ companies: [name], note: "first time" });
+  check("retiring an already-retired company reports it unchanged, not changed again",
+    again.json?.changes?.length === 0 && (again.json?.unchanged || []).includes(name) &&
+    (await onList(all, name))?.retired === first,
+    JSON.stringify(again.json));
+  await retire({ companies: [name], restore: true });
+}
+
 console.log("\n== invites and signup ==");
 // A new person's only credential is an invite code, and the two routes that take
 // one are public and unthrottled - so this is about what a code, or a guess at
